@@ -60,6 +60,25 @@ interface BlockBase {
   width: 'full' | 'half' | 'third';
 }
 
+/** Lo que comparten el tablero y el plano. */
+export interface BoardBody {
+  title: string;
+  /** El campo que se cambia al arrastrar, si se puede arrastrar. */
+  dragField: string | null;
+  actions: ComputedAction[];
+  columns: Array<{
+    key: string;
+    label: string;
+    count: number;
+    cards: Array<{
+      id: string;
+      label: string;
+      details: Array<{ label: string; value: string }>;
+    }>;
+  }>;
+  source: string;
+}
+
 export type ComputedBlock =
   | (BlockBase & { type: 'text'; markdown: string })
   | (BlockBase & {
@@ -98,24 +117,13 @@ export type ComputedBlock =
       tone: Tone;
       source: string;
     })
-  | (BlockBase & {
-      type: 'board';
-      title: string;
-      /** El campo que se cambia al arrastrar, si se puede arrastrar. */
-      dragField: string | null;
-      actions: ComputedAction[];
-      columns: Array<{
-        key: string;
-        label: string;
-        count: number;
-        cards: Array<{
-          id: string;
-          label: string;
-          details: Array<{ label: string; value: string }>;
-        }>;
-      }>;
-      source: string;
-    })
+  | (BlockBase & BoardBody & { type: 'board' })
+  | (BlockBase &
+      BoardBody & {
+        type: 'zones';
+        /** Dónde va cada zona en la rejilla de 12×12. */
+        layout: Array<{ zone: string; x: number; y: number; w: number; h: number }>;
+      })
   | (BlockBase & {
       type: 'form';
       title: string;
@@ -361,6 +369,24 @@ function problem(block: ViewBlock, message: string): ComputedBlock {
   };
 }
 
+/**
+ * Dónde va cada zona. Las que el spec ubicó, donde dijo; las demás (y «Sin
+ * estado») se acomodan solas debajo, de a tres por fila, sin pisar nada.
+ */
+export function zoneLayout(
+  placed: Array<{ zone: string; x: number; y: number; w: number; h: number }>,
+  zones: string[],
+): Array<{ zone: string; x: number; y: number; w: number; h: number }> {
+  const out = placed.filter((p) => zones.includes(p.zone));
+  let nextY = out.reduce((max, p) => Math.max(max, p.y + p.h), 0);
+  const missing = zones.filter((z) => !out.some((p) => p.zone === z));
+  missing.forEach((zone, i) => {
+    out.push({ zone, x: (i % 3) * 4, y: nextY, w: 4, h: 2 });
+    if (i % 3 === 2) nextY += 2;
+  });
+  return out;
+}
+
 function toAction(a: RowAction): ComputedAction {
   return { id: a.id, label: a.label, kind: a.kind, confirm: a.confirm, tone: a.tone };
 }
@@ -396,8 +422,10 @@ function computeBlock(
     ...(block.type === 'table'
       ? [...block.columns, ...(block.sort ? [block.sort.field] : [])]
       : []),
-    ...(block.type === 'chart' || block.type === 'board' ? [block.groupBy] : []),
-    ...(block.type === 'board' ? block.cardFields : []),
+    ...(block.type === 'chart' || block.type === 'board' || block.type === 'zones'
+      ? [block.groupBy]
+      : []),
+    ...(block.type === 'board' || block.type === 'zones' ? block.cardFields : []),
     ...(block.type === 'form' ? block.fields : []),
     ...((block.type === 'metric' || block.type === 'chart') && block.field ? [block.field] : []),
   ].filter((key) => !fieldType(tracker, key));
@@ -568,7 +596,8 @@ function computeBlock(
       };
     }
 
-    case 'board': {
+    case 'board':
+    case 'zones': {
       const options = tracker.fields.find((f) => f.key === block.groupBy)?.options ?? [];
       const details = block.cardFields.length
         ? block.cardFields
@@ -586,8 +615,7 @@ function computeBlock(
       }
       const columns = [...buckets.entries()].map(([key, list]) => ({ key, label: key, list }));
       if (loose.length) columns.push({ key: '__none', label: 'Sin estado', list: loose });
-      return {
-        type: 'board',
+      const shared = {
         id: block.id,
         width: block.width,
         title: block.title,
@@ -610,6 +638,16 @@ function computeBlock(
         })),
         source: tracker.name,
       };
+      return block.type === 'zones'
+        ? {
+            ...shared,
+            type: 'zones',
+            layout: zoneLayout(
+              block.layout,
+              columns.map((c) => c.key),
+            ),
+          }
+        : { ...shared, type: 'board' };
     }
 
     case 'form': {

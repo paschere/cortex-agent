@@ -20,7 +20,7 @@ import { createTrackerSync, latestSourceSheet, listTrackerSyncs } from './sync';
  * programado, que vuelve a consultar la API con la forma nueva.
  */
 
-async function resolveSource(db: SupabaseClient, actorId: string, ref: string) {
+export async function resolveSource(db: SupabaseClient, actorId: string, ref: string) {
   const q = db
     .from('feed_sources')
     .select('id, name, kind, config, enabled')

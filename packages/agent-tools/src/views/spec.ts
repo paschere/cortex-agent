@@ -267,6 +267,34 @@ export const boardBlockSchema = z.object({
   actions: z.array(rowActionSchema).max(3).default([]),
 });
 
+/**
+ * EL PLANO. Un tablero con forma de lugar: cada opción del campo de opciones
+ * es una ZONA dibujada en una rejilla de 12×12 (una posición de la
+ * plataforma, un muelle, una puerta), y cada fila es una ficha dentro de su
+ * zona. Arrastrar la ficha a otra zona cambia el campo, igual que el tablero.
+ * Sin `layout`, las zonas se acomodan solas en filas de tres.
+ */
+export const zoneLayoutSchema = z.object({
+  zone: z.string().trim().min(1).max(80),
+  x: z.number().int().min(0).max(11),
+  y: z.number().int().min(0).max(11),
+  w: z.number().int().min(1).max(12).default(4),
+  h: z.number().int().min(1).max(6).default(2),
+});
+
+export const zonesBlockSchema = z.object({
+  ...base,
+  ...source,
+  type: z.literal('zones'),
+  title,
+  groupBy: fieldRef,
+  cardFields: z.array(fieldRef).max(2).default([]),
+  limit: z.number().int().min(1).max(40).default(20),
+  draggable: z.boolean().default(false),
+  actions: z.array(rowActionSchema).max(3).default([]),
+  layout: z.array(zoneLayoutSchema).max(30).default([]),
+});
+
 export const formBlockSchema = z.object({
   ...base,
   type: z.literal('form'),
@@ -288,6 +316,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   tableBlockSchema,
   chartBlockSchema,
   boardBlockSchema,
+  zonesBlockSchema,
   formBlockSchema,
 ]);
 export type ViewBlock = z.infer<typeof blockSchema>;
@@ -492,6 +521,27 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         checkWrites(block.draggable ? [block.groupBy] : [], block.actions);
         break;
       }
+      case 'zones': {
+        if (
+          need(block.groupBy, 'zonas del plano') &&
+          !tracker.opaque &&
+          fieldType(tracker, block.groupBy) !== 'select'
+        )
+          problems.push(
+            `${where}: el plano reparte por un campo de opciones; «${block.groupBy}» no lo es.`,
+          );
+        const options = tracker.fields.find((f) => f.key === block.groupBy)?.options ?? [];
+        for (const z of block.layout)
+          if (!tracker.opaque && options.length && !options.includes(z.zone))
+            problems.push(
+              `${where}: «${z.zone}» no es una opción de ${block.groupBy} (${options.join(', ')}).`,
+            );
+          else if (z.x + z.w > 12)
+            problems.push(`${where}: la zona «${z.zone}» se sale del plano (x + w > 12).`);
+        for (const c of block.cardFields) need(c, 'ficha');
+        checkWrites(block.draggable ? [block.groupBy] : [], block.actions);
+        break;
+      }
       case 'form':
         if (isReadOnlySource(block.tracker)) {
           problems.push(
@@ -521,7 +571,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
   const writes = spec.blocks.some(
     (b) =>
       (b.type === 'table' && (b.editable.length > 0 || b.actions.length > 0)) ||
-      (b.type === 'board' && (b.draggable || b.actions.length > 0)),
+      ((b.type === 'board' || b.type === 'zones') && (b.draggable || b.actions.length > 0)),
   );
   if (writes && spec.editing === 'off')
     problems.push(
@@ -546,5 +596,6 @@ export const BLOCK_LABEL: Record<ViewBlockType, string> = {
   table: 'Tabla',
   chart: 'Gráfico',
   board: 'Tablero',
+  zones: 'Plano',
   form: 'Formulario',
 };

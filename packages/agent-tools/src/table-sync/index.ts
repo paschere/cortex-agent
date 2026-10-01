@@ -3,8 +3,11 @@
  */
 
 import './tools';
+import './enrich-tools';
 
 export { trackersSyncFromSource, trackersSyncs } from './tools';
+export { trackersUpdateFromSource } from './enrich-tools';
+export { applyUpdateOnly, createUpdateOnlySync, matchPart } from './enrich';
 export {
   SYNC_COLUMNS,
   applyTrackerSync,

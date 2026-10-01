@@ -208,6 +208,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   company_facts: 'Leer la ficha de la empresa',
   kb_propose_memory: 'Proponer un recuerdo para la empresa',
   trackers_sync_from_source: 'Llenar una tabla sola desde una fuente',
+  trackers_update_from_source: 'Actualizar una tabla desde una fuente',
   trackers_syncs: 'Ver las tablas que se llenan solas',
   trackers_define: 'Crear o cambiar una tabla',
   trackers_list: 'Ver las tablas inventadas',

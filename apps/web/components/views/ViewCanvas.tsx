@@ -16,6 +16,7 @@ import { useMemo, useState, useTransition } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ViewChart } from './ViewChart';
+import { ViewZones } from './ViewZones';
 import { EditableCell, RowActions, ViewWriterProvider, useViewWriter } from './view-writes';
 
 /**
@@ -180,6 +181,8 @@ function Block({
       );
     case 'board':
       return <Board block={block} />;
+    case 'zones':
+      return <ViewZones block={block} Card={Card} />;
     case 'form':
       return <Form block={block} target={target} submit={submit} />;
     case 'problem':

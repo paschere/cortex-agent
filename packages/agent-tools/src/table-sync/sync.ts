@@ -41,10 +41,12 @@ export interface TrackerSyncRow {
   last_inserted: number;
   last_updated: number;
   last_skipped: number;
+  /** 0163: `update_only` sólo escribe en filas que ya existen (ver enrich.ts). */
+  mode?: 'upsert' | 'update_only';
 }
 
 export const SYNC_COLUMNS =
-  'id, source_id, sheet_index, tracker_id, mapping, key_fields, interval_minutes, notify, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_inserted, last_updated, last_skipped';
+  'id, source_id, sheet_index, tracker_id, mapping, key_fields, interval_minutes, notify, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_inserted, last_updated, last_skipped, mode';
 
 // ---------------------------------------------------------------------------
 // Celdas → valores de la tabla
@@ -209,9 +211,13 @@ export interface SyncOutcome {
  */
 export async function applyTrackerSync(
   db: SupabaseClient,
-  sync: Pick<TrackerSyncRow, 'tracker_id' | 'mapping' | 'key_fields' | 'created_by'>,
+  sync: Pick<TrackerSyncRow, 'tracker_id' | 'mapping' | 'key_fields' | 'created_by' | 'mode'>,
   sheet: SheetData,
 ): Promise<SyncOutcome> {
+  if (sync.mode === 'update_only') {
+    const { applyUpdateOnly } = await import('./enrich');
+    return applyUpdateOnly(db, sync, sheet);
+  }
   const { data: t, error: tError } = await db
     .from('trackers')
     .select(TRACKER_COLUMNS)

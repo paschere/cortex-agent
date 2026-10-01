@@ -1067,7 +1067,7 @@ export async function editViewRow(
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Esta vista no se puede editar.');
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
-  if (!block || (block.type !== 'table' && block.type !== 'board'))
+  if (!block || (block.type !== 'table' && block.type !== 'board' && block.type !== 'zones'))
     throw new NotFoundError('Ese bloque no está en esta vista.');
   const allowed = new Set(
     block.type === 'table' ? block.editable : block.draggable ? [block.groupBy] : [],
@@ -1081,7 +1081,7 @@ export async function editViewRow(
     rowId: input.rowId,
     patch: input.patch,
     allowed,
-    kind: block.type === 'board' ? 'move' : 'edit',
+    kind: block.type === 'table' ? 'edit' : 'move',
     actor: input.actor,
   });
   return { label };
@@ -1104,7 +1104,7 @@ export async function runViewAction(
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Los botones de esta vista no están activos.');
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
-  if (!block || (block.type !== 'table' && block.type !== 'board'))
+  if (!block || (block.type !== 'table' && block.type !== 'board' && block.type !== 'zones'))
     throw new NotFoundError('Ese bloque no está en esta vista.');
   const action = block.actions.find((a) => a.id === input.actionId);
   if (!action) throw new NotFoundError('Ese botón ya no está en la vista.');
