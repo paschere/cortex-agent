@@ -75,6 +75,9 @@ export const JOBS: JobSpec[] = [
   // Tablas que se llenan solas desde una fuente conectada (0161). Cada 5
   // minutos decide qué sincronizaciones tocan; cada una corre en su evento.
   { name: 'table-sync/dispatch', cron: '*/5 * * * *', retryLimit: 1, concurrency: 1 },
+  // Carpetas de Drive que llenan tablas (0162): cada 10 minutos, el pulso de
+  // drive/sync. Ver apps/web/inngest/functions/drive-table.ts.
+  { name: 'drive-table/dispatch', cron: '*/10 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'actions/sweep.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'management/workflow.dispatch', cron: '*/15 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'management/workflow.advance', retryLimit: 2, concurrency: 5 },
@@ -109,6 +112,9 @@ export const JOBS: JobSpec[] = [
   { name: 'receivables/watch.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'table-sync/run', retryLimit: 1, concurrency: 5 },
   { name: 'table-sync/setup', retryLimit: 0, concurrency: 2 },
+  // Lee documentos con el modelo: sin reintento (la siguiente corrida retoma
+  // lo que falte) y una corrida por carpeta a la vez.
+  { name: 'drive-table/run', retryLimit: 0, concurrency: 2, singletonKeyFrom: 'syncId' },
   { name: 'goals/watch.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'learning/pass.workspace', retryLimit: 1, concurrency: 1 },
   { name: 'memory/derive.user', retryLimit: 1, concurrency: 5 },

@@ -5,6 +5,7 @@ import { devTaskIntake } from './dev-task-intake';
 import { devTaskRun } from './dev-task-run';
 import { devTaskStatus } from './dev-task-status';
 import { driveSync } from './drive-sync';
+import { driveTableDispatch, driveTableRun } from './drive-table';
 import { errandRun } from './errand-run';
 import { errandSweep } from './errand-sweep';
 import { gmailBackfillUser, gmailSweepDispatch, gmailSweepUser } from './gmail-learn';
@@ -44,6 +45,8 @@ export {
   tableSyncDispatch,
   tableSyncRun,
   tableSyncSetup,
+  driveTableDispatch,
+  driveTableRun,
   goalsWatchDispatch,
   goalsWatchWorkspace,
   gmailBackfillUser,
@@ -90,6 +93,8 @@ export const functions = [
   tableSyncDispatch,
   tableSyncRun,
   tableSyncSetup,
+  driveTableDispatch,
+  driveTableRun,
   goalsWatchDispatch,
   goalsWatchWorkspace,
   gmailBackfillUser,

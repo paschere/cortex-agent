@@ -38,6 +38,7 @@ import { devTaskIntakeJob } from '@/inngest/functions/dev-task-intake';
 import { devTaskRunJob } from '@/inngest/functions/dev-task-run';
 import { devTaskStatusJob } from '@/inngest/functions/dev-task-status';
 import { driveSyncJob } from '@/inngest/functions/drive-sync';
+import { driveTableDispatchJob, driveTableRunJob } from '@/inngest/functions/drive-table';
 import { errandRunJob } from '@/inngest/functions/errand-run';
 import { errandSweepJob } from '@/inngest/functions/errand-sweep';
 import {
@@ -92,6 +93,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'commitments/watch.dispatch': commitmentsWatchDispatchJob,
   'receivables/watch.dispatch': receivablesWatchDispatchJob,
   'table-sync/dispatch': tableSyncDispatchJob,
+  'drive-table/dispatch': driveTableDispatchJob,
   'actions/sweep.dispatch': actionsSweepDispatchJob,
   'management/workflow.dispatch': managementWorkflowDispatchJob,
   'management/workflow.advance': managementWorkflowAdvanceJob,
@@ -117,6 +119,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'receivables/watch.workspace': receivablesWatchWorkspaceJob,
   'table-sync/run': tableSyncRunJob,
   'table-sync/setup': tableSyncSetupJob,
+  'drive-table/run': driveTableRunJob,
   'goals/watch.workspace': goalsWatchWorkspaceJob,
   'memory/derive.user': memoryDeriveUserJob,
   'gmail/backfill.user': gmailBackfillUserJob,

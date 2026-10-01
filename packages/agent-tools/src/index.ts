@@ -135,6 +135,7 @@ export * from './reports';
 export * from './trackers';
 export * from './views';
 export * from './table-sync';
+export * from './drive-table';
 // Encargos (migration 0089): a job handed over and worked unattended for
 // minutes or hours. The EXECUTION engine lives in apps/web/lib/errands, which
 // needs Inngest and the orchestrator; what is here is the vocabulary every

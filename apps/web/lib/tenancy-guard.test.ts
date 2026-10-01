@@ -99,6 +99,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. "Which table syncs are due" spans the install; each sync then runs on its own event with a handle pinned to its workspace, under the identity of the source owner who created it.',
   ],
   [
+    'inngest/functions/drive-table.ts',
+    'Cron. "Which Drive folders feeding a table are due" spans the install; the raw handle selects (id, organization_id) and nothing else. Each folder then runs on its own event with a handle pinned to its workspace, reading Drive with the credentials of the person who connected it.',
+  ],
+  [
     'inngest/functions/receivables-watch.ts',
     'Cron. "Which workspaces have receivable invoices" spans the install; each event then carries one workspace and every handle in the per-workspace job is built from it. The only other unscoped read is that workspace\'s own name for the email header.',
   ],

@@ -210,6 +210,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   trackers_sync_from_source: 'Llenar una tabla sola desde una fuente',
   trackers_update_from_source: 'Actualizar una tabla desde una fuente',
   trackers_syncs: 'Ver las tablas que se llenan solas',
+  trackers_sync_from_drive_folder: 'Llenar una tabla desde una carpeta de Drive',
+  trackers_drive_syncs: 'Ver las carpetas de Drive que llenan tablas',
   trackers_define: 'Crear o cambiar una tabla',
   trackers_list: 'Ver las tablas inventadas',
   trackers_query: 'Consultar la tabla',
