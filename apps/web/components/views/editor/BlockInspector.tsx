@@ -23,12 +23,14 @@ import {
   sourceOf,
   withSource,
 } from '@/lib/views/editor-spec';
+import { normalizeLayout } from '@/lib/views/zone-layout';
 import type { RowAction, ViewBlock, ViewFilter } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { AlertTriangle, Lock } from 'lucide-react';
 import { useId } from 'react';
 import { ActionsEditor } from './ActionsEditor';
 import { FiltersEditor } from './FiltersEditor';
+import { ZoneDrawer } from './ZoneDrawer';
 import {
   Field,
   FieldChips,
@@ -447,10 +449,20 @@ function TypeFields({
             />
           </Field>
           {zones && (
-            <p className="text-micro leading-relaxed text-ink-faint">
-              Las zonas se acomodan solas en filas de tres. Para dibujarlas como tu bodega o tu
-              plataforma, pídeselo a Cortex abajo: «pon el muelle 1 arriba a la izquierda».
-            </p>
+            <div className="space-y-1.5">
+              <ZoneDrawer
+                zones={selects.find((f) => f.key === loose.groupBy)?.options ?? []}
+                layout={normalizeLayout(
+                  loose.layout,
+                  selects.find((f) => f.key === loose.groupBy)?.options ?? [],
+                )}
+                onChange={(layout) => onChange({ ...loose, layout } as unknown as ViewBlock)}
+              />
+              <p className="text-micro leading-relaxed text-ink-faint">
+                Sin dibujo, las zonas se acomodan solas en filas de tres. También puedes pedírselo a
+                Cortex: «pon el muelle 1 arriba a la izquierda».
+              </p>
+            </div>
           )}
         </>
       );
