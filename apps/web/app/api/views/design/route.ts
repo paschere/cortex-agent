@@ -7,6 +7,7 @@ import {
   checkDesign,
   designInput,
   modelDesignSchema,
+  salvageDesign,
   sampleOf,
 } from '@/lib/views/design';
 import {
@@ -25,6 +26,7 @@ import {
   viewCatalog,
   viewSpecSchema,
 } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { generateObject } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -116,7 +118,7 @@ export async function POST(req: NextRequest) {
         model: chatModel(),
         experimental_providerMetadata: NO_THINKING,
         schema: modelDesignSchema,
-        maxTokens: 8000,
+        maxTokens: 12000,
         abortSignal: AbortSignal.any([req.signal, AbortSignal.timeout(75000)]),
         system: VIEW_DESIGNER_SYSTEM,
         prompt: JSON.stringify({
@@ -153,6 +155,23 @@ export async function POST(req: NextRequest) {
         instruction: 'Corrige exactamente estos problemas y devuelve la vista completa otra vez.',
       }));
       checked = checkDesign(object, catalog);
+    }
+    if (!checked.ok) {
+      logger.warn(
+        { problems: checked.problems.slice(0, 8) },
+        'view designer: second attempt still invalid',
+      );
+      const salvaged = salvageDesign(object, catalog);
+      if (salvaged) {
+        checked = {
+          ok: true,
+          result: {
+            ...salvaged.result,
+            explanation:
+              `${salvaged.result.explanation} Dejé por fuera ${salvaged.dropped.length === 1 ? 'un bloque que no cuadraba' : `${salvaged.dropped.length} bloques que no cuadraban`} con tus tablas; pídemelo de otra forma o agrégalo en el lienzo.`.trim(),
+          },
+        };
+      }
     }
     if (!checked.ok)
       return NextResponse.json({

@@ -154,7 +154,13 @@ export function checkDesign(
     if (existing.has(t.slug)) continue;
     const slug = trackerSlugSchema.safeParse(t.slug);
     const fields = trackerFieldsSchema.safeParse(
-      t.fields.map((f) => ({ ...f, options: f.type === 'select' ? f.options : undefined })),
+      // Un campo de opciones sin opciones no se puede llenar: queda como texto
+      // en vez de tumbar la tabla entera.
+      t.fields.map((f) =>
+        f.type === 'select' && f.options.length
+          ? f
+          : { ...f, type: f.type === 'select' ? ('text' as const) : f.type, options: undefined },
+      ),
     );
     if (!slug.success)
       problems.push(`La tabla nueva «${t.slug}» necesita un slug en minúsculas_con_guiones_bajos.`);
@@ -201,8 +207,10 @@ export function checkDesign(
     })),
     ...newTrackers,
   ];
-  problems.push(...checkSpecAgainst(parsed.data, full));
-  if (problems.length) return { ok: false, problems };
+  const spec = autoFixSpec(parsed.data, full);
+  const specProblems = checkSpecAgainst(spec, full);
+  if (problems.length || specProblems.length)
+    return { ok: false, problems: [...problems, ...specProblems] };
   return {
     ok: true,
     result: {
@@ -210,10 +218,104 @@ export function checkDesign(
       name: object.name.trim() || 'Vista sin nombre',
       description: object.description.trim(),
       explanation: object.explanation.trim(),
-      spec: parsed.data,
+      spec,
       newTrackers,
     },
   };
+}
+
+/**
+ * LO QUE SE ARREGLA SOLO, SIN VOLVER A PREGUNTARLE AL MODELO.
+ *
+ * Errores de forma que tienen una sola corrección posible: un bloque editable
+ * con `editing: 'off'` (lo pidió editable: el equipo edita), una alerta que
+ * apunta a una tabla que no existe (se quita), columnas, tarjetas o columnas
+ * editables que no son campos (se quitan de la lista). Lo que cambia el
+ * sentido de la vista no se toca aquí.
+ */
+export function autoFixSpec(spec: ViewSpec, catalog: CatalogTracker[]): ViewSpec {
+  const bySlug = new Map(catalog.map((t) => [t.slug, t]));
+  const known = (slug: string, key: string) => {
+    const t = bySlug.get(slug);
+    if (!t || t.opaque) return true;
+    return (
+      ['label', 'created_at', 'updated_at'].includes(key) || t.fields.some((f) => f.key === key)
+    );
+  };
+  const blocks = spec.blocks.map((b) => {
+    if (b.type === 'table')
+      return {
+        ...b,
+        columns: b.columns.filter((c) => known(b.tracker, c)),
+        editable: b.editable.filter(
+          (c) => known(b.tracker, c) && !['label', 'created_at', 'updated_at'].includes(c),
+        ),
+      };
+    if (b.type === 'board' || b.type === 'zones')
+      return { ...b, cardFields: b.cardFields.filter((c) => known(b.tracker, c)) };
+    if (b.type === 'form')
+      return {
+        ...b,
+        fields: b.fields.filter(
+          (c) => known(b.tracker, c) && !['label', 'created_at', 'updated_at'].includes(c),
+        ),
+      };
+    return b;
+  }) as ViewSpec['blocks'];
+  const writes = blocks.some(
+    (b) =>
+      (b.type === 'table' && (b.editable.length > 0 || b.actions.length > 0)) ||
+      ((b.type === 'board' || b.type === 'zones') && (b.draggable || b.actions.length > 0)),
+  );
+  return {
+    ...spec,
+    blocks,
+    editing: writes && spec.editing === 'off' ? 'team' : spec.editing,
+    alerts: spec.alerts.filter((a) => bySlug.has(a.source)),
+  };
+}
+
+/**
+ * EL ÚLTIMO RECURSO: SI TRAS DOS INTENTOS ALGÚN BLOQUE NO CUADRA, SE QUITA ESE
+ * BLOQUE Y SE ENTREGA EL RESTO. Una vista con cinco bloques buenos y uno
+ * menos es mejor respuesta que «no logré armar nada». Los problemas se
+ * reconocen por su prefijo «Bloque «id»» (ver checkSpecAgainst); los que no
+ * nombran un bloque (una tabla nueva mal definida) no se pueden salvar así.
+ */
+export function salvageDesign(
+  object: ModelDesign,
+  catalog: DesignCatalogEntry[],
+): { result: Extract<DesignResult, { status: 'ready' }>; dropped: string[] } | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(object.specJson);
+  } catch {
+    return null;
+  }
+  const blocks = (raw as { blocks?: unknown[] })?.blocks;
+  if (!Array.isArray(blocks)) return null;
+  const tried = { ...object, specJson: JSON.stringify(raw) };
+  const first = checkDesign(tried, catalog);
+  if (first.ok) return { result: first.result, dropped: [] };
+  const offending = new Set(
+    first.problems.flatMap((p) => {
+      const m = /Bloque «([^»]+)»|blocks\.(\d+)/.exec(p);
+      if (!m) return [];
+      if (m[1]) return [m[1]];
+      const index = Number(m[2]);
+      const id = (blocks[index] as { id?: string } | undefined)?.id;
+      return id ? [id] : [];
+    }),
+  );
+  if (!offending.size) return null;
+  const kept = blocks.filter((b) => !offending.has(String((b as { id?: string }).id)));
+  if (!kept.length) return null;
+  const second = checkDesign(
+    { ...object, specJson: JSON.stringify({ ...(raw as object), blocks: kept }) },
+    catalog,
+  );
+  if (!second.ok) return null;
+  return { result: second.result, dropped: [...offending] };
 }
 
 export const VIEW_DESIGNER_SYSTEM = `Eres Cortex, el gerente operativo de la empresa indicada. Diseñas UNA vista (pantalla, tablero, portal o formulario) sobre las tablas de la empresa, a partir de lo que pide su persona. No ejecutas nada: devuelves un borrador que la persona revisa antes de guardar.
