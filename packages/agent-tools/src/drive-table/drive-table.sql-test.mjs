@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-// Migración 0162 contra PostgreSQL real (PGlite): la carpeta, el libro de
+// Migración 0164 contra PostgreSQL real (PGlite): la carpeta, el libro de
 // archivos y la clave externa de las filas que sostiene la idempotencia.
 // PGLITE_MODULE=/ruta/a/@electric-sql/pglite/dist/index.js node packages/agent-tools/src/drive-table/drive-table.sql-test.mjs
 import { readFileSync } from 'node:fs';
@@ -33,7 +33,7 @@ await db.exec(
     m161.indexOf('create table public.tracker_syncs'),
   ),
 );
-await db.exec(migration('0162_drive_folder_syncs.sql'));
+await db.exec(migration('0164_drive_folder_syncs.sql'));
 
 const user = '11111111-1111-4111-a111-111111111111';
 const {

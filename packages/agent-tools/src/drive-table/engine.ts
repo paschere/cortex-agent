@@ -30,7 +30,7 @@ import {
 } from './plan';
 
 /**
- * UNA CARPETA DE DRIVE QUE LLENA UNA TABLA (migración 0162) — el motor.
+ * UNA CARPETA DE DRIVE QUE LLENA UNA TABLA (migración 0164) — el motor.
  *
  * Una corrida, en cuatro pasos que el trabajo programado
  * (apps/web/inngest/functions/drive-table.ts) hace cada uno en su `step.run`:

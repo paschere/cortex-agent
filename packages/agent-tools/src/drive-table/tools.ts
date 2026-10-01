@@ -28,7 +28,7 @@ import {
 import { proposeTableFromFolder } from './propose';
 
 /**
- * Llenar una tabla de la empresa desde una carpeta de Google Drive (0162).
+ * Llenar una tabla de la empresa desde una carpeta de Google Drive (0164).
  *
  * «A esta carpeta nos llegan las facturas de los proveedores / las guías / las
  * órdenes de compra: que cada archivo sea una fila.» Pide confirmación: lee

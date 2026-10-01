@@ -3,7 +3,7 @@ import { quoteSupportsAmount } from '../documents/verify';
 import type { FieldType, TrackerField } from '../trackers/schema';
 
 /**
- * UNA CARPETA DE DRIVE QUE LLENA UNA TABLA (migración 0162) — la parte pura.
+ * UNA CARPETA DE DRIVE QUE LLENA UNA TABLA (migración 0164) — la parte pura.
  *
  * Aquí no hay red, ni modelo, ni base: sólo las decisiones que hay que poder
  * probar sin ninguno de los tres.

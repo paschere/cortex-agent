@@ -1,6 +1,6 @@
 # Carpeta de Drive → tabla
 
-Cada archivo que llega a una carpeta de Google Drive se lee y se vuelve una fila (o varias) de una tabla de la empresa. Sirve para cualquier documento que llegue repetido: facturas de proveedores, órdenes de compra, remisiones, guías, hojas de vida, contratos. Migración `0162_drive_folder_syncs.sql`.
+Cada archivo que llega a una carpeta de Google Drive se lee y se vuelve una fila (o varias) de una tabla de la empresa. Sirve para cualquier documento que llegue repetido: facturas de proveedores, órdenes de compra, remisiones, guías, hojas de vida, contratos. Migración `0164_drive_folder_syncs.sql`.
 
 ## Cómo se usa
 En el chat: «los proveedores dejan sus facturas en esta carpeta (enlace): que cada una quede en una tabla *facturas*, con proveedor y número como clave». Herramienta `trackers.sync_from_drive_folder` (pide confirmación); `trackers.drive_syncs` lista las carpetas conectadas, su última corrida y los archivos por revisar o con error, con el motivo.

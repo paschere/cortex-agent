@@ -16,7 +16,7 @@ import {
 import { logger } from '@cortex/core';
 
 /**
- * CARPETAS DE DRIVE QUE LLENAN TABLAS (migración 0162).
+ * CARPETAS DE DRIVE QUE LLENAN TABLAS (migración 0164).
  *
  * Cada 10 minutos —el mismo pulso que drive-sync—: qué carpetas tocan
  * (`next_run_at` vencido). Cada una corre en su propio evento y en su espacio,
