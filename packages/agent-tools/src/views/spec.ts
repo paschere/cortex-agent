@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TRACKER_SLUG_RE, type TrackerField } from '../trackers/schema';
+import { embedSrc, httpsUrl, safeHref } from './embeds';
 
 /**
  * EL CONTRATO DE UNA VISTA (migración 0156).
@@ -137,6 +138,10 @@ export const TONES = ['primary', 'emerald', 'amber', 'sky', 'rose'] as const;
 export type Tone = (typeof TONES)[number];
 
 const fieldRef = z.string().trim().min(1).max(32);
+
+/** Períodos del KPI que se compara con el anterior. */
+export const PERIODS = ['day', 'week', 'month'] as const;
+export type Period = (typeof PERIODS)[number];
 const title = z.string().trim().min(1).max(120);
 
 export const filterSchema = z
@@ -190,6 +195,22 @@ export const metricBlockSchema = z.object({
   goal: z.number().finite().optional(),
   tone: z.enum(TONES).default('primary'),
   caption: z.string().trim().max(200).optional(),
+  /**
+   * EL KPI CONTRA EL PERÍODO ANTERIOR. Con `compare: 'previous_period'`, la
+   * cifra deja de ser «todo lo que cumple los filtros» y pasa a ser «lo de
+   * este período» (`period`, por `dateField`), con el delta contra el
+   * anterior y una línea con los últimos períodos. `goodWhen` dice si subir es
+   * bueno (ventas) o malo (devoluciones, días de mora): decide el color de la
+   * flecha, no su dirección.
+   *
+   * Todo opcional y sin valores por defecto a propósito: los specs ya
+   * guardados (y los escritos a mano como `ViewSpec`) siguen siendo válidos y
+   * del mismo tipo.
+   */
+  compare: z.enum(['previous_period']).optional(),
+  period: z.enum(PERIODS).optional(),
+  dateField: fieldRef.optional(),
+  goodWhen: z.enum(['up', 'down']).optional(),
 });
 
 /**
@@ -223,9 +244,31 @@ export const rowActionSchema = z
   });
 export type RowAction = z.infer<typeof rowActionSchema>;
 
+/**
+ * LA FICHA DE UNA FILA. Un clic en una fila de una tabla, una tarjeta, una
+ * ficha del plano, una tarjeta de la galería o un evento del calendario abre
+ * su ficha: todos los campos declarados de esa fila, sus fechas y sus botones.
+ *
+ *   - `openRecord` (por defecto sí): `false` la apaga para ese bloque.
+ *   - `detailFields`: qué campos muestra. Vacío = todos los de una tabla
+ *     propia; en una fuente de la plataforma o del Feed, los primeros ocho
+ *     (ver `defaultDetailFields` en compute.ts).
+ *   - `recordEditable`: qué campos se editan DESDE la ficha. Sólo tablas
+ *     propias, y sólo si la vista deja escribir (`editing`): pasa por el mismo
+ *     `editViewRow` que una celda, con la misma lista blanca.
+ *
+ * Opcionales sin valor por defecto, como el KPI: los specs viejos no cambian.
+ */
+const record = {
+  openRecord: z.boolean().optional(),
+  detailFields: z.array(fieldRef).max(16).optional(),
+  recordEditable: z.array(fieldRef).max(12).optional(),
+};
+
 export const tableBlockSchema = z.object({
   ...base,
   ...source,
+  ...record,
   type: z.literal('table'),
   title,
   columns: z.array(fieldRef).max(10).default([]),
@@ -256,6 +299,7 @@ export const chartBlockSchema = z.object({
 export const boardBlockSchema = z.object({
   ...base,
   ...source,
+  ...record,
   type: z.literal('board'),
   title,
   /** Un campo de opciones: cada opción es una columna del tablero. */
@@ -285,6 +329,7 @@ export const zoneLayoutSchema = z.object({
 export const zonesBlockSchema = z.object({
   ...base,
   ...source,
+  ...record,
   type: z.literal('zones'),
   title,
   groupBy: fieldRef,
@@ -310,6 +355,126 @@ export const formBlockSchema = z.object({
   successMessage: z.string().trim().min(1).max(200).default('Recibido. Gracias.'),
 });
 
+/**
+ * LA GALERÍA: TARJETAS EN REJILLA. Para catálogos, inmuebles, vehículos,
+ * pacientes, cursos, proveedores: cualquier lista que se lee mejor por
+ * tarjeta que por renglón. `badgeField` (un campo de opciones) pinta una
+ * etiqueta con el color de su posición en las opciones; `imageField` es un
+ * campo de texto con una dirección `https:` (las demás no se pintan).
+ */
+export const galleryBlockSchema = z.object({
+  ...base,
+  ...source,
+  ...record,
+  type: z.literal('gallery'),
+  title,
+  titleField: fieldRef.default('label'),
+  subtitleField: fieldRef.optional(),
+  metaFields: z.array(fieldRef).max(3).default([]),
+  badgeField: fieldRef.optional(),
+  imageField: fieldRef.optional(),
+  columns: z.union([z.literal(2), z.literal(3), z.literal(4)]).default(3),
+  sort: z.object({ field: fieldRef, dir: z.enum(['asc', 'desc']).default('desc') }).optional(),
+  limit: z.number().int().min(1).max(48).default(12),
+  actions: z.array(rowActionSchema).max(3).default([]),
+});
+
+/**
+ * EL CALENDARIO. Cada fila con fecha en `dateField` es un evento. `month`
+ * pinta la cuadrícula del mes (el cálculo entrega el mes anterior, el actual
+ * y el siguiente: se navega entre ellos sin volver a pedir datos); `agenda`
+ * es la lista de los próximos `days` días. `colorField` (un campo de
+ * opciones) colorea cada evento por su opción.
+ */
+export const calendarBlockSchema = z.object({
+  ...base,
+  ...source,
+  ...record,
+  type: z.literal('calendar'),
+  title,
+  dateField: fieldRef,
+  labelField: fieldRef.default('label'),
+  colorField: fieldRef.optional(),
+  mode: z.enum(['month', 'agenda']).default('month'),
+  /** Agenda: cuántos días hacia adelante, contando hoy. */
+  days: z.number().int().min(1).max(60).default(14),
+  actions: z.array(rowActionSchema).max(3).default([]),
+});
+
+/**
+ * EL AVANCE HACIA UNA META. Sin `groupBy`, una sola barra: el agregado contra
+ * `target`. Con `groupBy`, una barra por grupo (vendedor, sede, curso, ruta)
+ * contra la meta de ese grupo en `targets` o, si no tiene, contra `target`.
+ * Sin ninguna meta, las barras se comparan con el grupo más grande.
+ */
+export const progressBlockSchema = z.object({
+  ...base,
+  ...source,
+  type: z.literal('progress'),
+  title,
+  groupBy: fieldRef.optional(),
+  aggregate: z.enum(AGGREGATES).default('count'),
+  field: fieldRef.optional(),
+  target: z.number().finite().positive().optional(),
+  targets: z
+    .array(
+      z.object({
+        group: z.string().trim().min(1).max(80),
+        target: z.number().finite().positive(),
+      }),
+    )
+    .max(24)
+    .default([]),
+  format: z.enum(['number', 'money', 'percent']).default('number'),
+  limit: z.number().int().min(1).max(24).default(8),
+  tone: z.enum(TONES).default('primary'),
+});
+
+const httpsField = z
+  .string()
+  .trim()
+  .max(1000)
+  .refine((v) => httpsUrl(v) !== null, 'Usa una dirección que empiece por https://.');
+
+/**
+ * UNA IMAGEN O UN VIDEO/MAPA/PRESENTACIÓN INSERTADO. Nunca HTML: una
+ * dirección `https:` y, si es inserción, de la lista corta de embeds.ts
+ * (YouTube, Google Maps, Loom, Slides y Docs publicados). Sin `url`, el bloque
+ * sale vacío con la invitación a ponerla (así nace en el lienzo).
+ */
+export const MEDIA_ASPECTS = ['16:9', '4:3', '1:1', '3:4'] as const;
+export const mediaBlockSchema = z.object({
+  ...base,
+  type: z.literal('media'),
+  title: z.string().trim().max(120).optional(),
+  kind: z.enum(['image', 'embed']).default('image'),
+  url: httpsField.optional(),
+  alt: z.string().trim().max(200).optional(),
+  caption: z.string().trim().max(300).optional(),
+  aspect: z.enum(MEDIA_ASPECTS).default('16:9'),
+});
+
+/** Un botón de navegación: a otra pantalla de Cortex o a una página `https:`. */
+export const viewLinkSchema = z.object({
+  label: z.string().trim().min(1).max(40),
+  href: z
+    .string()
+    .trim()
+    .max(1000)
+    .refine((v) => safeHref(v) !== null, 'Usa una ruta de Cortex (/…) o una dirección https://.'),
+  description: z.string().trim().max(120).optional(),
+  tone: z.enum(TONES).default('primary'),
+});
+
+export const linksBlockSchema = z.object({
+  ...base,
+  type: z.literal('links'),
+  title: z.string().trim().max(120).optional(),
+  links: z.array(viewLinkSchema).min(1).max(8),
+  /** `buttons`: una fila de botones; `cards`: tarjetas con su descripción. */
+  style: z.enum(['buttons', 'cards']).default('buttons'),
+});
+
 export const blockSchema = z.discriminatedUnion('type', [
   textBlockSchema,
   metricBlockSchema,
@@ -318,6 +483,11 @@ export const blockSchema = z.discriminatedUnion('type', [
   boardBlockSchema,
   zonesBlockSchema,
   formBlockSchema,
+  galleryBlockSchema,
+  calendarBlockSchema,
+  progressBlockSchema,
+  mediaBlockSchema,
+  linksBlockSchema,
 ]);
 export type ViewBlock = z.infer<typeof blockSchema>;
 export type ViewBlockType = ViewBlock['type'];
@@ -345,6 +515,59 @@ export type ViewAlert = z.infer<typeof viewAlertSchema>;
 /** Cada cuánto se refresca sola una vista abierta. 0 = nunca. */
 export const REFRESH_CHOICES = [0, 10, 30, 60] as const;
 
+/**
+ * LA BARRA DE FILTROS DE LA VISTA ENTERA. Hasta seis controles arriba de todo
+ * («Sede», «Fechas», «Buscar cliente»). Lo que se elige se aplica a TODOS los
+ * bloques que leen esa misma fuente, y a sus avisos. Se calcula en el
+ * servidor: el navegador manda la elección (`?f=` en /api/views/…/data), el
+ * servidor la valida contra este spec (ver view-filters.ts) y recalcula.
+ *
+ *   - `select`: un menú con las opciones del campo (o sus valores, si no es
+ *     de opciones).
+ *   - `date_range`: desde / hasta sobre un campo de fecha.
+ *   - `search`: texto que se busca en el campo y en el nombre de la fila.
+ */
+export const FILTER_BAR_KINDS = ['select', 'date_range', 'search'] as const;
+export const filterBarItemSchema = z.object({
+  id: z.string().regex(BLOCK_ID_RE),
+  label: z.string().trim().min(1).max(40),
+  source: sourceRef,
+  field: fieldRef,
+  kind: z.enum(FILTER_BAR_KINDS),
+});
+export type FilterBarItem = z.infer<typeof filterBarItemSchema>;
+export const MAX_FILTER_BAR = 6;
+
+/**
+ * PÁGINAS: pestañas sobre la MISMA lista de bloques. Cada página nombra sus
+ * bloques; los que no están en ninguna salen en la primera. Sin páginas, la
+ * vista es una sola página, como siempre.
+ */
+export const viewPageSchema = z.object({
+  id: z.string().regex(BLOCK_ID_RE),
+  title: z.string().trim().min(1).max(40),
+  blockIds: z.array(z.string().regex(BLOCK_ID_RE)).max(MAX_VIEW_BLOCKS).default([]),
+});
+export type ViewPage = z.infer<typeof viewPageSchema>;
+export const MAX_VIEW_PAGES = 8;
+
+/**
+ * EL ASPECTO. Siempre con los tokens del sistema de diseño: un color de
+ * acento de los cinco, una densidad y una cabecera. `hero` es una banda
+ * grande con el título, el subtítulo y, si hay, una imagen de portada
+ * `https:`. No hay colores libres ni CSS: una vista de un cliente se ve como
+ * Cortex, en claro afuera y en el tema del espacio adentro.
+ */
+export const DENSITIES = ['comfortable', 'compact'] as const;
+export const HEADER_STYLES = ['plain', 'hero'] as const;
+export const viewThemeSchema = z.object({
+  accent: z.enum(TONES).optional(),
+  density: z.enum(DENSITIES).optional(),
+  header: z.enum(HEADER_STYLES).optional(),
+  cover: httpsField.optional(),
+});
+export type ViewTheme = z.infer<typeof viewThemeSchema>;
+
 export const viewSpecSchema = z
   .object({
     version: z.literal(1),
@@ -362,18 +585,57 @@ export const viewSpecSchema = z
      */
     editing: z.enum(['off', 'team', 'public']).default('off'),
     alerts: z.array(viewAlertSchema).max(5).default([]),
+    // Opcionales, sin valor por defecto: un spec guardado antes de que
+    // existieran sigue siendo el mismo objeto y del mismo tipo.
+    filtersBar: z.array(filterBarItemSchema).max(MAX_FILTER_BAR).optional(),
+    pages: z.array(viewPageSchema).max(MAX_VIEW_PAGES).optional(),
+    theme: viewThemeSchema.optional(),
   })
   .superRefine((spec, ctx) => {
+    const issue = (message: string, path: Array<string | number>) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message, path });
     const seen = new Set<string>();
     for (const [i, block] of spec.blocks.entries()) {
-      if (seen.has(block.id)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `El id de bloque «${block.id}» está repetido.`,
-          path: ['blocks', i, 'id'],
-        });
-      }
+      if (seen.has(block.id))
+        issue(`El id de bloque «${block.id}» está repetido.`, ['blocks', i, 'id']);
       seen.add(block.id);
+      // Lo que cruza dos propiedades de un mismo bloque: la unión discriminada
+      // no deja refinar cada objeto, así que se comprueba aquí, con su ruta.
+      if (block.type === 'media' && block.kind === 'embed' && block.url && !embedSrc(block.url))
+        issue(
+          'Ese enlace no se puede insertar. Sirven YouTube, Google Maps («Insertar un mapa»), Loom y Google Slides o Docs publicados en la web.',
+          ['blocks', i, 'url'],
+        );
+      if (block.type === 'progress' && !block.groupBy && block.target === undefined)
+        issue('Una barra de avance sin agrupar necesita una meta (target).', [
+          'blocks',
+          i,
+          'target',
+        ]);
+      if (block.type === 'metric' && block.compare && !block.dateField)
+        issue('Comparar con el período anterior necesita un campo de fecha (dateField).', [
+          'blocks',
+          i,
+          'dateField',
+        ]);
+    }
+    const pageIds = new Set<string>();
+    for (const [i, page] of (spec.pages ?? []).entries()) {
+      if (pageIds.has(page.id)) issue(`La página «${page.id}» está repetida.`, ['pages', i, 'id']);
+      pageIds.add(page.id);
+      for (const id of page.blockIds)
+        if (!seen.has(id))
+          issue(`La página «${page.title}» nombra el bloque «${id}», que no existe.`, [
+            'pages',
+            i,
+            'blockIds',
+          ]);
+    }
+    const barIds = new Set<string>();
+    for (const [i, item] of (spec.filtersBar ?? []).entries()) {
+      if (barIds.has(item.id))
+        issue(`El filtro «${item.id}» está repetido.`, ['filtersBar', i, 'id']);
+      barIds.add(item.id);
     }
   });
 export type ViewSpec = z.infer<typeof viewSpecSchema>;
@@ -434,7 +696,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
   const problems: string[] = [];
   const bySlug = new Map(catalog.map((t) => [t.slug, t]));
   for (const block of spec.blocks) {
-    if (block.type === 'text') continue;
+    if (!('tracker' in block)) continue;
     const where = `Bloque «${block.id}»`;
     const tracker = bySlug.get(block.tracker);
     if (!tracker) {
@@ -457,7 +719,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
       }
       return true;
     };
-    /** Lo que escribe: columnas editables y botones que cambian un campo. */
+    /** Lo que escribe: columnas editables, campos de la ficha y botones que cambian un campo. */
     const checkWrites = (editable: string[], actions: RowAction[]) => {
       const writes = editable.length > 0 || actions.length > 0;
       if (!writes) return;
@@ -485,7 +747,47 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
     if ('filters' in block) {
       for (const f of block.filters) need(f.field, 'filtro');
     }
+    const recordEditable = 'recordEditable' in block ? (block.recordEditable ?? []) : [];
+    if ('detailFields' in block) for (const k of block.detailFields ?? []) need(k, 'ficha');
+    /** Un campo que tiene que ser de cierto tipo (fecha, opciones…). */
+    const needType = (key: string, what: string, ok: (t: string) => boolean, wanted: string) => {
+      if (!need(key, what) || tracker.opaque) return;
+      if (!ok(String(fieldType(tracker, key))))
+        problems.push(`${where}: «${key}» no es ${wanted} (${what}).`);
+    };
+    const isDate = (t: string) => t === 'date' || t === 'builtin_date';
+    const isSelect = (t: string) => t === 'select';
     switch (block.type) {
+      case 'progress':
+        if (block.aggregate !== 'count') {
+          if (!block.field)
+            problems.push(`${where}: «${block.aggregate}» necesita un campo numérico.`);
+          else needType(block.field, 'cifra', (t) => NUMERIC.has(t), 'un campo de número o dinero');
+        }
+        if (block.groupBy) need(block.groupBy, 'agrupar');
+        break;
+      case 'gallery':
+        need(block.titleField, 'título de la tarjeta');
+        if (block.subtitleField) need(block.subtitleField, 'subtítulo');
+        for (const k of block.metaFields) need(k, 'dato de la tarjeta');
+        if (block.badgeField)
+          needType(block.badgeField, 'etiqueta', isSelect, 'un campo de opciones');
+        if (block.imageField)
+          needType(
+            block.imageField,
+            'imagen',
+            (t) => t === 'text',
+            'un campo de texto con la dirección de la imagen',
+          );
+        if (block.sort) need(block.sort.field, 'orden');
+        checkWrites(recordEditable, block.actions);
+        break;
+      case 'calendar':
+        needType(block.dateField, 'fecha del evento', isDate, 'un campo de fecha');
+        need(block.labelField, 'nombre del evento');
+        if (block.colorField) needType(block.colorField, 'color', isSelect, 'un campo de opciones');
+        checkWrites(recordEditable, block.actions);
+        break;
       case 'metric':
       case 'chart': {
         if (block.aggregate !== 'count') {
@@ -501,12 +803,14 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
             );
         }
         if (block.type === 'chart') need(block.groupBy, 'agrupar');
+        if (block.type === 'metric' && block.compare && block.dateField)
+          needType(block.dateField, 'período', isDate, 'un campo de fecha');
         break;
       }
       case 'table':
         for (const c of block.columns) need(c, 'columna');
         if (block.sort) need(block.sort.field, 'orden');
-        checkWrites(block.editable, block.actions);
+        checkWrites([...block.editable, ...recordEditable], block.actions);
         break;
       case 'board': {
         if (
@@ -518,7 +822,10 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
             `${where}: el tablero agrupa por un campo de opciones; «${block.groupBy}» no lo es.`,
           );
         for (const c of block.cardFields) need(c, 'tarjeta');
-        checkWrites(block.draggable ? [block.groupBy] : [], block.actions);
+        checkWrites(
+          [...(block.draggable ? [block.groupBy] : []), ...recordEditable],
+          block.actions,
+        );
         break;
       }
       case 'zones': {
@@ -539,7 +846,10 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
           else if (z.x + z.w > 12)
             problems.push(`${where}: la zona «${z.zone}» se sale del plano (x + w > 12).`);
         for (const c of block.cardFields) need(c, 'ficha');
-        checkWrites(block.draggable ? [block.groupBy] : [], block.actions);
+        checkWrites(
+          [...(block.draggable ? [block.groupBy] : []), ...recordEditable],
+          block.actions,
+        );
         break;
       }
       case 'form':
@@ -568,23 +878,63 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
       if (!fieldType(tracker, f.field))
         problems.push(`Alerta «${alert.id}»: «${f.field}» no es un campo de ${tracker.name}.`);
   }
-  const writes = spec.blocks.some(
-    (b) =>
-      (b.type === 'table' && (b.editable.length > 0 || b.actions.length > 0)) ||
-      ((b.type === 'board' || b.type === 'zones') && (b.draggable || b.actions.length > 0)),
-  );
-  if (writes && spec.editing === 'off')
+  const used = new Set(spec.blocks.flatMap((b) => ('tracker' in b ? [b.tracker] : [])));
+  for (const item of spec.filtersBar ?? []) {
+    const where = `Filtro «${item.id}»`;
+    const tracker = bySlug.get(item.source);
+    if (!tracker) {
+      problems.push(`${where}: «${item.source}» no existe.`);
+      continue;
+    }
+    if (!used.has(item.source))
+      problems.push(
+        `${where}: ningún bloque lee «${tracker.name}»; el filtro no tendría qué filtrar.`,
+      );
+    if (tracker.opaque) continue;
+    const t = fieldType(tracker, item.field);
+    if (!t) {
+      problems.push(`${where}: «${item.field}» no es un campo de ${tracker.name}.`);
+      continue;
+    }
+    if (item.kind === 'date_range' && t !== 'date' && t !== 'builtin_date')
+      problems.push(
+        `${where}: un rango de fechas necesita un campo de fecha; «${item.field}» no lo es.`,
+      );
+    if (item.kind === 'select' && (t === 'date' || t === 'builtin_date'))
+      problems.push(`${where}: para una fecha usa un rango (date_range), no un menú.`);
+  }
+  if (specWrites(spec) && spec.editing === 'off')
     problems.push(
       'La vista tiene columnas editables, tableros que se arrastran o botones, pero `editing` está en "off": ponlo en "team" o "public" para que funcionen.',
     );
   return problems;
 }
 
+/**
+ * ¿El spec pide escribir? Celdas editables, campos editables en la ficha,
+ * tableros o planos que se arrastran, y botones por fila. Si sí, `editing` no
+ * puede quedar en `off`.
+ */
+export function specWrites(spec: Pick<ViewSpec, 'blocks'>): boolean {
+  return spec.blocks.some((b) => {
+    if ('recordEditable' in b && (b.recordEditable?.length ?? 0) > 0) return true;
+    if ('actions' in b && b.actions.length > 0) return true;
+    if (b.type === 'table') return b.editable.length > 0;
+    if (b.type === 'board' || b.type === 'zones') return b.draggable;
+    return false;
+  });
+}
+
+/** La fuente que un bloque lee, o null (texto, imagen, enlaces). */
+export function blockSource(block: ViewBlock): string | null {
+  return 'tracker' in block ? block.tracker : null;
+}
+
 /** Las tablas y fuentes que una vista lee, sin repetir. */
 export function trackersOf(spec: ViewSpec): string[] {
   return [
     ...new Set([
-      ...spec.blocks.flatMap((b) => (b.type === 'text' ? [] : [b.tracker])),
+      ...spec.blocks.flatMap((b) => ('tracker' in b ? [b.tracker] : [])),
       ...spec.alerts.map((a) => a.source),
     ]),
   ];
@@ -598,4 +948,9 @@ export const BLOCK_LABEL: Record<ViewBlockType, string> = {
   board: 'Tablero',
   zones: 'Plano',
   form: 'Formulario',
+  gallery: 'Galería',
+  calendar: 'Calendario',
+  progress: 'Avance',
+  media: 'Imagen o video',
+  links: 'Botones',
 };

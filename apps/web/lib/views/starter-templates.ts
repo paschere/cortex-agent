@@ -19,18 +19,50 @@ import type { ViewSpec } from '@cortex/agent-tools';
  * renombrar un campo de `cortex.ventas` rompa la prueba y no la plantilla.
  */
 
-export type StarterIcon = 'truck' | 'wallet' | 'trending' | 'inbox';
+export type StarterIcon =
+  | 'truck'
+  | 'wallet'
+  | 'trending'
+  | 'inbox'
+  | 'users'
+  | 'boxes'
+  | 'calendar'
+  | 'kanban';
+
+/** Para qué área es: la galería de «Nueva vista» las agrupa así. */
+export type StarterCategory = 'Ventas y cartera' | 'Operación' | 'Clientes y equipo';
+
+/** La forma de una vista, para dibujar su miniatura sin calcularla. */
+export interface StarterSketch {
+  type: string;
+  width: 'full' | 'half' | 'third';
+}
 
 interface StarterBase {
   id: string;
   title: string;
   body: string;
   icon: StarterIcon;
+  category: StarterCategory;
 }
 
+/**
+ * Las de frase llevan además `sketch`: la forma que se espera que Cortex arme,
+ * sólo para la miniatura de la galería (la vista real la decide el diseñador
+ * con las tablas de la empresa y puede salir distinta).
+ */
 export type StarterTemplate =
   | (StarterBase & { kind: 'spec'; name: string; description: string; spec: ViewSpec })
-  | (StarterBase & { kind: 'prompt'; prompt: string });
+  | (StarterBase & { kind: 'prompt'; prompt: string; sketch: StarterSketch[] });
+
+/** La forma de una plantilla, venga de su spec o de su boceto. */
+export function templateShape(t: StarterTemplate): StarterSketch[] {
+  return t.kind === 'spec'
+    ? t.spec.blocks.map((b) => ({ type: b.type, width: b.width as StarterSketch['width'] }))
+    : t.sketch;
+}
+
+const S = (type: string, width: StarterSketch['width']): StarterSketch => ({ type, width });
 
 const LIVE = (): Pick<ViewSpec, 'refreshSeconds' | 'editing' | 'alerts' | 'accent'> => ({
   refreshSeconds: 30,
@@ -226,6 +258,15 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     id: 'operacion_carga',
     kind: 'prompt',
     icon: 'truck',
+    category: 'Operación',
+    sketch: [
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('board', 'full'),
+      S('form', 'half'),
+      S('table', 'half'),
+    ],
     title: 'Operación de carga: guías y dollies',
     body: 'Guías por estado en un tablero, dollies en uso y un formulario para registrar una guía.',
     prompt:
@@ -235,6 +276,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     id: 'cartera',
     kind: 'spec',
     icon: 'wallet',
+    category: 'Ventas y cartera',
     title: 'Cartera',
     body: 'Lo por cobrar, lo vencido y qué clientes deben más, con las facturas abiertas.',
     name: 'Cartera',
@@ -245,6 +287,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     id: 'ventas_mes',
     kind: 'spec',
     icon: 'trending',
+    category: 'Ventas y cartera',
     title: 'Ventas del mes',
     body: 'Lo facturado en los últimos 30 días, por día y por cliente.',
     name: 'Ventas del mes',
@@ -255,9 +298,81 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     id: 'solicitudes',
     kind: 'prompt',
     icon: 'inbox',
+    category: 'Clientes y equipo',
+    sketch: [
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('chart', 'third'),
+      S('board', 'full'),
+      S('form', 'full'),
+    ],
     title: 'Seguimiento de solicitudes',
     body: 'Solicitudes por estado, las que llevan más días abiertas y un formulario para recibirlas.',
     prompt:
       'Seguimiento de solicitudes de clientes: cuántas están abiertas, un tablero por estado que se pueda arrastrar, las que llevan más de 5 días sin cerrar y un formulario para registrar una solicitud nueva.',
+  },
+  {
+    id: 'crm_ventas',
+    kind: 'prompt',
+    icon: 'kanban',
+    category: 'Ventas y cartera',
+    sketch: [
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('board', 'full'),
+      S('chart', 'half'),
+      S('table', 'half'),
+    ],
+    title: 'CRM de ventas',
+    body: 'Negocios por etapa en un tablero, lo que está por cerrar y cuánto suma cada vendedor.',
+    prompt:
+      'CRM de ventas: un tablero de negocios por etapa (prospecto, propuesta, negociación, ganado, perdido) que se pueda arrastrar, el valor total en negociación, cuántos se ganaron este mes, un gráfico del valor por vendedor y la lista de negocios con su próximo paso.',
+  },
+  {
+    id: 'inventario',
+    kind: 'prompt',
+    icon: 'boxes',
+    category: 'Operación',
+    sketch: [
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('chart', 'half'),
+      S('table', 'half'),
+      S('form', 'full'),
+    ],
+    title: 'Inventario',
+    body: 'Existencias por bodega, lo que está bajo el mínimo y un formulario para registrar movimientos.',
+    prompt:
+      'Inventario: cuántos productos hay, cuáles están por debajo del mínimo, un gráfico de existencias por bodega, la lista de productos con su cantidad y un formulario para registrar una entrada o salida.',
+  },
+  {
+    id: 'agenda_citas',
+    kind: 'prompt',
+    icon: 'calendar',
+    category: 'Clientes y equipo',
+    sketch: [S('metric', 'half'), S('metric', 'half'), S('table', 'full'), S('form', 'full')],
+    title: 'Agenda de citas',
+    body: 'Las citas de hoy y de la semana, quién atiende cada una y un formulario para agendar.',
+    prompt:
+      'Agenda de citas: cuántas citas hay hoy y en los próximos 7 días, la lista de citas ordenada por fecha con cliente, responsable y estado, y un formulario público para que un cliente pida una cita.',
+  },
+  {
+    id: 'proyectos',
+    kind: 'prompt',
+    icon: 'kanban',
+    category: 'Clientes y equipo',
+    sketch: [
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('board', 'full'),
+      S('table', 'full'),
+    ],
+    title: 'Proyectos',
+    body: 'Proyectos por estado, los atrasados primero y quién es responsable de cada uno.',
+    prompt:
+      'Seguimiento de proyectos: cuántos hay en curso, cuántos están atrasados, un tablero por estado que se pueda arrastrar y la lista con responsable, fecha de entrega y avance.',
   },
 ];

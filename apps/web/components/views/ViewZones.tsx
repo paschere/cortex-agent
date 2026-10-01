@@ -4,6 +4,7 @@ import type { ComputedBlock } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { MapPin } from 'lucide-react';
 import { useState } from 'react';
+import { useRecordOpener } from './blocks/RecordDrawer';
 import { RowActions, useViewWriter } from './view-writes';
 
 /**
@@ -33,6 +34,7 @@ export function ViewZones({
   Card: (props: { title?: string; source?: string; children: React.ReactNode }) => React.ReactNode;
 }) {
   const writer = useViewWriter();
+  const open = useRecordOpener(block.id, block.record);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +120,17 @@ export function ViewZones({
                       dragging === card.id && 'opacity-50',
                     )}
                   >
-                    <span className="font-medium text-ink">{card.label}</span>
+                    {open ? (
+                      <button
+                        type="button"
+                        onClick={() => open(card.id)}
+                        className="font-medium text-ink underline-offset-4 hover:underline"
+                      >
+                        {card.label}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-ink">{card.label}</span>
+                    )}
                     {card.details[0] && (
                       <span className="ml-1.5 text-micro text-ink-faint">
                         {card.details[0].value}

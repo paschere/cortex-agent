@@ -2,14 +2,25 @@ import {
   AGGREGATES as CANONICAL_AGGREGATES,
   BLOCK_ID_RE as CANONICAL_BLOCK_ID_RE,
   BLOCK_LABEL as CANONICAL_BLOCK_LABEL,
+  DENSITIES as CANONICAL_DENSITIES,
+  FILTER_BAR_KINDS as CANONICAL_FILTER_BAR_KINDS,
   FILTER_OPS as CANONICAL_FILTER_OPS,
+  HEADER_STYLES as CANONICAL_HEADER_STYLES,
   MAX_VIEW_BLOCKS as CANONICAL_MAX_BLOCKS,
+  MAX_FILTER_BAR as CANONICAL_MAX_FILTER_BAR,
+  MAX_VIEW_PAGES as CANONICAL_MAX_PAGES,
+  MEDIA_ASPECTS as CANONICAL_MEDIA_ASPECTS,
+  PERIODS as CANONICAL_PERIODS,
   REFRESH_CHOICES as CANONICAL_REFRESH,
   TONES as CANONICAL_TONES,
   VALUELESS_OPS as CANONICAL_VALUELESS,
   WIDTHS as CANONICAL_WIDTHS,
+  blockSchema,
+  calendarBlockSchema,
   chartBlockSchema,
   isReadOnlySource,
+  linksBlockSchema,
+  mediaBlockSchema,
   metricBlockSchema,
   viewSpecSchema,
 } from '@cortex/agent-tools';
@@ -19,13 +30,24 @@ import {
   BLOCK_ID_RE,
   BLOCK_LABEL,
   BUCKETS,
+  CALENDAR_MODES,
   CHART_KINDS,
+  DENSITIES,
   EDITING_MODES,
+  FILTER_BAR_KINDS,
   FILTER_OPS,
   FILTER_OP_LABEL,
   FORMATS,
+  HEADER_STYLES,
   KNOWN_BLOCK_TYPES,
+  LINK_STYLES,
+  MAX_FILTER_BAR,
   MAX_VIEW_BLOCKS,
+  MAX_VIEW_PAGES,
+  MEDIA_ASPECTS,
+  MEDIA_KINDS,
+  PERIODS,
+  RECORD_BLOCK_TYPES,
   REFRESH_CHOICES,
   TONES,
   VALUELESS_OPS,
@@ -67,6 +89,32 @@ describe('vocabulario del lienzo', () => {
     // biome-ignore lint/suspicious/noExplicitAny: el objeto vive dentro de un ZodEffects.
     const shape = (viewSpecSchema as any)._def.schema.shape;
     expect([...EDITING_MODES]).toEqual(enumOf(shape.editing));
+  });
+
+  it('bloques nuevos: períodos, calendario, imagen, botones, barra de filtros y aspecto', () => {
+    expect([...PERIODS]).toEqual([...CANONICAL_PERIODS]);
+    expect([...CALENDAR_MODES]).toEqual(enumOf(calendarBlockSchema.shape.mode));
+    expect([...MEDIA_KINDS]).toEqual(enumOf(mediaBlockSchema.shape.kind));
+    expect([...MEDIA_ASPECTS]).toEqual([...CANONICAL_MEDIA_ASPECTS]);
+    expect([...LINK_STYLES]).toEqual(enumOf(linksBlockSchema.shape.style));
+    expect([...FILTER_BAR_KINDS]).toEqual([...CANONICAL_FILTER_BAR_KINDS]);
+    expect([...DENSITIES]).toEqual([...CANONICAL_DENSITIES]);
+    expect([...HEADER_STYLES]).toEqual([...CANONICAL_HEADER_STYLES]);
+    expect(MAX_FILTER_BAR).toBe(CANONICAL_MAX_FILTER_BAR);
+    expect(MAX_VIEW_PAGES).toBe(CANONICAL_MAX_PAGES);
+  });
+
+  it('el lienzo conoce todos los tipos del contrato, y la ficha sólo existe donde el contrato la acepta', () => {
+    const accepted = blockSchema.options.map((o) => o.shape.type.value as string);
+    for (const type of accepted)
+      expect(
+        (KNOWN_BLOCK_TYPES as readonly string[]).includes(type) || type === 'zones',
+        type,
+      ).toBe(true);
+    for (const type of RECORD_BLOCK_TYPES) {
+      const option = blockSchema.options.find((o) => o.shape.type.value === type);
+      expect(option && 'openRecord' in option.shape, type).toBe(true);
+    }
   });
 
   it('nombra igual cada tipo de bloque que el contrato conoce', () => {

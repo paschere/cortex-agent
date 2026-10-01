@@ -182,9 +182,31 @@ const DOORS: Array<{ id: Visibility; icon: typeof Users; title: string; body: st
   },
 ];
 
-function ShareDialog({ view }: { view: ToolbarView }) {
+/**
+ * La puerta de compartir. La usan la barra de la vista, el estudio (su botón
+ * «Compartir» de arriba) y el menú de cada tarjeta en /views: un solo diálogo,
+ * con las mismas reglas, para que nunca haya dos maneras de abrir una vista.
+ * `trigger` cambia el botón que lo abre; `open`/`onOpenChange` lo controlan
+ * desde afuera (el menú de una tarjeta no tiene botón propio).
+ */
+export function ShareDialog({
+  view,
+  trigger,
+  open: controlled,
+  onOpenChange,
+}: {
+  view: ToolbarView;
+  trigger?: React.ReactElement | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlled ?? ownOpen;
+  const setOpen = (next: boolean) => {
+    if (controlled === undefined) setOwnOpen(next);
+    onOpenChange?.(next);
+  };
   const [door, setDoor] = useState<Visibility>(view.visibility);
   const [password, setPassword] = useState('');
   const [days, setDays] = useState<string>('none');
@@ -218,18 +240,22 @@ function ShareDialog({ view }: { view: ToolbarView }) {
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className={PILL} title="Compartir">
-        <Icon className="h-3.5 w-3.5" />
-        <Label>
-          {view.visibility === 'workspace'
-            ? 'Compartir'
-            : view.visibility === 'link'
-              ? 'Con enlace'
-              : 'Con contraseña'}
-        </Label>
-      </Dialog.Trigger>
+      {trigger === undefined ? (
+        <Dialog.Trigger className={PILL} title="Compartir">
+          <Icon className="h-3.5 w-3.5" />
+          <Label>
+            {view.visibility === 'workspace'
+              ? 'Compartir'
+              : view.visibility === 'link'
+                ? 'Con enlace'
+                : 'Con contraseña'}
+          </Label>
+        </Dialog.Trigger>
+      ) : (
+        trigger && <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
+      )}
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[min(520px,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-card border border-border bg-surface shadow-pop outline-none">
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div>
@@ -418,7 +444,7 @@ function HistoryDialog({ view, versions }: { view: ToolbarView; versions: Toolba
         <span className="tabular font-mono">v{view.version}</span>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[min(480px,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-card border border-border bg-surface shadow-pop outline-none">
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div>

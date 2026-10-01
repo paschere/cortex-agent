@@ -2,9 +2,11 @@
 
 import { type EditorWidth, WIDTHS, WIDTH_LABEL } from '@/lib/views/editor-shape';
 import { titleOf } from '@/lib/views/editor-spec';
+import { widthFromFraction } from '@/lib/views/studio';
 import type { ComputedBlock, ViewBlock } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { AlertTriangle, ChevronDown, ChevronUp, Copy, GripVertical, Trash2 } from 'lucide-react';
+import { useRef } from 'react';
 import { ViewBlockPreview } from '../ViewCanvas';
 import { blockIcon, blockLabel } from './block-meta';
 
@@ -19,13 +21,16 @@ import { blockIcon, blockLabel } from './block-meta';
  * El asa también se maneja con el teclado: flechas para mover. Y todo lo del
  * asa existe además como botón, porque arrastrar no es algo que todo el mundo
  * pueda hacer.
+ *
+ * ELEGIDO, el marco muestra sus esquinas y un asa en el borde derecho que se
+ * arrastra para cambiar el ancho: salta entre tercio, mitad y completo (los
+ * tres que el contrato conoce) según hasta dónde llegue el puntero en la
+ * rejilla. Es un atajo del ratón; los mismos tres anchos están en la barra
+ * flotante como botones, que son lo que usa el teclado.
+ *
+ * Cuántas columnas ocupa lo decide el estudio (`span`), según el dispositivo
+ * que se está mirando, no la ventana: ver `deviceSpan` en lib/views/studio.ts.
  */
-
-export const SPAN: Record<string, string> = {
-  full: 'md:col-span-6',
-  half: 'md:col-span-3',
-  third: 'md:col-span-3 xl:col-span-2',
-};
 
 const ICON_BUTTON =
   'grid h-7 w-7 shrink-0 place-items-center rounded-pill text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-35';
@@ -52,6 +57,8 @@ export function BlockFrame({
   onRemove,
   canDuplicate,
   gripProps,
+  span,
+  resizable = true,
 }: {
   block: ViewBlock;
   computed: ComputedBlock | undefined;
@@ -70,14 +77,34 @@ export function BlockFrame({
   onRemove: () => void;
   canDuplicate: boolean;
   gripProps: React.HTMLAttributes<HTMLButtonElement>;
+  /** Las columnas que ocupa en el dispositivo que se está mirando. */
+  span: string;
+  /** El asa de ancho: no en el teléfono, donde todo es ancho completo. */
+  resizable?: boolean;
 }) {
   const Icon = blockIcon(block.type);
   const title = titleOf(block);
   const label = blockLabel(block.type);
+  const frame = useRef<HTMLElement>(null);
+  const resizing = useRef(false);
+
+  function resizeTo(x: number) {
+    const grid = frame.current?.closest('[data-studio-grid]')?.getBoundingClientRect();
+    const own = frame.current?.getBoundingClientRect();
+    if (!grid || !own || grid.width <= 0) return;
+    const next = widthFromFraction((x - own.left) / grid.width);
+    if (next !== block.width) onWidth(next);
+  }
+
   return (
     <section
+      ref={frame}
       data-block-id={block.id}
-      className={clsx('relative min-w-0', SPAN[block.width] ?? SPAN.full, drag && 'z-30')}
+      className={clsx(
+        'relative min-w-0 transition-[transform,opacity] duration-150 motion-reduce:transition-none',
+        span,
+        drag && 'z-30 opacity-90 transition-none',
+      )}
       style={drag ? { transform: `translate3d(${drag.dx}px, ${drag.dy}px, 0)` } : undefined}
     >
       {indicator && (
@@ -110,6 +137,52 @@ export function BlockFrame({
           drag && 'shadow-pop',
         )}
       >
+        {selected && (
+          <>
+            {(
+              [
+                '-left-1 -top-1',
+                '-right-1 -top-1',
+                '-left-1 -bottom-1',
+                '-right-1 -bottom-1',
+              ] as const
+            ).map((pos) => (
+              <span
+                key={pos}
+                aria-hidden
+                className={clsx(
+                  'pointer-events-none absolute z-10 h-2 w-2 rounded-pill border-2 border-primary bg-surface',
+                  pos,
+                )}
+              />
+            ))}
+            {resizable && (
+              <span
+                aria-hidden
+                title="Arrastra para cambiar el ancho"
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  resizing.current = true;
+                }}
+                onPointerMove={(e) => {
+                  if (resizing.current) resizeTo(e.clientX);
+                }}
+                onPointerUp={() => {
+                  resizing.current = false;
+                }}
+                onPointerCancel={() => {
+                  resizing.current = false;
+                }}
+                className="absolute -right-1.5 top-1/2 z-20 hidden h-10 w-3 -translate-y-1/2 cursor-ew-resize touch-none place-items-center rounded-pill border border-primary bg-surface shadow-card md:grid"
+              >
+                <span className="h-5 w-0.5 rounded-pill bg-primary/60" />
+              </span>
+            )}
+          </>
+        )}
         {selected && (
           // La barra flota sobre el borde del marco: elegir un bloque no le cambia la altura.
           <div className="absolute -top-4 right-2 z-20 flex items-center gap-0.5 rounded-pill border border-border-strong bg-surface p-0.5 shadow-pop">

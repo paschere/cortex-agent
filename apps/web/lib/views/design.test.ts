@@ -66,4 +66,36 @@ describe('el diseñador no se rinde por errores menores', () => {
     expect(saved?.dropped).toEqual(['hoy']);
     expect(saved?.result.spec.blocks.map((b) => b.id)).toEqual(['b']);
   });
+
+  it('páginas con bloques que no existen y filtros sobre tablas que nadie lee se limpian solos', () => {
+    const res = checkDesign(
+      object(
+        [
+          {
+            id: 'g',
+            type: 'gallery',
+            title: 'Guías',
+            tracker: 'guias',
+            badgeField: 'estado',
+            recordEditable: ['estado', 'label'],
+          },
+        ],
+        {
+          pages: [{ id: 'p', title: 'Resumen', blockIds: ['g', 'no_existe'] }],
+          filtersBar: [
+            { id: 'e', label: 'Estado', source: 'guias', field: 'estado', kind: 'select' },
+            { id: 'x', label: 'Otra', source: 'cortex.ventas', field: 'estado', kind: 'select' },
+          ],
+        },
+      ),
+      catalog,
+    );
+    expect(res.ok ? [] : res.problems).toEqual([]);
+    if (!res.ok) return;
+    expect(res.result.spec.pages?.[0]?.blockIds).toEqual(['g']);
+    expect(res.result.spec.filtersBar?.map((f) => f.id)).toEqual(['e']);
+    const g = res.result.spec.blocks[0];
+    expect(g?.type === 'gallery' && g.recordEditable).toEqual(['estado']);
+    expect(res.result.spec.editing).toBe('team');
+  });
 });

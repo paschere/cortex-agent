@@ -23,3 +23,5 @@ export * from './compute';
 export * from './store';
 export * from './sources';
 export * from './feed-sources';
+export * from './embeds';
+export * from './view-filters';

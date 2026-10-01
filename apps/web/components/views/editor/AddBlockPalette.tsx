@@ -1,7 +1,12 @@
 'use client';
 
 import { KNOWN_BLOCK_TYPES } from '@/lib/views/editor-shape';
-import { type EditorSource, type PaletteType, defaultSourceFor } from '@/lib/views/editor-spec';
+import {
+  type EditorSource,
+  type PaletteType,
+  SOURCELESS_TYPES,
+  defaultSourceFor,
+} from '@/lib/views/editor-spec';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import { X } from 'lucide-react';
@@ -20,12 +25,26 @@ import { BLOCK_PITCH, blockIcon, blockLabel } from './block-meta';
  * (`catalog.blockTypes`): la paleta no ofrece lo que el guardado rechazaría.
  */
 
-const ORDER: PaletteType[] = ['metric', 'table', 'chart', 'board', 'zones', 'form', 'text'];
+const ORDER: PaletteType[] = [
+  'metric',
+  'progress',
+  'table',
+  'chart',
+  'board',
+  'gallery',
+  'calendar',
+  'zones',
+  'form',
+  'text',
+  'media',
+  'links',
+];
 
 const WHY_NOT: Partial<Record<PaletteType, string>> = {
   form: 'Necesitas una tabla de tu empresa: pídele a Cortex que cree una.',
   board: 'Necesitas una tabla con un campo de opciones (un estado, una etapa).',
   zones: 'Necesitas una tabla con un campo de opciones (una zona, un muelle).',
+  calendar: 'Necesitas una tabla con un campo de fecha (una cita, una entrega).',
 };
 
 export function AddBlockPalette({
@@ -72,8 +91,9 @@ export function AddBlockPalette({
           <ul className="scroll-slim grid min-h-0 gap-2 overflow-auto p-4 sm:grid-cols-2">
             {types.map((type) => {
               const Icon = blockIcon(type);
-              const ready = type === 'text' || Boolean(defaultSourceFor(type, sources, prefer));
-              const disabled = loading || !ready;
+              const ready =
+                SOURCELESS_TYPES.has(type) || Boolean(defaultSourceFor(type, sources, prefer));
+              const disabled = (loading && !SOURCELESS_TYPES.has(type)) || !ready;
               return (
                 <li key={type}>
                   <button

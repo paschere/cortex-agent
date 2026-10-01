@@ -63,6 +63,10 @@ export async function editorCatalog(
       readOnly: t.kind !== 'tracker',
       ...(t.opaque ? { opaque: true } : {}),
       fields: t.fields,
+      // Las filas que tiene (las tablas del espacio y del Feed). La columna
+      // «Datos» del estudio lo muestra; null en las fuentes de la plataforma,
+      // que no se cuentan. No es parte de `EditorSource`: viaja de más.
+      rowCount: t.rowCount,
     })),
     blockTypes: blockSchema.options.map((o) => o.shape.type.value as string),
   };

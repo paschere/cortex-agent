@@ -9,6 +9,7 @@ import type {
 import type { ZodIssue } from 'zod';
 import {
   BLOCK_ID_RE,
+  BLOCK_LABEL,
   BUILTIN_FIELD_LABEL,
   type EditorFilterOp,
   FILTER_OP_LABEL,
@@ -176,7 +177,8 @@ export function titleOf(block: ViewBlock): string {
     const first = block.markdown.split('\n').find((l) => l.trim()) ?? '';
     return first.replace(/^#+\s*/, '').slice(0, 60) || 'Texto';
   }
-  return 'Sin título';
+  if (block.type === 'links') return block.links[0]?.label ?? BLOCK_LABEL.links ?? 'Botones';
+  return BLOCK_LABEL[block.type] ?? 'Sin título';
 }
 
 /** Un id libre que cumple BLOCK_ID_RE: `cifra`, `cifra_2`, `cifra_3`… */
@@ -290,6 +292,44 @@ export function withSource(block: ViewBlock, source: EditorSource): ViewBlock {
       };
     case 'form':
       return { ...block, tracker: source.slug, fields: [] };
+    case 'gallery':
+      return {
+        ...block,
+        tracker: source.slug,
+        filters: [],
+        titleField: 'label',
+        subtitleField: undefined,
+        metaFields: [],
+        badgeField: select?.key,
+        imageField: undefined,
+        sort: undefined,
+        actions: [],
+        detailFields: undefined,
+        recordEditable: undefined,
+      };
+    case 'calendar':
+      return {
+        ...block,
+        tracker: source.slug,
+        filters: [],
+        dateField: date?.key ?? 'created_at',
+        labelField: 'label',
+        colorField: select?.key,
+        actions: [],
+        detailFields: undefined,
+        recordEditable: undefined,
+      };
+    case 'progress':
+      return {
+        ...block,
+        tracker: source.slug,
+        filters: [],
+        groupBy: select?.key,
+        aggregate: 'count',
+        field: undefined,
+        target: select ? block.target : (block.target ?? 10),
+        targets: [],
+      };
     default:
       // El plano (`zones`) es un tablero con forma de lugar: lo mismo que el
       // tablero, y además su dibujo, que nombraba opciones de la fuente vieja.
@@ -320,6 +360,10 @@ export function sourceRefusal(type: string, source: EditorSource): string | null
     return type === 'zones'
       ? 'Un plano necesita un campo de opciones para sus zonas.'
       : 'Un tablero necesita un campo de opciones para sus columnas.';
+  // `created_at` siempre existe, pero un calendario de «cuándo se creó cada
+  // fila» casi nunca es lo que alguien quiere: pide una fecha de verdad.
+  if (type === 'calendar' && !source.fields.some((f) => f.type === 'date'))
+    return 'Un calendario necesita un campo de fecha (una cita, una entrega, un vencimiento).';
   return null;
 }
 
@@ -330,8 +374,11 @@ function preferredSources(sources: EditorSource[]): EditorSource[] {
     .sort((a, b) => rank[a.kind] - rank[b.kind] || b.fields.length - a.fields.length);
 }
 
-/** Lo que la paleta puede crear: los seis de siempre y el plano, si el contrato lo acepta. */
+/** Lo que la paleta puede crear: los tipos conocidos y el plano, si el contrato lo acepta. */
 export type PaletteType = KnownBlockType | 'zones';
+
+/** Los tipos que no leen ninguna fuente: nacen sin tabla. */
+export const SOURCELESS_TYPES: ReadonlySet<string> = new Set(['text', 'media', 'links']);
 
 export function defaultSourceFor(
   type: PaletteType,
@@ -365,6 +412,11 @@ export function newBlock(
     board: 'tablero',
     form: 'formulario',
     text: 'texto',
+    gallery: 'galeria',
+    calendar: 'calendario',
+    progress: 'avance',
+    media: 'imagen',
+    links: 'botones',
   };
   const id = uniqueBlockId(spec, BASE[type]);
   if (type === 'text')
@@ -373,6 +425,16 @@ export function newBlock(
       type: 'text',
       width: 'full',
       markdown: '## Un título\n\nUna línea que explique qué muestra esta parte de la vista.',
+    };
+  // Sin dirección todavía: el bloque nace vacío, con la invitación a pegarla.
+  if (type === 'media') return { id, type: 'media', width: 'half', kind: 'image', aspect: '16:9' };
+  if (type === 'links')
+    return {
+      id,
+      type: 'links',
+      width: 'full',
+      style: 'buttons',
+      links: [{ label: 'Todas las vistas', href: '/views', tone: 'primary' }],
     };
   const source = defaultSourceFor(type, sources, prefer);
   if (!source) return null;
@@ -487,6 +549,73 @@ export function newBlock(
         submitLabel: 'Enviar',
         successMessage: 'Recibido. Gracias.',
       };
+    case 'gallery': {
+      const text = fields.filter((f) => !f.builtin && f.type === 'text');
+      return {
+        id,
+        type: 'gallery',
+        width: 'full',
+        tracker: source.slug,
+        filters: [],
+        title: clip(name),
+        titleField: 'label',
+        subtitleField: text[0]?.key,
+        metaFields: fields
+          .filter((f) => !f.builtin && f.key !== select?.key && f.key !== text[0]?.key)
+          .slice(0, 2)
+          .map((f) => f.key),
+        badgeField: select?.key,
+        columns: 3,
+        limit: 12,
+        actions: [],
+      };
+    }
+    case 'calendar':
+      return {
+        id,
+        type: 'calendar',
+        width: 'full',
+        tracker: source.slug,
+        filters: [],
+        title: clip(`${name} por ${(date?.label ?? 'fecha').toLowerCase()}`),
+        dateField: date?.key ?? 'created_at',
+        labelField: 'label',
+        colorField: select?.key,
+        mode: 'month',
+        days: 14,
+        actions: [],
+      };
+    case 'progress':
+      return select
+        ? {
+            id,
+            type: 'progress',
+            width: 'half',
+            tracker: source.slug,
+            filters: [],
+            title: clip(`${name} por ${select.label.toLowerCase()}`),
+            groupBy: select.key,
+            aggregate: money ? 'sum' : 'count',
+            field: money?.key,
+            targets: [],
+            format: money ? 'money' : 'number',
+            limit: 8,
+            tone: 'primary',
+          }
+        : {
+            id,
+            type: 'progress',
+            width: 'half',
+            tracker: source.slug,
+            filters: [],
+            title: clip(`Meta de ${name.toLowerCase()}`),
+            aggregate: 'count',
+            target: 100,
+            targets: [],
+            format: 'number',
+            limit: 8,
+            tone: 'primary',
+          };
   }
 }
 
@@ -511,15 +640,23 @@ export function newAlert(spec: ViewSpec, sources: EditorSource[]): ViewAlert | n
   };
 }
 
-/** Si el spec pide escribir (celdas, arrastrar, botones): entonces `editing` no puede ser `off`. */
-export function specWrites(spec: ViewSpec): boolean {
+/**
+ * Si el spec pide escribir (celdas, campos de la ficha, arrastrar, botones):
+ * entonces `editing` no puede ser `off`. La misma regla que `specWrites` del
+ * contrato, repetida por la razón de editor-shape.ts.
+ */
+export function specWrites(spec: Pick<ViewSpec, 'blocks'>): boolean {
   return spec.blocks.some((b) => {
-    if (b.type === 'table') return b.editable.length > 0 || b.actions.length > 0;
-    const loose = b as { type: string; draggable?: boolean; actions?: unknown[] };
-    return (
-      (loose.type === 'board' || loose.type === 'zones') &&
-      (Boolean(loose.draggable) || (loose.actions?.length ?? 0) > 0)
-    );
+    const loose = b as {
+      type: string;
+      draggable?: boolean;
+      actions?: unknown[];
+      editable?: unknown[];
+      recordEditable?: unknown[];
+    };
+    if ((loose.recordEditable?.length ?? 0) > 0 || (loose.actions?.length ?? 0) > 0) return true;
+    if (loose.type === 'table') return (loose.editable?.length ?? 0) > 0;
+    return (loose.type === 'board' || loose.type === 'zones') && Boolean(loose.draggable);
   });
 }
 
@@ -552,6 +689,29 @@ const PROP_NAME: Record<string, string> = {
   successMessage: 'Mensaje al enviar',
   intro: 'Introducción',
   caption: 'Nota',
+  titleField: 'Título de la tarjeta',
+  subtitleField: 'Subtítulo',
+  metaFields: 'Datos de la tarjeta',
+  badgeField: 'Etiqueta',
+  imageField: 'Imagen',
+  dateField: 'Campo de fecha',
+  labelField: 'Nombre del evento',
+  colorField: 'Color por',
+  days: 'Días',
+  target: 'Meta',
+  targets: 'Metas por grupo',
+  group: 'Grupo',
+  url: 'Dirección',
+  href: 'Destino',
+  links: 'Botones',
+  alt: 'Texto alternativo',
+  detailFields: 'Campos de la ficha',
+  recordEditable: 'Campos editables en la ficha',
+  filtersBar: 'Barra de filtros',
+  pages: 'Páginas',
+  blockIds: 'Bloques de la página',
+  theme: 'Aspecto',
+  cover: 'Portada',
   goal: 'Meta',
   message: 'Mensaje',
   subtitle: 'Subtítulo',

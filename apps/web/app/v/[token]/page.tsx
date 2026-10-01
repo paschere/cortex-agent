@@ -1,6 +1,12 @@
 import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import { isUnlocked, openPublicView, unlockCookieName } from '@/lib/views/public';
-import { canWriteView, computeView, countPublicOpen, loadViewSources } from '@cortex/agent-tools';
+import {
+  canWriteView,
+  computeView,
+  countPublicOpen,
+  loadViewSources,
+  parseViewFilterParam,
+} from '@cortex/agent-tools';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -26,8 +32,14 @@ export const metadata: Metadata = {
   referrer: 'no-referrer',
 };
 
-export default async function PublicViewPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+export default async function PublicViewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ f?: string | string[] }>;
+}) {
+  const [{ token }, query] = await Promise.all([params, searchParams]);
   const opened = await openPublicView(token);
   if (!opened) notFound();
   const { view, db, organizationName } = opened;
@@ -44,29 +56,39 @@ export default async function PublicViewPage({ params }: { params: Promise<{ tok
   }
 
   // `audience: 'public'`: una fuente interna del equipo no se lee aquí aunque
-  // la vista la tenga; su bloque sale como aviso (ver loadViewSources).
+  // la vista la tenga; su bloque sale como aviso (ver loadViewSources). Y en
+  // el cálculo: la ficha de una fila sólo trae lo que el bloque ya muestra,
+  // salvo que el spec diga `detailFields`. Un enlace con `?f=` abre ya
+  // filtrado (validado contra el spec guardado).
   const computed = computeView(
     view.spec,
     await loadViewSources(db, view.spec, { audience: 'public' }),
     new Date(),
-    { writable: canWriteView(view, 'public') },
+    {
+      writable: canWriteView(view, 'public'),
+      audience: 'public',
+      filters: parseViewFilterParam(view.spec, typeof query.f === 'string' ? query.f : null),
+    },
   );
+  const subtitle = view.spec.subtitle ?? view.description ?? null;
+  const hero = computed.theme?.header === 'hero';
   void countPublicOpen(db, view).catch(() => undefined);
 
   return (
     <Shell organization={organizationName}>
-      <header className="mb-6">
-        <h1 className="text-xl font-bold tracking-tight text-ink">{view.name}</h1>
-        {(view.spec.subtitle || view.description) && (
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">
-            {view.spec.subtitle ?? view.description}
-          </p>
-        )}
-      </header>
+      {!hero && (
+        <header className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-ink">{view.name}</h1>
+          {subtitle && (
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">{subtitle}</p>
+          )}
+        </header>
+      )}
       <LiveViewCanvas
         initial={computed}
         target={{ kind: 'public', token }}
         dataUrl={`/api/views/public/data?token=${encodeURIComponent(token)}`}
+        heading={{ title: view.name, subtitle }}
       />
       <p className="mt-8 text-micro text-ink-faint">
         Datos al{' '}

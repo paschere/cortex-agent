@@ -1,13 +1,18 @@
 import { BLOCK_LABEL } from '@/lib/views/editor-shape';
 import {
+  CalendarDays,
   ChartColumn,
   ClipboardList,
+  GalleryVerticalEnd,
   Hash,
+  ImageIcon,
   LayoutGrid,
+  Link2,
   type LucideIcon,
   MapPinned,
   SquareKanban,
   Table2,
+  Target,
   Type,
 } from 'lucide-react';
 
@@ -20,6 +25,11 @@ export const BLOCK_ICON: Record<string, LucideIcon> = {
   zones: MapPinned,
   form: ClipboardList,
   text: Type,
+  gallery: GalleryVerticalEnd,
+  calendar: CalendarDays,
+  progress: Target,
+  media: ImageIcon,
+  links: Link2,
 };
 
 export function blockIcon(type: string): LucideIcon {
@@ -39,4 +49,9 @@ export const BLOCK_PITCH: Record<string, string> = {
   zones: 'Un plano del lugar: cada zona con lo que hay adentro.',
   form: 'Para que alguien agregue una fila sin entrar a la tabla.',
   text: 'Un título o una explicación corta.',
+  gallery: 'Tarjetas en rejilla, con foto y etiqueta: productos, inmuebles, pacientes.',
+  calendar: 'Citas, entregas o vencimientos en el mes, o la agenda de los próximos días.',
+  progress: 'Barras de avance hacia una meta, en total o por sede, vendedor o ruta.',
+  media: 'Una imagen, o un video de YouTube o Loom, un mapa o una presentación.',
+  links: 'Botones que llevan a otra vista o a una página.',
 };

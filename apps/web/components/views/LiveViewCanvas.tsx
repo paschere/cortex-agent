@@ -1,10 +1,17 @@
 'use client';
 
+import {
+  type FilterState,
+  encodeFilterState,
+  stateFromComputed,
+  withFilterParam,
+} from '@/lib/views/filter-param';
 import type { ComputedView } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { Bell, BellOff, Radio, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type SubmitTarget, ViewCanvas } from './ViewCanvas';
+import { ViewHero } from './blocks/ViewChrome';
 
 /**
  * UNA VISTA QUE SE MANTIENE AL DÍA SOLA, Y QUE AVISA.
@@ -22,6 +29,19 @@ import { type SubmitTarget, ViewCanvas } from './ViewCanvas';
  * sistema. Los navegadores no dejan sonar nada hasta que alguien toca la
  * página, así que el primer clic en «Activar avisos» es también el que
  * desbloquea el audio.
+ *
+ * FILTROS Y PÁGINAS EN LA DIRECCIÓN. Lo elegido en la barra de filtros viaja
+ * como `?f=` (ver lib/views/filter-param.ts) y la pestaña como `?p=`: copiar
+ * la dirección comparte la vista tal como se está mirando. Cambiar un filtro
+ * pide la vista recalculada en el servidor con ese `f` (los refrescos en vivo
+ * también lo llevan), y una respuesta vieja que llega tarde se descarta: la
+ * pantalla siempre muestra el ÚLTIMO filtro elegido. Si la página llegó sin
+ * filtrar y la dirección trae `f` (la página de adentro no lo lee), se pide
+ * filtrada al abrir.
+ *
+ * LA CABECERA GRANDE. Con `theme.header: 'hero'` y un `heading`, el lienzo
+ * pinta la banda con el título, el subtítulo y la portada; quien lo monta no
+ * pinta su propio título.
  */
 
 interface Toast {
@@ -57,13 +77,21 @@ export function LiveViewCanvas({
   initial,
   target,
   dataUrl,
+  heading,
 }: {
   initial: ComputedView;
   target: SubmitTarget;
   /** De dónde se refresca: /api/views/<id>/data o /api/views/public/data?token=… */
   dataUrl: string;
+  /** Título y subtítulo para la cabecera `hero`, si el tema la pide. */
+  heading?: { title: string; subtitle?: string | null };
 }) {
   const [view, setView] = useState(initial);
+  const [filters, setFilters] = useState<FilterState>(() => stateFromComputed(initial.filtersBar));
+  const [filtering, setFiltering] = useState(false);
+  const [page, setPage] = useState<string | null>(null);
+  const filterParam = useRef(encodeFilterState(stateFromComputed(initial.filtersBar)));
+  const seq = useRef(0);
   const [updatedAt, setUpdatedAt] = useState(() => Date.now());
   const [, tick] = useState(0);
   const [failing, setFailing] = useState(false);
@@ -123,23 +151,80 @@ export function LiveViewCanvas({
     [alertsOn],
   );
 
-  const refresh = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
+  /**
+   * `force`: un cambio de filtro o una escritura; va aunque haya un sondeo en
+   * vuelo, y el que llegue después de otro más nuevo se descarta.
+   */
+  const refresh = useCallback(
+    async (force = false) => {
+      if (inFlight.current && !force) return;
+      inFlight.current = true;
+      const mine = ++seq.current;
+      try {
+        const url = withFilterParam(dataUrl, filterParam.current, window.location.origin);
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(String(res.status));
+        const body = (await res.json()) as { view: ComputedView };
+        if (mine !== seq.current) return;
+        setView(body.view);
+        setUpdatedAt(Date.now());
+        setFailing(false);
+        announce(body.view);
+      } catch {
+        if (mine === seq.current) setFailing(true);
+      } finally {
+        if (mine === seq.current) {
+          inFlight.current = false;
+          setFiltering(false);
+        }
+      }
+    },
+    [dataUrl, announce],
+  );
+
+  /** Escribe `?f=` / `?p=` sin recargar ni agregar pasos al historial. */
+  const writeUrl = useCallback((key: 'f' | 'p', value: string | null) => {
     try {
-      const res = await fetch(dataUrl, { cache: 'no-store' });
-      if (!res.ok) throw new Error(String(res.status));
-      const body = (await res.json()) as { view: ComputedView };
-      setView(body.view);
-      setUpdatedAt(Date.now());
-      setFailing(false);
-      announce(body.view);
+      const url = new URL(window.location.href);
+      if (value) url.searchParams.set(key, value);
+      else url.searchParams.delete(key);
+      window.history.replaceState(window.history.state, '', url);
     } catch {
-      setFailing(true);
-    } finally {
-      inFlight.current = false;
+      /* Sin historial (un iframe raro): el filtro vale igual en pantalla. */
     }
-  }, [dataUrl, announce]);
+  }, []);
+
+  const changeFilters = useCallback(
+    (next: FilterState) => {
+      setFilters(next);
+      const f = encodeFilterState(next);
+      if (f === filterParam.current) return;
+      filterParam.current = f;
+      writeUrl('f', f || null);
+      setFiltering(true);
+      void refresh(true);
+    },
+    [refresh, writeUrl],
+  );
+
+  // Al abrir: la pestaña y el filtro que traiga la dirección.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo al montar.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('p');
+    if (p && initial.pages?.some((x) => x.id === p)) setPage(p);
+    const f = params.get('f') ?? '';
+    if ((initial.filtersBar?.length ?? 0) > 0 && f !== filterParam.current) {
+      filterParam.current = f;
+      setFiltering(true);
+      void refresh(true);
+    }
+  }, []);
+
+  // Lo que el servidor validó manda: si descartó parte del filtro, la barra lo refleja.
+  useEffect(() => {
+    if (!filtering) setFilters(stateFromComputed(view.filtersBar));
+  }, [view.filtersBar, filtering]);
 
   useEffect(() => {
     const every = view.refreshSeconds * 1000;
@@ -194,6 +279,9 @@ export function LiveViewCanvas({
 
   return (
     <div>
+      {heading && view.theme?.header === 'hero' && (
+        <ViewHero title={heading.title} subtitle={heading.subtitle} theme={view.theme} />
+      )}
       {(view.refreshSeconds > 0 || hasAlerts) && (
         <div className="mb-3 flex flex-wrap items-center justify-end gap-2 text-micro text-ink-faint">
           {view.refreshSeconds > 0 && (
@@ -225,7 +313,19 @@ export function LiveViewCanvas({
         </div>
       )}
 
-      <ViewCanvas view={view} target={target} onChanged={() => void refresh()} />
+      <ViewCanvas
+        view={view}
+        target={target}
+        onChanged={() => void refresh(true)}
+        filters={{ state: filters, onChange: changeFilters, pending: filtering }}
+        page={{
+          current: page,
+          onSelect: (id) => {
+            setPage(id);
+            writeUrl('p', id === view.pages?.[0]?.id ? null : id);
+          },
+        }}
+      />
 
       <div
         aria-live="polite"

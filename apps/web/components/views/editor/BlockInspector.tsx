@@ -5,12 +5,23 @@ import {
   AGGREGATE_LABEL,
   BUCKETS,
   BUCKET_LABEL,
+  CALENDAR_MODES,
+  CALENDAR_MODE_LABEL,
   CHART_KINDS,
   CHART_LABEL,
   type EditorAggregate,
   type EditorTone,
   FORMATS,
   FORMAT_LABEL,
+  GALLERY_COLUMNS,
+  LINK_STYLES,
+  LINK_STYLE_LABEL,
+  MEDIA_ASPECTS,
+  MEDIA_KINDS,
+  MEDIA_KIND_LABEL,
+  PERIODS,
+  PERIOD_LABEL,
+  RECORD_BLOCK_TYPES,
   TONES,
   TONE_LABEL,
   WIDTHS,
@@ -26,17 +37,19 @@ import {
 import { normalizeLayout } from '@/lib/views/zone-layout';
 import type { RowAction, ViewBlock, ViewFilter } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { AlertTriangle, Lock } from 'lucide-react';
+import { AlertTriangle, Lock, Plus } from 'lucide-react';
 import { useId } from 'react';
 import { ActionsEditor } from './ActionsEditor';
 import { FiltersEditor } from './FiltersEditor';
 import { ZoneDrawer } from './ZoneDrawer';
 import {
+  AddButton,
   Field,
   FieldChips,
   FieldSelect,
   INPUT,
   NumberInput,
+  RemoveButton,
   Section,
   Segmented,
   SourceSelect,
@@ -112,18 +125,33 @@ export function BlockInspector({
       )}
 
       <Section title="Contenido">
-        {'title' in block && typeof block.title === 'string' && (
-          <Field label="Título">
+        {(block.type === 'media' || block.type === 'links') && (
+          <Field label="Título (opcional)">
             <input
-              value={block.title}
+              value={block.title ?? ''}
               maxLength={120}
               onChange={(e) =>
-                onChange({ ...block, title: e.target.value } as ViewBlock, key('title'))
+                onChange({ ...block, title: e.target.value || undefined }, key('title'))
               }
               className={INPUT}
             />
           </Field>
         )}
+        {'title' in block &&
+          typeof block.title === 'string' &&
+          block.type !== 'media' &&
+          block.type !== 'links' && (
+            <Field label="Título">
+              <input
+                value={block.title}
+                maxLength={120}
+                onChange={(e) =>
+                  onChange({ ...block, title: e.target.value } as ViewBlock, key('title'))
+                }
+                className={INPUT}
+              />
+            </Field>
+          )}
         {block.type === 'text' && (
           <Field label="Texto" hint="## para un título, **negrita**, - para una lista.">
             <textarea
@@ -135,6 +163,8 @@ export function BlockInspector({
             />
           </Field>
         )}
+        {block.type === 'media' && <MediaFields block={block} onChange={onChange} />}
+        {block.type === 'links' && <LinksFields block={block} onChange={onChange} />}
         <Segmented
           label="Ancho"
           value={block.width}
@@ -178,6 +208,8 @@ export function BlockInspector({
           />
         </Section>
       )}
+
+      <RecordSection block={block} source={source} onChange={onChange} />
 
       <Interaction
         block={block}
@@ -243,6 +275,8 @@ function TypeFields({
 }) {
   const fields = fieldOptions(source);
   const numeric = fields.filter(isNumericField);
+  const dates = fields.filter(isDateField);
+  const selects = fields.filter((f) => f.type === 'select');
   switch (block.type) {
     case 'metric':
       return (
@@ -286,8 +320,281 @@ function TypeFields({
               className={INPUT}
             />
           </Field>
+          <Toggle
+            label="Comparar con el período anterior"
+            hint="La cifra pasa a ser la del período, con flecha y una línea de los últimos."
+            checked={Boolean(block.compare)}
+            disabled={!dates.length}
+            onChange={(on) =>
+              onChange(
+                on
+                  ? {
+                      ...block,
+                      compare: 'previous_period',
+                      period: block.period ?? 'month',
+                      dateField:
+                        block.dateField ?? dates.find((f) => !f.builtin)?.key ?? dates[0]?.key,
+                    }
+                  : { ...block, compare: undefined },
+              )
+            }
+          />
+          {block.compare && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Según la fecha">
+                  <FieldSelect
+                    fields={dates}
+                    value={block.dateField}
+                    onChange={(dateField) => dateField && onChange({ ...block, dateField })}
+                  />
+                </Field>
+                <Field label="Período">
+                  <select
+                    value={block.period ?? 'month'}
+                    onChange={(e) =>
+                      onChange({ ...block, period: e.target.value as (typeof PERIODS)[number] })
+                    }
+                    className={INPUT}
+                  >
+                    {PERIODS.map((p) => (
+                      <option key={p} value={p}>
+                        {PERIOD_LABEL[p]}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <Segmented
+                label="Subir es"
+                value={block.goodWhen ?? 'up'}
+                options={[
+                  { value: 'up', label: 'Bueno (ventas)' },
+                  { value: 'down', label: 'Malo (devoluciones)' },
+                ]}
+                onChange={(goodWhen) => onChange({ ...block, goodWhen })}
+              />
+            </>
+          )}
         </>
       );
+    case 'gallery':
+      return (
+        <>
+          <Field label="Título de cada tarjeta">
+            <FieldSelect
+              fields={fields.filter((f) => !isDateField(f))}
+              value={block.titleField}
+              onChange={(titleField) => titleField && onChange({ ...block, titleField })}
+            />
+          </Field>
+          <Field label="Subtítulo">
+            <FieldSelect
+              fields={fields}
+              value={block.subtitleField}
+              emptyLabel="Sin subtítulo"
+              onChange={(subtitleField) => onChange({ ...block, subtitleField })}
+            />
+          </Field>
+          <FieldChips
+            label="Datos de cada tarjeta"
+            fields={fields.filter((f) => f.key !== 'label')}
+            value={block.metaFields}
+            max={3}
+            emptyHint="Sólo el título y el subtítulo."
+            onChange={(metaFields) => onChange({ ...block, metaFields })}
+          />
+          <Field label="Etiqueta de color" hint="Cada opción con su color.">
+            <FieldSelect
+              fields={selects}
+              value={block.badgeField}
+              emptyLabel="Sin etiqueta"
+              onChange={(badgeField) => onChange({ ...block, badgeField })}
+            />
+          </Field>
+          <Field
+            label="Foto"
+            hint="Un campo de texto con la dirección https:// de la imagen. Las demás no se muestran."
+          >
+            <FieldSelect
+              fields={fields.filter((f) => f.type === 'text' && !f.builtin)}
+              value={block.imageField}
+              emptyLabel="Sin foto"
+              onChange={(imageField) => onChange({ ...block, imageField })}
+            />
+          </Field>
+          <Segmented
+            label="Tarjetas por fila"
+            value={block.columns}
+            options={GALLERY_COLUMNS.map((c) => ({ value: c, label: String(c) }))}
+            onChange={(columns) => onChange({ ...block, columns })}
+          />
+          <SortPicker
+            fields={fields}
+            sort={block.sort}
+            onChange={(sort) => onChange({ ...block, sort })}
+          />
+          <Field label="Máximo de tarjetas">
+            <NumberInput
+              min={1}
+              max={48}
+              value={block.limit}
+              onChange={(limit) => onChange({ ...block, limit: limit ?? 12 }, `${block.id}:limit`)}
+            />
+          </Field>
+        </>
+      );
+    case 'calendar':
+      return (
+        <>
+          <Segmented
+            label="Cómo se ve"
+            value={block.mode}
+            options={CALENDAR_MODES.map((m) => ({ value: m, label: CALENDAR_MODE_LABEL[m] }))}
+            onChange={(mode) => onChange({ ...block, mode })}
+          />
+          <Field label="Fecha de cada evento">
+            <FieldSelect
+              fields={dates}
+              value={block.dateField}
+              onChange={(dateField) => dateField && onChange({ ...block, dateField })}
+            />
+          </Field>
+          <Field label="Nombre de cada evento">
+            <FieldSelect
+              fields={fields.filter((f) => !isDateField(f))}
+              value={block.labelField}
+              onChange={(labelField) => labelField && onChange({ ...block, labelField })}
+            />
+          </Field>
+          <Field label="Color según" hint="Un campo de opciones: cada opción con su color.">
+            <FieldSelect
+              fields={selects}
+              value={block.colorField}
+              emptyLabel="Un solo color"
+              onChange={(colorField) => onChange({ ...block, colorField })}
+            />
+          </Field>
+          {block.mode === 'agenda' && (
+            <Field label="Días hacia adelante" hint="Contando hoy, hasta 60.">
+              <NumberInput
+                min={1}
+                max={60}
+                value={block.days}
+                onChange={(days) => onChange({ ...block, days: days ?? 14 }, `${block.id}:days`)}
+              />
+            </Field>
+          )}
+        </>
+      );
+    case 'progress': {
+      const groupOptions = selects.find((f) => f.key === block.groupBy)?.options ?? [];
+      return (
+        <>
+          <Field label="Una barra por" hint="Sin agrupar, es una sola barra contra la meta.">
+            <FieldSelect
+              fields={fields.filter((f) => !isNumericField(f))}
+              value={block.groupBy}
+              emptyLabel="Sin agrupar: una sola barra"
+              onChange={(groupBy) =>
+                onChange({
+                  ...block,
+                  groupBy,
+                  targets: [],
+                  target: groupBy ? block.target : (block.target ?? 100),
+                })
+              }
+            />
+          </Field>
+          <AggregatePicker
+            aggregate={block.aggregate}
+            field={block.field}
+            numeric={numeric}
+            onChange={(aggregate, field) =>
+              onChange({
+                ...block,
+                aggregate,
+                field,
+                format:
+                  aggregate !== 'count' && numeric.find((f) => f.key === field)?.type === 'money'
+                    ? 'money'
+                    : block.format,
+              })
+            }
+          />
+          <Field
+            label={block.groupBy ? 'Meta común (opcional)' : 'Meta'}
+            hint={
+              block.groupBy
+                ? 'Sin ninguna meta, cada barra se compara con la más grande.'
+                : undefined
+            }
+          >
+            <NumberInput
+              min={0}
+              value={block.target}
+              onChange={(target) =>
+                onChange(
+                  { ...block, target: target && target > 0 ? target : undefined },
+                  `${block.id}:target`,
+                )
+              }
+            />
+          </Field>
+          {groupOptions.length > 0 && (
+            <fieldset className="space-y-1.5">
+              <legend className="field-label mb-1">Meta de cada grupo (opcional)</legend>
+              {groupOptions.slice(0, 24).map((group) => {
+                const current = block.targets.find((t) => t.group === group)?.target;
+                return (
+                  <div
+                    key={group}
+                    className="grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-2"
+                  >
+                    <span className="truncate text-xs text-ink">{group}</span>
+                    <NumberInput
+                      ariaLabel={`Meta de ${group}`}
+                      min={0}
+                      value={current}
+                      placeholder={block.target ? String(block.target) : '—'}
+                      onChange={(target) =>
+                        onChange(
+                          {
+                            ...block,
+                            targets: [
+                              ...block.targets.filter((t) => t.group !== group),
+                              ...(target && target > 0 ? [{ group, target }] : []),
+                            ],
+                          },
+                          `${block.id}:targets:${group}`,
+                        )
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </fieldset>
+          )}
+          <Segmented
+            label="Formato"
+            value={block.format}
+            options={FORMATS.map((f) => ({ value: f, label: FORMAT_LABEL[f] }))}
+            onChange={(format) => onChange({ ...block, format })}
+          />
+          {block.groupBy && (
+            <Field label="Máximo de barras">
+              <NumberInput
+                min={1}
+                max={24}
+                value={block.limit}
+                onChange={(limit) => onChange({ ...block, limit: limit ?? 8 }, `${block.id}:limit`)}
+              />
+            </Field>
+          )}
+          <ToneSwatches value={block.tone} onChange={(tone) => onChange({ ...block, tone })} />
+        </>
+      );
+    }
     case 'chart': {
       const groupType = fields.find((f) => f.key === block.groupBy)?.type;
       return (
@@ -351,36 +658,11 @@ function TypeFields({
             emptyHint="Automáticas: el nombre y los primeros cinco campos."
             onChange={(columns) => onChange({ ...block, columns })}
           />
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
-            <Field label="Ordenar por">
-              <FieldSelect
-                fields={fields}
-                value={block.sort?.field}
-                emptyLabel="Lo más reciente primero"
-                onChange={(field) =>
-                  onChange({
-                    ...block,
-                    sort: field ? { field, dir: block.sort?.dir ?? 'desc' } : undefined,
-                  })
-                }
-              />
-            </Field>
-            {block.sort && (
-              <Segmented
-                label="Dirección"
-                hideLabel
-                size="sm"
-                value={block.sort.dir}
-                options={[
-                  { value: 'desc', label: 'Mayor primero' },
-                  { value: 'asc', label: 'Menor primero' },
-                ]}
-                onChange={(dir) =>
-                  block.sort && onChange({ ...block, sort: { field: block.sort.field, dir } })
-                }
-              />
-            )}
-          </div>
+          <SortPicker
+            fields={fields}
+            sort={block.sort}
+            onChange={(sort) => onChange({ ...block, sort })}
+          />
           <Field label="Máximo de filas">
             <NumberInput
               min={1}
@@ -470,6 +752,247 @@ function TypeFields({
   }
 }
 
+const isDateField = (f: ReturnType<typeof fieldOptions>[number]) => f.type === 'date';
+
+function SortPicker({
+  fields,
+  sort,
+  onChange,
+}: {
+  fields: ReturnType<typeof fieldOptions>;
+  sort: { field: string; dir: 'asc' | 'desc' } | undefined;
+  onChange: (sort: { field: string; dir: 'asc' | 'desc' } | undefined) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+      <Field label="Ordenar por">
+        <FieldSelect
+          fields={fields}
+          value={sort?.field}
+          emptyLabel="Lo más reciente primero"
+          onChange={(field) => onChange(field ? { field, dir: sort?.dir ?? 'desc' } : undefined)}
+        />
+      </Field>
+      {sort && (
+        <Segmented
+          label="Dirección"
+          hideLabel
+          size="sm"
+          value={sort.dir}
+          options={[
+            { value: 'desc', label: 'Mayor primero' },
+            { value: 'asc', label: 'Menor primero' },
+          ]}
+          onChange={(dir) => onChange({ field: sort.field, dir })}
+        />
+      )}
+    </div>
+  );
+}
+
+type MediaBlock = Extract<ViewBlock, { type: 'media' }>;
+type LinksBlock = Extract<ViewBlock, { type: 'links' }>;
+
+/** Imagen o inserción: una dirección, nunca HTML. El servidor la valida en la vista previa. */
+function MediaFields({ block, onChange }: { block: MediaBlock; onChange: Change }) {
+  return (
+    <>
+      <Segmented
+        label="Qué es"
+        value={block.kind}
+        options={MEDIA_KINDS.map((k) => ({ value: k, label: MEDIA_KIND_LABEL[k] }))}
+        onChange={(kind) => onChange({ ...block, kind })}
+      />
+      <Field
+        label="Dirección"
+        hint={
+          block.kind === 'embed'
+            ? 'YouTube, Loom, «Insertar un mapa» de Google Maps, o Google Slides/Docs publicados en la web.'
+            : 'La dirección https:// de la imagen.'
+        }
+      >
+        <input
+          type="url"
+          inputMode="url"
+          placeholder="https://"
+          maxLength={1000}
+          value={block.url ?? ''}
+          onChange={(e) =>
+            onChange({ ...block, url: e.target.value.trim() || undefined }, `${block.id}:url`)
+          }
+          className={INPUT}
+        />
+      </Field>
+      {block.kind === 'image' && (
+        <Field label="Qué muestra la imagen" hint="Para quien no la ve (lector de pantalla).">
+          <input
+            maxLength={200}
+            value={block.alt ?? ''}
+            onChange={(e) =>
+              onChange({ ...block, alt: e.target.value || undefined }, `${block.id}:alt`)
+            }
+            className={INPUT}
+          />
+        </Field>
+      )}
+      <Field label="Pie (opcional)">
+        <input
+          maxLength={300}
+          value={block.caption ?? ''}
+          onChange={(e) =>
+            onChange({ ...block, caption: e.target.value || undefined }, `${block.id}:caption`)
+          }
+          className={INPUT}
+        />
+      </Field>
+      <Segmented
+        label="Proporción"
+        value={block.aspect}
+        options={MEDIA_ASPECTS.map((a) => ({ value: a, label: a }))}
+        onChange={(aspect) => onChange({ ...block, aspect })}
+      />
+    </>
+  );
+}
+
+/** Los botones de navegación: hasta ocho, cada uno a una ruta de Cortex o a una página https. */
+function LinksFields({ block, onChange }: { block: LinksBlock; onChange: Change }) {
+  const set = (i: number, patch: Partial<LinksBlock['links'][number]>) =>
+    onChange(
+      { ...block, links: block.links.map((l, j) => (j === i ? { ...l, ...patch } : l)) },
+      `${block.id}:links:${i}`,
+    );
+  return (
+    <>
+      <Segmented
+        label="Estilo"
+        value={block.style}
+        options={LINK_STYLES.map((s) => ({ value: s, label: LINK_STYLE_LABEL[s] }))}
+        onChange={(style) => onChange({ ...block, style })}
+      />
+      <div className="space-y-2">
+        <span className="field-label block">Botones</span>
+        {block.links.map((link, i) => (
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: los botones no tienen id; el orden es su identidad.
+            key={i}
+            className="space-y-2 rounded-sm border border-border bg-surface-2/60 p-2.5"
+          >
+            <div className="flex items-center gap-2">
+              <input
+                aria-label={`Texto del botón ${i + 1}`}
+                maxLength={40}
+                value={link.label}
+                onChange={(e) => set(i, { label: e.target.value })}
+                className={INPUT}
+              />
+              <RemoveButton
+                label={`Quitar el botón ${link.label || i + 1}`}
+                onClick={() =>
+                  block.links.length > 1 &&
+                  onChange({ ...block, links: block.links.filter((_, j) => j !== i) })
+                }
+              />
+            </div>
+            <input
+              aria-label={`Destino del botón ${i + 1}`}
+              placeholder="/views/cartera o https://…"
+              maxLength={1000}
+              value={link.href}
+              onChange={(e) => set(i, { href: e.target.value.trim() })}
+              className={INPUT}
+            />
+            <input
+              aria-label={`Descripción del botón ${i + 1}`}
+              placeholder="Una línea (opcional)"
+              maxLength={120}
+              value={link.description ?? ''}
+              onChange={(e) => set(i, { description: e.target.value || undefined })}
+              className={INPUT}
+            />
+            <select
+              aria-label={`Color del botón ${i + 1}`}
+              value={link.tone}
+              onChange={(e) => set(i, { tone: e.target.value as EditorTone })}
+              className={INPUT}
+            >
+              {TONES.map((t) => (
+                <option key={t} value={t}>
+                  {TONE_LABEL[t]}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+        <AddButton
+          disabled={block.links.length >= 8}
+          onClick={() =>
+            onChange({
+              ...block,
+              links: [...block.links, { label: 'Nuevo botón', href: '/views', tone: 'primary' }],
+            })
+          }
+        >
+          <Plus className="h-3.5 w-3.5" /> Agregar botón
+        </AddButton>
+      </div>
+    </>
+  );
+}
+
+type RecordLike = {
+  id: string;
+  type: string;
+  openRecord?: boolean;
+  detailFields?: string[];
+};
+
+/** La ficha de una fila: si se abre y qué campos muestra. */
+function RecordSection({
+  block,
+  source,
+  onChange,
+}: {
+  block: ViewBlock;
+  source: EditorSource | undefined;
+  onChange: Change;
+}) {
+  if (!(RECORD_BLOCK_TYPES as readonly string[]).includes(block.type)) return null;
+  const loose = block as unknown as RecordLike;
+  const on = loose.openRecord !== false;
+  return (
+    <Section title="Ficha de cada fila">
+      <Toggle
+        label="Abrir la ficha al tocar una fila"
+        hint="Un panel con todos los campos, sus botones y cuándo cambió."
+        checked={on}
+        onChange={(next) =>
+          onChange({ ...block, openRecord: next ? undefined : false } as ViewBlock)
+        }
+      />
+      {on && (
+        <FieldChips
+          label="Campos de la ficha"
+          fields={fieldOptions(source).filter((f) => !f.builtin)}
+          value={loose.detailFields ?? []}
+          max={16}
+          emptyHint={
+            source?.readOnly
+              ? 'Los primeros ocho campos. Por enlace, sólo los que el bloque ya muestra.'
+              : 'Todos los campos. Por enlace, sólo los que el bloque ya muestra.'
+          }
+          onChange={(detailFields) =>
+            onChange({
+              ...block,
+              detailFields: detailFields.length ? detailFields : undefined,
+            } as ViewBlock)
+          }
+        />
+      )}
+    </Section>
+  );
+}
+
 function AggregatePicker({
   aggregate,
   field,
@@ -550,7 +1073,10 @@ function ToneSwatches({
   );
 }
 
-/** Celdas editables, arrastrar y botones: sólo en tablas propias, y sólo si alguien tiene permiso. */
+/**
+ * Celdas editables, campos que se editan en la ficha, arrastrar y botones:
+ * sólo en tablas propias, y sólo si alguien tiene permiso.
+ */
 function Interaction({
   block,
   source,
@@ -564,16 +1090,25 @@ function Interaction({
   onChange: Change;
   onAllowEditing: () => void;
 }) {
-  const loose = block as unknown as { type: string };
-  const isTable = block.type === 'table';
+  const loose = block as unknown as {
+    type: string;
+    draggable?: boolean;
+    actions?: RowAction[];
+    recordEditable?: string[];
+    openRecord?: boolean;
+  };
   const isBoard = loose.type === 'board' || loose.type === 'zones';
-  if (!isTable && !isBoard) return null;
+  if (!(RECORD_BLOCK_TYPES as readonly string[]).includes(loose.type)) return null;
   const readOnly = !source || source.readOnly;
   const fields = fieldOptions(source).filter((f) => !f.builtin);
   const board = block as unknown as BoardLike;
-  const writes = isTable
-    ? block.type === 'table' && (block.editable.length > 0 || block.actions.length > 0)
-    : board.draggable || board.actions.length > 0;
+  const actions = loose.actions ?? [];
+  const recordEditable = loose.recordEditable ?? [];
+  const writes =
+    actions.length > 0 ||
+    recordEditable.length > 0 ||
+    (block.type === 'table' && block.editable.length > 0) ||
+    (isBoard && board.draggable);
 
   return (
     <Section title="Interacción">
@@ -602,13 +1137,28 @@ function Interaction({
               onChange={(draggable) => onChange({ ...board, draggable } as unknown as ViewBlock)}
             />
           )}
+          {loose.openRecord !== false && (
+            <FieldChips
+              label="Campos que se editan en la ficha"
+              fields={fields}
+              value={recordEditable}
+              max={12}
+              emptyHint="Ninguno: la ficha sólo se lee."
+              onChange={(next) =>
+                onChange({
+                  ...block,
+                  recordEditable: next.length ? next : undefined,
+                } as ViewBlock)
+              }
+            />
+          )}
           <div>
             <span className="field-label mb-1 block">Botones en cada fila</span>
             <ActionsEditor
               source={source}
-              actions={isTable && block.type === 'table' ? block.actions : board.actions}
-              onChange={(actions) =>
-                onChange({ ...block, actions } as ViewBlock, `${block.id}:actions`)
+              actions={actions}
+              onChange={(next) =>
+                onChange({ ...block, actions: next } as ViewBlock, `${block.id}:actions`)
               }
             />
           </div>

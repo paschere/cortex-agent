@@ -13,11 +13,31 @@ Un spec JSON declarativo con 1–24 bloques. No hay HTML ni código generado: po
 | `table` | Columnas elegidas, orden, buscador y orden por columna en el navegador. |
 | `chart` | Barras, línea (por día/semana/mes) o dona. |
 | `board` | Tablero por un campo de opciones. |
+| `zones` | Plano: cada opción es una zona dibujada en una rejilla de 12×12. |
 | `form` | Agrega una fila a la tabla. Sólo escribe los campos que el bloque pide. |
+| `gallery` | Tarjetas en rejilla (2–4 columnas): título, subtítulo, hasta 3 datos, etiqueta de color (campo de opciones, color por posición) y foto (campo de texto con una dirección `https:`). |
+| `calendar` | `month`: cuadrícula del mes (el cálculo entrega mes anterior, actual y siguiente; se navega sin pedir datos). `agenda`: los próximos `days` días. Color por un campo de opciones. Tope de 300 eventos. |
+| `progress` | Barras de avance: una sola contra `target`, o una por grupo contra su meta en `targets` (o la común). Sin metas, relativas a la más grande. |
+| `media` | Imagen `https:` o inserción SÓLO de YouTube, Loom, Google Maps («Insertar un mapa»), Google Slides/Docs publicados (`embeds.ts`). Nunca HTML. |
+| `links` | Botones de navegación (hasta 8): ruta interna (`/views/…`) o `https:`. |
+
+`metric` también puede comparar con el período anterior: `compare: 'previous_period'`, `period` (`day`/`week`/`month`), `dateField` y `goodWhen` (`up`/`down`: el color de la flecha dice si el cambio es bueno). La cifra pasa a ser la del período, con delta y una línea de los últimos 10–12 períodos.
 
 Filtros: `eq`, `neq`, `contains`, `gt/gte/lt/lte`, `empty`, `not_empty`, `before_today`, `after_today`, `next_days`, `last_days` (hoy en Bogotá). Anchos `full`/`half`/`third` en una rejilla de 6 columnas; en móvil todo es ancho completo.
 
 Código: `packages/agent-tools/src/views/` — `spec.ts` (contrato y comprobación contra el catálogo), `compute.ts` (spec + filas → bloques resueltos, puro), `sources.ts` (registro de fuentes de la plataforma), `feed-sources.ts` (tablas del Feed: ids, encabezados → campos, lectura con dueño), `store.ts` (lectura/escritura, contraseñas, enlaces, formularios), `tools.ts`.
+
+## Ficha, barra de filtros, páginas y aspecto
+
+**Ficha de una fila.** En `table`, `board`, `zones`, `gallery` y `calendar`, tocar una fila abre un panel (hoja inferior en el teléfono) con sus campos, los editables, sus botones y sus fechas. Por bloque: `openRecord: false` la apaga, `detailFields` (≤16) elige los campos, `recordEditable` (≤12, sólo tablas propias, exige `editing`) los que se editan ahí. Los datos viajan con el cálculo (`block.record`), sólo para las filas que el bloque muestra y sólo los campos declarados: no hay ruta nueva que repita las puertas (sesión/token, contraseña, fuentes internas/personales, Feed sólo del dueño) ni una consulta por clic. Por defecto: dentro del equipo, todos los campos de una tabla propia (los primeros 8 de una fuente de sólo lectura); **por enlace (`audience: 'public'`), sólo los que el bloque ya pinta**, para que una vista ya compartida no empiece a mostrar más campos afuera. Escribir desde la ficha pasa por `editViewRow` con la lista blanca `blockWriteFields` (celdas + campo que se arrastra + `recordEditable`).
+
+**Barra de filtros** (`spec.filtersBar`, ≤6): `{id, label, source, field, kind: select|date_range|search}`. Filtra en el servidor todos los bloques (y avisos) que leen esa fuente. El navegador manda `?f=` (una query `id=valor&…` codificada; rango `desde~hasta`) a `/api/views/[id]/data` y `/api/views/public/data`; `parseViewFilterParam` lo valida contra el spec guardado y descarta lo demás. `LiveViewCanvas` lo deja en la dirección para compartir la vista filtrada; `/v/<token>?f=…` abre ya filtrada. La fuente tiene que estar en algún bloque y el rango, sobre una fecha (`checkSpecAgainst`).
+
+**Páginas** (`spec.pages`, ≤8): pestañas sobre la misma lista de bloques; un bloque puede estar en varias y el que no está en ninguna sale en la primera. La elegida va en `?p=`. Sin páginas, una sola.
+
+**Aspecto** (`spec.theme`): `accent` (los cinco tonos; si falta, `spec.accent`), `density` (`comfortable`/`compact`), `header` (`plain`/`hero`: banda con título, subtítulo y `cover` https). Sólo tokens. La página pública pinta la banda en lugar de su título; adentro, quien monta `LiveViewCanvas` le pasa `heading`.
+
+Todo lo nuevo es opcional y sin valores por defecto en el contrato: los specs guardados no cambian ni de forma ni de tipo. Código: `embeds.ts` (direcciones), `view-filters.ts` (parámetro `f`), `compute.ts` (bloques, ficha, barra, páginas, tema); en web, `components/views/blocks/*`.
 
 ## Fuentes de la plataforma
 
@@ -102,13 +122,25 @@ Los llamadores pasan `viewerId`: la página de la vista, `/api/views/[id]/data` 
 
 ## Cómo se crea y se edita
 
-- **En /views**: se describe la vista; `/api/views/design` devuelve un borrador con vista previa calculada con datos reales. Se puede seguir afinando con otra frase. Nada se guarda sin «Crear vista» / «Guardar cambios». Si faltan datos, el diseñador puede proponer hasta 2 tablas nuevas, que se crean al guardar (nunca modifica una tabla existente).
-- **En /views/<slug>**: la barra de abajo («Pídele un cambio a Cortex») edita la vista con texto, y «Editar» (`?editar=1`) abre el lienzo (abajo).
-- **Plantillas en /views**: «Cartera» y «Ventas del mes» son specs sobre `cortex.ventas` que abren directo en el lienzo con datos reales (sin gastar respuestas del plan); «Operación de carga» y «Seguimiento de solicitudes» se le piden a Cortex porque dependen de las tablas de cada empresa; «Lienzo en blanco» arranca con un bloque de texto. `apps/web/lib/views/starter-templates.ts`.
+- **En /views** (`components/views/gallery/ViewsLibrary.tsx`): la estantería con buscador, filtros (Fijadas / Compartidas / Mías), orden, miniaturas con el acento de cada vista, quién la editó y cuándo, y un menú por tarjeta (abrir, editar, duplicar, fijar, compartir, archivar; las mismas acciones de servidor y reglas que la barra de la vista; «Duplicar» es `duplicateViewAction`, que guarda la misma spec con `saveViewAction`). «Nueva vista» (o `?nueva=1`) abre la galería (`NewViewDialog`): describirla con Cortex, una plantilla o el lienzo en blanco; todo abre el estudio (abajo) y nada se guarda hasta «Crear». Si faltan datos, el diseñador puede proponer hasta 2 tablas nuevas, que se crean al guardar (nunca modifica una tabla existente).
+- **En /views/<slug>**: la barra de abajo («Pídele un cambio a Cortex») edita la vista con texto, y «Editar» (`?editar=1`) abre el estudio en pantalla completa (abajo).
+- **Plantillas** (`apps/web/lib/views/starter-templates.ts`): «Cartera» y «Ventas del mes» son specs sobre `cortex.ventas` que abren armadas con datos reales (sin gastar respuestas del plan); «Operación de carga», «Seguimiento de solicitudes», «CRM de ventas», «Inventario», «Agenda de citas» y «Proyectos» son frases que Cortex arma con las tablas de cada empresa (llevan un boceto `sketch` sólo para su miniatura); «Lienzo en blanco» arranca con un bloque de texto.
 - **En el chat**: `views.list`, `views.get`, `views.create`, `views.update`, `views.share`, `views.archive`.
 - Cada guardado es una versión (`custom_view_versions`) con la frase que la produjo. Restaurar copia una versión vieja como nueva. Las ediciones simultáneas no se pisan: la segunda recibe un conflicto.
 
-### El lienzo (editar con las manos)
+### El estudio (editar con las manos)
+
+Pantalla completa (`components/views/editor/ViewEditor.tsx` + `components/views/studio/*`; lo que no depende de React, en `lib/views/studio.ts` con `studio.test.ts`):
+
+- **Arriba**: salir, el nombre (se edita en el sitio), estado («Cambios sin guardar» / «Guardado»), deshacer/rehacer, ver como Computador / Tableta / Celular (el marco mide hasta 1280 / 768 / 390 px y las columnas las decide el marco, no la ventana: `deviceSpan`), «Probar» (la vista interactiva con datos reales, sin escribir nada), «Compartir» (el mismo `ShareDialog` de la barra) y «Guardar» (no cierra el estudio; una vista nueva pasa a `/views/<slug>?editar=1`).
+- **Izquierda**: «Agregar» (biblioteca de piezas con su dibujo, buscable; se tocan o se arrastran al lienzo y caen donde se sueltan, con `locateDrop`; los tipos salen de `blockTypes` del servidor y de lo que `newBlock` sabe armar), «Datos» (el catálogo por familia, con campos, filas —`rowCount`, que `/api/views/catalog` manda de más— y botones para poner una pieza sobre cada fuente), «Capas» (los bloques en lista: elegir, reordenar, renombrar) y «Páginas» cuando la vista tiene (`spec.pages`: navegar y decir en qué páginas sale el bloque elegido; crearlas y renombrarlas sigue en «Ajustes de la vista»).
+- **Centro**: el lienzo con las seis columnas a la vista al pasar o arrastrar, marco de selección con esquinas y un asa a la derecha que cambia el ancho (tercio/mitad/completo), y un final que enseña («Arrastra una pieza aquí o pídeselo a Cortex»).
+- **Derecha**: el inspector (Bloque / Vista), plegable; por debajo de 1600 px arranca plegado y elegir un bloque lo abre.
+- **Abajo**: la caja de Cortex flotante (⌘K o «/») con frases sugeridas a partir de la vista (`studioSuggestions`). Atajos con «?» (`ShortcutsDialog`).
+- **Teléfono y tableta** (< 1024 px): lienzo a pantalla completa, barra de pestañas abajo (Agregar, Datos, Capas, Ajustes) y cada panel como hoja que sube.
+- **Borrador en el navegador** (`useDraftAutosave`): mientras hay cambios sin guardar se copia a `localStorage` por vista; al volver se ofrece «Recuperar» o «Descartar», nunca se aplica solo. Todo en try/catch.
+
+### El lienzo por dentro
 
 `apps/web/components/views/editor/*`. Para «este gráfico más ancho» o «quita ese filtro» sin escribirle a Cortex:
 
@@ -161,4 +193,5 @@ Los llamadores pasan `viewerId`: la página de la vista, `/api/views/[id]/data` 
 - `scripts/test-views-sql.mjs` (PGlite): CHECK de las puertas, slugs por espacio y el candado de intentos. `PGLITE_MODULE=<ruta> node scripts/test-views-sql.mjs`.
 - `apps/web/lib/shared-links-public-paths.test.ts`: las rutas públicas siguen en el middleware.
 - `apps/web/lib/views/editor-shape.test.ts` y `editor-spec.test.ts`: vocabulario del lienzo contra el contrato; mover/duplicar/borrar; plantillas válidas; problemas atados a su bloque.
+- `packages/agent-tools/src/views/blocks.test.ts`: direcciones (https, lista de inserciones, botones), contrato de los bloques nuevos, galería/calendario/avance/KPI, ficha (campos por audiencia, edición sólo con permiso), barra de filtros (parámetro, aplicación a bloques y avisos, tildes), páginas y tema. `apps/web/lib/views/filter-param.test.ts`: la copia del navegador escribe lo que el servidor lee.
 - QA visual con datos de mentira en escritorio, 375 px y el tema oscuro de la app (también el lienzo: seleccionar, inspector, paleta, arrastrar, borrar con deshacer, plantilla «Cartera»). Sin prueba autenticada end-to-end contra una base con la 0156 aplicada.

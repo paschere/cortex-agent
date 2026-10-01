@@ -1,7 +1,8 @@
 'use client';
 
 import { submitViewFormAction } from '@/lib/views/actions';
-import type { ComputedBlock, ComputedView, Tone } from '@cortex/agent-tools';
+import type { FilterState } from '@/lib/views/filter-param';
+import type { ComputedBlock, ComputedView } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
   AlertTriangle,
@@ -9,14 +10,28 @@ import {
   ArrowUp,
   CheckCircle2,
   Loader2,
+  PanelRightOpen,
   Search,
   Send,
 } from 'lucide-react';
-import { useMemo, useState, useTransition } from 'react';
+import { useCallback, useId, useMemo, useState, useTransition } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ViewChart } from './ViewChart';
 import { ViewZones } from './ViewZones';
+import { CalendarBlock } from './blocks/Calendar';
+import { GalleryBlock } from './blocks/Gallery';
+import { LinksBlock, MediaBlock } from './blocks/Media';
+import { MetricBlock } from './blocks/Metric';
+import { ProgressBlock } from './blocks/Progress';
+import {
+  RecordDrawer,
+  RecordOpenerProvider,
+  recordBlockOf,
+  useRecordOpener,
+} from './blocks/RecordDrawer';
+import { FilterBar, PageTabs } from './blocks/ViewChrome';
+import { Card, ViewThemeProvider } from './blocks/theme';
 import { EditableCell, RowActions, ViewWriterProvider, useViewWriter } from './view-writes';
 
 /**
@@ -30,6 +45,13 @@ import { EditableCell, RowActions, ViewWriterProvider, useViewWriter } from './v
  *
  * La rejilla es de seis columnas: un tercio ocupa dos, una mitad tres. En un
  * teléfono todo es ancho completo, que es como se lee una vista en WhatsApp.
+ *
+ * Alrededor de los bloques: la barra de filtros (si el spec la tiene), las
+ * pestañas de las páginas y la ficha de una fila (components/views/blocks).
+ * Quien monta el lienzo decide si la barra filtra (`filters`, con su
+ * `onChange`) y qué página se ve (`page`); sin eso, la página se elige aquí y
+ * la barra se pinta apagada. Los bloques de cada tipo viven en
+ * components/views/blocks; aquí quedan la tabla, el tablero y el formulario.
  */
 
 export type SubmitTarget =
@@ -74,47 +96,106 @@ const SPAN: Record<ComputedBlock['width'], string> = {
   third: 'md:col-span-3 xl:col-span-2',
 };
 
-const TONE_TEXT: Record<Tone, string> = {
-  primary: 'text-primary',
-  emerald: 'text-emerald',
-  amber: 'text-amber',
-  sky: 'text-sky',
-  rose: 'text-rose',
-};
-const TONE_BAR: Record<Tone, string> = {
-  primary: 'bg-primary',
-  emerald: 'bg-emerald',
-  amber: 'bg-amber',
-  sky: 'bg-sky',
-  rose: 'bg-rose',
-};
+export interface CanvasFilters {
+  state: FilterState;
+  onChange: (next: FilterState) => void;
+  pending?: boolean;
+}
 
 export function ViewCanvas({
   view,
   target,
   onChanged,
+  filters,
+  page,
 }: {
   view: ComputedView;
   target: SubmitTarget;
   /** Después de una escritura: el refresco en vivo lo usa para recalcular. */
   onChanged?: () => void;
+  /** La barra de filtros conectada a quien recalcula. Sin esto, se pinta apagada. */
+  filters?: CanvasFilters;
+  /** La página elegida, si quien monta el lienzo la lleva (en la URL). */
+  page?: { current: string | null; onSelect: (id: string) => void };
 }) {
   const submit = submitterFor(target);
+  const idBase = useId().replace(/:/g, '');
+  const pages = view.pages ?? [];
+  const [localPage, setLocalPage] = useState<string | null>(null);
+  const wanted = page ? page.current : localPage;
+  const current = pages.find((p) => p.id === wanted) ?? pages[0] ?? null;
+  const visible = current ? new Set(current.blockIds) : null;
+  const shown = visible ? view.blocks.filter((b) => visible.has(b.id)) : view.blocks;
+  const theme = view.theme;
+  const compact = theme?.density === 'compact';
+
+  // La ficha abierta: se busca en la vista de AHORA, así que después de un
+  // refresco muestra lo nuevo (o dice que la fila ya no está).
+  const [opened, setOpened] = useState<{ blockId: string; rowId: string } | null>(null);
+  const openRecord = useCallback(
+    (blockId: string, rowId: string) => setOpened({ blockId, rowId }),
+    [],
+  );
+  const openedBlock = opened
+    ? recordBlockOf(view.blocks.find((b) => b.id === opened.blockId))
+    : null;
+
   return (
-    <ViewWriterProvider target={view.writable ? target : { kind: 'preview' }} onChanged={onChanged}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-        {view.blocks.map((block) => (
-          <section key={block.id} className={clsx('min-w-0', SPAN[block.width])}>
-            <Block block={block} target={target} submit={submit} />
-          </section>
-        ))}
-        {view.partial.length > 0 && (
-          <p className="text-micro text-ink-faint md:col-span-6">
-            Cifras calculadas sobre las 2.000 filas más recientes de {view.partial.join(', ')}.
-          </p>
-        )}
-      </div>
-    </ViewWriterProvider>
+    <ViewThemeProvider theme={theme}>
+      <ViewWriterProvider
+        target={view.writable ? target : { kind: 'preview' }}
+        onChanged={onChanged}
+      >
+        <RecordOpenerProvider value={openRecord}>
+          {(view.filtersBar?.length ?? 0) > 0 && (
+            <FilterBar
+              items={view.filtersBar ?? []}
+              state={filters?.state ?? {}}
+              onChange={filters?.onChange}
+              pending={filters?.pending}
+            />
+          )}
+          {pages.length > 1 && current && (
+            <PageTabs
+              pages={pages}
+              current={current.id}
+              accent={theme?.accent ?? 'primary'}
+              idBase={idBase}
+              onSelect={(id) => (page ? page.onSelect(id) : setLocalPage(id))}
+            />
+          )}
+          <div
+            id={pages.length > 1 ? `${idBase}-panel` : undefined}
+            role={pages.length > 1 ? 'tabpanel' : undefined}
+            aria-labelledby={
+              pages.length > 1 && current ? `${idBase}-tab-${current.id}` : undefined
+            }
+            className={clsx('grid grid-cols-1 md:grid-cols-6', compact ? 'gap-3' : 'gap-4')}
+          >
+            {shown.map((block) => (
+              <section key={block.id} className={clsx('min-w-0', SPAN[block.width])}>
+                <Block block={block} target={target} submit={submit} />
+              </section>
+            ))}
+            {shown.length === 0 && (
+              <p className="py-10 text-center text-sm text-ink-faint md:col-span-6">
+                Esta página todavía no tiene bloques.
+              </p>
+            )}
+            {view.partial.length > 0 && (
+              <p className="text-micro text-ink-faint md:col-span-6">
+                Cifras calculadas sobre las 2.000 filas más recientes de {view.partial.join(', ')}.
+              </p>
+            )}
+          </div>
+          <RecordDrawer
+            block={openedBlock}
+            rowId={opened?.rowId ?? null}
+            onClose={() => setOpened(null)}
+          />
+        </RecordOpenerProvider>
+      </ViewWriterProvider>
+    </ViewThemeProvider>
   );
 }
 
@@ -129,30 +210,6 @@ export function ViewBlockPreview({ block }: { block: ComputedBlock }) {
     <ViewWriterProvider target={{ kind: 'preview' }}>
       <Block block={block} target={{ kind: 'preview' }} />
     </ViewWriterProvider>
-  );
-}
-
-function Card({
-  title,
-  source,
-  children,
-  className,
-}: { title?: string; source?: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={clsx(
-        'h-full rounded-card border border-border bg-surface p-4 shadow-card sm:p-5',
-        className,
-      )}
-    >
-      {(title || source) && (
-        <header className="mb-3 flex items-baseline justify-between gap-3">
-          {title && <h2 className="text-sm font-semibold text-ink">{title}</h2>}
-          {source && <span className="shrink-0 text-micro text-ink-faint">{source}</span>}
-        </header>
-      )}
-      {children}
-    </div>
   );
 }
 
@@ -181,7 +238,7 @@ function Block({
         </div>
       );
     case 'metric':
-      return <Metric block={block} />;
+      return <MetricBlock block={block} />;
     case 'table':
       return <Table block={block} />;
     case 'chart':
@@ -199,6 +256,16 @@ function Block({
       return <ViewZones block={block} Card={Card} />;
     case 'form':
       return <Form block={block} target={target} submit={submit} />;
+    case 'gallery':
+      return <GalleryBlock block={block} />;
+    case 'calendar':
+      return <CalendarBlock block={block} />;
+    case 'progress':
+      return <ProgressBlock block={block} />;
+    case 'media':
+      return <MediaBlock block={block} />;
+    case 'links':
+      return <LinksBlock block={block} />;
     case 'problem':
       return (
         <Card className="border-amber/40 bg-amber-soft/40">
@@ -214,46 +281,11 @@ function Block({
   }
 }
 
-function Metric({ block }: { block: Extract<ComputedBlock, { type: 'metric' }> }) {
-  const pct = block.goal ? Math.max(0, Math.min(block.goal.ratio, 1)) : 0;
-  return (
-    <Card>
-      <p className="field-label">{block.title}</p>
-      <p
-        className={clsx(
-          'tabular mt-2 font-mono text-display font-semibold leading-none tracking-tight',
-          TONE_TEXT[block.tone],
-        )}
-      >
-        {block.display}
-      </p>
-      {block.goal ? (
-        <div className="mt-4">
-          <div className="h-1.5 overflow-hidden rounded-pill bg-surface-2">
-            <div
-              className={clsx(
-                'h-full rounded-pill transition-[width] duration-500 ease-out',
-                TONE_BAR[block.tone],
-              )}
-              style={{ width: `${pct * 100}%` }}
-            />
-          </div>
-          <p className="mt-1.5 text-micro text-ink-faint">
-            {Math.round(block.goal.ratio * 100)}% de la meta ·{' '}
-            <span className="tabular font-mono">{block.goal.display}</span>
-          </p>
-        </div>
-      ) : (
-        <p className="mt-3 text-micro text-ink-faint">
-          {block.caption ??
-            `${block.rows} ${block.rows === 1 ? 'fila' : 'filas'} · ${block.source}`}
-        </p>
-      )}
-    </Card>
-  );
-}
+/** Un clic en un control de la fila (celda editable, botón) no abre la ficha. */
+const INTERACTIVE = 'button, a, input, select, textarea, label';
 
 function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) {
+  const open = useRecordOpener(block.id, block.record);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const rows = useMemo(() => {
@@ -328,13 +360,26 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
               {block.actions.length > 0 && (
                 <th scope="col" className="px-4 py-2" aria-label="Acciones" />
               )}
+              {open && <th scope="col" className="w-10 px-2 py-2" aria-label="Ficha" />}
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
+              // biome-ignore lint/a11y/useKeyWithClickEvents: el clic en la fila es un atajo; con el teclado se abre con el botón «Abrir la ficha» de la última celda.
               <tr
                 key={r.id}
-                className="border-b border-border/60 last:border-0 hover:bg-surface-2/60"
+                onClick={
+                  open
+                    ? (e) => {
+                        if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
+                        open(r.id);
+                      }
+                    : undefined
+                }
+                className={clsx(
+                  'border-b border-border/60 last:border-0 hover:bg-surface-2/60',
+                  open && 'cursor-pointer',
+                )}
               >
                 {r.cells.map((cell, i) => {
                   const column = block.columns[i];
@@ -372,6 +417,19 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
                     />
                   </td>
                 )}
+                {open && (
+                  <td className="w-10 px-2 py-1.5 text-right align-top">
+                    <button
+                      type="button"
+                      onClick={() => open(r.id)}
+                      aria-label={`Abrir la ficha de ${r.cells[0] ?? 'esta fila'}`}
+                      title="Abrir la ficha"
+                      className="grid h-7 w-7 place-items-center rounded-pill text-ink-faint transition-colors duration-150 hover:bg-primary-soft hover:text-primary"
+                    >
+                      <PanelRightOpen className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -393,6 +451,7 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
 
 function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) {
   const writer = useViewWriter();
+  const open = useRecordOpener(block.id, block.record);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -449,7 +508,17 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                     dragging === card.id && 'opacity-50',
                   )}
                 >
-                  <p className="text-sm font-medium text-ink">{card.label}</p>
+                  {open ? (
+                    <button
+                      type="button"
+                      onClick={() => open(card.id)}
+                      className="text-left text-sm font-medium text-ink underline-offset-4 hover:underline"
+                    >
+                      {card.label}
+                    </button>
+                  ) : (
+                    <p className="text-sm font-medium text-ink">{card.label}</p>
+                  )}
                   {card.details.length > 0 && (
                     <dl className="mt-1.5 space-y-0.5">
                       {card.details.map((d) => (

@@ -1,7 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
-import { MousePointerClick, X } from 'lucide-react';
+import { MousePointerClick, PanelRightClose, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 /**
@@ -14,7 +14,9 @@ import { useEffect, useRef } from 'react';
  *
  * En el teléfono la hoja tapa la mitad de abajo del lienzo, con un velo que
  * la cierra al tocarlo, y lleva el foco a su título al abrirse para que el
- * lector de pantalla diga dónde está. En escritorio está siempre.
+ * lector de pantalla diga dónde está. En escritorio es la columna derecha del
+ * estudio, de alto completo y con su propio scroll; se pliega con
+ * `onCollapse` para darle todo el ancho al lienzo.
  */
 export function InspectorPanel({
   tab,
@@ -24,6 +26,8 @@ export function InspectorPanel({
   open,
   onClose,
   scrollKey,
+  onCollapse,
+  summary,
   children,
 }: {
   tab: 'block' | 'view';
@@ -35,6 +39,10 @@ export function InspectorPanel({
   onClose: () => void;
   /** Cambia cuando se elige otra cosa: el panel vuelve arriba en vez de quedarse a media altura. */
   scrollKey: string;
+  /** Escritorio: pliega la columna. */
+  onCollapse?: () => void;
+  /** Qué está elegido (icono y nombre), arriba de las pestañas. */
+  summary?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
@@ -62,14 +70,30 @@ export function InspectorPanel({
         className={clsx(
           'fixed inset-x-0 bottom-0 z-50 flex max-h-[78vh] flex-col rounded-t-card border border-border bg-surface shadow-pop transition-transform duration-200 ease-out motion-reduce:transition-none',
           open ? 'translate-y-0' : 'invisible translate-y-full',
-          'lg:visible lg:sticky lg:inset-auto lg:top-[4.5rem] lg:z-auto lg:max-h-[calc(100vh-7.5rem)] lg:translate-y-0 lg:self-start lg:rounded-card lg:shadow-card',
+          'lg:visible lg:static lg:z-auto lg:h-full lg:max-h-none lg:w-[22rem] lg:shrink-0 lg:translate-y-0 lg:rounded-none lg:border-0 lg:border-l lg:bg-surface/80 lg:shadow-none',
         )}
       >
         <div
           className="mx-auto mt-2 h-1 w-10 rounded-pill bg-border-strong lg:hidden"
           aria-hidden
         />
-        <div className="flex items-center gap-2 border-b border-border px-4 pb-3 pt-2 lg:pt-3">
+        {summary && (
+          <div className="flex items-center gap-2 px-4 pt-2 lg:pt-3">
+            <div className="min-w-0 flex-1">{summary}</div>
+            {onCollapse && (
+              <button
+                type="button"
+                onClick={onCollapse}
+                aria-label="Plegar el panel de ajustes"
+                title="Plegar el panel"
+                className="hidden h-7 w-7 place-items-center rounded-pill text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink lg:grid"
+              >
+                <PanelRightClose className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+        <div className="flex items-center gap-2 border-b border-border px-4 pb-3 pt-2 lg:pt-2.5">
           <h2 ref={heading} tabIndex={-1} className="sr-only">
             {tab === 'block' && blockTitle ? `Ajustes de ${blockTitle}` : 'Ajustes de la vista'}
           </h2>

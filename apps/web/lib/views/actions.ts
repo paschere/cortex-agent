@@ -118,6 +118,32 @@ export async function saveViewAction(
   }
 }
 
+/**
+ * «Duplicar» en el menú de una tarjeta de /views. No es un camino nuevo: lee
+ * la vista y la guarda como nueva con `saveViewAction`, el mismo contrato y el
+ * mismo catálogo de quien duplica. Por eso una vista que usa el Feed privado
+ * de otra persona no se puede duplicar: esas tablas no son de quien la copia,
+ * y el guardado lo dice. Sale con su forma, no con su puerta: la copia nace
+ * sólo para el equipo y sin fijar.
+ */
+export async function duplicateViewAction(
+  viewId: string,
+): Promise<ViewActionResult<{ slug: string; version: number }>> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId);
+    return await saveViewAction({
+      name: `${view.name} (copia)`.slice(0, 80),
+      description: view.description,
+      spec: view.spec,
+      prompt: `Copia de «${view.name}»`,
+    });
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo duplicar la vista.') };
+  }
+}
+
 async function manageable(viewId: string) {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);

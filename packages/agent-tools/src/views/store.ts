@@ -6,7 +6,7 @@ import { bogotaToday } from '../commitments/shape';
 import { appBaseUrl } from '../reports/store';
 import { rowLabel } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, listTrackers, shapeValues } from '../trackers/store';
-import type { ViewRow, ViewSource } from './compute';
+import { type ViewRow, type ViewSource, blockWriteFields } from './compute';
 import {
   FEED_NO_VIEWER_MESSAGE,
   FEED_PUBLIC_MESSAGE,
@@ -1058,7 +1058,10 @@ async function patchRow(
   return { label, changes };
 }
 
-/** Editar una celda de una tabla o mover una tarjeta del tablero. */
+/** Los bloques cuyas filas se tocan: celdas, tarjetas, fichas, eventos. */
+const ROW_BLOCKS: ReadonlySet<string> = new Set(['table', 'board', 'zones', 'gallery', 'calendar']);
+
+/** Editar una celda de una tabla, mover una tarjeta o cambiar un campo desde la ficha. */
 export async function editViewRow(
   db: SupabaseClient,
   view: CustomViewRow,
@@ -1067,11 +1070,12 @@ export async function editViewRow(
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Esta vista no se puede editar.');
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
-  if (!block || (block.type !== 'table' && block.type !== 'board' && block.type !== 'zones'))
+  if (!block || !ROW_BLOCKS.has(block.type) || !('tracker' in block))
     throw new NotFoundError('Ese bloque no está en esta vista.');
-  const allowed = new Set(
-    block.type === 'table' ? block.editable : block.draggable ? [block.groupBy] : [],
-  );
+  // La lista blanca es la del bloque: celdas editables, el campo que se
+  // arrastra y los campos que la ficha deja editar (`recordEditable`). La
+  // misma función que el cálculo usa para decir qué se edita en pantalla.
+  const allowed = new Set(blockWriteFields(block));
   if (!allowed.size) throw new ValidationError('Este bloque no se edita.');
   if (!input.actor) await assertPublicBudget(db, view.id);
   const tracker = await trackerForBlock(db, block.tracker);
@@ -1081,7 +1085,12 @@ export async function editViewRow(
     rowId: input.rowId,
     patch: input.patch,
     allowed,
-    kind: block.type === 'table' ? 'edit' : 'move',
+    kind:
+      block.type === 'board' || block.type === 'zones'
+        ? Object.keys(input.patch).every((k) => k === block.groupBy)
+          ? 'move'
+          : 'edit'
+        : 'edit',
     actor: input.actor,
   });
   return { label };
@@ -1104,7 +1113,7 @@ export async function runViewAction(
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Los botones de esta vista no están activos.');
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
-  if (!block || (block.type !== 'table' && block.type !== 'board' && block.type !== 'zones'))
+  if (!block || !ROW_BLOCKS.has(block.type) || !('actions' in block) || !('tracker' in block))
     throw new NotFoundError('Ese bloque no está en esta vista.');
   const action = block.actions.find((a) => a.id === input.actionId);
   if (!action) throw new NotFoundError('Ese botón ya no está en la vista.');

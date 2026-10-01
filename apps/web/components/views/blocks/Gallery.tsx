@@ -1,0 +1,138 @@
+'use client';
+
+import type { ComputedBlock } from '@cortex/agent-tools';
+import { clsx } from 'clsx';
+import { useState } from 'react';
+import { RowActions } from '../view-writes';
+import { useRecordOpener } from './RecordDrawer';
+import { Card, TONE_SOFT, useViewTheme } from './theme';
+
+/**
+ * LA GALERÍA: TARJETAS EN REJILLA.
+ *
+ * Inmuebles, vehículos, cursos, pacientes, productos: cualquier lista que se
+ * lee mejor por tarjeta. Cada tarjeta es UN botón que abre la ficha (el patrón
+ * del enlace estirado: el título es el botón y su `::after` cubre la tarjeta),
+ * y los botones de la fila quedan por encima para que no abran la ficha.
+ *
+ * La imagen sólo se pinta si el cálculo la dejó pasar (`https:` público) y se
+ * vuelve a comprobar aquí: `loading="lazy"`, sin referrer —quien sirve la foto
+ * no se entera de qué vista la mostró— y, si falla, la tarjeta sigue sin ella.
+ */
+
+type Gallery = Extract<ComputedBlock, { type: 'gallery' }>;
+
+const COLS: Record<Gallery['columns'], string> = {
+  2: 'sm:grid-cols-2',
+  3: 'sm:grid-cols-2 lg:grid-cols-3',
+  4: 'sm:grid-cols-2 lg:grid-cols-4',
+};
+
+export function GalleryBlock({ block }: { block: Gallery }) {
+  const open = useRecordOpener(block.id, block.record);
+  const { density } = useViewTheme();
+  return (
+    <Card
+      title={block.title}
+      source={`${block.total} ${block.total === 1 ? 'fila' : 'filas'} · ${block.source}`}
+    >
+      {block.cards.length === 0 ? (
+        <p className="py-8 text-center text-sm text-ink-faint">Todavía no hay filas.</p>
+      ) : (
+        <ul
+          className={clsx(
+            'grid grid-cols-1',
+            COLS[block.columns],
+            density === 'compact' ? 'gap-2' : 'gap-3',
+          )}
+        >
+          {block.cards.map((card) => (
+            <li
+              key={card.id}
+              className={clsx(
+                'group relative flex flex-col overflow-hidden rounded-sm border border-border bg-surface shadow-card transition-all duration-150',
+                open &&
+                  'hover:-translate-y-px hover:border-border-strong focus-within:ring-2 focus-within:ring-primary/40',
+              )}
+            >
+              {card.image && <CardImage src={card.image} />}
+              <div
+                className={clsx('flex flex-1 flex-col', density === 'compact' ? 'p-2.5' : 'p-3')}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  {open ? (
+                    <button
+                      type="button"
+                      onClick={() => open(card.id)}
+                      className="min-w-0 text-left text-sm font-semibold text-ink outline-none after:absolute after:inset-0 after:content-['']"
+                    >
+                      {card.title}
+                    </button>
+                  ) : (
+                    <p className="min-w-0 text-sm font-semibold text-ink">{card.title}</p>
+                  )}
+                  {card.badge && (
+                    <span
+                      className={clsx(
+                        'shrink-0 rounded-pill px-2 py-0.5 text-micro font-semibold',
+                        TONE_SOFT[card.badge.tone],
+                      )}
+                    >
+                      {card.badge.label}
+                    </span>
+                  )}
+                </div>
+                {card.subtitle && (
+                  <p className="mt-0.5 truncate text-xs text-ink-muted">{card.subtitle}</p>
+                )}
+                {card.meta.length > 0 && (
+                  <dl className="mt-2 space-y-0.5">
+                    {card.meta.map((m) => (
+                      <div key={m.label} className="flex justify-between gap-2 text-micro">
+                        <dt className="text-ink-faint">{m.label}</dt>
+                        <dd className="tabular truncate font-mono text-ink-muted">{m.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {block.actions.length > 0 && (
+                  <div className="relative z-10 mt-auto pt-2.5">
+                    <RowActions
+                      blockId={block.id}
+                      actions={block.actions}
+                      rowId={card.id}
+                      rowLabel={card.title}
+                    />
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {block.total > block.cards.length && (
+        <p className="mt-2 text-micro text-ink-faint">
+          Se muestran {block.cards.length} de {block.total}.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function CardImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed || !src.startsWith('https://')) return null;
+  return (
+    <div className="aspect-[4/3] w-full overflow-hidden bg-surface-2">
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className="h-full w-full object-cover"
+      />
+    </div>
+  );
+}

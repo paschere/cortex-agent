@@ -131,8 +131,24 @@ export const BUCKET_LABEL: Record<(typeof BUCKETS)[number], string> = {
 export const MAX_VIEW_BLOCKS = 24;
 export const BLOCK_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 
-/** Los seis tipos que el lienzo sabe armar. Otro tipo (p. ej. «zones») se conserva tal cual. */
-export const KNOWN_BLOCK_TYPES = ['metric', 'table', 'chart', 'board', 'form', 'text'] as const;
+/**
+ * Los tipos que el lienzo sabe armar desde la paleta. El plano (`zones`) va
+ * aparte: se ofrece sólo si el contrato del servidor lo acepta. Un tipo que el
+ * lienzo no conozca se conserva tal cual.
+ */
+export const KNOWN_BLOCK_TYPES = [
+  'metric',
+  'table',
+  'chart',
+  'board',
+  'gallery',
+  'calendar',
+  'progress',
+  'form',
+  'media',
+  'links',
+  'text',
+] as const;
 export type KnownBlockType = (typeof KNOWN_BLOCK_TYPES)[number];
 
 export const BLOCK_LABEL: Record<string, string> = {
@@ -143,6 +159,63 @@ export const BLOCK_LABEL: Record<string, string> = {
   board: 'Tablero',
   form: 'Formulario',
   zones: 'Plano',
+  gallery: 'Galería',
+  calendar: 'Calendario',
+  progress: 'Avance',
+  media: 'Imagen o video',
+  links: 'Botones',
+};
+
+/** Bloques cuyas filas abren su ficha al tocarlas. */
+export const RECORD_BLOCK_TYPES = ['table', 'board', 'zones', 'gallery', 'calendar'] as const;
+
+export const PERIODS = ['day', 'week', 'month'] as const;
+export const PERIOD_LABEL: Record<(typeof PERIODS)[number], string> = {
+  day: 'Día',
+  week: 'Semana',
+  month: 'Mes',
+};
+
+export const CALENDAR_MODES = ['month', 'agenda'] as const;
+export const CALENDAR_MODE_LABEL: Record<(typeof CALENDAR_MODES)[number], string> = {
+  month: 'Mes',
+  agenda: 'Agenda',
+};
+
+export const GALLERY_COLUMNS = [2, 3, 4] as const;
+
+export const MEDIA_KINDS = ['image', 'embed'] as const;
+export const MEDIA_KIND_LABEL: Record<(typeof MEDIA_KINDS)[number], string> = {
+  image: 'Imagen',
+  embed: 'Video, mapa o presentación',
+};
+export const MEDIA_ASPECTS = ['16:9', '4:3', '1:1', '3:4'] as const;
+
+export const LINK_STYLES = ['buttons', 'cards'] as const;
+export const LINK_STYLE_LABEL: Record<(typeof LINK_STYLES)[number], string> = {
+  buttons: 'Botones',
+  cards: 'Tarjetas',
+};
+
+export const FILTER_BAR_KINDS = ['select', 'date_range', 'search'] as const;
+export type EditorFilterBarKind = (typeof FILTER_BAR_KINDS)[number];
+export const FILTER_BAR_KIND_LABEL: Record<EditorFilterBarKind, string> = {
+  select: 'Menú de opciones',
+  date_range: 'Rango de fechas',
+  search: 'Buscador',
+};
+export const MAX_FILTER_BAR = 6;
+export const MAX_VIEW_PAGES = 8;
+
+export const DENSITIES = ['comfortable', 'compact'] as const;
+export const DENSITY_LABEL: Record<(typeof DENSITIES)[number], string> = {
+  comfortable: 'Amplia',
+  compact: 'Compacta',
+};
+export const HEADER_STYLES = ['plain', 'hero'] as const;
+export const HEADER_LABEL: Record<(typeof HEADER_STYLES)[number], string> = {
+  plain: 'Sencilla',
+  hero: 'Portada grande',
 };
 
 /** Los tres campos que toda fila tiene, con el nombre que ve la gente. */

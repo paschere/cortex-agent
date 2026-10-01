@@ -1,5 +1,10 @@
 import { isUnlocked, openPublicView, unlockCookieName } from '@/lib/views/public';
-import { canWriteView, computeView, loadViewSources } from '@cortex/agent-tools';
+import {
+  canWriteView,
+  computeView,
+  loadViewSources,
+  parseViewFilterParam,
+} from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -7,6 +12,10 @@ import { type NextRequest, NextResponse } from 'next/server';
  * token abierto, contraseña si la pide (cookie de desbloqueo), y las fuentes
  * internas no se leen (`audience: 'public'`). Sin contar una visita: refrescar
  * no es abrir.
+ *
+ * `?f=` (la barra de filtros) se valida contra el spec guardado, y
+ * `audience: 'public'` también en el cálculo: sin `detailFields` en el spec,
+ * la ficha de una fila sólo trae lo que el bloque ya muestra.
  */
 
 export const runtime = 'nodejs';
@@ -27,7 +36,11 @@ export async function GET(req: NextRequest) {
     view.spec,
     await loadViewSources(db, view.spec, { audience: 'public' }),
     new Date(),
-    { writable: canWriteView(view, 'public') },
+    {
+      writable: canWriteView(view, 'public'),
+      audience: 'public',
+      filters: parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f')),
+    },
   );
   return NextResponse.json(
     { version: view.version, view: computed },

@@ -107,15 +107,7 @@ export function ViewWriterProvider({
 const EDIT_INPUT =
   'w-full min-w-[7rem] rounded-sm border border-primary bg-surface px-2 py-1 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
 
-export function EditableCell({
-  blockId,
-  rowId,
-  field,
-  edit,
-  raw,
-  display,
-  className,
-}: {
+interface EditableProps {
   blockId: string;
   rowId: string;
   field: string;
@@ -123,7 +115,31 @@ export function EditableCell({
   raw: string | number | null;
   display: string;
   className?: string;
-}) {
+  /** Nombre del campo para el lector de pantalla («Editar Estado»). */
+  label?: string;
+}
+
+/** Una celda de tabla que se edita en el sitio. */
+export function EditableCell(props: EditableProps) {
+  return <EditableValue {...props} as="td" />;
+}
+
+/**
+ * Un valor que se edita en el sitio, dentro de lo que sea: una celda, un
+ * renglón de la ficha. Sin quien escriba (vista previa, sólo lectura), es el
+ * valor y nada más.
+ */
+export function EditableValue({
+  blockId,
+  rowId,
+  field,
+  edit,
+  raw,
+  display,
+  className,
+  label,
+  as: Tag = 'div',
+}: EditableProps & { as?: 'td' | 'div' }) {
   const writer = useViewWriter();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(raw == null ? '' : String(raw));
@@ -138,7 +154,7 @@ export function EditableCell({
     if (editing) input.current?.focus();
   }, [editing]);
 
-  if (!writer) return <td className={className}>{display}</td>;
+  if (!writer) return <Tag className={className}>{display}</Tag>;
 
   async function commit(next: string) {
     setEditing(false);
@@ -156,11 +172,12 @@ export function EditableCell({
   }
 
   return (
-    <td className={clsx(className, 'group/cell relative')}>
+    <Tag className={clsx(className, 'group/cell relative')}>
       {editing ? (
         edit.type === 'select' ? (
           <select
             ref={input}
+            aria-label={label ? `Editar ${label}` : undefined}
             value={value}
             onChange={(e) => void commit(e.target.value)}
             onBlur={() => setEditing(false)}
@@ -184,6 +201,7 @@ export function EditableCell({
                   : 'text'
             }
             step="any"
+            aria-label={label ? `Editar ${label}` : undefined}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onBlur={() => void commit(value)}
@@ -202,6 +220,7 @@ export function EditableCell({
           type="button"
           onClick={() => setEditing(true)}
           title="Editar"
+          aria-label={label ? `${label}: ${display}. Editar` : undefined}
           style={{ textAlign: 'inherit' }}
           className="-mx-1 w-[calc(100%+0.5rem)] rounded-sm px-1 underline decoration-border-strong decoration-dotted underline-offset-4 transition-colors hover:bg-primary-soft/40"
         >
@@ -213,7 +232,7 @@ export function EditableCell({
       {error && state === 'error' && (
         <span className="mt-0.5 block text-micro text-rose">{error}</span>
       )}
-    </td>
+    </Tag>
   );
 }
 

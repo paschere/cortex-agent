@@ -3,6 +3,7 @@ import {
   type TrackerField,
   type ViewSpec,
   checkSpecAgainst,
+  specWrites,
   trackerFieldsSchema,
   trackerSlugSchema,
   viewSpecSchema,
@@ -16,7 +17,7 @@ import { z } from 'zod';
  * modelo devuelve el spec ENTERO nuevo, nunca un diff: un diff aplicado sobre
  * una versión que cambió mientras tanto produce una vista que nadie pidió. El
  * spec va como texto JSON (`specJson`) por la misma razón que en Activaciones:
- * una unión discriminada de seis bloques como esquema estructurado es frágil
+ * una unión discriminada de una docena de bloques como esquema estructurado es frágil
  * en el proveedor, y aquí se valida dos veces de todos modos.
  *
  * Dos validaciones: la forma (zod) y el catálogo (`checkSpecAgainst`: que cada
@@ -182,7 +183,7 @@ export function checkDesign(
 
   let raw: unknown;
   try {
-    raw = JSON.parse(object.specJson);
+    raw = preClean(JSON.parse(object.specJson));
   } catch {
     return { ok: false, problems: [...problems, 'specJson no es JSON válido.'] };
   }
@@ -225,6 +226,42 @@ export function checkDesign(
 }
 
 /**
+ * ANTES DE LA FORMA: lo que se limpia en el JSON crudo porque zod lo
+ * rechazaría entero por un detalle. Páginas que nombran bloques que no existen
+ * (o que se quitaron al salvar el diseño) pierden esos nombres, y una página
+ * sin título se queda con uno; filtros de la barra con id repetido se quedan
+ * con el primero. Ni bloques ni campos: eso lo decide `autoFixSpec`.
+ */
+function preClean(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const spec = raw as {
+    blocks?: Array<{ id?: unknown }>;
+    pages?: Array<{ blockIds?: unknown; title?: unknown }>;
+    filtersBar?: Array<{ id?: unknown }>;
+  };
+  const ids = new Set((Array.isArray(spec.blocks) ? spec.blocks : []).map((b) => b?.id));
+  const out: Record<string, unknown> = { ...(raw as object) };
+  if (Array.isArray(spec.pages)) {
+    const pages = spec.pages
+      .filter((p) => p && typeof p === 'object')
+      .map((p, i) => ({
+        ...p,
+        title: typeof p.title === 'string' && p.title.trim() ? p.title : `Página ${i + 1}`,
+        blockIds: Array.isArray(p.blockIds) ? p.blockIds.filter((id) => ids.has(id)) : [],
+      }));
+    if (pages.length) out.pages = pages.slice(0, 8);
+    else out.pages = undefined;
+  }
+  if (Array.isArray(spec.filtersBar)) {
+    const seen = new Set<unknown>();
+    out.filtersBar = spec.filtersBar
+      .filter((f) => f && typeof f === 'object' && !seen.has(f.id) && seen.add(f.id))
+      .slice(0, 6);
+  }
+  return out;
+}
+
+/**
  * LO QUE SE ARREGLA SOLO, SIN VOLVER A PREGUNTARLE AL MODELO.
  *
  * Errores de forma que tienen una sola corrección posible: un bloque editable
@@ -242,17 +279,36 @@ export function autoFixSpec(spec: ViewSpec, catalog: CatalogTracker[]): ViewSpec
       ['label', 'created_at', 'updated_at'].includes(key) || t.fields.some((f) => f.key === key)
     );
   };
-  const blocks = spec.blocks.map((b) => {
+  const builtin = (c: string) => ['label', 'created_at', 'updated_at'].includes(c);
+  const blocks = spec.blocks.map((block) => {
+    // La ficha: campos que no existen se quitan; los editables, además, nunca
+    // son de los que toda fila trae.
+    const b =
+      'tracker' in block && ('detailFields' in block || 'recordEditable' in block)
+        ? {
+            ...block,
+            ...(block.detailFields
+              ? { detailFields: block.detailFields.filter((c) => known(block.tracker, c)) }
+              : {}),
+            ...(block.recordEditable
+              ? {
+                  recordEditable: block.recordEditable.filter(
+                    (c) => known(block.tracker, c) && !builtin(c),
+                  ),
+                }
+              : {}),
+          }
+        : block;
     if (b.type === 'table')
       return {
         ...b,
         columns: b.columns.filter((c) => known(b.tracker, c)),
-        editable: b.editable.filter(
-          (c) => known(b.tracker, c) && !['label', 'created_at', 'updated_at'].includes(c),
-        ),
+        editable: b.editable.filter((c) => known(b.tracker, c) && !builtin(c)),
       };
     if (b.type === 'board' || b.type === 'zones')
       return { ...b, cardFields: b.cardFields.filter((c) => known(b.tracker, c)) };
+    if (b.type === 'gallery')
+      return { ...b, metaFields: b.metaFields.filter((c) => known(b.tracker, c)) };
     if (b.type === 'form')
       return {
         ...b,
@@ -262,16 +318,16 @@ export function autoFixSpec(spec: ViewSpec, catalog: CatalogTracker[]): ViewSpec
       };
     return b;
   }) as ViewSpec['blocks'];
-  const writes = blocks.some(
-    (b) =>
-      (b.type === 'table' && (b.editable.length > 0 || b.actions.length > 0)) ||
-      ((b.type === 'board' || b.type === 'zones') && (b.draggable || b.actions.length > 0)),
-  );
+  const writes = specWrites({ blocks });
+  // Un filtro de la barra sobre una tabla que ningún bloque lee no filtra nada: se quita.
+  const used = new Set(blocks.flatMap((b) => ('tracker' in b ? [b.tracker] : [])));
+  const filtersBar = spec.filtersBar?.filter((f) => bySlug.has(f.source) && used.has(f.source));
   return {
     ...spec,
     blocks,
     editing: writes && spec.editing === 'off' ? 'team' : spec.editing,
     alerts: spec.alerts.filter((a) => bySlug.has(a.source)),
+    ...(spec.filtersBar ? { filtersBar: filtersBar?.length ? filtersBar : undefined } : {}),
   };
 }
 
@@ -307,11 +363,28 @@ export function salvageDesign(
       return id ? [id] : [];
     }),
   );
-  if (!offending.size) return null;
+  // Un filtro de la barra que no cuadra se quita igual que un bloque.
+  const badFilters = new Set(
+    first.problems.flatMap((p) => {
+      const m = /Filtro «([^»]+)»/.exec(p);
+      return m?.[1] ? [m[1]] : [];
+    }),
+  );
+  if (!offending.size && !badFilters.size) return null;
   const kept = blocks.filter((b) => !offending.has(String((b as { id?: string }).id)));
   if (!kept.length) return null;
+  const bar = (raw as { filtersBar?: Array<{ id?: unknown }> }).filtersBar;
   const second = checkDesign(
-    { ...object, specJson: JSON.stringify({ ...(raw as object), blocks: kept }) },
+    {
+      ...object,
+      specJson: JSON.stringify({
+        ...(raw as object),
+        blocks: kept,
+        ...(Array.isArray(bar)
+          ? { filtersBar: bar.filter((f) => !badFilters.has(String(f?.id))) }
+          : {}),
+      }),
+    },
     catalog,
   );
   if (!second.ok) return null;
@@ -344,8 +417,16 @@ Entre 1 y 24 bloques. Cada bloque: "id" (corto, único, a-z0-9_-) y "width": "fu
 filters: [{"field":key,"op":"eq"|"neq"|"contains"|"gt"|"gte"|"lt"|"lte"|"empty"|"not_empty"|"before_today"|"after_today"|"next_days"|"last_days","value"?}]. empty/not_empty/before_today/after_today sin value; next_days/last_days con un número de días; fechas AAAA-MM-DD.
 
 - {"type":"zones","title","tracker","groupBy":key de un campo select,"layout"?:[{"zone":opción,"x":0-11,"y":0-11,"w":1-12,"h":1-6}],"cardFields"?:[≤2 keys],"draggable"?,"actions"?,"filters"?} — un PLANO: cada opción es una zona dibujada en una rejilla de 12 columnas (muelle, posición, bodega, sala, mesa…) y cada fila es una ficha dentro de su zona. Úsalo cuando pidan un mapa, plano, layout físico o «ver dónde está cada cosa». Sin layout, las zonas se acomodan solas.
-INTERACTIVIDAD (sólo tablas propias, nunca fuentes de la plataforma ni tablas del Feed): en "table" puedes poner "editable":[keys] (se editan en el sitio) y "actions":[botones]; en "board", "draggable":true (arrastrar tarjetas cambia el campo de opciones) y "actions". Botón: {"id","label"(≤32),"kind":"set_field" con "field" y "value" (p. ej. estado=Pagada; en campos de opciones el valor debe ser una opción) | "notify" (avisa en la campana a quien creó la vista y a los administradores),"confirm"?:bool,"tone"?}. Si hay algo editable, arrastrable o con botones, pon en la raíz "editing":"team" (sólo el equipo en la app) o "public" (también quien tenga el enlace; úsalo sólo si lo piden explícitamente). Por defecto "off".
+- {"type":"metric", …,"compare":"previous_period","period":"day"|"week"|"month","dateField":key de fecha,"goodWhen"?:"up"|"down"} — un KPI: la cifra del período actual contra el anterior, con flecha y una línea de los últimos períodos. Úsalo cuando pidan «este mes vs. el anterior», «cómo vamos», «tendencia». goodWhen "down" cuando subir es malo (devoluciones, días de mora, quejas, ausencias).
+- {"type":"gallery","title","tracker","titleField"?(por defecto label),"subtitleField"?,"metaFields"?:[≤3 keys],"badgeField"?:key select (etiqueta de color),"imageField"?:key de texto con direcciones https de fotos,"columns"?:2|3|4,"sort"?,"limit"?(≤48),"filters"?,"actions"?} — tarjetas en rejilla: catálogos, inmuebles, vehículos, productos, pacientes, estudiantes, cursos, proveedores. Úsala en vez de una tabla cuando la gente «ve» cosas más que compararlas.
+- {"type":"calendar","title","tracker","dateField":key de fecha,"labelField"?,"colorField"?:key select,"mode"?:"month"|"agenda","days"?(agenda, 1-60),"filters"?,"actions"?} — citas, entregas, clases, turnos, vencimientos. "agenda" para «lo de los próximos días», "month" para ver el mes.
+- {"type":"progress","title","tracker","groupBy"?:key,"aggregate","field"?,"target"?:número,"targets"?:[{"group":opción,"target":número}],"format"?,"limit"?,"tone"?,"filters"?} — barras de avance hacia una meta: una sola (con target) o una por vendedor, sede, ruta, curso (metas por grupo en targets; si no, target común; sin ninguna, se comparan entre sí).
+- {"type":"media","title"?,"kind":"image"|"embed","url":dirección https,"alt"?,"caption"?,"aspect"?:"16:9"|"4:3"|"1:1"|"3:4"} — una imagen, o un video/mapa/presentación SÓLO de YouTube, Loom, Google Maps («Insertar un mapa», /maps/embed?pb=…) o Google Slides/Docs publicados en la web. Nunca otras páginas ni HTML. Úsalo sólo si la persona te da el enlace; no inventes direcciones.
+- {"type":"links","title"?,"links":[{"label"(≤40),"href":ruta interna como /views/cartera o https,"description"?,"tone"?}](1-8),"style"?:"buttons"|"cards"} — botones de navegación a otras vistas o páginas (un portal, un índice).
+FICHA DE CADA FILA: en table, board, zones, gallery y calendar, tocar una fila abre su ficha con sus campos (por defecto todos los de una tabla propia dentro de Cortex; por enlace público, sólo los que el bloque ya muestra). "openRecord":false la apaga; "detailFields":[≤16 keys] elige qué muestra (ponlo si piden mostrar más campos afuera, y nunca incluyas datos personales sensibles en una vista que se va a compartir); "recordEditable":[keys] deja editar esos campos desde la ficha (sólo tablas propias; necesita "editing").
+EN LA RAÍZ, OPCIONALES: "filtersBar":[{"id","label","source": tabla que algún bloque lee,"field","kind":"select"|"date_range"|"search"}] (≤6) — controles arriba que filtran TODOS los bloques de esa tabla («por sede», «entre fechas», «buscar cliente»); date_range sólo sobre fechas. "pages":[{"id","title","blockIds":[ids]}] (≤8) — pestañas cuando la vista tiene más de ~8 bloques o partes muy distintas («Resumen», «Detalle», «Agenda»); un bloque puede ir en varias; los que no estén en ninguna salen en la primera. "theme":{"accent"?:tono,"density"?:"comfortable"|"compact","header"?:"plain"|"hero","cover"?:imagen https} — "hero" para portales y vistas para clientes (banda grande con el nombre y el subtítulo); "compact" para tableros densos de operación.
+INTERACTIVIDAD (sólo tablas propias, nunca fuentes de la plataforma ni tablas del Feed): en "table" puedes poner "editable":[keys] (se editan en el sitio) y "actions":[botones]; en "board", "draggable":true (arrastrar tarjetas cambia el campo de opciones) y "actions"; en "gallery" y "calendar", "actions". Botón: {"id","label"(≤32),"kind":"set_field" con "field" y "value" (p. ej. estado=Pagada; en campos de opciones el valor debe ser una opción) | "notify" (avisa en la campana a quien creó la vista y a los administradores),"confirm"?:bool,"tone"?}. Si hay algo editable, arrastrable o con botones, pon en la raíz "editing":"team" (sólo el equipo en la app) o "public" (también quien tenga el enlace; úsalo sólo si lo piden explícitamente). Por defecto "off".
 EN VIVO Y AVISOS: en la raíz "refreshSeconds": 0|10|30|60 (por defecto 30; usa 10 si piden «en tiempo real»). "alerts":[{"id","source": slug o fuente,"filters"?,"message"?,"sound"?:bool (por defecto true),"desktop"?:bool,"bell"?:bool}] — avisan cuando aparece una fila nueva que cumple los filtros mientras la vista está abierta; "bell" además suena en la campana de quien creó la vista cuando entra una fila por un formulario de esta vista. Úsalas cuando pidan «que suene», «que avise», «que me notifique».
-Diseño: primero 2-4 cifras clave en third, luego gráficos en half, luego la tabla o el tablero en full. Títulos cortos en español de Colombia, sin emojis. Usa money para campos de dinero. line sólo sobre fechas; donut sólo con pocas categorías. No repitas la misma cifra dos veces.
+Diseño: primero 2-4 cifras clave en third (con compare cuando hay una fecha y tiene sentido la tendencia), luego gráficos o avances en half, luego la tabla, el tablero, la galería o el calendario en full. Agrega una barra de filtros cuando la vista mezcla sedes, vendedores o fechas. Sirve a cualquier negocio: ventas, logística, talento humano, clínicas, colegios, inmobiliarias. Títulos cortos en español de Colombia, sin emojis. Usa money para campos de dinero. line sólo sobre fechas; donut sólo con pocas categorías. No repitas la misma cifra dos veces.
 
 Si la petición es ambigua en algo esencial (qué tabla, qué cifra), devuelve specJson vacío y hasta 3 preguntas concretas en questions. Si puedes hacer algo razonable, hazlo y explica en explanation (1-3 frases, sin tecnicismos, sin mencionar JSON ni slugs) qué armaste y qué supusiste. name es cómo la llamará la gente; description, una línea.`;
