@@ -83,7 +83,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   accounting: {
     name: 'Programas contables',
     blurb:
-      'Siigo conectado directo (Alegra y QuickBooks, próximamente): clientes, productos, facturas y pagos llegan solos a tablas de la empresa, y las facturas con saldo entran a la cartera con el saldo que dice el programa. La llave la conecta un administrador en Integraciones y nunca pasa por el chat.',
+      'Siigo, Alegra o QuickBooks Online conectados directo: clientes, productos, facturas y pagos llegan solos a tablas de la empresa, y las facturas con saldo entran a la cartera con el saldo que dice el programa. La llave la conecta un administrador en Integraciones y nunca pasa por el chat.',
     tone: 'emerald',
     icon: 'Coins',
   },

@@ -114,7 +114,8 @@ const SECTIONS: Section[] = [
         href: '/payments',
         label: 'Cartera',
         note: 'Quién debe, desde cuándo, y qué pagos están en disputa',
-        keywords: 'pagos cartera cobros abonos recaudo facturas payments dso mora vencida siigo',
+        keywords:
+          'pagos cartera cobros abonos recaudo facturas payments dso mora vencida siigo alegra quickbooks',
       },
       {
         href: '/feed',

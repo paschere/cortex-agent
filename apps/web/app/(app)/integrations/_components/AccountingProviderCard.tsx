@@ -24,6 +24,11 @@ import {
  * Una tarjeta de «Programas contables»: conectar (la llave se prueba antes de
  * guardarse), ver cómo va, sincronizar ya, cambiar qué se trae y desconectar.
  * La llave se escribe aquí y viaja una sola vez al servidor; nunca vuelve.
+ *
+ * QuickBooks (`connect: 'oauth'`) no tiene llave que pegar: el botón lleva a
+ * Intuit con lo elegido (qué traer, cada cuánto) y la vuelta guarda el
+ * permiso. Si la instalación no tiene la app de Intuit configurada, la
+ * tarjeta lo dice y el botón queda apagado.
  */
 
 const FIELD =
@@ -136,6 +141,7 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
   const [notify, setNotify] = useState<boolean>(card.notify);
   const [enabled, setEnabled] = useState<boolean>(card.enabled);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
   const tone = TONE[card.tone];
   const name = card.provider.name;
 
@@ -165,9 +171,24 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
       </div>
     );
 
+  const oauth = card.provider.connect === 'oauth';
+  const setupMissing = card.provider.setupMissing;
   const credentialsReady = card.provider.credentialFields.every(
     (f) => (credentials[f.key] ?? '').trim().length >= 3,
   );
+
+  /** OAuth: a Intuit (o al programa) con lo elegido; la vuelta conecta. */
+  function startOauth() {
+    if (setupMissing || !entities.length) return;
+    setMessage(null);
+    setRedirecting(true);
+    const params = new URLSearchParams({
+      entities: entities.join(','),
+      interval: String(intervalMinutes),
+      notify: notify ? '1' : '0',
+    });
+    window.location.assign(`/api/integrations/${card.provider.id}?${params}`);
+  }
 
   return (
     <div className="flex h-full flex-col gap-3 rounded-card border border-border bg-surface p-4">
@@ -212,7 +233,59 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
         </ul>
       )}
 
-      {mode === 'connect' && (
+      {mode === 'connect' && oauth && (
+        <form
+          className="border-t border-border pt-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            startOauth();
+          }}
+        >
+          <p className="text-xs leading-snug text-ink-muted">{card.provider.credentialsHelp}</p>
+          {setupMissing && (
+            <p className="mt-3 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
+              {setupMissing}
+            </p>
+          )}
+          <EntityPicker
+            card={card}
+            value={entities}
+            onChange={setEntities}
+            disabled={redirecting || Boolean(setupMissing)}
+          />
+          <ScheduleFields
+            intervalMinutes={intervalMinutes}
+            setIntervalMinutes={setIntervalMinutes}
+            notify={notify}
+            setNotify={setNotify}
+            disabled={redirecting || Boolean(setupMissing)}
+          />
+          <p className="mt-3 text-micro leading-snug text-ink-faint">
+            Te llevamos a {name} para que des permiso de sólo lectura y vuelves aquí. El permiso
+            queda cifrado; nadie lo vuelve a ver, ni siquiera Cortex en el chat.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              type="submit"
+              disabled={redirecting || Boolean(setupMissing) || !entities.length}
+            >
+              {redirecting ? 'Abriendo…' : `Conectar con ${name}`}
+            </Button>
+            {card.connected && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={redirecting}
+                onClick={() => setMode('view')}
+              >
+                Cancelar
+              </Button>
+            )}
+          </div>
+        </form>
+      )}
+
+      {mode === 'connect' && !oauth && (
         <form
           className="border-t border-border pt-3"
           onSubmit={(e) => {
@@ -384,7 +457,7 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
             disabled={pending}
             onClick={() => setMode('connect')}
           >
-            Cambiar llave
+            {oauth ? 'Volver a conectar' : 'Cambiar llave'}
           </Button>
           <Button
             type="button"

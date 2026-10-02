@@ -281,7 +281,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     label: 'Ver las carpetas de Drive que llenan tablas',
     icon: 'FolderInput',
   },
-  // Programas contables conectados directo (Siigo…), 0165.
+  // Programas contables conectados directo (Siigo, Alegra, QuickBooks), 0165.
   accounting_status: { label: 'Ver cómo va el programa contable', icon: 'Calculator' },
   accounting_sync_now: { label: 'Traer ya los datos del programa contable', icon: 'RefreshCw' },
   trackers_define: { label: 'Crear o cambiar una tabla', icon: 'Table2' },

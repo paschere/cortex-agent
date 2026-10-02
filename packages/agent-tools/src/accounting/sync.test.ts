@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { ImportSystemPaymentsInput, ImportSystemPaymentsResult } from '../payments/import';
 import { createFakeSupabase } from '../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../tenancy/scoped-client';
+import { alegraProvider } from './providers/alegra';
+import { quickbooksProvider } from './providers/quickbooks';
 import { siigoProvider } from './providers/siigo';
 import type { AccountingConnectionRow } from './store';
 import { finishedCursor, noticeFor, planEntity, runAccountingSync } from './sync';
@@ -440,5 +442,145 @@ describe('la campana', () => {
       body: '2 facturas nuevas: FV-2-24, FV-2-25.',
     });
     expect(noticeFor('Siigo', { ...base, result: counts(0) }, 60, [])).toBeNull();
+  });
+});
+
+describe('el mismo motor para Alegra y QuickBooks', () => {
+  function respond(body: unknown) {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  it('Alegra: sus tablas, su cartera y sus pagos, con su nombre', async () => {
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const data: Record<string, unknown[]> = {
+        '/api/v1/invoices': [
+          {
+            id: '501',
+            date: '2026-09-01',
+            dueDate: '2026-09-15',
+            status: 'open',
+            total: 1_000_000,
+            balance: 400_000,
+            client: { id: '20', name: 'Nexa Logística', identification: '800555111-3' },
+            numberTemplate: { prefix: 'FE', number: 77, fullNumber: 'FE77' },
+            currency: { code: 'COP' },
+          },
+        ],
+        '/api/v1/payments': [
+          {
+            id: '9',
+            date: '2026-09-20',
+            amount: 600_000,
+            status: 'open',
+            client: { id: '20', name: 'Nexa Logística' },
+            invoices: [{ id: '501', number: 'FE77', amount: 600_000 }],
+            currency: { code: 'COP' },
+          },
+        ],
+      };
+      return respond({ metadata: { total: 1 }, data: data[url.pathname] ?? [] });
+    }) as unknown as typeof fetch;
+    const session = alegraProvider.open(
+      { email: 'a@b.co', token: 'tok-123' },
+      { fetch: fetchImpl, sleep: async () => undefined, minIntervalMs: 0 },
+    );
+    const w = world();
+    const pay = recorder();
+    const out = await runAccountingSync(
+      w.db,
+      connection({ provider: 'alegra', entities: ['invoices', 'payments'] }),
+      { session, now: NOW, importPayments: pay.importPayments },
+    );
+    expect(out.result.status).toBe('ok');
+    expect(((w.tables.trackers ?? []) as Row[]).map((t) => [t.slug, t.name])).toEqual([
+      ['alegra_facturas', 'Facturas (Alegra)'],
+      ['alegra_pagos', 'Pagos recibidos (Alegra)'],
+    ]);
+    expect((w.tables.accounting_invoices ?? []) as Row[]).toEqual([
+      expect.objectContaining({
+        source_system: 'alegra',
+        source_ref: '501',
+        doc_number: 'FE77',
+        client_nit: '800555111',
+        counterparty_name: 'Nexa Logística',
+        balance: 400_000,
+      }),
+    ]);
+    expect(pay.calls[0]).toMatchObject({ system: 'alegra' });
+    expect(pay.calls[0]?.rows).toEqual([
+      expect.objectContaining({ sourceRef: '9:0', invoiceNumber: 'FE77', amount: 600_000 }),
+    ]);
+  });
+
+  it('QuickBooks: «Clientes (QuickBooks)», «Facturas (QuickBooks)» y source_system quickbooks', async () => {
+    const env = { ...process.env };
+    process.env.QUICKBOOKS_CLIENT_ID = 'id';
+    process.env.QUICKBOOKS_CLIENT_SECRET = 'secreto';
+    try {
+      const fetchImpl = (async (input: string | URL | Request) => {
+        const q = new URL(String(input)).searchParams.get('query') ?? '';
+        if (q.includes('FROM Customer'))
+          return respond({
+            QueryResponse: { Customer: [{ Id: '24', DisplayName: 'Red Rock Diner' }] },
+          });
+        if (q.includes('FROM Invoice'))
+          return respond({
+            QueryResponse: {
+              Invoice: [
+                {
+                  Id: '130',
+                  DocNumber: '1037',
+                  TxnDate: '2026-09-20',
+                  DueDate: '2026-10-20',
+                  TotalAmt: 362.07,
+                  Balance: 100,
+                  CustomerRef: { value: '24' },
+                  CurrencyRef: { value: 'USD' },
+                },
+              ],
+            },
+          });
+        return respond({ QueryResponse: {} });
+      }) as unknown as typeof fetch;
+      const session = quickbooksProvider.open(
+        { realm_id: '123', refresh_token: 'r1', company_name: 'Red Rock' },
+        {
+          fetch: fetchImpl,
+          sleep: async () => undefined,
+          minIntervalMs: 0,
+          tokenStore: {
+            load: async () => ({ token: 'a', expiresAt: Date.now() + 3_600_000 }),
+            save: async () => undefined,
+          },
+        },
+      );
+      const w = world();
+      const out = await runAccountingSync(
+        w.db,
+        connection({ provider: 'quickbooks', entities: ['customers', 'invoices'] }),
+        { session, now: NOW, importPayments: recorder().importPayments },
+      );
+      expect(out.result.status).toBe('ok');
+      expect(((w.tables.trackers ?? []) as Row[]).map((t) => t.name)).toEqual([
+        'Clientes (QuickBooks)',
+        'Facturas (QuickBooks)',
+      ]);
+      expect((w.tables.accounting_invoices ?? []) as Row[]).toEqual([
+        expect.objectContaining({
+          source_system: 'quickbooks',
+          doc_number: '1037',
+          currency: 'USD',
+          balance: 100,
+          // El nombre sale de la tabla de clientes, traída antes en la corrida.
+          counterparty_name: 'Red Rock Diner',
+        }),
+      ]);
+    } finally {
+      process.env = env;
+    }
   });
 });

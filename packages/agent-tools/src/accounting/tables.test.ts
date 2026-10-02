@@ -101,16 +101,34 @@ describe('las tablas de un programa contable', () => {
     ]);
   });
 
-  it('la pantalla ve Siigo conectable y Alegra y QuickBooks como próximamente', () => {
-    expect(listAccountingProviders().map((p) => [p.id, p.available])).toEqual([
-      ['siigo', true],
-      ['alegra', false],
-      ['quickbooks', false],
-    ]);
-    const siigo = listAccountingProviders()[0];
-    expect(siigo?.credentialFields.map((f) => [f.key, f.secret])).toEqual([
-      ['username', false],
-      ['access_key', true],
-    ]);
+  it('la pantalla ve los tres programas conectables; QuickBooks entra por Intuit, sin formulario', () => {
+    const env = { ...process.env };
+    process.env.QUICKBOOKS_CLIENT_ID = '';
+    process.env.QUICKBOOKS_CLIENT_SECRET = '';
+    try {
+      const providers = listAccountingProviders();
+      expect(providers.map((p) => [p.id, p.available, p.connect])).toEqual([
+        ['siigo', true, 'credentials'],
+        ['alegra', true, 'credentials'],
+        ['quickbooks', true, 'oauth'],
+      ]);
+      expect(providers[0]?.credentialFields.map((f) => [f.key, f.secret])).toEqual([
+        ['username', false],
+        ['access_key', true],
+      ]);
+      expect(providers[1]?.credentialFields.map((f) => [f.key, f.secret])).toEqual([
+        ['email', false],
+        ['token', true],
+      ]);
+      // La llave de QuickBooks (refresh token) nunca es un campo de la pantalla.
+      expect(providers[2]?.credentialFields).toEqual([]);
+      expect(providers[2]?.setupMissing).toContain('Falta configurar la app de QuickBooks');
+      expect(providers[0]?.setupMissing).toBeNull();
+      process.env.QUICKBOOKS_CLIENT_ID = 'id';
+      process.env.QUICKBOOKS_CLIENT_SECRET = 'secreto';
+      expect(listAccountingProviders()[2]?.setupMissing).toBeNull();
+    } finally {
+      process.env = env;
+    }
   });
 });

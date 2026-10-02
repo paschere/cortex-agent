@@ -25,7 +25,7 @@ import { logger } from '@cortex/core';
  *   anota → campana.
  *
  * Una corrida tiene ocho minutos: el puente de pg-boss corta a los 800 s y
- * Siigo deja ~85 peticiones por minuto. La primera carga de una empresa grande
+ * Siigo deja ~85 peticiones por minuto (Alegra ~130, QuickBooks ~400). La primera carga de una empresa grande
  * no cabe; el motor anota dónde iba, la conexión queda «partial» y se vuelve a
  * encolar enseguida, hasta terminar.
  *

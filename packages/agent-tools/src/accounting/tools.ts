@@ -14,9 +14,9 @@ import { ACCOUNTING_ENTITIES, ACCOUNTING_PROVIDER_IDS, type AccountingEntity } f
 /**
  * Los programas contables desde el chat (migración 0165).
  *
- * Dos herramientas, a propósito ninguna para CONECTAR: la llave de Siigo la
- * pega un administrador en Integraciones y no pasa nunca por el modelo ni por
- * la conversación. Desde aquí se puede preguntar cómo va («¿Siigo está al
+ * Dos herramientas, a propósito ninguna para CONECTAR: la llave de Siigo o de
+ * Alegra la pega un administrador en Integraciones (QuickBooks se autoriza
+ * entrando a Intuit), y no pasa nunca por el modelo ni por la conversación. Desde aquí se puede preguntar cómo va («¿Siigo está al
  * día?») y pedir que traiga ya, con confirmación.
  */
 
@@ -66,7 +66,7 @@ function describeConnection(c: AccountingConnectionRow): string {
 export const accountingStatus = registerTool({
   id: 'accounting.status',
   description:
-    'Show the connected accounting programs (Siigo today; Alegra and QuickBooks coming): whether each is up to date, last sync, what it brings (customers, products, invoices, payments), which company tables it fills and any error. Read-only. Use it when the person asks about Siigo, their accounting program, or why invoices are or are not showing.',
+    'Show the connected accounting programs (Siigo, Alegra, QuickBooks Online): whether each is up to date, last sync, what it brings (customers, products, invoices, payments), which company tables it fills and any error. Read-only. Use it when the person asks about Siigo, Alegra, QuickBooks, their accounting program, or why invoices are or are not showing.',
   inputSchema: z.object({}),
   outputSchema: z.object({ markdown: z.string(), connected: z.number().int() }),
   rateLimit: { perMinute: 20 },
@@ -74,11 +74,17 @@ export const accountingStatus = registerTool({
     const connections = await listAccountingConnections(ctx.db);
     const soon = listAccountingProviders()
       .filter((p) => !connections.some((c) => c.provider === p.id))
-      .map((p) => (p.available ? `${p.name} (se puede conectar)` : `${p.name} (próximamente)`));
+      .map((p) =>
+        !p.available
+          ? `${p.name} (próximamente)`
+          : p.setupMissing
+            ? `${p.name} (falta configurar su app en esta instalación)`
+            : `${p.name} (se puede conectar)`,
+      );
     if (!connections.length)
       return {
         connected: 0,
-        markdown: `No hay ningún programa contable conectado. Un administrador lo conecta en Integraciones → Programas contables, pegando la llave del programa (la llave nunca pasa por el chat). Disponibles: ${soon.join(', ')}.`,
+        markdown: `No hay ningún programa contable conectado. Un administrador lo conecta en Integraciones → Programas contables (la llave nunca pasa por el chat). Disponibles: ${soon.join(', ')}.`,
       };
     return {
       connected: connections.length,
@@ -95,18 +101,29 @@ export const accountingStatus = registerTool({
 export const accountingSyncNow = registerTool({
   id: 'accounting.sync_now',
   description:
-    'Bring data from a connected accounting program (Siigo) right now instead of waiting for the next scheduled sync: new and changed customers, products, invoices and payments go into their company tables and invoices with a balance into receivables. Requires confirmation. It cannot connect a program — that is done by an admin in Integrations.',
+    'Bring data from a connected accounting program (Siigo, Alegra or QuickBooks) right now instead of waiting for the next scheduled sync: new and changed customers, products, invoices and payments go into their company tables and invoices with a balance into receivables. Requires confirmation. It cannot connect a program — that is done by an admin in Integrations.',
   inputSchema: z.object({
     provider: z
       .enum(ACCOUNTING_PROVIDER_IDS as unknown as [string, ...string[]])
-      .default('siigo')
-      .describe('Which accounting program: siigo, alegra or quickbooks.'),
+      .optional()
+      .describe(
+        'Which accounting program: siigo, alegra or quickbooks. Omit it when only one is connected.',
+      ),
   }),
   outputSchema: z.object({ queued: z.boolean(), markdown: z.string() }),
   requiresConfirmation: true,
   rateLimit: { perMinute: 4 },
   handler: async (input, ctx) => {
-    const provider = input.provider ?? 'siigo';
+    let provider = input.provider;
+    if (!provider) {
+      // Sin decir cuál: el único conectado; si hay varios, que lo diga.
+      const connected = await listAccountingConnections(ctx.db);
+      if (connected.length > 1)
+        throw new ValidationError(
+          `Hay varios programas contables conectados (${connected.map((c) => providerName(c.provider)).join(', ')}). Dime cuál sincronizo.`,
+        );
+      provider = connected[0]?.provider ?? 'siigo';
+    }
     const name = providerName(provider);
     const existing = await getAccountingConnection(ctx.db, provider);
     if (!existing)

@@ -126,6 +126,13 @@ export interface ProviderToken {
 export interface ProviderTokenStore {
   load(): Promise<ProviderToken | null>;
   save(token: ProviderToken): Promise<void>;
+  /**
+   * Guarda la llave entera otra vez, cifrada. Lo usa un programa con OAuth
+   * (QuickBooks): cada renovación puede devolver un refresh token nuevo y el
+   * viejo deja de servir, así que perderlo es perder la conexión. A diferencia
+   * de `save`, un error aquí NO se traga.
+   */
+  saveCredentials?(credentials: Record<string, string>): Promise<void>;
 }
 
 export interface ProviderRuntime {
@@ -144,6 +151,8 @@ export interface ProviderSession {
   listPage(entity: AccountingEntity, query: ProviderQuery, page: number): Promise<ProviderPage>;
   /** Peticiones HTTP hechas (para el registro de la corrida). */
   readonly requests: number;
+  /** Al desconectar: avisarle al programa que la llave ya no se usa (OAuth). Nunca lanza. */
+  revoke?(): Promise<void>;
 }
 
 export interface CredentialField {
@@ -165,6 +174,17 @@ export interface AccountingProvider {
   entities: readonly AccountingEntity[];
   /** Cómo se llaman los pagos en este programa («Recibos de caja»). */
   paymentsLabel?: string;
+  /**
+   * Cómo se conecta: pegando una llave en la tarjeta (`credentials`, Siigo y
+   * Alegra) o entrando al programa (`oauth`, QuickBooks). En `oauth` los
+   * `credentialFields` son lo que se guarda cifrado, no un formulario.
+   */
+  connect?: 'credentials' | 'oauth';
+  /**
+   * Lo que le falta a ESTA instalación para poder conectar el programa (p. ej.
+   * la app de QuickBooks sin registrar), en español, o `null` si está listo.
+   */
+  setupMissing?(): string | null;
   open(credentials: Record<string, string>, runtime?: ProviderRuntime): ProviderSession;
   /**
    * Qué listados pedir para una cosa:
@@ -192,4 +212,7 @@ export interface ProviderInfo {
   credentialFields: CredentialField[];
   entities: AccountingEntity[];
   paymentsLabel: string;
+  connect: 'credentials' | 'oauth';
+  /** Qué falta configurar en la instalación para conectarlo; `null` si nada. */
+  setupMissing: string | null;
 }

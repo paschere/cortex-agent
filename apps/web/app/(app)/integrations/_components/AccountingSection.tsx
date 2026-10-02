@@ -12,9 +12,10 @@ import { Calculator } from 'lucide-react';
 import { AccountingProviderCard } from './AccountingProviderCard';
 
 /**
- * PROGRAMAS CONTABLES (migración 0165): una tarjeta por programa. Siigo se
- * conecta aquí; Alegra y QuickBooks aparecen como «Próximamente» hasta que
- * tengan su archivo en accounting/providers.
+ * PROGRAMAS CONTABLES (migración 0165): una tarjeta por programa. Siigo y
+ * Alegra se conectan pegando su llave aquí; QuickBooks, entrando a Intuit (y
+ * si la instalación no tiene su app configurada, la tarjeta lo dice). El ancla
+ * `#programas-contables` es a donde llevan el autoservicio y los avisos.
  *
  * Sólo para quien administra el espacio: pegar la llave de la contabilidad de
  * la empresa es una decisión de la empresa. Los demás no ven la sección.

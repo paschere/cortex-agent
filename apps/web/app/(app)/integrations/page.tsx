@@ -2,6 +2,7 @@ import { DirectionPair } from '@/components/connect/DirectionPair';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { SourceDiagnostics } from '@/components/ui/source-diagnostics';
+import { quickbooksErrorMessage } from '@/lib/accounting/quickbooks-oauth';
 import { readSetupDiagnostics } from '@/lib/management/diagnostics';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -498,11 +499,12 @@ export default async function IntegrationsPage({
       )}
       {sp.error && (
         <div className="mb-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
-          No se pudo conectar: {sp.error}. Inténtalo otra vez desde la tarjeta.
+          {quickbooksErrorMessage(sp.error) ??
+            `No se pudo conectar: ${sp.error}. Inténtalo otra vez desde la tarjeta.`}
         </div>
       )}
 
-      {/* Programas contables (0165): Siigo hoy. Sólo para administradores. */}
+      {/* Programas contables (0165): Siigo, Alegra, QuickBooks. Sólo para administradores. */}
       <AccountingSection organizationId={user.organization.id} role={user.organization.role} />
 
       {/* Hairlines come from the gap showing the border colour through, so the

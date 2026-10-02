@@ -71,10 +71,10 @@ export const SOURCES: SourceOption[] = [
   },
   {
     id: 'file',
-    title: 'Un archivo de tu programa contable',
-    body: 'Exporta de Siigo, Alegra o World Office (Excel o CSV) y súbelo. Cortex entiende las columnas.',
-    go: { href: '/feed?mode=file' },
-    cta: 'Subir el archivo',
+    title: 'Tu programa contable',
+    body: 'Siigo, Alegra o QuickBooks: conéctalo una vez y Cortex trae clientes, facturas y pagos solo. ¿Otro programa? Sube el archivo exportado.',
+    go: { href: '/integrations#programas-contables' },
+    cta: 'Conectar mi programa',
   },
   {
     id: 'describe',

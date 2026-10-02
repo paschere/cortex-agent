@@ -13,6 +13,8 @@ const siigo: AccountingProviderInfo = {
   ],
   entities: ['customers', 'products', 'invoices', 'payments'],
   paymentsLabel: 'Recibos de caja',
+  connect: 'credentials',
+  setupMissing: null,
 };
 const alegra: AccountingProviderInfo = {
   id: 'alegra',
@@ -22,6 +24,8 @@ const alegra: AccountingProviderInfo = {
   credentialFields: [],
   entities: [],
   paymentsLabel: 'Pagos recibidos',
+  connect: 'credentials',
+  setupMissing: null,
 };
 
 const NOW = new Date('2026-10-01T12:00:00Z');

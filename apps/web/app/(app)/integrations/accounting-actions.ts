@@ -5,9 +5,13 @@ import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  AlegraError,
+  QuickBooksError,
   SiigoError,
   disconnectAccounting,
+  getAccountingConnection,
   getAccountingProvider,
+  openAccountingSession,
   requestAccountingSync,
   saveAccountingConnection,
   updateAccountingSettings,
@@ -21,8 +25,10 @@ import { revalidatePath } from 'next/cache';
  * sólo se decide QUIÉN (dueños y administradores) y se traduce el error.
  *
  * LA LLAVE. `connectAccountingProgram` es el único camino por el que entra una
- * llave: llega del formulario, se prueba contra el programa ANTES de guardarse
- * y se guarda cifrada. Ninguna acción la devuelve, y ningún error la repite.
+ * llave pegada (Siigo, Alegra): llega del formulario, se prueba contra el
+ * programa ANTES de guardarse y se guarda cifrada. QuickBooks no pega llave:
+ * entra por Intuit (app/api/integrations/quickbooks). Ninguna acción la
+ * devuelve, y ningún error la repite.
  */
 
 export type AccountingActionResult = { ok: true; note?: string } | { ok: false; error: string };
@@ -30,7 +36,13 @@ export type AccountingActionResult = { ok: true; note?: string } | { ok: false; 
 const PATH = '/integrations';
 
 function describe(err: unknown, fallback: string): string {
-  if (err instanceof SiigoError || err instanceof ValidationError || err instanceof NotFoundError)
+  if (
+    err instanceof SiigoError ||
+    err instanceof AlegraError ||
+    err instanceof QuickBooksError ||
+    err instanceof ValidationError ||
+    err instanceof NotFoundError
+  )
     return err.message;
   return fallback;
 }
@@ -55,6 +67,11 @@ export async function connectAccountingProgram(input: {
     const { user, db } = await adminDb();
     const provider = getAccountingProvider(input.provider);
     if (!provider) return { ok: false, error: 'Ese programa todavía no se puede conectar.' };
+    if (provider.connect === 'oauth')
+      return {
+        ok: false,
+        error: `${provider.name} se conecta entrando a su cuenta, con el botón de la tarjeta.`,
+      };
     const credentials = Object.fromEntries(
       provider.credentialFields.map((f) => [
         f.key,
@@ -130,6 +147,15 @@ export async function disconnectAccountingProgram(input: {
 }): Promise<AccountingActionResult> {
   try {
     const { db } = await adminDb();
+    // Un programa con OAuth (QuickBooks): avisarle que el permiso ya no se usa.
+    // Si no contesta, igual se desconecta.
+    if (getAccountingProvider(input.provider)?.connect === 'oauth') {
+      const conn = await getAccountingConnection(db, input.provider);
+      if (conn)
+        await openAccountingSession(db, conn.id)
+          .then((session) => session.revoke?.())
+          .catch(() => undefined);
+    }
     await disconnectAccounting(db, input.provider);
     revalidatePath(PATH);
     return {

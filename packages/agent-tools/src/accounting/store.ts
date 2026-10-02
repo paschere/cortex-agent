@@ -84,7 +84,9 @@ export interface AccountingConnectionRow {
 export function requireProvider(id: string): AccountingProvider {
   const provider = getAccountingProvider(id);
   if (!provider)
-    throw new ValidationError(`Todavía no se puede conectar «${id}». Por ahora: Siigo.`);
+    throw new ValidationError(
+      `Todavía no se puede conectar «${id}». Por ahora: Siigo, Alegra o QuickBooks.`,
+    );
   return provider;
 }
 
@@ -400,6 +402,16 @@ export async function openAccountingSession(
             token_enc: encryptToken(token.token),
             token_expires_at: new Date(token.expiresAt).toISOString(),
           })
+          .eq('id', row.id);
+        if (saveError) throw saveError;
+      },
+      // QuickBooks: el refresh token rota. La llave entera se vuelve a cifrar
+      // con el nuevo; si no se puede guardar, el programa no sigue.
+      saveCredentials: async (next) => {
+        const clean = cleanCredentials(provider, next);
+        const { error: saveError } = await db
+          .from('accounting_connections')
+          .update({ credentials_enc: encryptToken(JSON.stringify(clean)) })
           .eq('id', row.id);
         if (saveError) throw saveError;
       },
