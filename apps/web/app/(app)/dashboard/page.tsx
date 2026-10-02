@@ -25,11 +25,14 @@ import {
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
+import { AskCortex } from './_components/AskCortex';
 import { DayJournal } from './_components/DayJournal';
 import { Insights } from './_components/Insights';
 import { ManagementOverview } from './_components/ManagementOverview';
 import { MoneyAtRiskPanel } from './_components/MoneyAtRiskPanel';
 import { PinnedViews } from './_components/PinnedViews';
+import { ProcessesPanel } from './_components/ProcessesPanel';
+import { SetupStrip } from './_components/SetupStrip';
 import { WaitingIndex } from './_components/WaitingIndex';
 
 /**
@@ -88,54 +91,32 @@ export default async function DashboardPage() {
   const onboarding = await readOnboarding(sb);
   if (onboarding.show) redirect('/onboarding');
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const [waiting, journal, signalsRes, runsRes, convsRes] = await Promise.all([
+    // El índice de las cuatro colas. Los conteos salen de `countNavSignals`,
+    // el mismo que dibuja los badges del menú, así que la barra lateral y
+    // esta pantalla no pueden discrepar sobre cuánto trabajo hay parado.
+    readWaitingIndex(user.organization.id, user.id),
+    // La otra mitad: lo que Cortex hizo anoche y hoy. Cada clase de actividad
+    // se recoge sola dentro de `readJournal`, así que esta promesa no puede
+    // rechazar por una tabla caída — devuelve la jornada con el hueco dicho.
+    readJournal(user.organization.id, user.id, { isAdmin: user.role === 'org_admin' }),
+    sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+    sb
+      .from('scheduled_job_runs')
+      .select('id, status, started_at, output, error, scheduled_jobs!inner(name, user_id)')
+      .eq('scheduled_jobs.user_id', user.id)
+      .order('started_at', { ascending: false })
+      .limit(6),
+    sb
+      .from('conversations')
+      .select('id, title, updated_at, agents(name)')
+      .eq('user_id', user.id)
+      .neq('surface', 'mcp')
+      .order('updated_at', { ascending: false })
+      .limit(5),
+  ]);
 
-  const [waiting, journal, toolCallsRes, signalsRes, routinesRes, runsRes, convsRes] =
-    await Promise.all([
-      // El índice de las cuatro colas. Los conteos salen de `countNavSignals`,
-      // el mismo que dibuja los badges del menú, así que la barra lateral y
-      // esta pantalla no pueden discrepar sobre cuánto trabajo hay parado.
-      readWaitingIndex(user.organization.id, user.id),
-      // La otra mitad: lo que Cortex hizo anoche y hoy. Cada clase de actividad
-      // se recoge sola dentro de `readJournal`, así que esta promesa no puede
-      // rechazar por una tabla caída — devuelve la jornada con el hueco dicho.
-      readJournal(user.organization.id, user.id, { isAdmin: user.role === 'org_admin' }),
-      sb
-        .from('audit_events')
-        .select('id', { count: 'exact', head: true })
-        // Both are bookkeeping rows, not tool calls: counting them would make
-        // approving something look like running two things.
-        .not('tool_id', 'in', '("__agent_turn","__approval_decision")')
-        // La fila de intención (0118) precede a la de resultado de la MISMA
-        // llamada; contarla haría parecer dos acciones donde hubo una.
-        .neq('status', 'attempted')
-        .gte('created_at', todayStart.toISOString()),
-      sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
-      sb
-        .from('scheduled_jobs')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('status', 'active'),
-      sb
-        .from('scheduled_job_runs')
-        .select('id, status, started_at, output, error, scheduled_jobs!inner(name, user_id)')
-        .eq('scheduled_jobs.user_id', user.id)
-        .order('started_at', { ascending: false })
-        .limit(6),
-      sb
-        .from('conversations')
-        .select('id, title, updated_at, agents(name)')
-        .eq('user_id', user.id)
-        .neq('surface', 'mcp')
-        .order('updated_at', { ascending: false })
-        .limit(5),
-    ]);
-
-  const toolCallsToday = toolCallsRes.count ?? 0;
   const newSignals = signalsRes.count ?? 0;
-  const pendingApprovals = waiting.counts.approvals;
-  const activeRoutines = routinesRes.count ?? 0;
 
   const runs = (runsRes.data ?? []) as unknown as RunRow[];
   const conversations = (convsRes.data ?? []) as unknown as ConversationRow[];
@@ -153,46 +134,33 @@ export default async function DashboardPage() {
 
   return (
     <>
-      {/* Masthead: el escritorio abre con UNA cosa que manda — la frase. */}
-      <Panel className="animate-rise mb-4 overflow-hidden">
-        <div className="desk-sky px-5 pb-4 pt-5 sm:px-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-            <p className="text-sm font-semibold text-ink-muted">Hola, {firstName}</p>
-            <p className="tabular text-micro text-ink-faint">{todayLabel}</p>
-          </div>
-          {/* LA FRASE, ahora con el cuerpo de un titular. Es lo único de la
-              pantalla que se lee sin buscarlo, así que lleva el tamaño de
-              página entero; el saludo y la fecha la acompañan en chico. La
-              escribe `summarizeWaiting` a partir de los conteos y de dos
-              hechos —qué se venció y qué lleva más esperando—; ni una palabra
-              sale de un modelo. */}
-          <h1
+      {/* EL INICIO ABRE CON UNA PREGUNTA Y UN LUGAR DONDE CONTESTARLA.
+          El saludo, «¿qué resolvemos hoy?» y la caja para pedírselo a Cortex.
+          LA FRASE de las colas (`summarizeWaiting`, sin modelo) queda debajo
+          del título: sigue siendo lo primero que se lee de los datos, pero ya
+          no es lo único que la pantalla ofrece hacer. */}
+      <section className="animate-rise mb-5 flex flex-col gap-4 pt-1">
+        <div>
+          <p className="tabular text-sm font-semibold capitalize text-ink-faint">{todayLabel}</p>
+          <h1 className="mt-1 text-balance text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl">
+            Hola, {firstName}. ¿Qué resolvemos hoy?
+          </h1>
+          <p
             className={clsx(
-              'mt-1.5 max-w-3xl text-pretty leading-snug tracking-tight',
-              waiting.total > 0
-                ? 'text-xl font-extrabold text-ink'
-                : 'text-lg font-bold text-ink-muted',
+              'mt-1.5 max-w-3xl text-pretty text-sm leading-relaxed sm:text-base',
+              waiting.total > 0 ? 'font-semibold text-ink-muted' : 'text-ink-faint',
             )}
           >
             {waiting.sentence}
-          </h1>
+          </p>
         </div>
-        <div className="rule-double" />
-        {/* El pulso: cuatro cifras en celdas partidas por filos de un píxel —
-            la misma retícula que usan las colas de abajo — en vez de cuatro
-            pares etiqueta-número flotando. El ámbar sólo se enciende cuando
-            la cifra pide una mirada. */}
-        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-          <PulseCell label="Herramientas hoy" value={toolCallsToday} />
-          <PulseCell label="Prospectos nuevos" value={newSignals} attention={newSignals > 0} />
-          <PulseCell
-            label="Por aprobar"
-            value={pendingApprovals}
-            attention={pendingApprovals > 0}
-          />
-          <PulseCell label="Rutinas activas" value={activeRoutines} />
-        </div>
-      </Panel>
+        <AskCortex />
+      </section>
+
+      {/* Los cinco pasos del autoservicio; se va sola cuando están hechos. */}
+      <Suspense fallback={null}>
+        <SetupStrip organizationId={user.organization.id} userId={user.id} isAdmin={isAdmin} />
+      </Suspense>
 
       {/* LAS DOS MITADES, UNA AL LADO DE OTRA.
           A la izquierda, lo que espera a esta persona: el índice de las cuatro
@@ -214,6 +182,11 @@ export default async function DashboardPage() {
       {/* Cartera vencida, pagos de la semana y multas: sólo si hay algo. */}
       <Suspense fallback={null}>
         <MoneyAtRiskPanel organizationId={user.organization.id} />
+      </Suspense>
+
+      {/* Lo que Cortex tiene andando solo: carpetas, sincronizaciones, rutinas. */}
+      <Suspense fallback={null}>
+        <ProcessesPanel organizationId={user.organization.id} userId={user.id} />
       </Suspense>
 
       {/* Lo que el equipo fijó a propósito desde /views. Sin fijadas, nada. */}
@@ -565,29 +538,5 @@ function QuickAction({
       <span className="shrink-0 text-primary">{icon}</span>
       {label}
     </Link>
-  );
-}
-
-/**
- * Una celda del pulso: la etiqueta que nombra y la cifra en monoespaciada
- * (regla 3 — es un número que alguien cita). El ámbar sólo cuando la cifra
- * espera una mirada; un cero ámbar sería una alarma sin incendio.
- */
-function PulseCell({
-  label,
-  value,
-  attention = false,
-}: {
-  label: string;
-  value: number;
-  attention?: boolean;
-}) {
-  return (
-    <div className="bg-surface px-5 py-3">
-      <div className="field-label">{label}</div>
-      <div className={clsx('stat-num mt-0.5 text-lg', attention ? 'text-amber' : 'text-ink')}>
-        {value.toLocaleString()}
-      </div>
-    </div>
   );
 }

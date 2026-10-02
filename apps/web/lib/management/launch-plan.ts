@@ -96,8 +96,9 @@ export function buildLaunchPlan(e: LaunchEvidence): LaunchStep[] {
       evidence: `${countCopy(e.sources, 'conexiones registradas')}. ${countCopy(e.knowledge, 'documentos en el cerebro')}. La existencia no garantiza sincronización ni vigencia.`,
       state: countState(context),
       required: true,
-      action: { label: 'Traer datos al Feed', href: '/feed' },
+      action: { label: 'Elegir de dónde traer tus datos', href: '/onboarding/fuentes' },
       alternatives: [
+        { label: 'Traer datos al Feed', href: '/feed' },
         { label: 'Conectar herramientas', href: '/integrations' },
         { label: 'Preparar las fuentes financieras', href: '/finance' },
         { label: 'Guardar conocimiento permanente', href: '/kb' },
