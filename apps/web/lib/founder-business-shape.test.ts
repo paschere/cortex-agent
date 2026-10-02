@@ -3,6 +3,8 @@ import {
   type CompanyBusiness,
   actionCandidates,
   businessTotals,
+  cashIsTight,
+  cashWeeksLabel,
   compactCop,
   companyStatus,
   initialsOf,
@@ -73,6 +75,8 @@ function biz(id: string, patch: Partial<CompanyBusiness> = {}): CompanyBusiness 
     },
     recovered: { month: 0, monthInvoices: 0, total: 0, others: [] },
     sales: { month: 120_000_000, previous: 150_000_000, asOf: '2026-10-02' },
+    cash: null,
+    ledger: false,
     failing: { routines: 0, syncs: 0, total: 0 },
     setup: { ready: 5, total: 5, percent: 100, next: null },
     oldestDecisionAt: null,
@@ -182,6 +186,69 @@ describe('companyStatus', () => {
   it('una cifra sin dato no se lee como cero ni como problema', () => {
     const status = companyStatus(row('a'), biz('a', { risk: null, failing: null }), NOW);
     expect(status.label).toBe('Al día');
+  });
+});
+
+describe('la caja', () => {
+  const cash = (
+    runwayWeeks: number | null,
+    today = 80_000_000,
+  ): NonNullable<CompanyBusiness['cash']> => ({
+    today,
+    runwayWeeks,
+    horizonWeeks: 13,
+    lowest: { week: '2026-11-09', closing: 4_000_000 },
+  });
+
+  it('«13+» cuando no baja del mínimo en todo el horizonte; si no, las semanas', () => {
+    expect(cashWeeksLabel(cash(null))).toBe('13+');
+    expect(cashWeeksLabel({ ...cash(null), horizonWeeks: 8 })).toBe('8+');
+    expect(cashWeeksLabel(cash(5))).toBe('5');
+    expect(cashWeeksLabel(cash(0))).toBe('0');
+  });
+
+  it('dos semanas o menos pide atención y dice cuántas', () => {
+    expect(cashIsTight(cash(2))).toBe(true);
+    expect(cashIsTight(cash(3))).toBe(false);
+    expect(cashIsTight(cash(null))).toBe(false);
+    expect(cashIsTight(null)).toBe(false);
+    const tight = companyStatus(row('a'), biz('a', { cash: cash(2), ledger: true }), NOW);
+    expect(tight).toMatchObject({ tone: 'amber', label: 'Pide atención' });
+    expect(tight.reasons).toEqual(['Caja para 2 semanas']);
+    expect(companyStatus(row('a'), biz('a', { cash: cash(0), ledger: true }), NOW).reasons).toEqual(
+      ['La caja no alcanza esta semana'],
+    );
+  });
+
+  it('caja holgada o sin dato no alarma', () => {
+    expect(companyStatus(row('a'), biz('a', { cash: cash(6), ledger: true }), NOW).label).toBe(
+      'Al día',
+    );
+    expect(companyStatus(row('a'), biz('a', { cash: null, ledger: null }), NOW).label).toBe(
+      'Al día',
+    );
+  });
+
+  it('una empresa con caja en el libro ya tiene cifras, aunque no venda por el pulso', () => {
+    const status = companyStatus(
+      row('nueva'),
+      biz('nueva', {
+        sales: null,
+        cash: cash(null),
+        ledger: true,
+        setup: { ready: 1, total: 5, percent: 20, next: 'Conecta tu correo' },
+      }),
+      NOW,
+    );
+    expect(status.label).toBe('Al día');
+  });
+
+  it('cuenta en «Pide atención» de los totales', () => {
+    const totals = businessTotals([row('a'), row('b')], {
+      a: biz('a', { cash: cash(1), ledger: true }),
+      b: biz('b', { cash: cash(null), ledger: true }),
+    });
+    expect(totals.attention).toBe(1);
   });
 });
 

@@ -3,6 +3,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { hasLedgerCash } from '../ledger/forecast-explain';
+import { runForecast } from '../ledger/plans';
+import { canSeePayrollDetail, maskPayrollForecast } from '../ledger/privacy';
 import { readWeeklyManagement } from '../management/weekly-review';
 import { utilityModel } from '../model';
 import { moneyRecovered } from '../payments/recovered-store';
@@ -65,6 +68,10 @@ import {
  *     fallan, tareas con efecto (auditoría), asuntos cerrados con evidencia
  *     (management/weekly-review.ts) y lo que espera aprobación. Cada lectura
  *     en su propio `try`: una que falla se omite y se nombra al pie.
+ *   - LAS ALERTAS DE LA CAJA de las próximas 13 semanas (ledger/plans.ts ›
+ *     runForecast): caja en rojo o bajo el mínimo y pagos grandes en semanas
+ *     apretadas. Entran como cifras citables y como la primera recomendación
+ *     cuando la caja queda en rojo.
  *   - EL TEXTO lo escribe el modelo con la misma guarda de números del
  *     resumen diario; si inventa dos veces, se escribe sin modelo.
  *   - SE ENTREGA en el bloque «Semana» de la vista (debajo del resumen de
@@ -111,7 +118,12 @@ export async function readWeeklyActivity(
   const startIso = bogotaMidnight(w.from);
   const endIso = bogotaMidnight(shiftDay(w.to, 1));
   const nowIso = w.now.toISOString();
-  const out: WeeklyActivity = { ...EMPTY_ACTIVITY, failingRoutines: [], gaps: [] };
+  const out: WeeklyActivity = {
+    ...EMPTY_ACTIVITY,
+    failingRoutines: [],
+    cashAlerts: [],
+    gaps: [],
+  };
   const step = async (what: string, read: () => Promise<void>) => {
     try {
       await read();
@@ -239,6 +251,24 @@ export async function readWeeklyActivity(
         .lt('created_at', endIso);
       if (error) throw new Error(error.message);
       out.tasksDone = count ?? 0;
+    }),
+    step('la proyección de caja', async () => {
+      // Sólo lo que pide atención (caja en rojo o bajo el mínimo, pagos grandes
+      // en semanas apretadas); sin libro de plata, nada. La nómina sin nombres
+      // para quien no administra la empresa.
+      const [{ base }, admin] = await Promise.all([
+        runForecast(db, { today: w.today }),
+        canSeePayrollDetail(db, w.viewerId),
+      ]);
+      if (!hasLedgerCash(base)) return;
+      const result = admin ? base : maskPayrollForecast(base);
+      out.cashAlerts = result.alerts
+        .filter(
+          (a): a is typeof a & { severity: 'warn' | 'critical' } =>
+            a.severity === 'critical' || (a.severity === 'warn' && a.kind !== 'concentration'),
+        )
+        .slice(0, 3)
+        .map((a) => ({ severity: a.severity, message: a.message }));
     }),
     step('los cierres de Gerencia', async () => {
       const m = await readWeeklyManagement(db, startIso, endIso);

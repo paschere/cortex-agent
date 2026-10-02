@@ -61,6 +61,26 @@ export interface CompanyBusiness {
    * un mes a medias.
    */
   sales: { month: number; previous: number | null; asOf: string } | null;
+  /**
+   * La caja de hoy y cuánto alcanza, de la proyección del libro de plata
+   * (ledger/plans.ts, la misma de /finance). En pesos. `null`: sin dato — la
+   * lectura falló o la empresa no tiene saldos ni movimientos (ver `ledger`).
+   */
+  cash: {
+    /** Caja de hoy: la suma de los saldos de sus cuentas. */
+    today: number;
+    /**
+     * Semanas enteras antes de que el cierre proyectado baje del mínimo de caja
+     * (o de cero si no hay mínimo). `null`: no baja en todo el horizonte («13+»).
+     */
+    runwayWeeks: number | null;
+    /** Semanas que mira la proyección; «13+» sale de aquí. */
+    horizonWeeks: number;
+    /** La semana con el cierre más bajo. */
+    lowest: { week: string; closing: number };
+  } | null;
+  /** Si la empresa tiene algo en el libro de plata (cuentas o movimientos). `null`: sin dato. */
+  ledger: boolean | null;
   /** Rutinas cuya última corrida falló + sincronizaciones en error. `null`: sin dato. */
   failing: { routines: number; syncs: number; total: number } | null;
   /** Puesta en marcha (self-service/setup.ts). `null`: sin dato. */
@@ -137,6 +157,24 @@ export interface CompanyStatus {
 export const STALE_DECISION_DAYS = 2;
 /** Por debajo de esto, una empresa sin cifras está empezando, no «al día». */
 export const SETUP_STARTING_PERCENT = 60;
+/** Caja para estas semanas o menos ya pide atención. */
+export const CASH_TIGHT_WEEKS = 2;
+
+/** «13+», «5», «0»: las semanas que alcanza la caja, en el horizonte de la proyección. */
+export function cashWeeksLabel(cash: NonNullable<CompanyBusiness['cash']>): string {
+  return cash.runwayWeeks === null ? `${cash.horizonWeeks}+` : String(cash.runwayWeeks);
+}
+
+/** Si la caja ya está apretada: baja del mínimo en `CASH_TIGHT_WEEKS` semanas o menos. */
+export function cashIsTight(cash: CompanyBusiness['cash']): boolean {
+  return cash !== null && cash.runwayWeeks !== null && cash.runwayWeeks <= CASH_TIGHT_WEEKS;
+}
+
+function cashReason(weeks: number): string {
+  return weeks <= 0
+    ? 'La caja no alcanza esta semana'
+    : `Caja para ${plural(weeks, 'semana', 'semanas')}`;
+}
 
 /** Sólo lo que la regla necesita de una fila; así se prueba sin armar una entera. */
 export type StatusRow = Pick<ConsoleRow, 'kind' | 'owned' | 'pulse'> & {
@@ -150,12 +188,19 @@ function hasBusinessData(b: CompanyBusiness): boolean {
   return (
     (b.risk !== null && (b.risk.total > 0 || b.risk.others.length > 0)) ||
     (b.recovered !== null && b.recovered.total > 0) ||
-    (b.sales !== null && b.sales.month > 0)
+    (b.sales !== null && b.sales.month > 0) ||
+    b.cash !== null
   );
 }
 
 function allUnknown(b: CompanyBusiness): boolean {
-  return b.risk === null && b.recovered === null && b.failing === null && b.setup === null;
+  return (
+    b.risk === null &&
+    b.recovered === null &&
+    b.failing === null &&
+    b.setup === null &&
+    b.cash === null
+  );
 }
 
 /**
@@ -193,6 +238,8 @@ export function companyStatus(
     for (const other of risk?.others ?? [])
       if (other.amount > 0)
         reasons.push(`${otherCurrency(other.amount, other.currency)} en cartera vencida`);
+    const runway = business.cash?.runwayWeeks ?? null;
+    if (runway !== null && runway <= CASH_TIGHT_WEEKS) reasons.push(cashReason(runway));
     if (business.failing && business.failing.total > 0)
       reasons.push(plural(business.failing.total, 'proceso con error', 'procesos con error'));
   }

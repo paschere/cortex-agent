@@ -19,6 +19,7 @@ import {
   overdueReceivableInvoices,
   overdueStage,
   recordBalanceDrops,
+  syncLedger,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
@@ -64,7 +65,10 @@ export const receivablesWatchDispatchJob: JobHandler = async ({ step }) => {
     // 0165/0166: también los espacios cuya cartera viene de un programa
     // contable, y los que tuvieron avisos de esas facturas hace poco aunque ya
     // estén pagadas: la caída de saldo a cero es justo la que hay que anotar.
-    const [accounting, noticed] = await Promise.all([
+    // 0172: también los espacios con plata en el libro o pagos recientes, para
+    // que el libro de plata se ponga al día cada mañana aunque no tengan
+    // cartera (un extracto importado, pagos anotados a mano).
+    const [accounting, noticed, ledger, reported] = await Promise.all([
       getSupabaseServiceClient()
         .from('accounting_invoices')
         .select('organization_id')
@@ -77,15 +81,25 @@ export const receivablesWatchDispatchJob: JobHandler = async ({ step }) => {
         .not('accounting_invoice_id', 'is', null)
         .gte('sent_on', addDaysTo(bogotaToday(), -(RECOVERY_WINDOW_DAYS + 1)))
         .limit(20_000),
+      getSupabaseServiceClient().from('ledger_accounts').select('organization_id').limit(20_000),
+      getSupabaseServiceClient()
+        .from('payment_reports')
+        .select('organization_id')
+        .gte('created_at', `${addDaysTo(bogotaToday(), -35)}T00:00:00Z`)
+        .limit(20_000),
     ]);
     if (accounting.error) throw accounting.error;
     if (noticed.error) throw noticed.error;
+    if (ledger.error) throw ledger.error;
+    if (reported.error) throw reported.error;
     return [
       ...new Set(
         [
           ...((data ?? []) as Array<{ organization_id: string | null }>),
           ...((accounting.data ?? []) as Array<{ organization_id: string | null }>),
           ...((noticed.data ?? []) as Array<{ organization_id: string | null }>),
+          ...((ledger.data ?? []) as Array<{ organization_id: string | null }>),
+          ...((reported.data ?? []) as Array<{ organization_id: string | null }>),
         ]
           .map((r) => r.organization_id)
           .filter((id): id is string => Boolean(id)),
@@ -124,6 +138,21 @@ export const receivablesWatchWorkspaceJob: JobHandler = async ({ event, step }) 
     } catch (err) {
       logger.warn({ err, organizationId }, 'receivable balance drops not recorded');
       return { recorded: 0 };
+    }
+  });
+
+  // 0172: el libro de plata al día —facturas, pagos, documentos y categorías,
+  // con el modelo para lo que ninguna regla reconoce (con tope)—. Su propio
+  // paso: si falla, los avisos de hoy salen igual.
+  await step.run('sync-ledger', async () => {
+    try {
+      const result = await syncLedger(getOrgScopedClient(organizationId), organizationId, {
+        today,
+      });
+      return { status: result.status, counts: result.counts, errors: result.errors };
+    } catch (err) {
+      logger.warn({ err, organizationId }, 'ledger sync failed');
+      return { status: 'error' as const };
     }
   });
 

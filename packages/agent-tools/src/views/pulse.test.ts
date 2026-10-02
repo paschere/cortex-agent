@@ -318,6 +318,66 @@ describe('las cifras del día salen de la vista calculada', () => {
   });
 });
 
+describe('la caja en el pulso (libro de plata)', () => {
+  const tracker = (id: string) => {
+    const s = PLATFORM_SOURCES.get(id);
+    if (!s) throw new Error(id);
+    return { slug: s.id, name: s.name, fields: s.fields };
+  };
+  const inv: PulseInventory = {
+    platform: { ...EMPTY, 'cortex.caja': 'data', 'cortex.flujo_caja': 'data' },
+    accounting: [],
+  };
+
+  it('«Caja hoy» y «Semana más apretada», y las cifras dicen cuál semana', () => {
+    const spec = composePulseSpec(inv).spec as ViewSpec;
+    expect(ids(spec)).toEqual(expect.arrayContaining(['caja_hoy', 'semana_apretada']));
+    expect(block(spec, 'caja_hoy')).toMatchObject({ title: 'Caja hoy', tracker: 'cortex.caja' });
+    expect(block(spec, 'semana_apretada')).toMatchObject({
+      tracker: 'cortex.flujo_caja',
+      aggregate: 'min',
+      field: 'cierra',
+    });
+    expect(checkSpecAgainst(spec, CATALOG)).toEqual([]);
+
+    const week = (start: string, cierra: number, tight: boolean) =>
+      row(`Base:${start}`, start, {
+        semana: start,
+        abre: 0,
+        entra: 0,
+        sale: 0,
+        cierra,
+        escenario: 'Base',
+        mas_apretada: tight ? 'Sí' : 'No',
+        semanas_de_caja: 6,
+      });
+    const sources = new Map<string, ViewSource>([
+      [
+        'cortex.caja',
+        source(tracker('cortex.caja'), [
+          row('a1', 'Bancolombia', { cuenta: 'Bancolombia', saldo: 30_000_000, moneda: 'COP' }),
+        ]),
+      ],
+      [
+        'cortex.flujo_caja',
+        source(tracker('cortex.flujo_caja'), [
+          week('2026-09-28', 28_000_000, false),
+          week('2026-11-16', 4_500_000, true),
+          week('2026-11-23', 9_000_000, false),
+        ]),
+      ],
+    ]);
+    const facts = pulseFacts(spec, computeView(spec, sources, NOW), sources, NOW);
+    const get = (key: string) => facts.find((f) => f.key === key);
+    expect(get('caja_hoy')?.value).toBe(30_000_000);
+    expect(get('semana_apretada')?.value).toBe(4_500_000);
+    expect(get('semana_apretada.semana')?.display).toBe('la semana del 16 nov');
+    expect(get('semanas_de_caja')?.value).toBe(6);
+    const text = `La caja hoy es ${get('caja_hoy')?.display}; la semana más apretada es la del 16 nov, con ${get('semana_apretada')?.display}.`;
+    expect(checkGrounding(text, facts, NOW)).toEqual({ ok: true, ungrounded: [] });
+  });
+});
+
 describe('la guarda de números', () => {
   const facts = siigoFacts();
   const display = (key: string) => facts.find((f) => f.key === key)?.display ?? '';

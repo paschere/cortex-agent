@@ -19,6 +19,25 @@ import {
   type ReadingStatus,
 } from '../goals/shape';
 import { listGoals } from '../goals/store';
+import { cashRunwayWeeks } from '../ledger/forecast-explain';
+import { monthlyPnl, runForecast } from '../ledger/plans';
+import {
+  PAYROLL_CONFIDENTIAL_KEY,
+  PAYROLL_CONFIDENTIAL_LABEL,
+  canSeePayrollDetail,
+  isPayrollCategory,
+} from '../ledger/privacy';
+import {
+  CATEGORY_LABEL as LEDGER_CATEGORY_LABEL,
+  KIND_LABEL as LEDGER_KIND_LABEL,
+  SOURCE_KIND_LABEL as LEDGER_SOURCE_LABEL,
+  categoryLabel as ledgerCategoryLabel,
+  num as ledgerNum,
+} from '../ledger/shape';
+import {
+  listAccounts as listLedgerAccounts,
+  listMovements as listLedgerMovements,
+} from '../ledger/store';
 import { type ManagementState, managementStateLabels, managementStates } from '../management/shape';
 import { RECOVERY_TRIGGER_LABEL } from '../payments/recovered';
 import { moneyRecovered } from '../payments/recovered-store';
@@ -32,6 +51,7 @@ import {
 } from '../payments/shape';
 import { listPayments, num, overdueReceivableInvoices } from '../payments/store';
 import type { TrackerField } from '../trackers/schema';
+import { equipoSource, trabajoSource } from '../work/view-sources';
 import { type ViewRow, todayIn } from './compute';
 import { type ViewSpec, isFeedSourceId, trackersOf } from './spec';
 
@@ -1346,6 +1366,313 @@ const recuperado: PlatformSource = {
 };
 
 // ---------------------------------------------------------------------------
+// El libro de plata y la caja (migración 0172)
+// ---------------------------------------------------------------------------
+
+const LIBRO_SENTIDO = ['Entra', 'Sale'];
+const LIBRO_ESTADO = ['Esperado', 'Pasó'];
+const SIN_CATEGORIA = 'Sin categoría';
+
+/**
+ * EL LIBRO DE PLATA, FILA POR FILA: lo que entró y salió y lo que está por
+ * cobrar y por pagar, con su categoría y su mes, contado una sola vez (sin
+ * duplicados entre fuentes, sin anulados, sin pagos en disputa). Con esto un
+ * tablero arma «gastos por categoría», «ventas contra gastos por mes» o «lo que
+ * vence esta semana» sin una segunda verdad. Es `internal`: trae la nómina, el
+ * arriendo y a quién le paga la empresa.
+ *
+ * LA NÓMINA ES CONFIDENCIAL (ledger/privacy.ts): quien no administra la
+ * empresa —o una lectura sin nadie mirando— no ve sus filas: ve un total por
+ * mes, sentido y estado, rotulado «Nómina (confidencial)», sin contraparte.
+ * Las sumas por categoría y por mes dan lo mismo; las personas no salen.
+ */
+const libro: PlatformSource = {
+  id: 'cortex.libro',
+  name: 'Libro de plata',
+  description:
+    'Todos los movimientos de plata de la empresa (programa contable, extractos del banco, pagos, facturas confirmadas y lo anotado a mano), contados una sola vez: fecha, mes, si entra o sale, clase (ingreso, gasto, por cobrar, por pagar), categoría, contraparte, valor y de dónde salió.',
+  sensitivity: 'internal',
+  fields: [
+    field('fecha', 'Fecha', 'date'),
+    field('mes', 'Mes', 'text'),
+    field('sentido', 'Entra o sale', 'select', LIBRO_SENTIDO),
+    field('clase', 'Clase', 'select', Object.values(LEDGER_KIND_LABEL)),
+    field('estado', 'Estado', 'select', LIBRO_ESTADO),
+    field('categoria', 'Categoría', 'select', [
+      ...Object.values(LEDGER_CATEGORY_LABEL),
+      SIN_CATEGORIA,
+    ]),
+    field('contraparte', 'Contraparte', 'text'),
+    field('descripcion', 'Descripción', 'text'),
+    field('valor', 'Valor (COP)', 'money'),
+    field('pendiente', 'Pendiente (COP)', 'money'),
+    field('vence', 'Vence', 'date'),
+    field('moneda', 'Moneda', 'text'),
+    field('valor_otra_moneda', 'Valor en otra moneda', 'number'),
+    field('cuenta', 'Cuenta', 'text'),
+    field('fuente', 'De dónde viene', 'select', Object.values(LEDGER_SOURCE_LABEL)),
+  ],
+  async read(db, cap, _today, ctx) {
+    const [{ rows: all, truncated }, accounts, admin] = await Promise.all([
+      listLedgerMovements(db, { limit: cap }),
+      listLedgerAccounts(db),
+      canSeePayrollDetail(db, ctx.viewerId),
+    ]);
+    const accountName = new Map(accounts.map((a) => [a.id, a.name]));
+    const movements = admin ? all : all.filter((m) => !isPayrollCategory(m.category));
+    const payroll = new Map<string, Values & { valor?: number; valor_otra_moneda?: number }>();
+    if (!admin) {
+      for (const m of all) {
+        if (!isPayrollCategory(m.category)) continue;
+        const key = `${m.date.slice(0, 7)}|${m.direction}|${m.kind}|${m.status}|${m.currency}`;
+        const amount = ledgerNum(m.amount) ?? 0;
+        const cop = m.currency.trim().toUpperCase() === COP;
+        const entry = payroll.get(key) ?? {
+          fecha: `${m.date.slice(0, 7)}-01`,
+          mes: m.date.slice(0, 7),
+          sentido: m.direction === 'in' ? 'Entra' : 'Sale',
+          clase: LEDGER_KIND_LABEL[m.kind],
+          estado: m.status === 'expected' ? 'Esperado' : 'Pasó',
+          categoria: PAYROLL_CONFIDENTIAL_LABEL,
+          descripcion: PAYROLL_CONFIDENTIAL_LABEL,
+          moneda: m.currency,
+        };
+        if (cop) entry.valor = (entry.valor ?? 0) + amount;
+        else entry.valor_otra_moneda = (entry.valor_otra_moneda ?? 0) + amount;
+        payroll.set(key, entry);
+      }
+    }
+    const rows = movements.map((m) => {
+      const values: Values = {};
+      const amount = ledgerNum(m.amount) ?? 0;
+      const cop = m.currency.trim().toUpperCase() === COP;
+      put(values, 'fecha', m.date);
+      put(values, 'mes', m.date.slice(0, 7));
+      put(values, 'sentido', m.direction === 'in' ? 'Entra' : 'Sale');
+      put(values, 'clase', LEDGER_KIND_LABEL[m.kind]);
+      put(values, 'estado', m.status === 'expected' ? 'Esperado' : 'Pasó');
+      put(values, 'categoria', m.category ? ledgerCategoryLabel(m.category) : SIN_CATEGORIA);
+      put(values, 'contraparte', m.counterparty_name);
+      put(values, 'descripcion', m.description);
+      put(values, 'moneda', m.currency);
+      if (cop) put(values, 'valor', amount);
+      else put(values, 'valor_otra_moneda', amount);
+      if (cop && (m.kind === 'receivable' || m.kind === 'payable'))
+        put(values, 'pendiente', ledgerNum(m.outstanding));
+      put(values, 'vence', m.due_date);
+      put(values, 'cuenta', m.account_id ? (accountName.get(m.account_id) ?? null) : null);
+      put(values, 'fuente', LEDGER_SOURCE_LABEL[m.source_kind]);
+      return row(
+        m.id,
+        m.description.slice(0, 120) || 'Movimiento',
+        values,
+        m.created_at,
+        m.updated_at,
+      );
+    });
+    for (const [key, values] of payroll) {
+      rows.push(
+        row(`nomina:${key}`, PAYROLL_CONFIDENTIAL_LABEL, values, `${values.fecha}T00:00:00Z`),
+      );
+    }
+    return { rows, truncated };
+  },
+};
+
+const CAJA_ORIGEN: Record<string, string> = {
+  bank: 'Extracto del banco',
+  manual: 'Dicho a mano',
+  accounting: 'Programa contable',
+};
+
+/**
+ * LA CAJA POR CUENTA: el último saldo conocido de cada cuenta propia y de qué
+ * día es. `internal`: cuánta plata tiene la empresa no es para afuera.
+ */
+const caja: PlatformSource = {
+  id: 'cortex.caja',
+  name: 'Caja por cuenta',
+  description:
+    'Las cuentas propias (banco, efectivo) con su último saldo conocido, de qué día es y quién lo dijo (el extracto importado o una persona).',
+  sensitivity: 'internal',
+  fields: [
+    field('cuenta', 'Cuenta', 'text'),
+    field('saldo', 'Saldo (COP)', 'money'),
+    field('moneda', 'Moneda', 'text'),
+    field('saldo_otra_moneda', 'Saldo en otra moneda', 'number'),
+    field('al', 'Saldo al', 'date'),
+    field('dias', 'Días desde el saldo', 'number'),
+    field('origen', 'Quién dijo el saldo', 'select', Object.values(CAJA_ORIGEN)),
+  ],
+  async read(db, cap, today) {
+    const accounts = await listLedgerAccounts(db);
+    const rows = accounts.slice(0, cap).map((a) => {
+      const values: Values = {};
+      const balance = ledgerNum(a.balance) ?? 0;
+      put(values, 'cuenta', a.name);
+      put(values, 'moneda', a.currency);
+      if (a.currency.trim().toUpperCase() === COP) put(values, 'saldo', balance);
+      else put(values, 'saldo_otra_moneda', balance);
+      put(values, 'al', a.balance_at);
+      put(values, 'dias', Math.max(0, daysBetween(a.balance_at, today)));
+      put(values, 'origen', CAJA_ORIGEN[a.balance_source] ?? null);
+      return row(a.id, a.name, values, a.created_at, a.updated_at);
+    });
+    return { rows, truncated: accounts.length > cap };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// La proyección de caja y las pérdidas y ganancias (0172 + 0173)
+// ---------------------------------------------------------------------------
+
+const FLUJO_SERIE = ['Base', 'Escenario'];
+
+/**
+ * LA CAJA DE LAS PRÓXIMAS 13 SEMANAS: una fila por semana con cuánto abre,
+ * cuánto entra, cuánto sale y con cuánto cierra (ledger/plans.ts ›
+ * runForecast, la misma proyección que contesta el chat). Sólo pesos. Si hay
+ * escenarios guardados, el más reciente sale también, marcado «Escenario»,
+ * para pintar la base contra el escenario. Sin cuentas ni nada esperado en el
+ * libro, no hay filas: una caja «$ 0» sería «no hay datos» disfrazado.
+ * `internal`: la caja de la empresa no es para afuera.
+ */
+const flujoCaja: PlatformSource = {
+  id: 'cortex.flujo_caja',
+  name: 'Proyección de caja',
+  description:
+    'La caja de las próximas 13 semanas, semana por semana: con cuánto abre, cuánto se espera que entre y que salga, y con cuánto cierra; con la semana más apretada marcada. Si hay un escenario guardado, también sus semanas.',
+  sensitivity: 'internal',
+  fields: [
+    field('semana', 'Semana (lunes)', 'date'),
+    field('abre', 'Abre (COP)', 'money'),
+    field('entra', 'Entra (COP)', 'money'),
+    field('sale', 'Sale (COP)', 'money'),
+    field('cierra', 'Cierra (COP)', 'money'),
+    field('escenario', 'Serie', 'select', FLUJO_SERIE),
+    field('nombre_escenario', 'Escenario', 'text'),
+    field('mas_apretada', 'Semana más apretada', 'select', ['Sí', 'No']),
+    field('semanas_de_caja', 'Semanas de caja', 'number'),
+  ],
+  async read(db, cap, today) {
+    const { data: latest, error } = await db
+      .from('ledger_scenarios')
+      .select('id')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    const scenarioId = (latest as { id: string } | null)?.id ?? null;
+    const result = await runForecast(db, { today, currency: COP, scenarioId });
+    const base = result.base;
+    const empty = (base.accountCount ?? 0) === 0 && base.weeks.every((w) => w.items.length === 0);
+    if (empty) return { rows: [], truncated: false };
+    const rows: ViewRow[] = [];
+    const series = [
+      { r: base, serie: 'Base', name: null as string | null },
+      ...(result.scenario
+        ? [
+            {
+              r: result.scenario,
+              serie: 'Escenario',
+              name: result.scenario.scenario?.label ?? null,
+            },
+          ]
+        : []),
+    ];
+    const created = `${today}T00:00:00Z`;
+    for (const { r, serie, name } of series) {
+      const runway = cashRunwayWeeks(r);
+      for (const w of r.weeks) {
+        const values: Values = {};
+        put(values, 'semana', w.start);
+        put(values, 'abre', w.opening);
+        put(values, 'entra', w.inflows);
+        put(values, 'sale', w.outflows);
+        put(values, 'cierra', w.closing);
+        put(values, 'escenario', serie);
+        put(values, 'nombre_escenario', name);
+        put(values, 'mas_apretada', w.start === r.lowest.week ? 'Sí' : 'No');
+        put(values, 'semanas_de_caja', runway ?? r.weeks.length);
+        rows.push(row(`${serie}:${w.start}`, `Semana del ${w.start}`, values, created));
+      }
+    }
+    return { rows: rows.slice(0, cap), truncated: rows.length > cap };
+  },
+};
+
+/**
+ * PÉRDIDAS Y GANANCIAS POR MES (de caja): ventas, otros ingresos, gastos y
+ * margen de los últimos 12 meses, y una fila por categoría de gasto
+ * (`tipo = Gasto por categoría`) para pintar en qué se va la plata. Sólo
+ * pesos. La nómina, sin permiso de verla, como un solo total confidencial.
+ * `internal`.
+ */
+const pyg: PlatformSource = {
+  id: 'cortex.pyg',
+  name: 'Pérdidas y ganancias por mes',
+  description:
+    'Por mes (últimos 12, de caja): ventas, otros ingresos, gastos y margen; y una fila por cada categoría de gasto del mes (tipo «Gasto por categoría») para ver en qué se va la plata.',
+  sensitivity: 'internal',
+  fields: [
+    field('mes', 'Mes', 'text'),
+    field('fecha', 'Primer día del mes', 'date'),
+    field('tipo', 'Tipo', 'select', ['Resumen', 'Gasto por categoría']),
+    field('ventas', 'Ventas (COP)', 'money'),
+    field('otros_ingresos', 'Otros ingresos (COP)', 'money'),
+    field('gastos', 'Gastos (COP)', 'money'),
+    field('margen', 'Margen (COP)', 'money'),
+    field('categoria', 'Categoría', 'select', [
+      ...Object.values(LEDGER_CATEGORY_LABEL),
+      PAYROLL_CONFIDENTIAL_LABEL,
+      SIN_CATEGORIA,
+    ]),
+    field('valor', 'Valor (COP)', 'money'),
+  ],
+  async read(db, cap, today, ctx) {
+    const admin = await canSeePayrollDetail(db, ctx.viewerId);
+    const months = await monthlyPnl(db, {
+      months: 12,
+      currency: COP,
+      today,
+      includePayroll: admin,
+    });
+    if (months.every((m) => m.sales === 0 && m.otherIncome === 0 && m.expenses === 0))
+      return { rows: [], truncated: false };
+    const rows: ViewRow[] = [];
+    for (const m of months) {
+      const fecha = `${m.month}-01`;
+      const created = `${fecha}T00:00:00Z`;
+      const summary: Values = {};
+      put(summary, 'mes', m.month);
+      put(summary, 'fecha', fecha);
+      put(summary, 'tipo', 'Resumen');
+      put(summary, 'ventas', m.sales);
+      put(summary, 'otros_ingresos', m.otherIncome);
+      put(summary, 'gastos', m.expenses);
+      put(summary, 'margen', m.margin);
+      rows.push(row(`pyg:${m.month}`, `Mes ${m.month}`, summary, created));
+      for (const [key, value] of Object.entries(m.byCategory)) {
+        const values: Values = {};
+        const label =
+          key === PAYROLL_CONFIDENTIAL_KEY
+            ? PAYROLL_CONFIDENTIAL_LABEL
+            : key === 'sin_categoria'
+              ? SIN_CATEGORIA
+              : ledgerCategoryLabel(key);
+        put(values, 'mes', m.month);
+        put(values, 'fecha', fecha);
+        put(values, 'tipo', 'Gasto por categoría');
+        put(values, 'categoria', label);
+        put(values, 'valor', value);
+        rows.push(row(`pyg:${m.month}:${key}`, `${label} · ${m.month}`, values, created));
+      }
+    }
+    return { rows: rows.slice(0, cap), truncated: rows.length > cap };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // El registro
 // ---------------------------------------------------------------------------
 
@@ -1355,6 +1682,10 @@ export const PLATFORM_SOURCES: ReadonlyMap<string, PlatformSource> = new Map(
     pagos,
     cartera,
     recuperado,
+    libro,
+    caja,
+    flujoCaja,
+    pyg,
     clientes,
     vencimientos,
     compromisos,
@@ -1365,6 +1696,10 @@ export const PLATFORM_SOURCES: ReadonlyMap<string, PlatformSource> = new Map(
     seguimientos,
     operaciones,
     rutinas,
+    // El registro de trabajo (0174): work/view-sources.ts, con su propia regla
+    // de quién ve el trabajo de quién.
+    trabajoSource,
+    equipoSource,
   ].map((s) => [s.id, s]),
 );
 

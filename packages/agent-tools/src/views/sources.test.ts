@@ -63,11 +63,19 @@ describe('el registro de fuentes', () => {
       .map((s) => s.id)
       .sort();
     // La plata recuperada es interna: lo manual lleva el título de un asunto de Gerencia.
+    // El libro de plata, la caja, su proyección y el PyG también: traen nómina,
+    // arriendo y saldos. Y el registro de trabajo: nombra a gente del equipo.
     expect(internal).toEqual([
+      'cortex.caja',
       'cortex.compromisos',
+      'cortex.equipo',
+      'cortex.flujo_caja',
       'cortex.gestion',
+      'cortex.libro',
       'cortex.prospectos',
+      'cortex.pyg',
       'cortex.recuperado',
+      'cortex.trabajo',
     ]);
   });
 });

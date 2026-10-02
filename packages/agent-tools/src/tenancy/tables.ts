@@ -455,6 +455,18 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // Migración 0166: cuándo bajó el saldo de una factura de programa contable
   // avisada. Tenant: la escribe el vigilante de cartera de ese espacio.
   receivable_balance_drops: tenant(),
+  // 0172: el libro de plata. Tenant las cuatro, en el sentido más fuerte: un
+  // filtro perdido aquí no enseñaría una fila ajena, pondría la nómina, la
+  // caja y el margen de una empresa en las cifras de otra, con forma de número.
+  ledger_movements: tenant(),
+  ledger_accounts: tenant(),
+  ledger_category_rules: tenant(),
+  ledger_sync_state: tenant(),
+  // 0173: los planes sobre el libro — escenarios guardados y lo que una persona
+  // dijo que se repite (o que ignora). Tenant: son decisiones de una empresa
+  // sobre su propia caja.
+  ledger_scenarios: tenant(),
+  ledger_recurring: tenant(),
 
   // --- Vistas (migración 0156) ------------------------------------------------
   // Pantallas armadas sobre las tablas de arriba. Tenant las tres. La vista es
@@ -469,6 +481,18 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // 0171: las cifras que el pulso calculó cada día, para comparar sin
   // inventar. Tenant: son ventas, cartera y pagos de la empresa.
   pulse_snapshots: tenant(),
+
+  // --- Registro de trabajo (migración 0174) ----------------------------------
+  // Quién tiene que hacer qué, quién lo hizo y cuándo. Tenant las tres, en el
+  // sentido más delicado del producto: estas filas hablan de PERSONAS del
+  // equipo (su trabajo, sus días fuera). Un filtro perdido aquí no enseñaría
+  // una fila ajena: pondría el trabajo de la gente de una empresa en las
+  // cifras de otra. Y `work_people_meta` es tenant y no `derived` sobre
+  // `users` porque se lee por espacio («los equipos de esta empresa») sin
+  // nombrar a una persona.
+  work_items: tenant(),
+  work_people_meta: tenant(),
+  work_settings: tenant(),
 
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first

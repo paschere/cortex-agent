@@ -71,6 +71,15 @@ export interface StatementCredit extends StatementLine {
   sourceRef: string;
 }
 
+/**
+ * Una salida del extracto, con su huella. Pagos no las usa (una salida no es
+ * el pago de un cliente); el libro de plata (0172) sí: son los gastos.
+ */
+export interface StatementDebit extends StatementLine {
+  direction: 'debit';
+  sourceRef: string;
+}
+
 export interface SkippedLine {
   line: number;
   reason: string;
@@ -90,6 +99,10 @@ export interface ParsedStatement {
   credits: StatementCredit[];
   debits: number;
   debitsTotal: number;
+  /** Las salidas, una por una, para el libro de plata. Pagos no las lee. */
+  debitLines?: StatementDebit[];
+  /** El saldo con el que cerró la cuenta, si el archivo trae columna de saldo. */
+  closing?: { date: string; balance: number } | null;
   skipped: SkippedLine[];
   period: { from: string; to: string } | null;
   warnings: string[];
@@ -382,8 +395,12 @@ export function parseStatementRows(input: Cell[][], opts: ParseOptions = {}): St
     );
   }
 
-  const credits = assignSourceRefs(lines.filter((l) => l.direction === 'credit'));
+  const credits = assignSourceRefs(lines.filter((l) => l.direction === 'credit')).map((l) => ({
+    ...l,
+    direction: 'credit' as const,
+  }));
   const debits = lines.filter((l) => l.direction === 'debit');
+  const debitLines = assignSourceRefs(debits).map((l) => ({ ...l, direction: 'debit' as const }));
   const dates = lines.map((l) => l.date).sort();
 
   const columnNames: Partial<Record<ColumnRole, string>> = {};
@@ -409,6 +426,8 @@ export function parseStatementRows(input: Cell[][], opts: ParseOptions = {}): St
     credits,
     debits: debits.length,
     debitsTotal: round2(debits.reduce((s, d) => s + d.amount, 0)),
+    debitLines,
+    closing: closingOf(lines),
     skipped,
     period: dates.length
       ? { from: dates[0] as string, to: dates[dates.length - 1] as string }
@@ -437,7 +456,31 @@ export function statementFingerprint(
   return `h:${createHash('sha256').update(parts.join('\u0001')).digest('hex').slice(0, 40)}`;
 }
 
-function assignSourceRefs(lines: StatementLine[]): StatementCredit[] {
+/**
+ * El saldo con el que cerró el extracto: el de la fecha más reciente que trae
+ * saldo y, entre las de ese día, la última en el orden del archivo (la primera
+ * si el archivo va del más nuevo al más viejo).
+ */
+function closingOf(lines: StatementLine[]): { date: string; balance: number } | null {
+  const withBalance = lines.filter((l) => l.balance != null && Number.isFinite(l.balance));
+  if (!withBalance.length) return null;
+  const first = lines[0];
+  const lastLine = lines[lines.length - 1];
+  const descending = Boolean(first && lastLine && first.date > lastLine.date);
+  const last = withBalance.reduce((best, l) => {
+    if (l.date > best.date) return l;
+    if (l.date < best.date) return best;
+    return descending ? (l.line < best.line ? l : best) : l.line > best.line ? l : best;
+  });
+  return { date: last.date, balance: last.balance as number };
+}
+
+/**
+ * Las referencias de un grupo de líneas del MISMO sentido. La huella no lleva
+ * el sentido: abonos y salidas se numeran por separado y el libro antepone
+ * `d:` a las salidas.
+ */
+function assignSourceRefs(lines: StatementLine[]): Array<StatementLine & { sourceRef: string }> {
   const seen = new Map<string, number>();
   const seenTx = new Map<string, number>();
   return lines.map((line) => {
@@ -449,7 +492,7 @@ function assignSourceRefs(lines: StatementLine[]): StatementCredit[] {
       const n = (seenTx.get(key) ?? 0) + 1;
       seenTx.set(key, n);
       const ref = n === 1 ? `t:${key}` : `t:${key}#${n}`;
-      return { ...line, direction: 'credit', sourceRef: ref.slice(0, 200) };
+      return { ...line, sourceRef: ref.slice(0, 200) };
     }
     const key = [
       line.date,
@@ -460,7 +503,7 @@ function assignSourceRefs(lines: StatementLine[]): StatementCredit[] {
     ].join('\u0001');
     const ordinal = (seen.get(key) ?? 0) + 1;
     seen.set(key, ordinal);
-    return { ...line, direction: 'credit', sourceRef: statementFingerprint(line, ordinal) };
+    return { ...line, sourceRef: statementFingerprint(line, ordinal) };
   });
 }
 

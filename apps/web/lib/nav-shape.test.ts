@@ -154,9 +154,32 @@ describe('la navegación principal del autoservicio', () => {
   it('Equipo depende del rol y nunca lleva a una pantalla que la persona no puede abrir', () => {
     const team = (admin: boolean, founder: boolean) =>
       primaryNav({ admin, founder }).find((item) => item.label === 'Equipo')?.href;
-    expect(team(true, false)).toBe('/admin/users');
-    expect(team(false, true)).toBe('/team/activity');
-    expect(team(false, false)).toBeUndefined();
+    expect(team(true, false)).toBe('/team');
+    expect(team(false, true)).toBe('/team');
+    expect(team(true, true)).toBe('/team');
+    expect(team(false, false)).toBe('/team/yo');
+  });
+
+  it('Equipo se enciende en /team, Mi semana, el detalle de una persona y Personas', () => {
+    for (const [admin, founder] of [
+      [true, false],
+      [false, false],
+    ] as const) {
+      const item = primaryNav({ admin, founder }).find((i) => i.label === 'Equipo');
+      if (!item) throw new Error('falta Equipo');
+      for (const path of ['/team', '/team/yo', '/team/0b6c', '/team/medir', '/admin/users']) {
+        expect(primaryActive(path, item), path).toBe(true);
+      }
+    }
+  });
+
+  it('Mi semana y Equipo son destinos del rail para cualquiera', () => {
+    const every = new Set(everyDestination());
+    expect(every.has('/team')).toBe(true);
+    expect(every.has('/team/yo')).toBe(true);
+    for (const item of primaryNav({ admin: false, founder: false })) {
+      expect(every.has(item.href), item.href).toBe(true);
+    }
   });
 
   it('Datos se enciende en tablas, feed, Brain Knowledge e integraciones; el chat no en la consola multiempresa', () => {

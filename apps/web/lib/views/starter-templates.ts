@@ -253,6 +253,112 @@ const ventasDelMes: ViewSpec = {
   ],
 };
 
+/**
+ * Cómo va el equipo: el registro de trabajo (0174) en una vista. Las dos
+ * fuentes dependen de quién mira (work/access.ts): cada persona ve lo suyo y
+ * quien administra, a todo el equipo. La tabla va en orden alfabético y no hay
+ * gráfico por persona: nada que se lea como ranking.
+ */
+const TODOS: ViewSpec['alerts'][number]['filters'] = [{ field: 'tipo', op: 'eq', value: 'Todos' }];
+const ABIERTO: ViewSpec['alerts'][number]['filters'] = [
+  { field: 'estado', op: 'eq', value: 'Por hacer' },
+];
+
+const comoVaElEquipo: ViewSpec = {
+  version: 1,
+  ...LIVE(),
+  subtitle: 'El trabajo de los últimos 30 días: lo abierto, lo vencido y lo cerrado, por persona.',
+  blocks: [
+    {
+      id: 'abiertos',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.trabajo',
+      filters: [...ABIERTO],
+      title: 'Abiertos',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'primary',
+    },
+    {
+      id: 'vencidos',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.trabajo',
+      filters: [...ABIERTO, { field: 'vencido', op: 'eq', value: 'Sí' }],
+      title: 'Vencidos',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'rose',
+    },
+    {
+      id: 'cerrados',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.equipo',
+      filters: [...TODOS],
+      title: 'Cerrados en 30 días',
+      aggregate: 'sum',
+      field: 'cerrados',
+      format: 'number',
+      tone: 'emerald',
+    },
+    {
+      id: 'abiertos_tipo',
+      type: 'chart',
+      width: 'half',
+      tracker: 'cortex.trabajo',
+      filters: [...ABIERTO],
+      title: 'Abiertos por tipo de trabajo',
+      chart: 'bar',
+      groupBy: 'tipo',
+      bucket: 'month',
+      aggregate: 'count',
+      format: 'number',
+      limit: 8,
+      tone: 'primary',
+    },
+    {
+      id: 'vencidos_lista',
+      type: 'table',
+      width: 'half',
+      tracker: 'cortex.trabajo',
+      filters: [...ABIERTO, { field: 'vencido', op: 'eq', value: 'Sí' }],
+      title: 'Lo vencido',
+      columns: ['titulo', 'persona', 'tipo', 'vence'],
+      sort: { field: 'vence', dir: 'asc' },
+      limit: 50,
+      searchable: true,
+      editable: [],
+      actions: [],
+    },
+    {
+      id: 'personas',
+      type: 'table',
+      width: 'full',
+      tracker: 'cortex.equipo',
+      filters: [...TODOS],
+      title: 'Por persona (orden alfabético)',
+      columns: [
+        'persona',
+        'equipo',
+        'abiertos',
+        'vencidos',
+        'cerrados',
+        'cerrados_antes',
+        'a_tiempo',
+        'ciclo_horas',
+        'senales',
+      ],
+      sort: { field: 'persona', dir: 'asc' },
+      limit: 100,
+      searchable: true,
+      editable: [],
+      actions: [],
+    },
+  ],
+};
+
 export const STARTER_TEMPLATES: StarterTemplate[] = [
   {
     // El pulso depende de qué datos tiene cada empresa (Siigo, facturas
@@ -333,6 +439,17 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     body: 'Solicitudes por estado, las que llevan más días abiertas y un formulario para recibirlas.',
     prompt:
       'Seguimiento de solicitudes de clientes: cuántas están abiertas, un tablero por estado que se pueda arrastrar, las que llevan más de 5 días sin cerrar y un formulario para registrar una solicitud nueva.',
+  },
+  {
+    id: 'como_va_el_equipo',
+    kind: 'spec',
+    icon: 'users',
+    category: 'Clientes y equipo',
+    title: 'Cómo va el equipo',
+    body: 'Lo abierto, lo vencido y lo cerrado de cada persona, del registro de trabajo. Sin ranking.',
+    name: 'Cómo va el equipo',
+    description: 'Trabajo del equipo en los últimos 30 días, por persona y tipo.',
+    spec: comoVaElEquipo,
   },
   {
     id: 'crm_ventas',

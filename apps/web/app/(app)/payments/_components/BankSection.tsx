@@ -49,12 +49,17 @@ export async function BankSection({ organizationId }: { organizationId: string }
     };
   } catch {
     return (
-      <Panel className="px-5 py-6">
+      <Panel id="extractos" className="scroll-mt-20 px-5 py-6">
         <p className="text-sm text-ink-muted">
           No se pudo cargar la conciliación del banco ahora mismo. Recarga la página en un momento.
         </p>
       </Panel>
     );
   }
-  return <BankStatements recon={recon} />;
+  // El ancla `#extractos`: Finanzas y la guía mandan aquí para importar uno.
+  return (
+    <div id="extractos" className="scroll-mt-20">
+      <BankStatements recon={recon} />
+    </div>
+  );
 }

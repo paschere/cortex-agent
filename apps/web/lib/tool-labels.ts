@@ -66,6 +66,15 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   management_brief: { label: 'Revisar la gerencia de la empresa', icon: 'Briefcase' },
   management_inspect: { label: 'Consultar un asunto y su historial', icon: 'FileSearch' },
   management_record: { label: 'Organizar y seguir un asunto', icon: 'ClipboardList' },
+  // Registro de trabajo (0174).
+  work_record: { label: 'Anotar trabajo en el registro', icon: 'ClipboardCheck' },
+  work_record_batch: { label: 'Anotar muchas filas de trabajo', icon: 'ClipboardCheck' },
+  work_preview_batch: { label: 'Mirar qué trabajo entraría al registro', icon: 'FileSearch' },
+  work_assign: { label: 'Pasar trabajo a otra persona', icon: 'UserCheck' },
+  work_suggest_mapping: { label: 'Proponer cómo una tabla se vuelve trabajo', icon: 'Table2' },
+  work_configure: { label: 'Configurar el registro de trabajo', icon: 'Settings' },
+  work_update_person: { label: 'Anotar equipo, cargo o días fuera', icon: 'CalendarDays' },
+  work_query: { label: 'Consultar el registro de trabajo', icon: 'ListTodo' },
   browser_list_flows: { label: 'Ver los trámites aprendidos', icon: 'Globe' },
   browser_run_flow: { label: 'Hacer el trámite en el portal', icon: 'Globe' },
   browser_submit_flow: { label: 'Radicar el trámite en el portal', icon: 'Send' },
@@ -264,6 +273,25 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   payments_bank_unmatched: { label: 'Ver lo que entró al banco sin factura', icon: 'SearchCheck' },
   payments_apply_to_invoice: { label: 'Atar el pago a su factura', icon: 'Link' },
   payments_recovered: { label: 'Ver la plata recuperada con Cortex', icon: 'TrendingUp' },
+
+  // El libro de plata (0172): toda la plata de la empresa en un solo libro.
+  ledger_record: { label: 'Anotar un movimiento en el libro de plata', icon: 'NotebookPen' },
+  ledger_record_batch: {
+    label: 'Anotar varios movimientos en el libro de plata',
+    icon: 'FileSpreadsheet',
+  },
+  ledger_preview_batch: { label: 'Mirar qué entraría al libro de plata', icon: 'FileSearch' },
+  ledger_recategorize: { label: 'Corregir la categoría de los movimientos', icon: 'Tags' },
+  ledger_query: { label: 'Consultar el libro de plata', icon: 'BookOpen' },
+  ledger_set_balance: { label: 'Fijar el saldo de una cuenta', icon: 'Landmark' },
+  ledger_forecast: { label: 'Proyectar la caja de las próximas semanas', icon: 'ChartLine' },
+  ledger_explain_week: { label: 'Explicar la caja de una semana', icon: 'MessageCircleQuestion' },
+  ledger_save_scenario: { label: 'Guardar un escenario de caja', icon: 'BookmarkPlus' },
+  ledger_declare_recurring: { label: 'Anotar un ingreso o gasto que se repite', icon: 'Repeat' },
+  ledger_decide_recurring: {
+    label: 'Confirmar o ignorar un movimiento que se repite',
+    icon: 'CalendarCheck',
+  },
 
   // Metas. `goals_set` está arriba porque se para a pedir permiso.
   goals_offer_metrics: { label: 'Ver qué se puede medir aquí', icon: 'Ruler' },

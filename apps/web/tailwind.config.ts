@@ -3,7 +3,9 @@ import type { Config } from 'tailwindcss';
 const rgb = (v: string) => `rgb(var(${v}) / <alpha-value>)`;
 
 const config: Config = {
-  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
+  // lib/ también: `chipClass` (lib/status-chip.ts) y otras formas compartidas
+  // arman clases ahí, y sin escanearlas Tailwind no las generaba.
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}', './lib/**/*.{ts,tsx}'],
   // Workspace tokens select their own dark palette. OS preferences must not
   // activate isolated dark utilities on otherwise light public pages.
   darkMode: ['class'],

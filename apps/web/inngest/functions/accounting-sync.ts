@@ -11,6 +11,7 @@ import {
   openAccountingSession,
   providerName,
   runAccountingSync,
+  syncLedger,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
@@ -126,6 +127,20 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
       error: result.result.status === 'error' ? result.result.error : null,
     };
   });
+
+  // 0172: lo que acaba de llegar del programa (facturas, recibos) entra al
+  // libro de plata en la misma corrida. Su propio paso: si falla, la
+  // sincronización del programa ya quedó y el libro se pone al día mañana.
+  if ('status' in outcome && outcome.status !== 'error')
+    await step.run('sync-ledger', async () => {
+      try {
+        const result = await syncLedger(db, organizationId, { deadline: Date.now() + 2 * 60_000 });
+        return { status: result.status, counts: result.counts };
+      } catch (err) {
+        logger.warn({ err, organizationId }, 'ledger sync after accounting failed');
+        return { status: 'error' as const };
+      }
+    });
 
   // Una carga a medias sigue enseguida, sin esperar al próximo barrido.
   if ('status' in outcome && outcome.status === 'partial')

@@ -1,6 +1,7 @@
 import { ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeNit } from '../../clients/shape';
+import { type BankStatementLedgerResult, ingestBankStatement } from '../../ledger/bank';
 import { type SystemPaymentRow, importSystemPayments } from '../import';
 import { COUNTED_STATES, requireCurrency, signedAmount } from '../shape';
 import {
@@ -22,7 +23,14 @@ import {
   matchCredit,
   matchCredits,
 } from './match';
-import type { BankId, ColumnRole, ManualMapping, NeedsMapping, StatementCredit } from './parse';
+import type {
+  BankId,
+  ColumnRole,
+  ManualMapping,
+  NeedsMapping,
+  ParsedStatement,
+  StatementCredit,
+} from './parse';
 import { parseStatementFile } from './read';
 
 /**
@@ -352,6 +360,7 @@ function round2(n: number): number {
 interface Analysis {
   preview: BankStatementPreview;
   fresh: Array<{ credit: StatementCredit; match: CreditMatch }>;
+  parsed: ParsedStatement;
 }
 
 async function analyze(
@@ -432,7 +441,7 @@ async function analyze(
     lines,
     warnings: parsed.warnings,
   };
-  return { preview, fresh };
+  return { preview, fresh, parsed };
 }
 
 /** Leer el extracto y decir qué pasaría, sin escribir nada. */
@@ -455,6 +464,11 @@ export interface BankImportResult {
   /** Abonos que quedaron atados a su factura al entrar. */
   autoMatched: number;
   sentence: string;
+  /**
+   * Lo que entró al libro de plata (0172): abonos, salidas y el saldo final.
+   * Null si el libro no se pudo escribir; los pagos de arriba quedaron igual.
+   */
+  ledger?: BankStatementLedgerResult | null;
 }
 
 function moneyText(n: number, currency: string): string {
@@ -485,7 +499,7 @@ export async function importBankStatement(
 ): Promise<BankImportResult | NeedsMapping> {
   const analysis = await analyze(db, input);
   if (!('preview' in analysis)) return analysis;
-  const { preview, fresh } = analysis;
+  const { preview, fresh, parsed } = analysis;
 
   const rows: SystemPaymentRow[] = fresh.map(({ credit, match }) => {
     const best = match.status === 'matched' ? match.best?.invoice : null;
@@ -526,6 +540,27 @@ export async function importBankStatement(
   const newOnes = imported.created + imported.agreed + imported.disputed;
   const account = preview.accountLabel;
 
+  // EL LIBRO DE PLATA (0172): el extracto entero —abonos, salidas y saldo
+  // final— después de los pagos, y sin cambiar nada de lo que Pagos ya hizo.
+  // Si falla, los pagos quedaron igual y el resumen lo dice.
+  const paymentOf = new Map(
+    (imported.outcomes ?? []).map((o) => [o.sourceRef, o.paymentId] as const),
+  );
+  let ledger: BankStatementLedgerResult | null = null;
+  try {
+    ledger = await ingestBankStatement(db, {
+      system: preview.system,
+      accountLabel: input.accountLabel,
+      currency: preview.currency,
+      credits: parsed.credits.map((c) => ({ ...c, paymentId: paymentOf.get(c.sourceRef) ?? null })),
+      debits: parsed.debitLines ?? [],
+      closing: parsed.closing ?? null,
+      createdBy: input.createdBy ?? null,
+    });
+  } catch {
+    ledger = null;
+  }
+
   const parts: string[] = [];
   if (newOnes > 0) {
     parts.push(
@@ -549,7 +584,21 @@ export async function importBankStatement(
     );
   }
   if (preview.debitsIgnored > 0) {
-    parts.push(`Las ${preview.debitsIgnored} salidas del extracto no se importan.`);
+    parts.push(
+      ledger
+        ? `Las ${preview.debitsIgnored} salidas no son pagos de clientes: quedaron en el libro de plata como gastos.`
+        : `Las ${preview.debitsIgnored} salidas del extracto no se importan.`,
+    );
+  }
+  if (ledger && ledger.payablesSettled > 0) {
+    parts.push(
+      `${ledger.payablesSettled} de esas salidas pagaban facturas de proveedores que estaban por pagar: quedaron saldadas.`,
+    );
+  }
+  if (!ledger) {
+    parts.push(
+      'El libro de plata no se pudo actualizar con este extracto; se reintenta en la próxima importación.',
+    );
   }
   if (imported.rejected.length > 0) {
     parts.push(`${imported.rejected.length} fila(s) no se pudieron registrar.`);
@@ -565,6 +614,7 @@ export async function importBankStatement(
     rejected: imported.rejected,
     autoMatched,
     sentence: parts.join(' '),
+    ledger,
   };
 }
 

@@ -582,6 +582,52 @@ export const CASES: readonly EvalCase[] = [
     needsFamily: 'payments',
     why: 'payments.import_bank_statement, with a second bank so the case is not about one brand name.',
   },
+
+  /* ------------------------- selection-only: el libro de plata (2026-10)
+   * La proyección de caja a 13 semanas y sus escenarios. Nadie dice «libro» ni
+   * «proyección»: dicen «caja», «me alcanza», «y si». Los vecinos que compiten
+   * son payments (cartera), payroll (nómina) y accounting (el programa
+   * contable), y por eso cada caso nombra a uno. */
+  {
+    id: 'sel-caja-proximas-semanas',
+    group: 'unrelated',
+    query: 'como va a estar la caja las proximas semanas',
+    gold: [],
+    needsFamily: 'ledger',
+    why: 'ledger.forecast, the front door. "Caja" alone, no accents; payments.receivables ("¿cuánto nos deben?") is the near miss.',
+  },
+  {
+    id: 'sel-caja-cliente-tarde',
+    group: 'unrelated',
+    query: '¿y si Nexa nos paga un mes tarde?',
+    gold: [],
+    needsFamily: 'ledger',
+    why: 'ledger.forecast with an inline scenario. A client name and "paga" pull payments and crm; only the what-if framing points at the projection.',
+  },
+  {
+    id: 'sel-alcanza-nomina',
+    group: 'unrelated',
+    query: 'me alcanza para la nomina de diciembre',
+    gold: [],
+    needsFamily: 'ledger',
+    why: 'ledger.forecast. "Nómina" pulls payroll hard (payroll.cost_projection); the question is whether the cash covers it, which only the ledger knows.',
+  },
+  {
+    id: 'sel-contratar-dos',
+    group: 'unrelated',
+    query: 'y si contrato 2 personas mas',
+    gold: [],
+    needsFamily: 'ledger',
+    why: 'ledger.forecast with a hiring scenario. No money word at all; payroll and people are the plausible wrong answers.',
+  },
+  {
+    id: 'sel-semana-apretada',
+    group: 'unrelated',
+    query: 'por qué la semana del 17 queda tan apretada',
+    gold: [],
+    needsFamily: 'ledger',
+    why: 'ledger.explain_week, the follow-up to a projection. "Semana del 17" pulls gcal; nothing in the words says money.',
+  },
 ] as const;
 
 /**

@@ -312,6 +312,12 @@ export interface WeeklyActivity {
   tasksDone: number | null;
   /** Asuntos de Gerencia cerrados con evidencia. */
   closures: number | null;
+  /**
+   * Las alertas de la proyección de caja (ledger.forecast) que piden atención
+   * —caja en rojo o bajo el mínimo, pagos grandes en semanas apretadas—, ya en
+   * palabras. Vacío: no hay libro de plata, o la caja no preocupa.
+   */
+  cashAlerts: Array<{ severity: 'warn' | 'critical'; message: string }>;
   gaps: string[];
 }
 
@@ -329,6 +335,7 @@ export const EMPTY_ACTIVITY: WeeklyActivity = {
   draftsPending: null,
   tasksDone: null,
   closures: null,
+  cashAlerts: [],
   gaps: [],
 };
 
@@ -428,6 +435,14 @@ export function weeklyFacts(input: WeeklyReviewInput): WeeklyComposition {
     activityFact('cierres', 'Asuntos de Gerencia cerrados con evidencia', a.closures),
   ];
   for (const f of extra) if (f) facts.push(f);
+  a.cashAlerts.slice(0, 3).forEach((alert, i) => {
+    facts.push({
+      key: `caja.alerta.${i}`,
+      label: `Alerta de la proyección de caja: ${alert.message}`,
+      value: alert.severity === 'critical' ? 2 : 1,
+      display: alert.message,
+    });
+  });
   a.failingRoutines.slice(0, 3).forEach((r, i) => {
     facts.push({
       key: `cortex.rutina_fallando.${i}`,
@@ -465,6 +480,12 @@ export function weeklyRecommendations(
 ): string[] {
   const out: string[] = [];
   const worse = new Set(comp.worsened.map((d) => d.key.replace(/\.semana$/, '')));
+  const cash = fact(facts, 'caja.alerta.0');
+  const cashLine = cash
+    ? `Mira la caja de las próximas semanas: ${cash.display} Pídeme «¿cómo va a estar la caja?» para ver por qué y qué hacer.`
+    : null;
+  // La caja en rojo va primero: lo demás puede esperar una semana, eso no.
+  if (cashLine && cash?.value === 2) out.push(cashLine);
 
   const overdue = fact(facts, 'cartera_vencida');
   const debtor = debtorOf(fact(facts, 'top_deudores.0'));
@@ -474,6 +495,7 @@ export function weeklyRecommendations(
     );
   else if (positive(overdue))
     out.push(`Ponle fecha de cobro a la cartera vencida: suma ${overdue.display}.`);
+  if (cashLine && cash?.value !== 2) out.push(cashLine);
   const notices = fact(facts, 'cortex.avisos_cartera');
   if (positive(overdue) && notices && notices.value === 0)
     out.push(

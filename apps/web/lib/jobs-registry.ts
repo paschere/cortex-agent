@@ -78,6 +78,11 @@ import {
   weeklyReportDispatchJob,
   weeklyReportWorkspaceJob,
 } from '@/inngest/functions/weekly-report';
+import {
+  workAssignedJob,
+  workSyncDispatchJob,
+  workSyncWorkspaceJob,
+} from '@/inngest/functions/work-sync';
 import type { JobHandler } from '@/lib/jobs';
 
 export const JOB_HANDLERS: Record<string, JobHandler> = {
@@ -104,6 +109,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'management/follow-up.workspace': managementFollowUpWorkspaceJob,
   'goals/watch.dispatch': goalsWatchDispatchJob,
   'reports/weekly.dispatch': weeklyReportDispatchJob,
+  'work/sync.dispatch': workSyncDispatchJob,
 
   // --- Por evento: el nombre de siempre, intacto --------------------------
   'errand/advance': errandRunJob,
@@ -128,6 +134,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'gmail/backfill.user': gmailBackfillUserJob,
   'gmail/sweep.user': gmailSweepUserJob,
   'reports/weekly.workspace': weeklyReportWorkspaceJob,
+  'work/sync.workspace': workSyncWorkspaceJob,
+  'work/assigned': workAssignedJob,
   'dev/task.intake': devTaskIntakeJob,
   'dev/task.queued': devTaskRunJob,
   'dev/task.status': devTaskStatusJob,

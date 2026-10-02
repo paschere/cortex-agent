@@ -12,6 +12,8 @@ import {
   type ActionItem,
   type CompanyBusiness,
   type CompanyStatus,
+  cashIsTight,
+  cashWeeksLabel,
   compactCop,
   daysSince,
   fullCop,
@@ -149,7 +151,7 @@ function Figure({
 }
 
 /**
- * Las seis cifras del negocio de una empresa propia. `business` es `undefined`
+ * Las siete cifras del negocio de una empresa propia. `business` es `undefined`
  * mientras llega (esqueleto) y `null` si la empresa entera no respondió.
  */
 export function BusinessFacts({
@@ -168,6 +170,7 @@ export function BusinessFacts({
   const b = business ?? null;
   const risk = b?.risk ?? null;
   const recovered = b?.recovered ?? null;
+  const cash = b?.cash ?? null;
   const waited = daysSince(b?.oldestDecisionAt ?? null, now);
 
   const riskOthers = risk?.others.map((o) => otherCurrency(o.amount, o.currency)).join(' · ');
@@ -186,10 +189,28 @@ export function BusinessFacts({
       className={clsx(
         'grid gap-x-4 gap-y-3',
         columns === 'wide'
-          ? 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-6'
+          ? 'grid-cols-2 sm:grid-cols-4 xl:grid-cols-7'
           : 'grid-cols-2 sm:grid-cols-3',
       )}
     >
+      <Figure
+        label="Caja"
+        loading={loading}
+        value={cash ? compactCop(cash.today) : NO_DATA}
+        title={
+          cash
+            ? `${fullCop(cash.today)} hoy · lo más bajo: ${fullCop(cash.lowest.closing)} la semana del ${cash.lowest.week}`
+            : undefined
+        }
+        tone={!cash ? 'muted' : cash.today < 0 || cashIsTight(cash) ? 'rose' : undefined}
+        sub={
+          cash
+            ? `Semanas de caja: ${cashWeeksLabel(cash)}`
+            : b?.ledger === false
+              ? 'Sube un extracto'
+              : 'No se pudo leer'
+        }
+      />
       <Figure
         label="Plata en riesgo"
         loading={loading}

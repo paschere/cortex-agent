@@ -5,6 +5,7 @@ import {
   BookOpen,
   Briefcase,
   Building2,
+  CalendarCheck,
   CalendarClock,
   Database,
   FileBarChart,
@@ -286,6 +287,10 @@ export const SECTIONS: NavSection[] = [
       // recuento de lo que se movió. Sigue existiendo para quien lo busque.
       HOME,
       { href: '/goals', label: 'Metas', icon: Target },
+      // El trabajo del equipo (registro de trabajo, 0174). `/team` es la puerta
+      // de quien reparte el trabajo; quien no ve al equipo cae en «Mi semana».
+      { href: '/team', label: 'Equipo', icon: UsersRound },
+      { href: '/team/yo', label: 'Mi semana', icon: CalendarCheck },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
       { href: '/prospects', label: 'Prospectos', icon: Radar },
     ],
@@ -456,19 +461,21 @@ export function primaryNav({
   admin,
   founder,
 }: {
-  /** Admin de la organización: Equipo abre Personas. */
+  /** Admin de la organización: Equipo abre cómo va el trabajo de todo el equipo. */
   admin: boolean;
-  /** Fundador de una empresa sin ser admin: Equipo abre la actividad del equipo. */
+  /** Fundador de una empresa: también ve a todo el equipo. */
   founder: boolean;
 }): PrimaryItem[] {
-  const team = admin ? '/admin/users' : founder ? '/team/activity' : null;
+  // Todos tienen Equipo: quien reparte el trabajo ve al equipo entero (/team,
+  // con «Personas y accesos» en su cabecera); los demás, «Mi semana».
+  const team = admin || founder ? '/team' : '/team/yo';
   return [
     { ...HOME, icon: Home, match: ['/dashboard'] },
     { ...CHAT, match: ['/chat'] },
     { ...PROCESSES, match: ['/procesos'] },
     { ...VIEWS, match: ['/views'] },
     { ...DATA, match: ['/integrations', '/trackers', '/feed', '/kb'] },
-    ...(team ? [{ href: team, label: 'Equipo', icon: Users, match: ['/admin', '/team'] }] : []),
+    { href: team, label: 'Equipo', icon: Users, match: ['/admin', '/team'] },
   ];
 }
 

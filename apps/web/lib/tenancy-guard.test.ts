@@ -115,6 +115,10 @@ const ALLOWED = new Map<string, string>([
     'Cron discovers due workflow IDs across companies; each execution uses a handle pinned to the organization on the event.',
   ],
   [
+    'inngest/functions/work-sync.ts',
+    'Cron. "Which workspaces have work to read" (management cases, commitments, proposed actions, recent approvals, a work_settings row) spans the install; the raw handle selects organization_id and nothing else. Each id rides on its own event and syncWork runs with a handle pinned to it; the reassignment notice is built from a scoped handle too.',
+  ],
+  [
     'inngest/functions/goals-watch.ts',
     'Cron. "Which workspaces have an active goal" spans the install and there is no session behind a cron; the dispatcher selects organization_id off goals and nothing else. Every id rides on its own event, and the per-workspace function builds every handle from it — so one company\'s readings can only ever be computed from that company\'s rows.',
   ],

@@ -211,6 +211,67 @@ const paymentsRecord: SafeActionPolicy<unknown, { paymentId: string | null }> = 
         }),
 };
 
+/**
+ * El libro de plata (0172). Anotar ya es idempotente por la referencia que la
+ * herramienta deriva de la fuente, así que la guardia sólo evita repetir la
+ * llamada (y su tarjeta) y la verificación comprueba que la fila está.
+ */
+const ledgerRecord: SafeActionPolicy<unknown, { movementId: string }> = {
+  windowMs: DAY,
+  noun: 'el movimiento',
+  verify: ({ output, ctx }) =>
+    rowExists(
+      ctx,
+      'ledger_movements',
+      output.movementId,
+      'el movimiento está en el libro de plata.',
+      'no encuentro el movimiento en el libro de plata.',
+    ),
+};
+
+const ledgerBatch: AnySafeActionPolicy = { windowMs: 30 * 60_000, noun: 'los movimientos' };
+
+/**
+ * Un escenario de caja con el mismo nombre y los mismos ajustes, guardado dos
+ * veces el mismo día, es un reintento: la guardia lo para y la verificación
+ * mira que la fila quedó.
+ */
+const ledgerSaveScenario: SafeActionPolicy<unknown, { scenarioId: string }> = {
+  windowMs: DAY,
+  noun: 'el escenario',
+  verify: ({ output, ctx }) =>
+    rowExists(
+      ctx,
+      'ledger_scenarios',
+      output.scenarioId,
+      'el escenario quedó guardado.',
+      'no encuentro el escenario guardado.',
+    ),
+};
+
+/** Declarar dos veces el mismo arriendo duplicaría la salida en la proyección. */
+const ledgerDeclareRecurring: SafeActionPolicy<unknown, { recurringId: string }> = {
+  windowMs: DAY,
+  noun: 'el movimiento que se repite',
+  verify: ({ output, ctx }) =>
+    rowExists(
+      ctx,
+      'ledger_recurring',
+      output.recurringId,
+      'el movimiento que se repite quedó anotado.',
+      'no encuentro el movimiento que se repite.',
+    ),
+};
+
+/**
+ * Confirmar o ignorar lo detectado ya es idempotente (deja el mismo estado), así
+ * que basta la guardia corta para no repetir la llamada ni su tarjeta.
+ */
+const ledgerDecideRecurring: AnySafeActionPolicy = {
+  windowMs: 30 * 60_000,
+  noun: 'la decisión',
+};
+
 /** Sólo la CREACIÓN se guarda: una actualización con `rowId` ya es idempotente. */
 const trackersUpsert: SafeActionPolicy<{ rowId?: string }, { row: { id: string } }> = {
   windowMs: 30 * 60_000,
@@ -276,6 +337,20 @@ const weeklyReview: SafeActionPolicy<{ view?: string; force?: boolean }, unknown
   },
 };
 
+/**
+ * Pasar trabajo a otra persona (work.assign): la misma reasignación —mismos
+ * ítems, misma persona— dentro de una hora es un reintento, y repetirla
+ * mandaría dos avisos a la campana de quien lo recibe.
+ */
+const workAssign: SafeActionPolicy<{ itemIds?: string[]; person?: string }, unknown> = {
+  windowMs: HOUR,
+  noun: 'el cambio de responsable',
+  key: (input) => ({
+    itemIds: [...(input.itemIds ?? [])].sort(),
+    person: (input.person ?? '').trim().toLowerCase(),
+  }),
+};
+
 // --- Sin verificación (todavía): sólo la guardia de repetición -------------
 
 const chatPost: AnySafeActionPolicy = { windowMs: 6 * HOUR, noun: 'el mensaje' };
@@ -290,6 +365,11 @@ export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> 
   'mscal.create_event': mscalCreateEvent as unknown as AnySafeActionPolicy,
   'payments.record': paymentsRecord as unknown as AnySafeActionPolicy,
   'trackers.upsert': trackersUpsert as unknown as AnySafeActionPolicy,
+  'ledger.record': ledgerRecord as unknown as AnySafeActionPolicy,
+  'ledger.record_batch': ledgerBatch,
+  'ledger.save_scenario': ledgerSaveScenario as unknown as AnySafeActionPolicy,
+  'ledger.declare_recurring': ledgerDeclareRecurring as unknown as AnySafeActionPolicy,
+  'ledger.decide_recurring': ledgerDecideRecurring,
   'slack.post_message': chatPost,
   'chat.send_message': chatPost,
   'chat.send_dm': chatPost,
@@ -300,4 +380,5 @@ export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> 
   'gsheets.append_row': sheetRow,
   'views.refresh_summary': viewSummary as unknown as AnySafeActionPolicy,
   'views.weekly_review': weeklyReview as unknown as AnySafeActionPolicy,
+  'work.assign': workAssign as unknown as AnySafeActionPolicy,
 };

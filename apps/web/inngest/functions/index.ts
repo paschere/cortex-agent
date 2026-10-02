@@ -30,6 +30,7 @@ import { scheduleRun } from './schedule-run';
 import { tableSyncDispatch, tableSyncRun, tableSyncSetup } from './table-sync';
 import { turnContextPurge, turnLatencyPurge } from './turn-context-purge';
 import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
+import { workAssigned, workSyncDispatch, workSyncWorkspace } from './work-sync';
 
 export {
   managementFollowUpDispatch,
@@ -75,8 +76,14 @@ export {
   turnLatencyPurge,
   weeklyReportDispatch,
   weeklyReportWorkspace,
+  workSyncDispatch,
+  workSyncWorkspace,
+  workAssigned,
 };
 export const functions = [
+  workSyncDispatch,
+  workSyncWorkspace,
+  workAssigned,
   managementFollowUpDispatch,
   managementFollowUpWorkspace,
   activationDispatch,

@@ -688,6 +688,35 @@ describe('la revisión semanal se arma con la memoria y lo que hizo Cortex', () 
   });
 });
 
+describe('las alertas de la caja en la revisión semanal', () => {
+  it('la caja en rojo va primero, y sus cifras se pueden citar', () => {
+    const comp = weeklyFacts({
+      today: '2026-10-19',
+      from: '2026-10-12',
+      to: '2026-10-18',
+      current: weekFacts(4_250_000, 9_000_000),
+      base: { day: '2026-10-12', facts: weekFacts(3_000_000, 4_500_000) },
+      activity: {
+        ...ACTIVITY,
+        cashAlerts: [
+          {
+            severity: 'critical',
+            message: 'La caja queda en rojo la semana del 16 nov (−$ 3,2 M).',
+          },
+        ],
+      },
+    });
+    expect(get(comp.facts, 'caja.alerta.0')?.display).toBe(
+      'La caja queda en rojo la semana del 16 nov (−$ 3,2 M).',
+    );
+    const recs = weeklyRecommendations(comp.facts, comp, { hasPulse: true });
+    expect(recs[0]).toBe(
+      'Mira la caja de las próximas semanas: La caja queda en rojo la semana del 16 nov (−$ 3,2 M). Pídeme «¿cómo va a estar la caja?» para ver por qué y qué hacer.',
+    );
+    expect(checkGrounding(recs.join('\n'), comp.facts, MON)).toEqual({ ok: true, ungrounded: [] });
+  });
+});
+
 describe('la revisión se entrega una vez por semana', () => {
   const activity = async () => ACTIVITY;
 

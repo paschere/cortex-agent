@@ -205,7 +205,10 @@ function previewSentence(p: BankStatementPreview): string {
   parts.push(
     `De los ${p.newCredits} nuevos, ${p.matched} se atarían solos a su factura, ${p.suggested} tienen una sugerencia para confirmar y ${p.unmatched} no tienen factura a la vista.`,
   );
-  if (p.debitsIgnored > 0) parts.push(`Las ${p.debitsIgnored} salidas no se importan.`);
+  if (p.debitsIgnored > 0)
+    parts.push(
+      `Las ${p.debitsIgnored} salidas no entran a Pagos; al importar quedan en el libro de plata como gastos.`,
+    );
   if (p.skipped > 0) parts.push(`${p.skipped} fila(s) no se pudieron leer.`);
   return [...parts, ...p.warnings].join(' ');
 }
@@ -222,7 +225,7 @@ const LINE = z.object({
 export const paymentsPreviewBankStatement = registerTool({
   id: 'payments.preview_bank_statement',
   description:
-    'Mirar un extracto bancario (Excel o CSV de Bancolombia, Davivienda, BBVA, Banco de Bogotá u otro) antes de importarlo, sin escribir nada: qué banco es, cuántos abonos trae y por cuánto, cuántos ya estaban importados, y a qué factura iría cada uno. Las salidas del extracto no se importan. Úsalo SIEMPRE antes de payments.import_bank_statement y cuéntale el resumen a la persona. Si dice needs_mapping, enséñale los encabezados y pregúntale qué columna es cada cosa.',
+    'Mirar un extracto bancario (Excel o CSV de Bancolombia, Davivienda, BBVA, Banco de Bogotá u otro) antes de importarlo, sin escribir nada: qué banco es, cuántos abonos trae y por cuánto, cuántos ya estaban importados, y a qué factura iría cada uno. Las salidas no entran a Pagos; al importar quedan en el libro de plata. Úsalo SIEMPRE antes de payments.import_bank_statement y cuéntale el resumen a la persona. Si dice needs_mapping, enséñale los encabezados y pregúntale qué columna es cada cosa.',
   inputSchema: STATEMENT_INPUT,
   outputSchema: z.object({
     status: z.enum(['ready', 'needs_mapping']),
@@ -273,7 +276,7 @@ export const paymentsPreviewBankStatement = registerTool({
 export const paymentsImportBankStatement = registerTool({
   id: 'payments.import_bank_statement',
   description:
-    'Importar los abonos de un extracto bancario a Pagos. Cada abono nuevo queda registrado como dicho por el banco; los que cuadran sin duda (valor exacto y el número de la factura o el NIT en la descripción) quedan atados a su factura, y los demás quedan por revisar con sugerencias en /payments. Reimportar el mismo archivo o un periodo que se solapa NO duplica nada. Las salidas no se importan. Llama antes a payments.preview_bank_statement. Requiere confirmación.',
+    'Importar los abonos de un extracto bancario a Pagos. Cada abono nuevo queda registrado como dicho por el banco; los que cuadran sin duda (valor exacto y el número de la factura o el NIT en la descripción) quedan atados a su factura, y los demás quedan por revisar con sugerencias en /payments. Reimportar el mismo archivo o un periodo que se solapa NO duplica nada. Las salidas (débitos) no entran a Pagos: quedan en el libro de plata como gastos, y el saldo de cierre del extracto queda como saldo de la cuenta. Llama antes a payments.preview_bank_statement. Requiere confirmación.',
   inputSchema: STATEMENT_INPUT,
   outputSchema: z.object({
     status: z.enum(['imported', 'needs_mapping']),

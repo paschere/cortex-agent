@@ -139,6 +139,15 @@ export * from './drive-table';
 // Programas contables conectados directo (migración 0165): Siigo llena tablas
 // de la empresa como las dos de arriba, y además la cartera y los pagos.
 export * from './accounting';
+// El libro de plata (migración 0172): toda la plata de la empresa en un libro,
+// llenado desde el programa contable, los extractos, los pagos, los documentos
+// y el chat. Va después de ./payments y ./accounting, que son sus fuentes.
+export * from './ledger';
+// La proyección de caja trae sus propias ayudas de fechas y de texto con nombres
+// genéricos. En la raíz del paquete mandan las que ya estaban (compromisos y
+// reportes), con el mismo significado; las del libro se usan desde adentro.
+export { addDays, daysBetween, plural } from './commitments';
+export { mondayOf } from './reports';
 // Encargos (migration 0089): a job handed over and worked unattended for
 // minutes or hours. The EXECUTION engine lives in apps/web/lib/errands, which
 // needs Inngest and the orchestrator; what is here is the vocabulary every
@@ -225,3 +234,11 @@ export type { ClaimResult } from './errands';
 export * from './billing';
 
 export * from './management';
+
+// El registro de trabajo (migración 0174): quién tiene que hacer qué y quién lo
+// hizo, llenado desde Gerencia, compromisos, tablas y aprobaciones. Va después
+// de ./management, ./commitments, ./trackers y ./approvals, que son sus
+// fuentes, y de ./views, donde expone `cortex.trabajo` y `cortex.equipo`.
+export * from './work';
+// `previousPeriod`: en la raíz manda el de metas (ver work/index.ts).
+export { previousPeriod } from './goals';

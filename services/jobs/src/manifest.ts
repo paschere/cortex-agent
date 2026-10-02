@@ -92,6 +92,9 @@ export const JOBS: JobSpec[] = [
   { name: 'management/follow-up.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'goals/watch.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'reports/weekly.dispatch', cron: '0 12 * * 1', retryLimit: 1, concurrency: 1 },
+  // El registro de trabajo (0174): 06:45 de Bogotá todos los días, después de
+  // que los compromisos refrescan su estado. Ver apps/web/inngest/functions/work-sync.ts.
+  { name: 'work/sync.dispatch', cron: '45 11 * * *', retryLimit: 1, concurrency: 1 },
 
   // --- Los que llegan por evento --------------------------------------------
   // retryLimit 0 en los que llaman al modelo: reintentar un turno del agente
@@ -132,6 +135,9 @@ export const JOBS: JobSpec[] = [
   { name: 'gmail/backfill.user', retryLimit: 1, concurrency: 3, singletonKeyFrom: 'userId' },
   { name: 'gmail/sweep.user', retryLimit: 1, concurrency: 5, singletonKeyFrom: 'userId' },
   { name: 'reports/weekly.workspace', retryLimit: 1, concurrency: 5 },
+  { name: 'work/sync.workspace', retryLimit: 1, concurrency: 5 },
+  // El aviso de trabajo reasignado (work.assign): la campana de quien lo recibe.
+  { name: 'work/assigned', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.intake', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.queued', retryLimit: 0, concurrency: 2, singletonKeyFrom: 'taskId' },
   { name: 'dev/task.status', retryLimit: 1, concurrency: 5 },

@@ -114,6 +114,14 @@ const tools = listTools() as unknown as SelectableTool[];
  * of those families out of the band now fails here, and an edit to a tool in
  * one of them without re-measuring fails `is grading tool descriptions that
  * still exist` — which is the point, not a nuisance.
+ *
+ * RE-MEASURED AGAIN 2026-10-02 (same model, retrieval readings unchanged) with
+ * five selection cases for the cash projection (`ledger` family: «¿cómo va a
+ * estar la caja?», «¿y si Nexa nos paga un mes tarde?», «¿me alcanza para la
+ * nómina?», «¿y si contrato 2 personas?», «¿por qué esa semana?»). Selection
+ * reads 23 of 23. The what-if about a late client is the tight one: it sits
+ * next to the payments family, and `ledger.forecast` leads with those
+ * questions so the ledger family stays in the band.
  */
 const FLOOR = {
   grounding: 0.74,

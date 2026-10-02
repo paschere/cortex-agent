@@ -80,6 +80,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'emerald',
     icon: 'Coins',
   },
+  ledger: {
+    name: 'Libro de plata',
+    blurb:
+      'Toda la plata de la empresa en un solo libro: lo que entró y salió y lo que está por cobrar y por pagar, venga del programa contable, del extracto del banco, de los pagos, de una factura leída o del chat, contado una sola vez y con su categoría. De aquí salen ventas, gastos, margen y caja, y la proyección de caja a 13 semanas con sus escenarios («¿y si el cliente paga tarde?», «¿y si contrato a dos personas?»).',
+    tone: 'emerald',
+    icon: 'Coins',
+  },
   accounting: {
     name: 'Programas contables',
     blurb:
@@ -151,6 +158,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
       'Los asuntos que Cortex lleva como gerente: el resumen del día, el detalle de cada asunto y el registro de lo que se decidió o se hizo, con su evidencia.',
     tone: 'primary',
     icon: 'Target',
+  },
+  work: {
+    name: 'Registro de trabajo',
+    blurb:
+      'Quién tiene que hacer qué y quién lo hizo: casos, compromisos, filas de tablas con responsable y lo que cualquiera anote. Mide trabajo, no personas: cada quien ve todo lo suyo y quien administra ve al equipo.',
+    tone: 'sky',
+    icon: 'Users',
   },
   goals: {
     name: 'Metas',
@@ -519,6 +533,7 @@ const FAMILY_GROUP: Record<string, string> = {
   presentations: 'clients',
   payments: 'billing',
   accounting: 'billing',
+  ledger: 'billing',
   // Con los pagos y no con «Documentos y memoria»: lo que lee este módulo no es
   // documentación, son cifras con un papel detrás. La cartera se calcula
   // restándole los pagos a las facturas que salieron de aquí, así que separar
@@ -550,6 +565,9 @@ const FAMILY_GROUP: Record<string, string> = {
   payroll: 'money',
   goals: 'goals',
   management: 'goals',
+  // Con Gerencia: el registro de trabajo es la otra mitad de «¿cómo va la
+  // empresa?» — quién está cargado, qué se venció, qué se cerró a tiempo.
+  work: 'goals',
   vehicles: 'vehicles',
   // Sits with the fleet rather than with automation: a SOAT that lapses is a
   // truck off the road, and the person who cares about one cares about the

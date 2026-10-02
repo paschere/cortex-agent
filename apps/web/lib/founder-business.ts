@@ -14,7 +14,8 @@ import 'server-only';
  * ve dentro de esa empresa, con los permisos de esa empresa.
  *
  * Las cifras se calculan con las MISMAS funciones que el Inicio de cada empresa
- * (payments/risk.ts, payments/recovered-store.ts, self-service/read.ts): dos
+ * (payments/risk.ts, payments/recovered-store.ts, self-service/read.ts, y la
+ * proyección de caja de ledger/plans.ts): dos
  * fórmulas de «plata en riesgo» se separan el día que alguien toque una.
  *
  * ===========================================================================
@@ -31,9 +32,12 @@ import 'server-only';
 import {
   PULSE_SLUG,
   bogotaToday,
+  cashRunwayWeeks,
+  hasLedgerCash,
   moneyAtRisk,
   moneyRecovered,
   readPulseSnapshots,
+  runForecast,
   shiftDay,
 } from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -202,6 +206,31 @@ async function readPulse(
   };
 }
 
+/**
+ * La caja de hoy y cuántas semanas alcanza, con la MISMA proyección de
+ * /finance (ledger/plans.ts) y su caja mínima por defecto (un mes de gastos
+ * fijos: todavía no hay una caja mínima guardada por empresa).
+ * Sin cuentas ni movimientos en el libro no hay caja que mostrar: «sin dato»,
+ * nunca «$ 0».
+ */
+async function readCash(
+  db: SupabaseClient,
+  today: string,
+): Promise<{ ledger: boolean; cash: CompanyBusiness['cash'] }> {
+  // Pesos: la caja en otra moneda no se suma a la de pesos (ver la cabecera de founder-business-shape.ts).
+  const { base } = await runForecast(db, { today, currency: 'COP' });
+  if (!hasLedgerCash(base)) return { ledger: false, cash: null };
+  return {
+    ledger: true,
+    cash: {
+      today: base.startingCash,
+      runwayWeeks: cashRunwayWeeks(base),
+      horizonWeeks: base.weeks.length,
+      lowest: base.lowest,
+    },
+  };
+}
+
 /** La decisión más vieja que espera a esta persona: aprobaciones y acciones propuestas. */
 async function readOldestDecision(
   db: SupabaseClient,
@@ -248,10 +277,11 @@ export async function readCompanyBusiness(
   const today = bogotaToday();
   const userId = await settle('el directorio', id, () => directoryUserId(db, email));
 
-  const [risk, recovered, pulse, failing, setup, oldest, brand] = await Promise.all([
+  const [risk, recovered, pulse, cash, failing, setup, oldest, brand] = await Promise.all([
     settle('la plata en riesgo', id, () => moneyAtRisk(db, { today })),
     settle('lo recuperado', id, () => moneyRecovered(db, { today })),
     settle('el pulso', id, () => readPulse(db, today)),
+    settle('la caja', id, () => readCash(db, today)),
     settle('los procesos', id, () => readFailing(db, at)),
     userId
       ? settle('la puesta en marcha', id, async () =>
@@ -294,6 +324,8 @@ export async function readCompanyBusiness(
         }
       : null,
     sales: pulse?.sales ?? null,
+    cash: cash?.cash ?? null,
+    ledger: cash ? cash.ledger : null,
     failing,
     setup: setup
       ? {

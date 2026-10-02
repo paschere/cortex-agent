@@ -171,6 +171,15 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
       'Hazme un resumen cada lunes de cómo nos fue: qué mejoró, qué empeoró frente a la semana anterior, lo que hiciste por la empresa y tres acciones para la semana. Si todavía no hay pulso de la empresa, ármalo primero y programa también su resumen diario, que es lo que guarda las cifras para comparar.',
   },
   {
+    id: 'team_follow_up',
+    area: 'Equipo',
+    title: 'Seguimiento del equipo',
+    body: 'Cada lunes, cómo le fue al trabajo del equipo; y un aviso cuando alguien se carga de más o se acumulan vencidos.',
+    needs: 'El trabajo del equipo conectado (Gerencia, compromisos o una tabla con responsable)',
+    prompt:
+      'Quiero hacerle seguimiento al trabajo de mi equipo: programa un resumen cada lunes a las 7 a. m. con cómo nos fue la semana anterior (lo cerrado, lo vencido, lo que mejoró, lo que pide atención y lo que no tiene responsable), sin rankings ni notas por persona. Y avísame cuando alguien tenga mucha más carga que el resto, se le acumulen vencidos o se acumule trabajo sin responsable, con la sugerencia de a quién pasarle qué. Si el trabajo del equipo todavía no está conectado, dime qué tablas sirven y cómo conectarlas antes de cambiar nada.',
+  },
+  {
     id: 'morning',
     area: 'Equipo',
     title: 'Resumen de la mañana',

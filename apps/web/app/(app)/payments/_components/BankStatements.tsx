@@ -447,7 +447,7 @@ function PreviewSummary({
         {preview.debitsIgnored > 0 || preview.skipped > 0 ? (
           <p className="mt-2 text-xs text-ink-muted">
             {preview.debitsIgnored > 0
-              ? `${plural(preview.debitsIgnored, 'salida')} por ${money(preview.debitsTotal, preview.currency)} no se importan. `
+              ? `${plural(preview.debitsIgnored, 'salida')} por ${money(preview.debitsTotal, preview.currency)} no entran a Pagos: al importar quedan en el libro de plata como gastos. `
               : ''}
             {preview.skipped > 0
               ? `${plural(preview.skipped, 'fila')} no se pudieron leer (${preview.skippedExamples

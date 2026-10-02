@@ -71,6 +71,9 @@ export const PULSE_PLATFORM_SOURCES = [
   'cortex.pagos',
   'cortex.cartera',
   'cortex.recuperado',
+  'cortex.caja',
+  'cortex.flujo_caja',
+  'cortex.libro',
   'cortex.metas',
   'cortex.gestion',
   'cortex.compromisos',
@@ -368,6 +371,66 @@ export function composePulseSpec(inv: PulseInventory): PulseComposition {
     });
   }
 
+  // El libro de plata (0172): la caja de hoy y lo que salió este mes. Sólo si
+  // hay datos; sin extracto ni saldo dicho a mano no se inventa una caja.
+  if (has(inv, 'cortex.caja')) {
+    kpis.push({
+      id: 'caja_hoy',
+      type: 'metric',
+      width: 'third',
+      title: 'Caja hoy',
+      tracker: 'cortex.caja',
+      aggregate: 'sum',
+      field: 'saldo',
+      format: 'money',
+      tone: 'sky',
+      caption: 'Último saldo conocido de las cuentas: el del extracto o el dicho a mano.',
+    });
+    included.push('Caja por cuenta');
+  }
+  // La proyección de 13 semanas (0173): la semana en que la caja queda más
+  // baja. Sólo si el libro tiene con qué proyectar.
+  if (has(inv, 'cortex.flujo_caja')) {
+    kpis.push({
+      id: 'semana_apretada',
+      type: 'metric',
+      width: 'third',
+      title: 'Semana más apretada',
+      tracker: 'cortex.flujo_caja',
+      filters: [{ field: 'escenario', op: 'eq', value: 'Base' }],
+      aggregate: 'min',
+      field: 'cierra',
+      format: 'money',
+      tone: 'amber',
+      caption:
+        'Con cuánto cierra la semana más baja de las próximas 13, según la proyección de caja.',
+    });
+    included.push('Semana más apretada (proyección de caja)');
+  }
+  if (has(inv, 'cortex.libro')) {
+    kpis.push({
+      id: 'gastos_mes',
+      type: 'metric',
+      width: 'third',
+      title: 'Gastos del mes',
+      tracker: 'cortex.libro',
+      filters: [
+        { field: 'sentido', op: 'eq', value: 'Sale' },
+        { field: 'clase', op: 'eq', value: 'Gasto' },
+        { field: 'estado', op: 'eq', value: 'Pasó' },
+      ],
+      aggregate: 'sum',
+      field: 'valor',
+      format: 'money',
+      tone: 'rose',
+      compare: 'previous_period',
+      period: 'month',
+      dateField: 'fecha',
+      goodWhen: 'down',
+    });
+    included.push('Gastos del mes (libro de plata)');
+  }
+
   if (has(inv, 'cortex.metas')) {
     const recent: ViewFilter[] = [{ field: 'periodo', op: 'last_days', value: 31 }];
     kpis.push({
@@ -571,6 +634,8 @@ export const PULSE_GOOD_WHEN: Readonly<Record<string, 'up' | 'down'>> = {
   recuperado: 'up',
   metas_cumplidas: 'up',
   cartera_vencida: 'down',
+  caja_hoy: 'up',
+  semana_apretada: 'up',
   pendientes: 'down',
   compromisos_vencidos: 'down',
   vencen_semana: 'down',
@@ -746,7 +811,62 @@ export function pulseFacts(
       format: 'money',
     });
   }
+  // La semana más apretada de la proyección: cuál es y cuántas semanas
+  // aguanta la caja, para que el resumen pueda decir «la del 17 nov».
+  const flujo = sources.get('cortex.flujo_caja');
+  if (
+    flujo &&
+    !flujo.blocked &&
+    spec.blocks.some((b) => 'tracker' in b && b.tracker === 'cortex.flujo_caja')
+  ) {
+    const base = flujo.rows.filter((r) => r.values.escenario === 'Base');
+    const tight = base.find((r) => r.values.mas_apretada === 'Sí');
+    if (tight && typeof tight.values.semana === 'string') {
+      const week = tight.values.semana;
+      facts.push({
+        key: 'semana_apretada.semana',
+        label: `Semana más apretada de la caja: la del ${shortDay(week)}`,
+        value: null,
+        display: `la semana del ${shortDay(week)}`,
+      });
+      const runway = Number(tight.values.semanas_de_caja);
+      if (Number.isFinite(runway)) {
+        const horizon = base.length;
+        facts.push({
+          key: 'semanas_de_caja',
+          label:
+            runway >= horizon
+              ? `Semanas de caja: no baja del mínimo en las ${horizon} semanas`
+              : 'Semanas de caja: cuántas aguanta antes de bajar del mínimo',
+          value: runway,
+          display: runway >= horizon ? `${horizon}+` : formatValue(runway, 'number'),
+          format: 'number',
+          goodWhen: 'up',
+        });
+      }
+    }
+  }
   return facts;
+}
+
+const SHORT_MONTHS = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
+
+/** «2026-11-17» → «17 nov». */
+function shortDay(day: string): string {
+  return `${Number(day.slice(8, 10))} ${SHORT_MONTHS[Number(day.slice(5, 7)) - 1] ?? ''}`;
 }
 
 // ---------------------------------------------------------------------------
