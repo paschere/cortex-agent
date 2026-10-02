@@ -20,15 +20,20 @@ export default async function FirstStepsPage({
   const user = await requireSession();
   const { paso } = await searchParams;
   const db = getOrgScopedClient(user.organization.id);
-  const google = await db
-    .from('integrations')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-    .eq('provider', 'google');
+  const [google, facts] = await Promise.all([
+    db
+      .from('integrations')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('provider', 'google'),
+    db.from('company_facts').select('id', { count: 'exact', head: true }),
+  ]);
   return (
     <FirstSteps
       initialStep={paso === 'proceso' ? 'process' : 'source'}
       googleConnected={!google.error && (google.count ?? 0) > 0}
+      // Una lectura caída no marca el paso como hecho.
+      companyKnown={!facts.error && (facts.count ?? 0) > 0}
     />
   );
 }

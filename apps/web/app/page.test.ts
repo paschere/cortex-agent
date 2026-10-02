@@ -16,7 +16,7 @@ beforeEach(() => {
 describe('signed-in entry', () => {
   it('opens the global overview for a signed-in account', async () => {
     await expect(RootPage()).rejects.toThrow('redirected');
-    expect(mocks.redirect).toHaveBeenCalledWith('/overview');
+    expect(mocks.redirect).toHaveBeenCalledWith('/overview?inicio=1');
   });
   it('keeps the public landing for anonymous visitors without a session lookup', async () => {
     mocks.cookies.mockResolvedValue({ getAll: () => [] });

@@ -11,6 +11,13 @@
  * esconder algo que falta.
  */
 
+/**
+ * La marca de «ya vio los primeros 10 minutos». El Inicio manda a una empresa
+ * nueva allá UNA vez por navegador; después, la franja de pasos guía desde el
+ * Inicio y nadie queda atrapado en un asistente.
+ */
+export const FIRST_STEPS_SEEN_COOKIE = 'cortex_first_steps_seen';
+
 export type SetupEvidence = {
   /** Datos guardados en la ficha de la empresa. */
   facts: number | null;
@@ -65,7 +72,7 @@ export function buildSetupSteps(e: SetupEvidence): SetupStep[] {
       id: 'process',
       title: 'Activa un proceso',
       done: plural(e.processes, 'proceso andando', 'procesos andando'),
-      action: { label: 'Ver los listos', href: '/onboarding/fuentes?paso=proceso' },
+      action: { label: 'Ver los listos', href: '/procesos' },
       ready: has(e.processes) || has(e.views),
     },
     {

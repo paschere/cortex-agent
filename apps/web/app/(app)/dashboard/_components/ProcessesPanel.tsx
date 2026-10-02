@@ -43,7 +43,7 @@ export async function ProcessesPanel({
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Tus procesos</h2>
         <Link
-          href="/onboarding/fuentes?paso=proceso"
+          href="/procesos#listos"
           className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary-strong"
         >
           Activar otro <ArrowRight className="h-3 w-3" aria-hidden />
@@ -57,7 +57,7 @@ export async function ProcessesPanel({
             una tabla con lo que llega al Drive, avisar la cartera, resumirte el día.
           </p>
           <Link
-            href="/onboarding/fuentes?paso=proceso"
+            href="/procesos#listos"
             className="cortex-primary-button inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary-strong"
           >
             Ver los procesos listos <ArrowRight className="h-3.5 w-3.5" aria-hidden />

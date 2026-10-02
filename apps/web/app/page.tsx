@@ -59,7 +59,9 @@ export default async function RootPage() {
   if (maybeSignedIn) {
     const session = await getOptionalSession();
     if (session) {
-      redirect('/overview');
+      // `?inicio=1`: /overview decide si quien entra tiene una sola empresa
+      // y en ese caso la manda directo a su Inicio (ver overview/page.tsx).
+      redirect('/overview?inicio=1');
     }
   }
 

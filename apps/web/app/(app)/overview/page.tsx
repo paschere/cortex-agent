@@ -6,8 +6,10 @@ import { PageHeader } from '@/components/ui/page-header';
 import { readFounderConsole } from '@/lib/founder-console';
 import { buildConsoleRows } from '@/lib/founder-console-shape';
 import { requireFounderContext } from '@/lib/founder-guard';
+import { workspaceHref } from '@/lib/workspace-context';
 import { LayoutDashboard, MessagesSquare } from 'lucide-react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +20,10 @@ export const dynamic = 'force-dynamic';
  * y propiedades que `requireFounderContext` leyó de `ba_member`; el componente
  * de cliente sólo filtra y cambia de vista sobre lo que ya recibió.
  */
-export default async function OverviewPage() {
+export default async function OverviewPage({
+  searchParams,
+}: { searchParams: Promise<{ inicio?: string }> }) {
+  const { inicio } = await searchParams;
   const context = await requireFounderContext();
   const data = await readFounderConsole(context.accountId, context.user.email, context.owned);
   const rows = buildConsoleRows(
@@ -28,6 +33,17 @@ export default async function OverviewPage() {
     context.user.organization.id,
   );
   const founder = context.owned.length > 0;
+
+  // AL ENTRAR, QUIEN TIENE UNA SOLA EMPRESA VA A SU INICIO.
+  // El centro de mando sirve para comparar varias; con una sola es una tabla
+  // de una fila entre la persona y su trabajo. Sólo cuando se llega desde `/`
+  // (`?inicio=1`): abrir /overview a propósito sigue mostrándolo.
+  if (inicio === '1') {
+    const companies = rows.filter((row) => row.kind === 'company');
+    if (companies.length <= 1) {
+      redirect(companies[0] ? workspaceHref(companies[0].id, '/dashboard') : '/dashboard');
+    }
+  }
   return (
     <>
       <PageHeader

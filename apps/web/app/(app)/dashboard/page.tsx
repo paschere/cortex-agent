@@ -4,6 +4,7 @@ import { readInsights } from '@/lib/insights';
 import { readJournal } from '@/lib/journal';
 import { getMcpUrl } from '@/lib/mcp-url';
 import { relativeTime } from '@/lib/relative-time';
+import { FIRST_STEPS_SEEN_COOKIE } from '@/lib/self-service/setup';
 import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -22,6 +23,7 @@ import {
   Sparkles,
   Workflow,
 } from 'lucide-react';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
@@ -89,7 +91,12 @@ export default async function DashboardPage() {
   // `show: false` for every workspace that has ever done anything — including,
   // by way of migration 0085 § 8, every workspace that existed before it.
   const onboarding = await readOnboarding(sb);
-  if (onboarding.show) redirect('/onboarding');
+  // La primera vez, una empresa nueva va a los primeros 10 minutos (elegir de
+  // dónde salen sus datos y un primer proceso). Después ve el Inicio, que la
+  // sigue guiando con la franja de pasos — nunca un asistente del que no se sale.
+  if (onboarding.show && !(await cookies()).get(FIRST_STEPS_SEEN_COOKIE)) {
+    redirect('/onboarding/fuentes');
+  }
 
   const [waiting, journal, signalsRes, runsRes, convsRes] = await Promise.all([
     // El índice de las cuatro colas. Los conteos salen de `countNavSignals`,
