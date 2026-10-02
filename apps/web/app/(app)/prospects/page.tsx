@@ -111,7 +111,7 @@ export default async function ProspectsPage() {
   return (
     <>
       <PageHeader
-        title="Outreach"
+        title="Prospectos"
         subtitle="Oportunidades comerciales para tu oferta, respaldadas por señales públicas. Califica cada hallazgo antes de preparar un contacto."
         icon={<Radar className="h-5 w-5" />}
       />

@@ -27,7 +27,24 @@ export async function AccountingSection({
   organizationId: string;
   role: string;
 }) {
-  if (!canManageAccounting(role)) return null;
+  // Quien no administra no ve las llaves, pero sí que la sección existe y a
+  // quién pedírsela: una pantalla que calla lo que no te deja hacer es un
+  // callejón sin salida.
+  if (!canManageAccounting(role)) {
+    return (
+      <Panel className="mb-5 flex flex-wrap items-center gap-3 p-4" id="programas-contables">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-surface-2 text-ink-muted">
+          <Calculator className="h-4 w-4" aria-hidden />
+        </span>
+        <p className="min-w-0 flex-1 text-sm leading-relaxed text-ink-muted">
+          <span className="font-semibold text-ink">
+            Programas contables (Siigo, Alegra, QuickBooks).
+          </span>{' '}
+          Los conecta quien administra la empresa en Cortex; si los necesitas, pídeselo.
+        </p>
+      </Panel>
+    );
+  }
   const db = getOrgScopedClient(organizationId);
   let connections: AccountingConnectionRow[] = [];
   let readError = false;

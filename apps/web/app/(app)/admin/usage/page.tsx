@@ -1,23 +1,23 @@
+import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
+import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
+import { cacheSavingsUsd, formatUsd, rateFor, stepCostUsd } from '@/lib/model-pricing';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { clsx } from 'clsx';
-import Link from 'next/link';
 import {
-  BarChart3,
-  Zap,
   AlertTriangle,
-  Users,
-  Timer,
+  BarChart3,
   CheckCircle2,
-  Cpu,
   CircleDollarSign,
+  Cpu,
+  Timer,
+  Users,
+  Zap,
 } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
-import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
-import { LegendDot, RISK_BAR, SURFACE_BAR } from '../audit/_components/tags';
+import Link from 'next/link';
 import { formatTokens, turnTokens } from '../audit/_components/format';
-import { cacheSavingsUsd, formatUsd, rateFor, stepCostUsd } from '@/lib/model-pricing';
+import { LegendDot, RISK_BAR, SURFACE_BAR } from '../audit/_components/tags';
 
 interface AuditEvent {
   user_id: string;
@@ -42,7 +42,8 @@ const RANGES = [7, 14, 30] as const;
 const SURFACE_KEYS = ['web', 'mcp', 'schedule', 'unknown'] as const;
 const RISK_KEYS = ['low', 'medium', 'high', 'critical'] as const;
 
-const SELECT_FULL = 'user_id, tool_id, status, latency_ms, created_at, surface, risk_level, metadata';
+const SELECT_FULL =
+  'user_id, tool_id, status, latency_ms, created_at, surface, risk_level, metadata';
 const SELECT_LEGACY = 'user_id, tool_id, status, latency_ms, created_at, metadata';
 
 /** Horizontal stacked bar + legend, built from plain divs. */
@@ -134,16 +135,18 @@ export default async function UsagePage({
   let res = resFirst;
   if (res.error) res = await run(SELECT_LEGACY);
 
-  const rows: AuditEvent[] = ((res.data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
-    user_id: String(r.user_id ?? ''),
-    tool_id: String(r.tool_id ?? ''),
-    status: String(r.status ?? ''),
-    latency_ms: Number(r.latency_ms ?? 0),
-    created_at: String(r.created_at ?? ''),
-    surface: (r.surface as string | null) ?? null,
-    risk_level: (r.risk_level as string | null) ?? null,
-    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
-  }));
+  const rows: AuditEvent[] = ((res.data ?? []) as unknown as Record<string, unknown>[]).map(
+    (r) => ({
+      user_id: String(r.user_id ?? ''),
+      tool_id: String(r.tool_id ?? ''),
+      status: String(r.status ?? ''),
+      latency_ms: Number(r.latency_ms ?? 0),
+      created_at: String(r.created_at ?? ''),
+      surface: (r.surface as string | null) ?? null,
+      risk_level: (r.risk_level as string | null) ?? null,
+      metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+    }),
+  );
 
   // Aggregations
   const byTool: Record<string, { count: number; errors: number; latencies: number[] }> = {};
@@ -307,7 +310,8 @@ export default async function UsagePage({
     return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
   };
 
-  const successRate = okCount + errorCount > 0 ? Math.round((okCount / (okCount + errorCount)) * 100) : 100;
+  const successRate =
+    okCount + errorCount > 0 ? Math.round((okCount / (okCount + errorCount)) * 100) : 100;
   const p50 = pct(allLatencies, 0.5);
   const p95 = pct(allLatencies, 0.95);
 
@@ -320,9 +324,13 @@ export default async function UsagePage({
     );
   }
 
-  const toolEntries = Object.entries(byTool).sort((a, b) => b[1].count - a[1].count).slice(0, 15);
+  const toolEntries = Object.entries(byTool)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 15);
   const maxToolCount = toolEntries[0]?.[1].count ?? 1;
-  const userEntries = Object.entries(byUser).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const userEntries = Object.entries(byUser)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
   const maxUserCount = userEntries[0]?.[1] ?? 1;
 
   // Day series, oldest → newest, filling gaps
@@ -464,7 +472,7 @@ export default async function UsagePage({
                 ? 'No hay llamadas en esta ventana.'
                 : bySurface.unknown === rows.length
                   ? 'Estas llamadas todavía no traen la superficie registrada.'
-                  : 'La app web, Claude por MCP y las rutinas que corren solas.'}
+                  : 'La app web, Claude o ChatGPT conectados, y las rutinas que corren solas.'}
             </p>
           </Panel>
 
@@ -614,11 +622,11 @@ export default async function UsagePage({
           )}
 
           <p className="mt-3 text-micro leading-relaxed text-ink-faint">
-            Estimado con precios de lista (Sonnet 5: $2/$10 por millón hasta el 31 de agosto,
-            luego $3/$15). El chat se calcula con el detalle real del caché; encargos y
-            orquestador guardan solo totales, así que su cifra es techo, no piso. Las llamadas
-            utilitarias (títulos, extractores, sugerencias) no registran consumo y no aparecen
-            aquí — la cifra autoritativa está en la consola de Anthropic.
+            Estimado con precios de lista (Sonnet 5: $2/$10 por millón hasta el 31 de agosto, luego
+            $3/$15). El chat se calcula con el detalle real del caché; encargos y orquestador
+            guardan solo totales, así que su cifra es techo, no piso. Las llamadas utilitarias
+            (títulos, extractores, sugerencias) no registran consumo y no aparecen aquí — la cifra
+            autoritativa está en la consola de Anthropic.
           </p>
         </Panel>
 
@@ -647,8 +655,14 @@ export default async function UsagePage({
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
                         <div
-                          className={t.errors > 0 ? 'h-full rounded-full bg-amber' : 'h-full rounded-full bg-primary'}
-                          style={{ width: `${Math.max(3, Math.round((t.count / maxToolCount) * 100))}%` }}
+                          className={
+                            t.errors > 0
+                              ? 'h-full rounded-full bg-amber'
+                              : 'h-full rounded-full bg-primary'
+                          }
+                          style={{
+                            width: `${Math.max(3, Math.round((t.count / maxToolCount) * 100))}%`,
+                          }}
                         />
                       </div>
                     </li>
@@ -678,7 +692,9 @@ export default async function UsagePage({
                     <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
                       <div
                         className="h-full rounded-full bg-primary"
-                        style={{ width: `${Math.max(3, Math.round((count / maxUserCount) * 100))}%` }}
+                        style={{
+                          width: `${Math.max(3, Math.round((count / maxUserCount) * 100))}%`,
+                        }}
                       />
                     </div>
                   </li>

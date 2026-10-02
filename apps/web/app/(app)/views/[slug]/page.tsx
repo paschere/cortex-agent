@@ -1,5 +1,7 @@
 import { ViewStudio } from '@/components/views/ViewStudio';
 import { type ToolbarView, ViewToolbar } from '@/components/views/ViewToolbar';
+import { ViewBrandProvider } from '@/components/views/blocks/brand';
+import { loadSessionBrand } from '@/lib/branding/store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
@@ -24,6 +26,10 @@ import { notFound } from 'next/navigation';
  * en pantalla completa para cambiarla con las manos; la barra de arriba decide
  * quién más la ve. Con el estudio abierto no se pinta la cabecera: el estudio
  * la tapa entera y trae su propio «Compartir», con los mismos datos.
+ *
+ * La portada (logo, título, «en vivo», la barra de la vista) la pinta el
+ * lienzo; la marca de la empresa (migración 0170) llega por contexto y, si la
+ * tabla no contesta, la vista se ve con los colores de Cortex.
  */
 
 export const dynamic = 'force-dynamic';
@@ -48,16 +54,16 @@ export default async function ViewPage({
   const view = await getView(db, decodeURIComponent(slug));
   if (!view) notFound();
 
-  const [sources, versions] = await Promise.all([
+  const [sources, versions, brand] = await Promise.all([
     loadViewSources(db, view.spec, { viewerId: user.id }),
     listViewVersions(db, view.id, 20),
+    loadSessionBrand(db, user.organization.name),
   ]);
   const computed = computeView(view.spec, sources, new Date(), {
     writable: canWriteView(view, 'member'),
   });
   const open = view.share_token && shareIsOpen(view) ? publicViewUrl(view.share_token) : null;
   const internal = internalSourcesOf(view.spec);
-  const hero = computed.theme?.header === 'hero';
 
   const toolbarView: ToolbarView = {
     id: view.id,
@@ -71,6 +77,16 @@ export default async function ViewPage({
     canManage: user.role === 'org_admin' || view.created_by === user.id,
     shareBlocked: internal.length ? internalShareRefusal(internal) : null,
   };
+  const toolbar = (
+    <ViewToolbar
+      view={toolbarView}
+      versions={versions.map((v) => ({
+        version: v.version,
+        prompt: v.prompt,
+        when: WHEN.format(new Date(v.created_at)),
+      }))}
+    />
+  );
   const studio = (
     <ViewStudio
       key={view.version}
@@ -84,42 +100,20 @@ export default async function ViewPage({
       }}
       initial={computed}
       share={toolbarView}
+      headerActions={editing ? undefined : toolbar}
     />
   );
-  if (editing) return studio;
+  if (editing) return <ViewBrandProvider brand={brand}>{studio}</ViewBrandProvider>;
 
   return (
-    <>
+    <ViewBrandProvider brand={brand}>
       <Link
         href="/views"
-        className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
+        className="view-no-print mb-4 inline-flex items-center gap-1 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
       >
         <ChevronLeft className="h-3.5 w-3.5" /> Vistas
       </Link>
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        {/* Con la cabecera grande del tema, el título lo pinta el lienzo (ViewHero). */}
-        {hero ? (
-          <span aria-hidden />
-        ) : (
-          <div className="min-w-0">
-            <h1 className="page-heading text-xl font-bold tracking-tight text-ink">{view.name}</h1>
-            {(view.spec.subtitle || view.description) && (
-              <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">
-                {view.spec.subtitle ?? view.description}
-              </p>
-            )}
-          </div>
-        )}
-        <ViewToolbar
-          view={toolbarView}
-          versions={versions.map((v) => ({
-            version: v.version,
-            prompt: v.prompt,
-            when: WHEN.format(new Date(v.created_at)),
-          }))}
-        />
-      </header>
       {studio}
-    </>
+    </ViewBrandProvider>
   );
 }

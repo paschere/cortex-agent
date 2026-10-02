@@ -38,7 +38,7 @@ export const METER_LABEL: Record<MeterId, { one: string; many: string; help: str
   documents: {
     one: 'documento',
     many: 'documentos',
-    help: 'Cada archivo, correo archivado o grabación que entra a Brain Knowledge. Una grabación cuenta como un documento, no por minutos.',
+    help: 'Cada archivo, correo archivado o grabación que entra al cerebro. Una grabación cuenta como un documento, no por minutos.',
   },
 };
 

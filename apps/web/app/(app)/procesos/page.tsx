@@ -1,6 +1,8 @@
 import { ProcessesPanel } from '@/app/(app)/dashboard/_components/ProcessesPanel';
 import { ProcessCatalog } from '@/components/self-service/ProcessCatalog';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
+import { Sparkles } from 'lucide-react';
 import { Suspense } from 'react';
 
 export const dynamic = 'force-dynamic';
@@ -18,15 +20,15 @@ export default async function ProcessesPage() {
   const user = await requireSession();
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 pb-10">
-      <header>
-        <h1 className="text-balance text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl">
-          Procesos
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted sm:text-base">
-          Lo que Cortex hace solo, sin que se lo pidas. Activa uno listo o describe el tuyo: Cortex
-          pregunta lo justo y queda andando.
-        </p>
-      </header>
+      {/* La misma cabecera que el resto de pantallas: Procesos es una puerta
+          principal y no puede verse más chica que Pagos o Aprobaciones. */}
+      <div className="-mb-6">
+        <PageHeader
+          title="Procesos"
+          subtitle="Lo que Cortex hace solo, sin que se lo pidas. Activa uno listo o describe el tuyo: Cortex pregunta lo justo y queda andando. Los que corren a una hora fija se llaman rutinas."
+          icon={<Sparkles className="h-5 w-5" aria-hidden />}
+        />
+      </div>
 
       <Suspense fallback={null}>
         <ProcessesPanel organizationId={user.organization.id} userId={user.id} />

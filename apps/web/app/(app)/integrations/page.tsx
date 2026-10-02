@@ -79,6 +79,18 @@ const STATE_TAG: Record<ConnState, { label: string; cls: string }> = {
   unknown: { label: 'Sin comprobar', cls: 'border-border bg-surface-2 text-ink-muted' },
 };
 
+/** Lo que vuelve en `?connected=` tras un OAuth, dicho como lo diría una persona. */
+const CONNECTED_NAME: Record<string, string> = {
+  google: 'Google',
+  microsoft: 'Microsoft 365',
+  hubspot: 'HubSpot',
+  github: 'GitHub',
+  linear: 'Linear',
+  quickbooks: 'QuickBooks',
+  siigo: 'Siigo',
+  alegra: 'Alegra',
+};
+
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('es-CO', {
@@ -93,6 +105,7 @@ export default async function IntegrationsPage({
   searchParams: Promise<Record<string, string>>;
 }) {
   const user = await requireSession();
+  const isAdmin = user.role === 'org_admin';
   const sp = await searchParams;
   const db = getOrgScopedClient(user.organization.id);
   const diagnosticsPromise = readSetupDiagnostics(db, user.id);
@@ -139,10 +152,14 @@ export default async function IntegrationsPage({
   }
 
   /** Owner line for a workspace credential provisioned by ops. */
+  // Un dueño sin equipo técnico no sabe qué es «la API key de búsqueda»: lo que
+  // necesita saber es que esto lo activa Cortex y no él. El detalle técnico
+  // sigue ahí para quien administra, que es quien lo va a pedir.
   function opsOwner(connected: boolean, what: string): string {
-    return connected
-      ? 'La configuró el equipo técnico · la usa toda la organización'
-      : `Falta que el equipo técnico la habilite: ${what}`;
+    if (connected) return 'Activa para toda la empresa';
+    return isAdmin
+      ? `La activa el equipo de Cortex; pídesela · detalle: ${what}`
+      : 'La activa el equipo de Cortex; pídesela a quien administra la empresa';
   }
 
   // Tool counts per family, straight from the live registry.
@@ -235,7 +252,7 @@ export default async function IntegrationsPage({
       state: personalState('microsoft'),
       scope: 'personal',
       unlocks:
-        'Leer y buscar tu correo de Outlook, leer un hilo completo, dejar borradores y enviarlos, ver y crear eventos del calendario, y guardar en Brain Knowledge la correspondencia con clientes y proveedores.',
+        'Leer y buscar tu correo de Outlook, leer un hilo completo, dejar borradores y enviarlos, ver y crear eventos del calendario, y guardar en el cerebro la correspondencia con clientes y proveedores.',
       offline:
         'Sin correo ni calendario para quienes trabajan en Outlook: Cortex no ve nada de su día.',
       // The one thing this line has to make unmissable: nobody's mailbox is
@@ -245,7 +262,7 @@ export default async function IntegrationsPage({
         ? `La conectaste tú${microsoftScopes ? ` · ${microsoftScopes} permisos otorgados` : ''}`
         : microsoftConfigured
           ? 'Cada quien conecta su propio buzón. Nadie ve el correo de otro'
-          : 'Falta que el equipo técnico registre la aplicación en Azure',
+          : 'Todavía no está habilitado en tu cuenta de Cortex; pídeselo al equipo de Cortex',
       connectHref:
         !mine.microsoft && microsoftConfigured
           ? '/api/integrations/microsoft?preset=all'
@@ -259,16 +276,16 @@ export default async function IntegrationsPage({
       state: waOn ? 'workspace' : 'disconnected',
       scope: 'company',
       unlocks:
-        'Escribirle a Cortex por mensaje directo desde tu teléfono, y guardar en Brain Knowledge los grupos que elijas, con quién dijo qué y cuándo.',
+        'Escribirle a Cortex por mensaje directo desde tu teléfono, y guardar en el cerebro los grupos que elijas, con quién dijo qué y cuándo.',
       offline:
-        'Nadie puede conversar con Cortex por WhatsApp y no entra nada de los grupos a Brain Knowledge.',
+        'Nadie puede conversar con Cortex por WhatsApp y no entra nada de los grupos al cerebro.',
       owner: waOn
         ? myWaLink
           ? 'Número de la empresa en línea · el tuyo ya está vinculado'
           : 'Número de la empresa en línea · falta vincular el tuyo para que te conteste'
         : waStatus === 'pairing'
-          ? 'Hay un código de emparejamiento esperando a que alguien lo escanee'
-          : 'Falta emparejar el número dedicado de la empresa',
+          ? 'Alguien está vinculando el número de la empresa ahora mismo'
+          : 'Falta vincular el número dedicado de la empresa: se hace desde esta tarjeta, con QR o con el número',
       connectHref: '/integrations/whatsapp',
       ctaLabel: waOn ? 'Configurar' : 'Emparejar',
       footNote: waOn
@@ -283,12 +300,10 @@ export default async function IntegrationsPage({
       state: hubspotWorkspace ? 'workspace' : personalState('hubspot'),
       scope: hubspotWorkspace ? 'company' : 'personal',
       unlocks:
-        'Negocios, empresas, contactos, salud del pipeline y actividad reciente: el sistema de registro comercial.',
+        'Negocios, empresas, contactos, cómo va el embudo de ventas y la actividad reciente.',
       offline:
-        'Sin respuestas de negocios, pipeline ni contactos: todo el lado comercial queda a oscuras.',
-      owner: hubspotWorkspace
-        ? 'La configuró el equipo técnico · una sola app privada para toda la organización'
-        : personalOwner('hubspot'),
+        'Sin respuestas de negocios, embudo ni contactos: todo el lado comercial queda a oscuras.',
+      owner: hubspotWorkspace ? 'Activa para toda la empresa' : personalOwner('hubspot'),
       connectHref: !hubspotWorkspace && !mine.hubspot ? '/api/integrations/hubspot' : undefined,
     },
     {
@@ -317,17 +332,17 @@ export default async function IntegrationsPage({
     },
     {
       key: 'brain',
-      name: 'Cortex Brain',
+      name: 'El cerebro de Cortex',
       icon: Brain,
       families: ['kb', 'pipeline', 'schedule', 'inbox', 'security'],
       state: brainOn ? 'workspace' : 'disconnected',
       scope: 'company',
       unlocks:
-        'Búsqueda y memoria en Brain Knowledge, pipelines, rutinas y el resumen del correo: el razonamiento propio de Cortex.',
-      offline: 'Se para el corazón: sin Brain Knowledge, sin pipelines y sin rutinas.',
+        'Buscar y recordar lo que guardas, los flujos, las rutinas y el resumen del correo: el razonamiento propio de Cortex.',
+      offline: 'Se para todo: sin cerebro, sin flujos y sin rutinas.',
       owner:
         brainOn && !semanticSearchOn
-          ? 'La configuró el equipo técnico · sin llave de embeddings, así que Brain Knowledge solo busca por palabras'
+          ? 'Activo · por ahora el cerebro busca por palabras, no por significado'
           : opsOwner(brainOn, 'falta la API key del modelo'),
     },
     {
@@ -350,7 +365,7 @@ export default async function IntegrationsPage({
       state: slackOn ? 'workspace' : 'disconnected',
       scope: 'company',
       unlocks:
-        'Publicar avances, reportes y resultados de rutinas directo en los canales del equipo.',
+        'Publicar avances, informes y resultados de rutinas directo en los canales del equipo.',
       offline: 'Los resultados se quedan en la app y en el correo: nada llega a Slack.',
       owner: opsOwner(slackOn, 'todavía no está aprovisionado el token del bot'),
     },
@@ -366,7 +381,7 @@ export default async function IntegrationsPage({
         'Sin visibilidad de repos, issues ni PRs: las preguntas de ingeniería quedan sin respuesta.',
       owner: mine.github
         ? personalOwner('github')
-        : `${personalOwner('github')} · la habilita el equipo técnico`,
+        : `${personalOwner('github')} · la habilita el equipo de Cortex`,
     },
     {
       key: 'linear',
@@ -380,7 +395,7 @@ export default async function IntegrationsPage({
         'Sin respuestas de roadmap ni de carga: Cortex no ve qué está construyendo el equipo.',
       owner: mine.linear
         ? personalOwner('linear')
-        : `${personalOwner('linear')} · la habilita el equipo técnico`,
+        : `${personalOwner('linear')} · la habilita el equipo de Cortex`,
     },
   ];
 
@@ -428,9 +443,9 @@ export default async function IntegrationsPage({
   /** The register header: what the organisation holds, counted in mono. */
   const stats = [
     {
-      label: 'Sistemas configurados',
+      label: 'Conectados',
       value: `${connected.length}/${providers.length}`,
-      sub: 'con credencial o sesión registrada',
+      sub: 'sistemas que Cortex ya puede usar',
       icon: CircleCheck,
       tone: 'text-emerald',
     },
@@ -442,16 +457,19 @@ export default async function IntegrationsPage({
       tone: missing.length > 0 ? 'text-amber' : 'text-emerald',
     },
     {
-      label: 'Herramientas propias',
+      label: 'Cosas que sabe hacer',
       value: String(totalToolCount),
-      sub: 'disponibles para Cortex',
+      sub: 'acciones disponibles para Cortex',
       icon: Wrench,
       tone: 'text-ink',
     },
     {
-      label: 'Herramientas que conectaste',
+      label: 'Extras que agregaste',
       value: String(totalMcpTools),
-      sub: `${mcpServers.length} ${mcpServers.length === 1 ? 'servidor MCP externo' : 'servidores MCP externos'}`,
+      sub:
+        mcpServers.length === 0
+          ? 'ninguno (es opcional)'
+          : `desde ${mcpServers.length} ${mcpServers.length === 1 ? 'conexión avanzada' : 'conexiones avanzadas'}`,
       icon: Boxes,
       tone: 'text-ink',
     },
@@ -460,20 +478,26 @@ export default async function IntegrationsPage({
   return (
     <>
       <PageHeader
-        title="Integraciones"
-        subtitle={`Fuentes y herramientas de ${user.organization.name}: qué está configurado, quién puede usarlo y qué falta comprobar.`}
+        title="Datos y conexiones"
+        subtitle={`De dónde saca Cortex lo que sabe de ${user.organization.name}: conecta tu correo, tu contabilidad o una carpeta, y Cortex trabaja con eso. Lo que no esté conectado, no lo ve.`}
         icon={<Plug className="h-5 w-5" />}
         actions={
-          <Link
-            href={workspaceHref(user.organization.id, '/activations')}
-            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            Ver activaciones
-          </Link>
+          <>
+            <Link
+              href={`/chat?prompt=${encodeURIComponent('Ayúdame a decidir qué conectar primero para que me sirvas en mi empresa. Pregúntame dónde tengo hoy la información (correo, Excel, programa contable, WhatsApp).')}`}
+              className="inline-flex min-h-10 items-center rounded-pill bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              ¿Qué conecto primero?
+            </Link>
+            <Link
+              href={workspaceHref(user.organization.id, '/activations')}
+              className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-5 py-2 text-sm font-bold text-ink transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              Reglas sobre tus datos
+            </Link>
+          </>
         }
       />
-
-      <DirectionPair active="outbound" />
 
       <SourceIntake workspaceId={user.organization.id} />
 
@@ -494,13 +518,13 @@ export default async function IntegrationsPage({
 
       {sp.connected && (
         <div className="mb-4 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-xs text-emerald">
-          Se conectó {sp.connected}.
+          Listo: quedó conectado {CONNECTED_NAME[sp.connected] ?? 'el sistema'}.
         </div>
       )}
       {sp.error && (
         <div className="mb-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
           {quickbooksErrorMessage(sp.error) ??
-            `No se pudo conectar: ${sp.error}. Inténtalo otra vez desde la tarjeta.`}
+            'No se pudo terminar la conexión. Inténtalo otra vez desde la tarjeta; si se repite, cuéntaselo a Cortex en el chat.'}
         </div>
       )}
 
@@ -524,156 +548,6 @@ export default async function IntegrationsPage({
             </div>
           ))}
         </div>
-      </Panel>
-
-      {/* THE PANEL THAT WOULD HAVE CAUGHT IT ON DAY ONE.
-          A single document once burned an entire embedding account, and nobody
-          found out until Brain Knowledge stopped indexing. Nothing here is a
-          billing system — it is the four facts that would have made somebody
-          ask a question: which model is running, whether that model has any
-          free allowance at all, how much has been embedded this month, and
-          which document accounted for most of it. */}
-      <Panel className="mb-5 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-2.5">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
-              <Gauge className="h-5 w-5" />
-            </span>
-            <div>
-              <div className="text-sm font-bold text-ink">Embeddings de Brain Knowledge</div>
-              <p className="mt-0.5 text-xs leading-snug text-ink-muted">
-                {embeddingOk ? (
-                  <>
-                    <span className="font-semibold text-ink">{embedding.provider.label}</span> ·{' '}
-                    <span className="font-mono text-micro">{embedding.model}</span> · 1024
-                    dimensiones
-                  </>
-                ) : (
-                  'La configuración de embeddings no es válida, así que no se está indexando nada.'
-                )}
-              </p>
-            </div>
-          </div>
-          <span
-            className={clsx(
-              'rounded-pill border px-2.5 py-0.5 text-micro font-semibold',
-              semanticSearchOn
-                ? 'border-emerald/40 bg-emerald-soft text-emerald'
-                : 'border-amber/40 bg-amber-soft text-amber',
-            )}
-          >
-            {semanticSearchOn ? 'Indexando por significado' : 'Solo por palabras'}
-          </span>
-        </div>
-
-        {!embeddingOk && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro leading-snug text-rose">
-            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-            <span>{embedding.error}</span>
-          </p>
-        )}
-
-        {/* The lesson of the incident, stated as a rule the screen enforces: a
-            model without a free allowance is a decision, not a default, and it
-            should be visible before the credits run out rather than after. */}
-        {embeddingOk && embedding.facts && embedding.facts.freeTierTokens === 0 && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
-            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-            <span>
-              <span className="font-semibold">Este modelo no tiene tokens gratis: </span>
-              se paga desde el primero. {embedding.facts.note} Si no fue una decisión deliberada,
-              vuelve a <span className="font-mono">voyage-4-lite</span>, que trae 200 millones
-              gratis y las mismas 1024 dimensiones.
-            </span>
-          </p>
-        )}
-        {embeddingOk && !embedding.facts && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
-            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-            <span>
-              No conocemos <span className="font-mono">{embedding.model}</span>, así que no podemos
-              decir qué cuesta ni si tiene nivel gratuito. Verifícalo con {embedding.provider.label}{' '}
-              antes de indexar un corpus grande.
-            </span>
-          </p>
-        )}
-        {embeddingOk && !embedding.keyConfigured && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
-            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-            <span>
-              Falta <span className="font-mono">{embedding.apiKeyEnv}</span>. Nada se pierde: los
-              documentos se guardan, se buscan por palabras y quedan en cola sin vector. En cuanto
-              exista la llave, el trabajo de reindexado los completa solo.
-            </span>
-          </p>
-        )}
-
-        <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-4">
-          <div className="bg-surface p-3">
-            <span className="field-label">Tokens embebidos · 30 días</span>
-            <div className="stat-num mt-1 text-xl leading-none text-ink">
-              {spend.tokens.toLocaleString('es-CO')}
-            </div>
-            <div className="mt-1 text-micro leading-snug text-ink-faint">
-              {spend.anyEstimated ? 'incluye estimados nuestros' : 'según el proveedor'}
-            </div>
-          </div>
-          <div className="bg-surface p-3">
-            <span className="field-label">Costo aproximado</span>
-            <div className="stat-num mt-1 text-xl leading-none text-ink">
-              {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
-                ? `US$${((spend.tokens / 1_000_000) * embedding.facts.pricePerMillionTokensUsd).toFixed(4)}`
-                : '—'}
-            </div>
-            <div className="mt-1 text-micro leading-snug text-ink-faint">
-              {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
-                ? `US$${embedding.facts.pricePerMillionTokensUsd}/millón · precio verificado el ${PRICES_CHECKED_ON}`
-                : 'el proveedor no publica precio por token'}
-            </div>
-          </div>
-          <div className="bg-surface p-3">
-            <span className="field-label">Fragmentos</span>
-            <div className="stat-num mt-1 text-xl leading-none text-ink">
-              {spend.texts.toLocaleString('es-CO')}
-            </div>
-            <div className="mt-1 text-micro leading-snug text-ink-faint">
-              en {spend.requests.toLocaleString('es-CO')}{' '}
-              {spend.requests === 1 ? 'llamada' : 'llamadas'}
-            </div>
-          </div>
-          <div className="bg-surface p-3">
-            <span className="field-label">Modelos usados</span>
-            <div className="stat-num mt-1 text-xl leading-none text-ink">
-              {spend.models.length || '—'}
-            </div>
-            <div className="mt-1 line-clamp-2 text-micro leading-snug text-ink-faint">
-              {spend.models.length > 1
-                ? 'hubo un cambio de modelo; se está reindexando'
-                : (spend.models[0] ?? 'nada embebido en el periodo')}
-            </div>
-          </div>
-        </div>
-
-        {spend.topDocuments.length > 0 && (
-          <div className="mt-3">
-            <span className="field-label">Lo que más se embebió</span>
-            <ul className="mt-1.5 space-y-1">
-              {spend.topDocuments.map((d) => (
-                <li
-                  key={d.documentId ?? 'sin-documento'}
-                  className="flex items-baseline justify-between gap-3 text-micro"
-                >
-                  <span className="truncate text-ink-muted">
-                    {d.title ?? (d.documentId ? 'Documento eliminado' : 'Sin documento')}
-                  </span>
-                  <span className="shrink-0 font-mono text-micro text-ink-faint">
-                    {d.tokens.toLocaleString('es-CO')} tokens · {d.texts} fragmentos
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </Panel>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -764,73 +638,256 @@ export default async function IntegrationsPage({
         })}
       </div>
 
-      <section className="mt-5 rounded-xl border border-primary/25 bg-primary-soft p-5">
-        <h2 className="text-lg font-semibold">Conecta el sistema de tu empresa</h2>
-        <p className="mt-2 max-w-2xl text-sm text-ink-muted">
-          ¿Tu ERP, inventario o sistema de pedidos tiene una API? Comparte su documentación y
-          prepara las herramientas que Cortex podrá usar en esta empresa.
+      <section className="mt-5 rounded-card border border-primary/25 bg-primary-soft p-5 sm:p-6">
+        <h2 className="text-lg font-extrabold tracking-tight text-ink">
+          ¿Usas otro programa que no está aquí?
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
+          Inventario, pedidos, un ERP propio: cuéntale a Cortex cuál es y te dice cómo traerlo. Si
+          ese programa tiene una API, quien lo maneje puede conectarla con su documentación.
         </p>
-        <a
-          className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white"
-          href={workspaceHref(user.organization.id, '/tools#custom-tools')}
-        >
-          Conectar una API propia →
-        </a>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href={`/chat?prompt=${encodeURIComponent('Quiero conectar otro programa que uso en mi empresa: ')}`}
+            className="inline-flex min-h-10 items-center rounded-pill bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-strong"
+          >
+            Contárselo a Cortex
+          </Link>
+          <Link
+            href={workspaceHref(user.organization.id, '/tools#custom-tools')}
+            className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-5 py-2 text-sm font-bold text-ink transition-colors hover:bg-surface-2"
+          >
+            Conectar una API (técnico)
+          </Link>
+        </div>
       </section>
+
+      <div className="mt-5">
+        <DirectionPair active="outbound" />
+      </div>
 
       {/* Advanced: external MCP servers are just another inbound source of
           tools — same direction as an integration, so they live here. */}
-      <Panel className="mt-5 scroll-mt-5 p-5" id="mcp">
-        <div className="flex flex-wrap items-start gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-surface-2 text-ink-muted">
-            <Server className="h-4 w-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="field-label">Avanzado · solo tu cuenta</div>
-            <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">
-              Herramientas extra que le conectas a Cortex
-            </h2>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
-              Apunta Cortex a tu propio servidor de Model Context Protocol —Notion, el servidor de
-              un proveedor, algo que tú mismo alojes— y sus herramientas se suman a la lista de
-              arriba, solo para tu cuenta. Casi nadie necesita esto.
-            </p>
-            <p className="mt-1 text-micro text-ink-faint">
-              Hasta <span className="tabular">{MAX_MCP_SERVERS}</span> servidores y{' '}
-              <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas en total. ¿Lo que buscas
-              es usar Cortex <em>desde</em> Claude?{' '}
-              <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
-                Esa es la otra página
-              </Link>
-              .
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 border-t border-border pt-4">
-          <McpServerList servers={mcpServers} />
-
-          {atServerCapacity && (
-            <p className="mt-4 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
-              Llegaste al tope de <span className="tabular">{MAX_MCP_SERVERS}</span> servidores.
-              Elimina uno de arriba para agregar otro.
-            </p>
-          )}
-          {atToolCapacity && (
-            <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
-              Llegaste al tope de <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas.
-              Cortex deja de sincronizar nuevas hasta que elimines un servidor de arriba.
-            </p>
-          )}
-
-          {!atServerCapacity && (
-            <div className="mt-4 border-t border-border pt-4">
-              <h3 className="text-xs font-semibold text-ink">Agregar un servidor</h3>
-              <AddMcpServerForm disabled={atServerCapacity} />
+      <details className="group mt-5 scroll-mt-5" id="mcp" open={mcpServers.length > 0}>
+        <summary className="cursor-pointer list-none rounded-card border border-border bg-surface px-4 py-3 text-sm font-semibold text-ink-muted shadow-card hover:text-ink [&::-webkit-details-marker]:hidden">
+          Avanzado: conectar herramientas externas (servidores MCP)
+          <span className="ml-1 text-ink-faint group-open:hidden">(casi nadie lo necesita)</span>
+        </summary>
+        <Panel className="mt-3 p-5">
+          <div className="flex flex-wrap items-start gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-surface-2 text-ink-muted">
+              <Server className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="field-label">Avanzado · solo tu cuenta</div>
+              <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">
+                Herramientas extra que le conectas a Cortex
+              </h2>
+              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
+                Para equipos técnicos: apunta Cortex a un servidor MCP (Model Context Protocol)
+                —Notion, el servidor de un proveedor, algo que tú mismo alojes— y sus herramientas
+                se suman a las de arriba, solo para tu cuenta.
+              </p>
+              <p className="mt-1 text-micro text-ink-faint">
+                Hasta <span className="tabular">{MAX_MCP_SERVERS}</span> servidores y{' '}
+                <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas en total. ¿Lo que
+                buscas es preguntarle a Cortex <em>desde</em> Claude o ChatGPT?{' '}
+                <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
+                  Esa es la otra página
+                </Link>
+                .
+              </p>
             </div>
-          )}
-        </div>
-      </Panel>
+          </div>
+
+          <div className="mt-4 border-t border-border pt-4">
+            <McpServerList servers={mcpServers} />
+
+            {atServerCapacity && (
+              <p className="mt-4 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
+                Llegaste al tope de <span className="tabular">{MAX_MCP_SERVERS}</span> servidores.
+                Elimina uno de arriba para agregar otro.
+              </p>
+            )}
+            {atToolCapacity && (
+              <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
+                Llegaste al tope de <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas.
+                Cortex deja de sincronizar nuevas hasta que elimines un servidor de arriba.
+              </p>
+            )}
+
+            {!atServerCapacity && (
+              <div className="mt-4 border-t border-border pt-4">
+                <h3 className="text-xs font-semibold text-ink">Agregar un servidor</h3>
+                <AddMcpServerForm disabled={atServerCapacity} />
+              </div>
+            )}
+          </div>
+        </Panel>
+      </details>
+      {/* THE PANEL THAT WOULD HAVE CAUGHT IT ON DAY ONE.
+          A single document once burned an entire embedding account, and nobody
+          found out until Brain Knowledge stopped indexing. Nothing here is a
+          billing system — it is the four facts that would have made somebody
+          ask a question: which model is running, whether that model has any
+          free allowance at all, how much has been embedded this month, and
+          which document accounted for most of it. */}
+      {/* Telemetría de operación: útil para quien administra, ruido para los
+          demás. Plegada y al final, nunca entre el título y las conexiones. */}
+      {isAdmin && (
+        <details className="group mt-5">
+          <summary className="cursor-pointer list-none rounded-card border border-border bg-surface px-4 py-3 text-sm font-semibold text-ink-muted shadow-card hover:text-ink [&::-webkit-details-marker]:hidden">
+            Detalles técnicos del cerebro · sólo administradores
+            <span className="ml-1 text-ink-faint group-open:hidden">(mostrar)</span>
+          </summary>
+          <div className="mt-3">
+            <Panel className="p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
+                    <Gauge className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <div className="text-sm font-bold text-ink">
+                      Indexado del cerebro (embeddings)
+                    </div>
+                    <p className="mt-0.5 text-xs leading-snug text-ink-muted">
+                      {embeddingOk ? (
+                        <>
+                          <span className="font-semibold text-ink">{embedding.provider.label}</span>{' '}
+                          · <span className="font-mono text-micro">{embedding.model}</span> · 1024
+                          dimensiones
+                        </>
+                      ) : (
+                        'La configuración de embeddings no es válida, así que no se está indexando nada.'
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={clsx(
+                    'rounded-pill border px-2.5 py-0.5 text-micro font-semibold',
+                    semanticSearchOn
+                      ? 'border-emerald/40 bg-emerald-soft text-emerald'
+                      : 'border-amber/40 bg-amber-soft text-amber',
+                  )}
+                >
+                  {semanticSearchOn ? 'Indexando por significado' : 'Solo por palabras'}
+                </span>
+              </div>
+
+              {!embeddingOk && (
+                <p className="mt-3 flex items-start gap-1.5 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro leading-snug text-rose">
+                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+                  <span>{embedding.error}</span>
+                </p>
+              )}
+
+              {/* The lesson of the incident, stated as a rule the screen enforces: a
+                model without a free allowance is a decision, not a default, and it
+                should be visible before the credits run out rather than after. */}
+              {embeddingOk && embedding.facts && embedding.facts.freeTierTokens === 0 && (
+                <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
+                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+                  <span>
+                    <span className="font-semibold">Este modelo no tiene tokens gratis: </span>
+                    se paga desde el primero. {embedding.facts.note} Si no fue una decisión
+                    deliberada, vuelve a <span className="font-mono">voyage-4-lite</span>, que trae
+                    200 millones gratis y las mismas 1024 dimensiones.
+                  </span>
+                </p>
+              )}
+              {embeddingOk && !embedding.facts && (
+                <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
+                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+                  <span>
+                    No conocemos <span className="font-mono">{embedding.model}</span>, así que no
+                    podemos decir qué cuesta ni si tiene nivel gratuito. Verifícalo con{' '}
+                    {embedding.provider.label} antes de indexar un corpus grande.
+                  </span>
+                </p>
+              )}
+              {embeddingOk && !embedding.keyConfigured && (
+                <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
+                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+                  <span>
+                    Falta <span className="font-mono">{embedding.apiKeyEnv}</span>. Nada se pierde:
+                    los documentos se guardan, se buscan por palabras y quedan en cola sin vector.
+                    En cuanto exista la llave, el trabajo de reindexado los completa solo.
+                  </span>
+                </p>
+              )}
+
+              <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-4">
+                <div className="bg-surface p-3">
+                  <span className="field-label">Tokens embebidos · 30 días</span>
+                  <div className="stat-num mt-1 text-xl leading-none text-ink">
+                    {spend.tokens.toLocaleString('es-CO')}
+                  </div>
+                  <div className="mt-1 text-micro leading-snug text-ink-faint">
+                    {spend.anyEstimated ? 'incluye estimados nuestros' : 'según el proveedor'}
+                  </div>
+                </div>
+                <div className="bg-surface p-3">
+                  <span className="field-label">Costo aproximado</span>
+                  <div className="stat-num mt-1 text-xl leading-none text-ink">
+                    {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
+                      ? `US$${((spend.tokens / 1_000_000) * embedding.facts.pricePerMillionTokensUsd).toFixed(4)}`
+                      : '—'}
+                  </div>
+                  <div className="mt-1 text-micro leading-snug text-ink-faint">
+                    {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
+                      ? `US$${embedding.facts.pricePerMillionTokensUsd}/millón · precio verificado el ${PRICES_CHECKED_ON}`
+                      : 'el proveedor no publica precio por token'}
+                  </div>
+                </div>
+                <div className="bg-surface p-3">
+                  <span className="field-label">Fragmentos</span>
+                  <div className="stat-num mt-1 text-xl leading-none text-ink">
+                    {spend.texts.toLocaleString('es-CO')}
+                  </div>
+                  <div className="mt-1 text-micro leading-snug text-ink-faint">
+                    en {spend.requests.toLocaleString('es-CO')}{' '}
+                    {spend.requests === 1 ? 'llamada' : 'llamadas'}
+                  </div>
+                </div>
+                <div className="bg-surface p-3">
+                  <span className="field-label">Modelos usados</span>
+                  <div className="stat-num mt-1 text-xl leading-none text-ink">
+                    {spend.models.length || '—'}
+                  </div>
+                  <div className="mt-1 line-clamp-2 text-micro leading-snug text-ink-faint">
+                    {spend.models.length > 1
+                      ? 'hubo un cambio de modelo; se está reindexando'
+                      : (spend.models[0] ?? 'nada embebido en el periodo')}
+                  </div>
+                </div>
+              </div>
+
+              {spend.topDocuments.length > 0 && (
+                <div className="mt-3">
+                  <span className="field-label">Lo que más se embebió</span>
+                  <ul className="mt-1.5 space-y-1">
+                    {spend.topDocuments.map((d) => (
+                      <li
+                        key={d.documentId ?? 'sin-documento'}
+                        className="flex items-baseline justify-between gap-3 text-micro"
+                      >
+                        <span className="truncate text-ink-muted">
+                          {d.title ?? (d.documentId ? 'Documento eliminado' : 'Sin documento')}
+                        </span>
+                        <span className="shrink-0 font-mono text-micro text-ink-faint">
+                          {d.tokens.toLocaleString('es-CO')} tokens · {d.texts} fragmentos
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Panel>
+          </div>
+        </details>
+      )}
     </>
   );
 }

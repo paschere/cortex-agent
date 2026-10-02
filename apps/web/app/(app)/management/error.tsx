@@ -5,8 +5,8 @@ export default function ManagementError({ reset }: { reset: () => void }) {
     <div role="alert" className="space-y-4 p-6">
       <h1 className="text-xl font-bold">Gerencia no está disponible</h1>
       <p>
-        No pudimos consultar los asuntos. Comprueba la conexión y que la migración 0130 esté
-        aplicada.
+        No pudimos consultar los asuntos ahora mismo. Revisa tu conexión e inténtalo de nuevo; si
+        sigue igual, cuéntaselo a Cortex en el chat para que quede registrado.
       </p>
       <Button onClick={reset}>Intentar de nuevo</Button>
     </div>

@@ -145,8 +145,8 @@ export function SourceClassification({
             <FileSearch className="mx-auto h-5 w-5 text-ink-faint" aria-hidden />
             <p className="mt-2 text-sm font-semibold text-ink">No hay documentos extraídos</p>
             <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-ink-muted">
-              Aquí aparecen documentos ya leídos por Cortex. Subirlos al Feed por sí solo no los
-              clasifica ni los incluye en Finanzas.
+              Aquí aparecen documentos ya leídos por Cortex. Subirlos a la bandeja por sí solo no
+              los clasifica ni los incluye en Finanzas.
             </p>
             <Link
               href={extractionHref}

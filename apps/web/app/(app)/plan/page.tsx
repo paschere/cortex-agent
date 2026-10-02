@@ -124,7 +124,8 @@ function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
       {state === 'blocked' && meter === 'answers' && (
         <p className="mt-2 text-xs leading-relaxed text-rose">
           Se acabó el margen. Cortex no empieza respuestas nuevas, pero todo lo que ya está adentro
-          se sigue leyendo y buscando. Amplía el plan y vuelve a responder de inmediato.
+          se sigue leyendo y buscando. Elige un plan más grande abajo («Quiero …») y vuelve a
+          responder de inmediato.
         </p>
       )}
       {state === 'blocked' && meter === 'documents' && (
@@ -453,7 +454,7 @@ export default async function PlanPage({
                       being told what the smallest invoice on this plan is. */}
                   <div className="tabular mt-1 text-xs text-ink-faint">
                     {other.retainerCop != null
-                      ? 'Retainer. Sin tope de respuestas ni de personas.'
+                      ? 'Tarifa mensual fija. Sin tope de respuestas ni de personas.'
                       : other.seatsMaximum !== null
                         ? `Hasta ${count(other.seatsMaximum)} personas`
                         : other.billableSeatsMinimum > 1
@@ -473,8 +474,8 @@ export default async function PlanPage({
       {usage.status !== 'active' && (
         <p className="text-xs text-rose">
           Tu suscripción está marcada como{' '}
-          {usage.status === 'past_due' ? 'pendiente de pago' : 'cancelada'}. Escríbenos antes de que
-          afecte al equipo.
+          {usage.status === 'past_due' ? 'pendiente de pago' : 'cancelada'}. Avísale al equipo de
+          Cortex (con «Quiero …» en el plan que quieras) antes de que afecte al equipo.
         </p>
       )}
     </div>

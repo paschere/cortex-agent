@@ -95,7 +95,7 @@ export const KIND_COPY: Record<
   space: {
     noun: 'Espacio de documentos',
     verb: 'Crear el espacio',
-    where: 'Brain Knowledge',
+    where: 'Cerebro',
     href: '/kb',
     blurb: 'Un sitio para guardar los papeles de este tema y poder citarlos después.',
   },

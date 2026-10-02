@@ -96,6 +96,13 @@ export function ViewWriterProvider({
         return res;
       },
     };
+  } else if (target.kind === 'demo') {
+    // El escaparate de desarrollo: todo «sale bien» sin tocar nada.
+    const fake = async (): Promise<Result> => {
+      await new Promise((r) => setTimeout(r, 400));
+      return { ok: true, message: 'Hecho (de mentira).' };
+    };
+    writer = { edit: fake, act: fake };
   }
   return <WriterContext.Provider value={writer}>{children}</WriterContext.Provider>;
 }

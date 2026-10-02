@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { X } from 'lucide-react';
 import { createContext, useContext } from 'react';
 import { EditableValue, RowActions } from '../view-writes';
+import { useBrandScope } from './brand';
 import { formatWhen } from './theme';
 
 /**
@@ -78,21 +79,27 @@ export function RecordDrawer({
   const open = Boolean(block && rowId);
   const row = block?.record && rowId ? block.record.rows[rowId] : undefined;
   const actions: ComputedAction[] = block?.actions ?? [];
+  // La ficha se monta en un portal, fuera del envoltorio de la vista: lleva
+  // su propia copia de la marca para que sus botones y acentos sean los mismos.
+  const scope = useBrandScope();
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 animate-veil bg-canvas/60 backdrop-blur-[2px]" />
         <Dialog.Content
+          style={scope.style}
           className={clsx(
+            scope.className,
             'fixed z-50 flex flex-col overflow-hidden border border-border bg-surface shadow-pop outline-none animate-veil',
             // Teléfono: hoja desde abajo. Desde sm: panel a la derecha.
             'inset-x-0 bottom-0 max-h-[88dvh] rounded-t-card',
             'sm:inset-x-auto sm:inset-y-3 sm:right-3 sm:max-h-none sm:w-[min(26rem,calc(100vw-1.5rem))] sm:rounded-card',
           )}
         >
-          <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="relative flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+            <span aria-hidden className="view-brand-stripe absolute inset-x-0 top-0 h-1" />
             <div className="min-w-0">
-              <Dialog.Title className="truncate text-base font-semibold text-ink">
+              <Dialog.Title className="truncate text-lg font-bold tracking-tight text-ink">
                 {row?.label ?? 'Fila'}
               </Dialog.Title>
               <Dialog.Description className="truncate text-micro text-ink-faint">

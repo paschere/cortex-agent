@@ -120,6 +120,12 @@ export default async function TeamActivityPage({
             <p className="mt-1 text-xs text-ink-muted">
               Cuando el equipo converse con Cortex o genere informes, aparecerán aquí.
             </p>
+            <Link
+              href="/team/activity"
+              className="mt-4 inline-flex min-h-9 items-center rounded-pill border border-border-strong bg-surface px-4 py-1.5 text-sm font-bold text-ink hover:bg-surface-2"
+            >
+              Quitar los filtros
+            </Link>
           </div>
         ) : (
           <ul className="divide-y divide-border">

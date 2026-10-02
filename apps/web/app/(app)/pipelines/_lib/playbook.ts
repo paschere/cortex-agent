@@ -133,7 +133,7 @@ export function renderPlaybook(opts: {
 
 const FAMILY_LABELS: Record<string, string> = {
   hubspot: 'HubSpot',
-  kb: 'Brain Knowledge',
+  kb: 'Cerebro',
   gmail: 'Gmail',
   gcal: 'Google Calendar',
   gsheets: 'Google Sheets',

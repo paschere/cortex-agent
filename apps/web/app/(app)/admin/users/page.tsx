@@ -51,8 +51,8 @@ const NO_MANAGER = '__nadie__';
 
 /** Roles as a person would name them, not as the column stores them. */
 const ROLE_LABEL: Record<Role, string> = {
-  org_admin: 'Admin de la organización',
-  team_admin: 'Admin de equipo',
+  org_admin: 'Administra la empresa',
+  team_admin: 'Lidera un equipo',
   member: 'Miembro',
 };
 
@@ -302,7 +302,7 @@ export default async function UsersPage() {
                 <tr className="text-left">
                   <th className="field-label px-4 py-2.5">Persona</th>
                   <th className="field-label px-4 py-2.5">Rol</th>
-                  <th className="field-label px-4 py-2.5 text-right">Llamadas · 7d</th>
+                  <th className="field-label px-4 py-2.5 text-right">Acciones · 7 días</th>
                   <th className="field-label px-4 py-2.5">Última actividad</th>
                   <th className="field-label px-4 py-2.5">Marcas</th>
                   <th className="field-label px-4 py-2.5">Ingresó</th>

@@ -95,7 +95,8 @@ function icon(name: string): typeof Brain {
  */
 const CORTEX_COPY = {
   title: '¿Qué resolvemos hoy?',
-  subtitle: 'Revisemos una prioridad, preparemos una decisión o avancemos un asunto de tu empresa.',
+  subtitle:
+    'Pregúntame por tu cartera, tus clientes o tus pendientes, o pídeme que haga algo por ti.',
 };
 
 const COPY: Record<string, { title: string; subtitle: string }> = { cortex: CORTEX_COPY };

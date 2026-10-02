@@ -161,7 +161,7 @@ export default async function CommitmentDetailPage({
                 href={`/kb?document=${c.source.documentId}`}
                 className="mt-3 inline-block text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                Abrir el documento en Brain Knowledge
+                Abrir el documento en el cerebro
               </Link>
             )}
             {row.confirmed_by && (

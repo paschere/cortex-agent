@@ -363,7 +363,7 @@ describe('lo que aprendió, y lo que no pudo aplicar solo', () => {
       proposedAt: at('2026-08-10T04:21:00-05:00'),
     });
     expect(lines.map((l) => l.text)).toEqual([
-      'Repasé cómo se está usando Brain Knowledge y ajusté tres fragmentos.',
+      'Repasé cómo se está usando el cerebro y ajusté tres fragmentos.',
       'Y te dejé una conclusión que no puedo aplicar solo.',
     ]);
     expect(lines.map((l) => l.attention)).toEqual([false, true]);

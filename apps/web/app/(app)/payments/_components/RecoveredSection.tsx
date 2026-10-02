@@ -46,13 +46,16 @@ export async function RecoveredSection({ organizationId }: { organizationId: str
     <Panel id="recuperado" className="scroll-mt-24 p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="field-label flex items-center gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5 text-emerald" aria-hidden /> Recuperado con Cortex
+          <h2 className="flex items-center gap-2.5 text-base font-bold text-ink-muted">
+            <span className="grid h-9 w-9 place-items-center rounded-sm bg-emerald-soft text-emerald">
+              <TrendingUp className="h-4 w-4" aria-hidden />
+            </span>
+            Recuperado con Cortex
+          </h2>
+          <p className="stat-num mt-3 text-2xl leading-none text-emerald sm:text-[2rem]">
+            {money(cop.month, 'COP')}
           </p>
-          <p className="mt-1.5 text-sm text-ink-muted">
-            <span className="tabular font-mono text-lg font-semibold text-emerald">
-              {money(cop.month, 'COP')}
-            </span>{' '}
+          <p className="mt-2 text-sm text-ink-muted">
             este mes ·{' '}
             <span className="tabular font-mono font-semibold text-ink">
               {money(cop.total, 'COP')}
@@ -84,7 +87,10 @@ export async function RecoveredSection({ organizationId }: { organizationId: str
         <p className="mt-4 text-sm text-ink-muted">
           Todavía no hay plata atribuible a Cortex. Aparece aquí cuando un pago llega después de un
           cobro enviado, un seguimiento de cobro en Gerencia o un aviso de mora, o cuando un
-          administrador anota lo recuperado al cerrar un asunto.
+          administrador anota lo recuperado al cerrar un asunto.{' '}
+          <Link href="/procesos" className="font-semibold text-primary hover:underline">
+            Activar el cobro de cartera
+          </Link>
         </p>
       ) : (
         <div className="mt-4 space-y-2">

@@ -6,9 +6,9 @@ import Link from 'next/link';
 const paths = [
   {
     title: 'Consultar un archivo ahora',
-    description: 'Súbelo al Feed para analizarlo sin convertirlo en memoria permanente.',
+    description: 'Súbelo a la bandeja para analizarlo sin convertirlo en memoria permanente.',
     scope: 'Solo tú · temporal',
-    action: 'Abrir Feed',
+    action: 'Abrir la bandeja',
     href: '/feed',
     icon: Inbox,
   },
@@ -16,7 +16,7 @@ const paths = [
     title: 'Guardar conocimiento de la empresa',
     description: 'Sube manuales, políticas y documentos que Cortex debe volver a encontrar.',
     scope: 'Empresa · persistente',
-    action: 'Abrir Brain Knowledge',
+    action: 'Abrir el cerebro',
     href: '/kb',
     icon: BookOpen,
   },

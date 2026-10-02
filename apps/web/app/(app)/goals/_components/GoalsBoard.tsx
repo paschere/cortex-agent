@@ -182,12 +182,8 @@ function History({ rows, live }: { rows: ReadingView[]; live: string | null }) {
       {rows.map((row) => (
         <li key={row.id} className="px-5 py-3">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="min-w-[9rem] text-sm font-semibold text-ink">
-              {row.periodLabel}
-            </span>
-            <span className="stat-num text-base font-semibold text-ink tabular">
-              {row.display}
-            </span>
+            <span className="min-w-[9rem] text-sm font-semibold text-ink">{row.periodLabel}</span>
+            <span className="stat-num text-base font-semibold text-ink tabular">{row.display}</span>
             <span className={chipClass(row.statusTone)}>{row.statusLabel}</span>
             <span className="text-xs text-ink-faint">
               objetivo de entonces: {row.judgedAgainst} · {row.sampleSize} dato(s)
@@ -291,9 +287,12 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
 
           {available.length === 0 ? (
             <p className="mt-2 rounded-card border border-amber/20 bg-amber-soft px-4 py-3 text-xs leading-relaxed text-amber">
-              Este espacio de trabajo todavía no puede calcular ninguna meta. Abajo está cada una
+              Tu empresa todavía no tiene los datos para calcular ninguna meta. Abajo está cada una
               con lo que le falta — y esa es toda la lista: una meta sin datos detrás es una casilla
-              vacía, y una casilla vacía resta más confianza de la que suma.
+              vacía, y una casilla vacía resta más confianza de la que suma.{' '}
+              <a href="/integrations" className="font-semibold underline">
+                Conectar de dónde salen los datos
+              </a>
             </p>
           ) : null}
 

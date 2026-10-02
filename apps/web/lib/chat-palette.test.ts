@@ -278,7 +278,7 @@ describe('dropDuplicateCommands', () => {
     // `/encargo` ya expande a «Investígame ».
     expect(expansions).not.toContain('Investígame ');
     // `/buscar` expande a otra frase más larga, así que kb.search se queda.
-    expect(expansions).toContain('Busca en Brain Knowledge ');
+    expect(expansions).toContain('Busca en el cerebro ');
   });
 
   it('deja intacto un grupo que falló', () => {

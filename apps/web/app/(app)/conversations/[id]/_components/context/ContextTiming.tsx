@@ -37,7 +37,7 @@ function ms(value: number): string {
 /** What each stage is called on screen. Unknown keys print themselves. */
 const STAGE_NAMES: Record<string, string> = {
   setup: 'Preparación',
-  retrieval: 'Brain Knowledge',
+  retrieval: 'Cerebro',
   selection: 'Elección de herramientas',
   history: 'Historial',
   prompt: 'Instrucciones',
@@ -74,7 +74,10 @@ export function ContextTiming({ latency }: { latency: LatencyView }) {
           </dd>
         </div>
         <div>
-          <dt className="text-ink-faint" title="La primera letra de la respuesta, no del razonamiento">
+          <dt
+            className="text-ink-faint"
+            title="La primera letra de la respuesta, no del razonamiento"
+          >
             Primera letra de la respuesta
           </dt>
           <dd className="font-semibold text-ink">
@@ -123,8 +126,9 @@ export function ContextTiming({ latency }: { latency: LatencyView }) {
           <>
             El turno dio <span className="tabular font-semibold text-ink">{latency.steps}</span>{' '}
             vueltas al modelo y llamó{' '}
-            <span className="tabular font-semibold text-ink">{latency.toolCalls}</span> herramientas,
-            que se llevaron <span className="tabular font-semibold text-ink">{ms(latency.toolMs)}</span>.
+            <span className="tabular font-semibold text-ink">{latency.toolCalls}</span>{' '}
+            herramientas, que se llevaron{' '}
+            <span className="tabular font-semibold text-ink">{ms(latency.toolMs)}</span>.
           </>
         ) : (
           <>Se resolvió en una sola vuelta al modelo, sin herramientas.</>

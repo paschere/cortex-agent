@@ -39,6 +39,8 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
     'Agrega una fila a una hoja compartida que otros pueden estar usando para reportes.',
   'schedule.create':
     'Crea una rutina DESATENDIDA que se ejecuta sola según su programación, sin que nadie la supervise. Sigue corriendo hasta que la pauses.',
+  'views.schedule_pulse':
+    'Crea una rutina DESATENDIDA que cada mañana reescribe el «Resumen de hoy» de la vista con sus propias cifras y te lo deja en la conversación de la rutina. Sólo escribe en esa vista; se pausa o se borra en /schedules.',
   'pipeline.create':
     'Guarda un procedimiento reutilizable que cualquiera del equipo puede ejecutar desde cualquier lado — un error en su diseño se repite en cada ejecución.',
   'pipeline.update':
@@ -59,7 +61,7 @@ const FAMILY_SYSTEM: Record<string, string> = {
   pipeline: 'la biblioteca de procedimientos compartida',
   presentations: 'la biblioteca de presentaciones para cliente',
   payroll: 'el servicio de nómina',
-  kb: 'Brain Knowledge, la memoria compartida',
+  kb: 'el cerebro, la memoria compartida',
   vehicles: 'el registro de vehículos y, a través de él, el RUNT y el SIMIT',
   browser: 'un portal de un tercero, con la credencial de la empresa',
   // Custom tools (migración 0067) llevan el id `custom.<slug>`. No podemos

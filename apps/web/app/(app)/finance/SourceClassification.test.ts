@@ -81,7 +81,7 @@ describe('SourceClassification', () => {
       }),
     );
     expect(html).toContain('documentos ya leídos por Cortex');
-    expect(html).toContain('Subirlos al Feed por sí solo no los clasifica');
+    expect(html).toContain('Subirlos a la bandeja por sí solo no los clasifica');
     expect(html).toContain('Solo un administrador del espacio');
   });
 });

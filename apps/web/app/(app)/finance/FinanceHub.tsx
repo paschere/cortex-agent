@@ -347,7 +347,7 @@ export function FinanceHub({ overview, links }: { overview: FinanceOverview; lin
               <NextStep
                 icon={<FileCheck2 />}
                 title="Consultar archivo temporal"
-                detail="Abre comprobantes y facturas recién cargados en Feed."
+                detail="Abre comprobantes y facturas recién cargados en la bandeja."
                 href={links.feed}
               />
               <NextStep

@@ -53,7 +53,7 @@ export function ViewZones({
   return (
     <Card title={block.title} source={block.source}>
       <div
-        className="flex flex-col gap-2 md:grid md:gap-2"
+        className="view-floor -mx-1 flex flex-col gap-2.5 rounded-sm border border-border/60 bg-surface-2/40 p-2.5 md:mx-0 md:grid md:gap-2.5 md:p-3"
         style={{
           gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
           gridTemplateRows: `repeat(${rows}, minmax(${ROW_REM}rem, auto))`,
@@ -85,24 +85,43 @@ export function ViewZones({
                 gridRow: `${place.y + 1} / span ${place.h}`,
               }}
               className={clsx(
-                'flex min-h-[4.25rem] flex-col rounded-sm border p-2 transition-colors duration-150',
+                'relative flex min-h-[4.25rem] flex-col overflow-hidden rounded-sm border p-2.5 shadow-card transition-colors duration-150',
                 loose
-                  ? 'border-dashed border-border bg-surface/40'
+                  ? 'border-dashed border-border-strong bg-surface/70 shadow-none'
                   : zone.count
-                    ? 'border-primary/30 bg-primary-soft/25'
-                    : 'border-border bg-surface-2/60',
+                    ? 'border-primary/30 bg-surface'
+                    : 'border-border bg-surface/80',
                 over === zone.key && 'border-primary bg-primary-soft/60 ring-2 ring-primary/40',
               )}
             >
-              <header className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-                <span className="flex min-w-0 items-center gap-1 text-xs font-semibold text-ink">
-                  <MapPin className="h-3 w-3 shrink-0 text-ink-faint" aria-hidden />
+              {!loose && zone.count > 0 && (
+                <span aria-hidden className="absolute inset-x-0 top-0 h-1 bg-primary" />
+              )}
+              <header className="mb-2 flex items-center justify-between gap-2 px-0.5">
+                <span className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-ink">
+                  <MapPin
+                    className={clsx(
+                      'h-3.5 w-3.5 shrink-0',
+                      zone.count && !loose ? 'text-primary' : 'text-ink-faint',
+                    )}
+                    aria-hidden
+                  />
                   <span className="truncate">{zone.label}</span>
                 </span>
-                <span className="tabular shrink-0 rounded-pill bg-surface px-1.5 font-mono text-micro text-ink-muted">
+                <span
+                  className={clsx(
+                    'tabular shrink-0 rounded-pill px-2 py-0.5 font-mono text-micro font-semibold',
+                    zone.count && !loose
+                      ? 'bg-primary-soft text-primary-ink'
+                      : 'bg-surface-2 text-ink-faint',
+                  )}
+                >
                   {zone.count}
                 </span>
               </header>
+              {zone.count === 0 && (
+                <p className="mt-auto px-0.5 text-micro text-ink-faint">Libre</p>
+              )}
               <ul className="flex flex-wrap gap-1.5">
                 {zone.cards.map((card) => (
                   <li
@@ -115,7 +134,7 @@ export function ViewZones({
                     onDragEnd={() => setDragging(null)}
                     title={card.details.map((d) => `${d.label}: ${d.value}`).join(' · ')}
                     className={clsx(
-                      'max-w-full rounded-pill border border-border bg-surface px-2.5 py-1 text-xs shadow-card',
+                      'max-w-full rounded-pill border border-border bg-surface-2/70 px-2.5 py-1 text-xs transition-colors hover:border-border-strong',
                       canDrag && 'cursor-grab active:cursor-grabbing',
                       dragging === card.id && 'opacity-50',
                     )}
@@ -124,12 +143,12 @@ export function ViewZones({
                       <button
                         type="button"
                         onClick={() => open(card.id)}
-                        className="font-medium text-ink underline-offset-4 hover:underline"
+                        className="tabular font-mono font-semibold text-ink underline-offset-4 hover:underline"
                       >
                         {card.label}
                       </button>
                     ) : (
-                      <span className="font-medium text-ink">{card.label}</span>
+                      <span className="tabular font-mono font-semibold text-ink">{card.label}</span>
                     )}
                     {card.details[0] && (
                       <span className="ml-1.5 text-micro text-ink-faint">

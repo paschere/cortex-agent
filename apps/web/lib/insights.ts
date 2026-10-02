@@ -219,7 +219,7 @@ async function readBilling(db: Db, today: string): Promise<BillingFact | null> {
     pendingExcluded: result.pendingExcluded,
     truncated: scanned(result.groups) >= SCAN_CAP,
     source: {
-      system: 'Documentos (Brain Knowledge)',
+      system: 'Documentos (cerebro)',
       readAt: stamp(new Date().toISOString()),
       method: `suma de facturas confirmadas en ${currency}, por mes de emisión`,
     },
@@ -270,7 +270,7 @@ async function readConcentration(db: Db, today: string): Promise<ConcentrationFa
     pendingExcluded: result.pendingExcluded,
     truncated: scanned(result.groups) >= SCAN_CAP,
     source: {
-      system: 'Documentos (Brain Knowledge)',
+      system: 'Documentos (cerebro)',
       readAt: stamp(new Date().toISOString()),
       method: `suma de facturas confirmadas en ${currency}, por cliente`,
     },

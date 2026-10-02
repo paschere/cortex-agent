@@ -696,3 +696,12 @@ body {
 @media (prefers-reduced-motion: reduce) { .launch-center .animate-spin { animation: none; } }
 .launch-center__mobile-nav { display: none; }
 @media (max-width: 800px) { .launch-center__nav { display: none; }.launch-center__mobile-nav { display: block; padding: 18px 24px; border-bottom: 1px solid rgb(var(--border)); }.launch-center__mobile-nav label { display: block; font-size: 11px; color: rgb(var(--ink-muted)); margin-bottom: 10px; }.launch-center__mobile-nav select { display: block; width: 100%; min-width: 0; padding: 12px 9px; border: 1px solid rgb(var(--border)); border-radius: 10px; font-size: 12px; background: rgb(var(--surface-2)); color: rgb(var(--ink)); }.launch-center__mobile-nav select:focus-visible { outline: 2px solid rgb(var(--primary)); outline-offset: 3px; } }
+/* Bienvenida del chat, al tamaño del lienzo de autoservicio (sólo se añade):
+   letra de lectura (14px), y una tercera idea impar ocupa la fila entera en vez
+   de quedar huérfana en la columna izquierda. */
+.conversation-starts__tabs button { font-size: 14px; font-weight: 600; }
+.conversation-starts > p { font-size: 14px; font-weight: 600; color: rgb(var(--ink)); }
+.conversation-starts__examples button { font-size: 14px; line-height: 1.55; }
+.conversation-starts__examples > button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.conversation-starts__footer { font-size: 12px; }
+@media (max-width: 760px) { .conversation-starts__tabs button { font-size: 13px; } }

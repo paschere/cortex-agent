@@ -2,10 +2,11 @@
 
 import type { ComputedBlock } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
+import { LayoutGrid } from 'lucide-react';
 import { useState } from 'react';
 import { RowActions } from '../view-writes';
 import { useRecordOpener } from './RecordDrawer';
-import { Card, TONE_SOFT, useViewTheme } from './theme';
+import { Card, EmptyState, StatusChip, useViewTheme } from './theme';
 
 /**
  * LA GALERÍA: TARJETAS EN REJILLA.
@@ -28,22 +29,42 @@ const COLS: Record<Gallery['columns'], string> = {
   4: 'sm:grid-cols-2 lg:grid-cols-4',
 };
 
+function initialsOf(text: string): string {
+  const words = text.trim().split(/\s+/);
+  // Una sola palabra («WXK-482», «Kenworth»): sus dos primeros caracteres.
+  if (words.length === 1) return (words[0] ?? '').slice(0, 2).toLocaleUpperCase('es-CO') || '·';
+  return (
+    words
+      .filter((w) => /^[\p{L}\p{N}]/u.test(w))
+      .slice(0, 2)
+      .map((w) => w.charAt(0).toLocaleUpperCase('es-CO'))
+      .join('') || '·'
+  );
+}
+
 export function GalleryBlock({ block }: { block: Gallery }) {
   const open = useRecordOpener(block.id, block.record);
   const { density } = useViewTheme();
+  // Si ninguna tarjeta trae foto, cada una lleva sus iniciales: una rejilla de
+  // huecos grises no es una galería.
+  const anyImage = block.cards.some((c) => c.image);
   return (
     <Card
       title={block.title}
       source={`${block.total} ${block.total === 1 ? 'fila' : 'filas'} · ${block.source}`}
     >
       {block.cards.length === 0 ? (
-        <p className="py-8 text-center text-sm text-ink-faint">Todavía no hay filas.</p>
+        <EmptyState
+          icon={<LayoutGrid className="h-5 w-5" aria-hidden />}
+          title="Todavía no hay filas"
+          hint="Cada fila nueva de la fuente aparece aquí como una tarjeta."
+        />
       ) : (
         <ul
           className={clsx(
             'grid grid-cols-1',
             COLS[block.columns],
-            density === 'compact' ? 'gap-2' : 'gap-3',
+            density === 'compact' ? 'gap-2.5' : 'gap-4',
           )}
         >
           {block.cards.map((card) => (
@@ -52,51 +73,64 @@ export function GalleryBlock({ block }: { block: Gallery }) {
               className={clsx(
                 'group relative flex flex-col overflow-hidden rounded-sm border border-border bg-surface shadow-card transition-all duration-150',
                 open &&
-                  'hover:-translate-y-px hover:border-border-strong focus-within:ring-2 focus-within:ring-primary/40',
+                  'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-pop focus-within:ring-2 focus-within:ring-primary/40',
               )}
             >
-              {card.image && <CardImage src={card.image} />}
-              <div
-                className={clsx('flex flex-1 flex-col', density === 'compact' ? 'p-2.5' : 'p-3')}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  {open ? (
-                    <button
-                      type="button"
-                      onClick={() => open(card.id)}
-                      className="min-w-0 text-left text-sm font-semibold text-ink outline-none after:absolute after:inset-0 after:content-['']"
-                    >
-                      {card.title}
-                    </button>
-                  ) : (
-                    <p className="min-w-0 text-sm font-semibold text-ink">{card.title}</p>
-                  )}
-                  {card.badge && (
+              {anyImage &&
+                (card.image ? (
+                  <CardImage src={card.image} />
+                ) : (
+                  <div
+                    aria-hidden
+                    className="grid aspect-[4/3] w-full place-items-center bg-primary-soft text-xl font-extrabold tracking-tight text-primary-ink"
+                  >
+                    {initialsOf(card.title)}
+                  </div>
+                ))}
+              <div className={clsx('flex flex-1 flex-col', density === 'compact' ? 'p-3' : 'p-4')}>
+                <div className="flex items-start gap-3">
+                  {!anyImage && (
                     <span
-                      className={clsx(
-                        'shrink-0 rounded-pill px-2 py-0.5 text-micro font-semibold',
-                        TONE_SOFT[card.badge.tone],
-                      )}
+                      aria-hidden
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-primary-soft text-xs font-extrabold tracking-tight text-primary-ink"
                     >
-                      {card.badge.label}
+                      {initialsOf(card.title)}
                     </span>
                   )}
+                  <div className="min-w-0 flex-1">
+                    {open ? (
+                      <button
+                        type="button"
+                        onClick={() => open(card.id)}
+                        className="block min-w-0 max-w-full truncate text-left text-sm font-bold text-ink outline-none after:absolute after:inset-0 after:content-['']"
+                      >
+                        {card.title}
+                      </button>
+                    ) : (
+                      <p className="min-w-0 truncate text-sm font-bold text-ink">{card.title}</p>
+                    )}
+                    {card.subtitle && (
+                      <p className="mt-0.5 truncate text-xs text-ink-muted">{card.subtitle}</p>
+                    )}
+                  </div>
                 </div>
-                {card.subtitle && (
-                  <p className="mt-0.5 truncate text-xs text-ink-muted">{card.subtitle}</p>
+                {card.badge && (
+                  <div className="mt-3">
+                    <StatusChip value={card.badge.label} tone={card.badge.tone} />
+                  </div>
                 )}
                 {card.meta.length > 0 && (
-                  <dl className="mt-2 space-y-0.5">
+                  <dl className="mt-3 space-y-1 border-t border-border/70 pt-3">
                     {card.meta.map((m) => (
-                      <div key={m.label} className="flex justify-between gap-2 text-micro">
-                        <dt className="text-ink-faint">{m.label}</dt>
-                        <dd className="tabular truncate font-mono text-ink-muted">{m.value}</dd>
+                      <div key={m.label} className="flex justify-between gap-3 text-micro">
+                        <dt className="shrink-0 text-ink-faint">{m.label}</dt>
+                        <dd className="tabular truncate font-mono text-ink">{m.value}</dd>
                       </div>
                     ))}
                   </dl>
                 )}
                 {block.actions.length > 0 && (
-                  <div className="relative z-10 mt-auto pt-2.5">
+                  <div className="relative z-10 mt-auto pt-3">
                     <RowActions
                       blockId={block.id}
                       actions={block.actions}
@@ -111,7 +145,7 @@ export function GalleryBlock({ block }: { block: Gallery }) {
         </ul>
       )}
       {block.total > block.cards.length && (
-        <p className="mt-2 text-micro text-ink-faint">
+        <p className="mt-3 text-micro text-ink-faint">
           Se muestran {block.cards.length} de {block.total}.
         </p>
       )}

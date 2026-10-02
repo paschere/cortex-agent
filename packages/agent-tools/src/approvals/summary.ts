@@ -83,7 +83,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   gcal_create_event: 'Crear evento en el calendario',
   gsheets_read_range: 'Leer hoja de cálculo',
   gsheets_append_row: 'Agregar fila a la hoja',
-  kb_search: 'Buscar en Brain Knowledge',
+  kb_search: 'Buscar en el cerebro',
   screen_point_at: 'Señalar en tu pantalla',
   // Como `screen_point_at`: no está en el registro —se declara en `/api/chat` y
   // no ejecuta nada— pero su nombre sí tiene que estar aquí, porque este
@@ -126,7 +126,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   outlook_list_threads: 'Listar conversaciones de Outlook',
   outlook_draft: 'Redactar correo en Outlook',
   outlook_send_draft: 'Enviar el correo redactado en Outlook',
-  outlook_archive_thread: 'Guardar el correo en Brain Knowledge',
+  outlook_archive_thread: 'Guardar el correo en el cerebro',
   mscal_list_events: 'Ver el calendario de Outlook',
   mscal_create_event: 'Crear evento en el calendario de Outlook',
   gcal_upcoming_meetings: 'Ver las próximas reuniones',
@@ -152,11 +152,11 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   linear_workload_stats: 'Ver la carga de cada persona',
   linear_create_issue: 'Crear tarea en Linear',
   linear_create_comment: 'Comentar en la tarea',
-  kb_list_spaces: 'Ver los espacios de Brain Knowledge',
-  kb_create_document: 'Guardar en Brain Knowledge',
+  kb_list_spaces: 'Ver los espacios del cerebro',
+  kb_create_document: 'Guardar en el cerebro',
   kb_share_space: 'Cambiar quién ve un espacio',
-  kb_context: 'Reunir contexto de Brain Knowledge',
-  attachments_promote: 'Guardar el adjunto en Brain Knowledge',
+  kb_context: 'Reunir contexto del cerebro',
+  attachments_promote: 'Guardar el adjunto en el cerebro',
   payroll_team_overview: 'Ver el tamaño del equipo',
   payroll_team_assignments: 'Ver quién está con cada cliente',
   payroll_employee_profile: 'Ver la ficha de alguien del equipo',
@@ -230,6 +230,9 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   views_update: 'Cambiar una vista',
   views_share: 'Compartir una vista',
   views_archive: 'Archivar una vista',
+  views_company_pulse: 'Armar el pulso de la empresa',
+  views_refresh_summary: 'Actualizar el resumen del día',
+  views_schedule_pulse: 'Programar el resumen diario',
   reports_generate: 'Armar el informe',
   reports_list: 'Ver los informes guardados',
   reports_open: 'Abrir un informe guardado',
@@ -249,7 +252,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   pipeline_finish_run: 'Cerrar la ejecución del procedimiento',
   meetings_list_transcripts: 'Ver qué reuniones dejaron transcripción',
   meetings_get_transcript: 'Leer la transcripción de la reunión',
-  meetings_import_transcript: 'Guardar la reunión en Brain Knowledge',
+  meetings_import_transcript: 'Guardar la reunión en el cerebro',
   meetings_join_live: 'Entrar a la reunión en vivo',
   meetings_live_status: 'Ver cómo va la reunión',
   meetings_speak: 'Hablar en la reunión en vivo',
@@ -315,6 +318,12 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
           : `con la programación "${input.cron}" (${input.timezone ?? 'UTC'})`;
       const writes = input.allowUnattendedWrites ? ' · PUEDE ESCRIBIR sin supervisión' : '';
       return `Programar "${input.name}" — se ejecuta ${when}${writes}`;
+    }
+    case 'views_schedule_pulse': {
+      const hour = typeof input.hour === 'number' ? input.hour : 7;
+      const minute = typeof input.minute === 'number' ? input.minute : 0;
+      const days = Array.isArray(input.weekdays) ? input.weekdays.join(',') : '1-5';
+      return `Programar el resumen diario de la vista «${input.view ?? 'pulso_empresa'}» — a las ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (${input.timezone ?? 'America/Bogota'}), días ${days}${input.notifyEmail ? ' · también por correo' : ''}`;
     }
     case 'vehicles_register':
       return `Registrar el vehículo de placa ${input.plate}`;

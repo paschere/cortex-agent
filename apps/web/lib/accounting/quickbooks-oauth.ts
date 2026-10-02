@@ -137,7 +137,7 @@ const ERRORS: Record<string, string> = {
   quickbooks_forbidden:
     'Ese usuario de QuickBooks no puede leer la contabilidad de la empresa. Conecta con un usuario administrador en QuickBooks.',
   quickbooks_setup:
-    'Intuit no reconoce la app de QuickBooks de esta instalación. Quien administra Cortex tiene que revisar QUICKBOOKS_CLIENT_ID y QUICKBOOKS_CLIENT_SECRET.',
+    'Intuit no reconoció la conexión de QuickBooks de Cortex. Avísale al equipo de Cortex para que la revise y vuelve a intentarlo.',
   quickbooks_failed: 'Intuit no confirmó la conexión. Vuelve a intentarlo en un momento.',
 };
 

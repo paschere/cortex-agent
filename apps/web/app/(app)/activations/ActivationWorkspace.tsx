@@ -587,8 +587,9 @@ export function ActivationWorkspace({
           <div>
             <h1 className="page-heading text-xl font-bold tracking-tight text-ink">Activaciones</h1>
             <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              Describe qué revisar en tus fuentes de Feed y convierte las coincidencias en asuntos
-              para {organizationName}. Simula primero y autoriza qué compartir o seguir revisando.
+              Describe qué revisar en tus fuentes de la bandeja y convierte las coincidencias en
+              asuntos para {organizationName}. Simula primero y autoriza qué compartir o seguir
+              revisando.
             </p>
           </div>
         </div>
@@ -772,7 +773,7 @@ export function ActivationWorkspace({
       {loading ? (
         <div className="grid min-h-[28rem] place-items-center rounded-card border border-border bg-surface">
           <output className="flex items-center gap-2 text-sm text-ink-muted">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Cargando hojas de tu Feed…
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Cargando hojas de tu bandeja…
           </output>
         </div>
       ) : data && data.sources.length === 0 ? (
@@ -795,7 +796,8 @@ export function ActivationWorkspace({
               <aside className="min-w-0 border-b border-border bg-surface-2/50 p-5 xl:border-b-0 xl:border-r">
                 <h2 className="text-sm font-bold text-ink">Preparar lectura</h2>
                 <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                  Usa tablas o prepara una lectura de tus documentos, enlaces y textos de Feed.
+                  Usa tablas o prepara una lectura de tus documentos, enlaces y textos de la
+                  bandeja.
                 </p>
                 <label
                   htmlFor="activation-kind"
@@ -1164,7 +1166,7 @@ function SourcePicker({
       href: textHref,
       icon: Type,
       title: 'Texto',
-      detail: 'Pega notas o datos directamente en Feed.',
+      detail: 'Pega notas o datos directamente en la bandeja.',
     },
   ];
   return (
@@ -1208,13 +1210,13 @@ function SourcePicker({
                 href={apiHref}
                 className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
               >
-                Configurar en Feed
+                Configurar en la bandeja
               </Link>
             </div>
           </div>
         </div>
         <p className="border-t border-border px-4 py-3 text-xs leading-relaxed text-ink-faint">
-          Las fuentes de Feed son privadas, duran 7 días y no se guardan automáticamente en Brain.
+          Las fuentes de la bandeja son privadas, duran 7 días y no se guardan solas en el cerebro.
           Las activaciones actuales necesitan una tabla para simular.
         </p>
       </div>
@@ -1578,13 +1580,13 @@ function Empty({ feedHref }: { feedHref: string }) {
     <div className="grid min-h-[28rem] place-items-center rounded-card border border-dashed border-border-strong bg-surface p-8 text-center">
       <div>
         <FileSpreadsheet className="mx-auto h-7 w-7 text-primary" aria-hidden />
-        <h2 className="mt-3 text-base font-bold text-ink">Añade una tabla a tu Feed</h2>
+        <h2 className="mt-3 text-base font-bold text-ink">Añade una tabla a tu bandeja</h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
-          Activaciones puede leer archivos CSV, XLSX y hojas de Google guardadas en tu Feed
+          Activaciones puede leer archivos CSV, XLSX y hojas de Google guardadas en tu bandeja
           personal.
         </p>
         <Link href={feedHref} className={`${button} mt-5 bg-primary text-white`}>
-          Ir a Feed <ArrowRight className="h-4 w-4" />
+          Ir a la bandeja <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
     </div>

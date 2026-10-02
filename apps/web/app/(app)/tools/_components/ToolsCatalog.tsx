@@ -1278,12 +1278,11 @@ function CauseDetail({
       <p className="mt-1.5 text-micro leading-snug text-ink">
         {isAdmin ? (
           <>
-            Al servidor le falta <span className="tabular font-semibold">{vars.join(', ')}</span>.
-            No se configura desde la app: alguien de infraestructura tiene que ponerla en el
-            entorno.
+            Esto lo habilita el equipo de Cortex, no se configura desde la app: pídeselo. Detalle
+            técnico: falta <span className="tabular font-semibold">{vars.join(', ')}</span>.
           </>
         ) : (
-          'Depende de una llave que se configura en el servidor. Pídesela a quien administra Cortex; no hay nada que puedas hacer desde acá.'
+          'Esto lo habilita el equipo de Cortex. Pídeselo a quien administra Cortex en tu empresa; no hay nada que tengas que hacer desde aquí.'
         )}
       </p>
     );

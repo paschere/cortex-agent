@@ -52,7 +52,7 @@ export function AskCortex() {
           <li key={s}>
             <Link
               href={`/chat?prompt=${encodeURIComponent(s)}`}
-              className="inline-flex items-center rounded-pill border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-ink-muted shadow-card transition-colors hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink"
+              className="inline-flex min-h-9 items-center rounded-pill border border-border bg-surface px-4 py-2 text-sm font-semibold text-ink-muted shadow-card transition-colors hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink"
             >
               {s}
             </Link>

@@ -179,7 +179,7 @@ export function ManualStudio({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Button variant="ghost" disabled={pending || listening} onClick={leave}>
             <ArrowLeft className="h-4 w-4" />
-            Biblioteca de procesos
+            Biblioteca de manuales
           </Button>
           <div className="flex items-center gap-3 text-xs text-ink-muted">
             <span className={step === 'explain' ? 'text-primary-ink' : ''}>1. Cuéntalo</span>

@@ -41,18 +41,21 @@ export function MediaBlock({ block }: { block: Media }) {
       <div
         className={clsx(
           'relative w-full overflow-hidden rounded-sm bg-surface-2',
+          !src && 'border border-dashed border-border-strong',
           ASPECT[block.aspect],
         )}
       >
         {!src ? (
           <div className="absolute inset-0 grid place-items-center p-4 text-center">
             <div>
-              {block.kind === 'embed' ? (
-                <PlayCircle className="mx-auto h-7 w-7 text-ink-faint" aria-hidden />
-              ) : (
-                <ImageOff className="mx-auto h-7 w-7 text-ink-faint" aria-hidden />
-              )}
-              <p className="mt-2 text-xs text-ink-muted">
+              <span className="mx-auto grid h-12 w-12 place-items-center rounded-pill bg-surface text-ink-faint shadow-card">
+                {block.kind === 'embed' ? (
+                  <PlayCircle className="h-6 w-6" aria-hidden />
+                ) : (
+                  <ImageOff className="h-6 w-6" aria-hidden />
+                )}
+              </span>
+              <p className="mx-auto mt-3 max-w-xs text-xs leading-relaxed text-ink-muted">
                 {block.kind === 'embed'
                   ? 'Pega el enlace de un video de YouTube o Loom, un mapa de Google o una presentación publicada.'
                   : 'Pega la dirección https:// de una imagen.'}
@@ -108,7 +111,9 @@ export function LinksBlock({ block }: { block: Links }) {
   if (block.style === 'cards')
     return (
       <div>
-        {block.title && <h2 className="mb-2 px-1 text-sm font-semibold text-ink">{block.title}</h2>}
+        {block.title && (
+          <h2 className="mb-3 px-1 text-base font-bold tracking-tight text-ink">{block.title}</h2>
+        )}
         <ul
           className={clsx(
             'grid grid-cols-1 sm:grid-cols-2',
@@ -121,13 +126,13 @@ export function LinksBlock({ block }: { block: Links }) {
                 href={l.href}
                 {...external(l)}
                 className={clsx(
-                  'group flex h-full items-start gap-3 rounded-card border bg-surface p-4 shadow-card transition-all duration-150 hover:-translate-y-px hover:shadow-pop',
+                  'group flex h-full items-start gap-3 rounded-card border bg-surface p-4 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-pop',
                   TONE_RING[l.tone],
                 )}
               >
                 <span
                   className={clsx(
-                    'grid h-8 w-8 shrink-0 place-items-center rounded-sm',
+                    'grid h-9 w-9 shrink-0 place-items-center rounded-sm transition-transform duration-150 group-hover:scale-105',
                     TONE_SOFT[l.tone],
                   )}
                 >
@@ -154,7 +159,9 @@ export function LinksBlock({ block }: { block: Links }) {
     );
   return (
     <div className="px-1">
-      {block.title && <h2 className="mb-2 text-sm font-semibold text-ink">{block.title}</h2>}
+      {block.title && (
+        <h2 className="mb-3 text-base font-bold tracking-tight text-ink">{block.title}</h2>
+      )}
       <ul className="flex flex-wrap gap-2">
         {block.links.map((l) => (
           <li key={`${l.label}-${l.href}`}>

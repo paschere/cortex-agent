@@ -11,6 +11,8 @@ import { LiveViewCanvas } from './LiveViewCanvas';
 import { PromptBar } from './PromptBar';
 import { ViewCanvas } from './ViewCanvas';
 import type { ToolbarView } from './ViewToolbar';
+import { ViewCover } from './blocks/ViewChrome';
+import { useViewBrand } from './blocks/brand';
 import { type SaveOutcome, ViewEditor } from './editor/ViewEditor';
 import { type DesignDraft, useDesigner } from './useDesigner';
 
@@ -88,6 +90,7 @@ export function ViewStudio({
   share = null,
   launch = null,
   onExit,
+  headerActions,
 }: {
   view?: StudioView;
   initial?: ComputedView;
@@ -96,6 +99,8 @@ export function ViewStudio({
   launch?: StudioLaunch | null;
   /** Cerrar el estudio de una vista nueva (vuelve a /views). */
   onExit?: () => void;
+  /** Los controles de la vista (compartir, versiones…) en su portada. */
+  headerActions?: React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -112,6 +117,7 @@ export function ViewStudio({
     null,
   );
   const designer = useDesigner(view?.id);
+  const brand = useViewBrand();
   const input = useRef<HTMLTextAreaElement>(null);
 
   const wantsEdit = Boolean(view) && params.get('editar') === '1';
@@ -329,9 +335,18 @@ export function ViewStudio({
               target={{ kind: 'app', viewId: view.id }}
               dataUrl={`/api/views/${view.id}/data`}
               heading={{ title: view.name, subtitle: view.spec.subtitle ?? view.description }}
+              actions={headerActions}
             />
           ) : (
-            <ViewCanvas view={shown} target={{ kind: 'preview' }} />
+            <>
+              <ViewCover
+                title={draft.name}
+                subtitle={(draft.spec as ViewSpec).subtitle ?? draft.description}
+                theme={shown.theme}
+                brand={brand}
+              />
+              <ViewCanvas view={shown} target={{ kind: 'preview' }} />
+            </>
           )}
         </div>
       )}

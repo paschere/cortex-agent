@@ -174,7 +174,7 @@ export default async function PaymentsPage() {
           value={headline ? headline.outstanding : 'Sin cartera'}
           sub={
             headline?.ageDays != null
-              ? `a ${headline.ageDays} días, en ${headline.openInvoices} factura(s)`
+              ? `a ${headline.ageDays} días, en ${headline.openInvoices} ${headline.openInvoices === 1 ? 'factura' : 'facturas'}`
               : 'sobre facturas confirmadas'
           }
           icon={<Banknote className="h-4 w-4" aria-hidden />}
@@ -183,7 +183,7 @@ export default async function PaymentsPage() {
         <StatCard
           label="Sin revisar"
           value={String(cartera.pendingExcluded)}
-          sub="facturas leídas que NO están en la cifra"
+          sub="facturas leídas que todavía no entran en la cifra"
           icon={<FileWarning className="h-4 w-4" aria-hidden />}
           tone={cartera.pendingExcluded > 0 ? 'amber' : 'emerald'}
           delay={60}

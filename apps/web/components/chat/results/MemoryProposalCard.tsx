@@ -112,7 +112,7 @@ export function MemoryProposalCard({ result }: ResultViewProps) {
           </>
         ) : (
           <p className="text-micro text-ink-faint">
-            Queda esperando que alguien con permiso lo apruebe en Brain Knowledge.
+            Queda esperando que alguien con permiso lo apruebe en el cerebro.
           </p>
         )}
       </div>

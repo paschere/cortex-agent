@@ -1,6 +1,12 @@
-import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
+import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
+import { relativeTime } from '@/lib/relative-time';
+import { requireSession } from '@/lib/session';
+import { CHIP_INTERACTIVE } from '@/lib/status-chip';
+import { getOrgScopedClient } from '@/lib/supabase/service';
+import { toolLabel } from '@/lib/tool-labels';
+import { listTools } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
   Activity,
@@ -27,24 +33,23 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import { listTools } from '@cortex/agent-tools';
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
-import { relativeTime } from '@/lib/relative-time';
-import { CHIP_INTERACTIVE } from '@/lib/status-chip';
-import { toolLabel } from '@/lib/tool-labels';
-import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import type { ReactNode } from 'react';
+import {
+  absoluteTime,
+  eventDetail,
+  formatLatency,
+  isAgentTurn,
+} from '../../audit/_components/format';
 import {
   DecisionTag,
   RiskTag,
+  SURFACE_BAR,
   SignalChip,
   StatusTag,
   SurfaceTag,
-  SURFACE_BAR,
 } from '../../audit/_components/tags';
-import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from '../../audit/_components/format';
 import {
   Chip,
   CountBar,
@@ -57,9 +62,9 @@ import {
 import { countdown } from '../_lib/countdown';
 import {
   AUDIT_ROW_CAP,
+  WINDOW_DAYS,
   fetchUserSecurity,
   fetchUserUsage,
-  WINDOW_DAYS,
 } from '../_lib/user-activity';
 
 export const dynamic = 'force-dynamic';
@@ -74,8 +79,8 @@ const SURFACE_KEYS = ['web', 'mcp', 'schedule', 'unknown'] as const;
 type Role = 'member' | 'team_admin' | 'org_admin';
 
 const ROLE_LABEL: Record<string, string> = {
-  org_admin: 'Admin de la organización',
-  team_admin: 'Admin de equipo',
+  org_admin: 'Administra la empresa',
+  team_admin: 'Lidera un equipo',
   member: 'Miembro',
 };
 
@@ -237,10 +242,12 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       .gt('expires_at', nowIso),
   ]);
 
-  const teams = ((membershipRes.data ?? []) as unknown as Array<{
-    team_id: string;
-    teams: { id: string; name: string } | { id: string; name: string }[] | null;
-  }>)
+  const teams = (
+    (membershipRes.data ?? []) as unknown as Array<{
+      team_id: string;
+      teams: { id: string; name: string } | { id: string; name: string }[] | null;
+    }>
+  )
     .map((m) => {
       const t = firstEmbed(m.teams);
       return { id: t?.id ?? m.team_id, name: t?.name ?? 'Equipo sin nombre' };
@@ -340,9 +347,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-extrabold tracking-tight text-ink">
-                  {displayName}
-                </h2>
+                <h2 className="text-lg font-extrabold tracking-tight text-ink">{displayName}</h2>
                 <span
                   className={clsx(
                     'rounded-pill border px-2 py-0.5 text-micro font-semibold',
@@ -465,8 +470,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             )}
             {integrations.some((i) => !!i.expires_at && i.expires_at <= nowIso) && (
               <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro leading-relaxed text-rose">
-                Un token vencido es la razón más común de que las herramientas dejen de responder
-                de un momento a otro. Pídele que vuelva a conectar esa cuenta en Integraciones.
+                Un token vencido es la razón más común de que las herramientas dejen de responder de
+                un momento a otro. Pídele que vuelva a conectar esa cuenta en Integraciones.
               </p>
             )}
           </div>
@@ -475,8 +480,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         {/* ---------------------------------------------------- cortex usage */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <StatTile
-            label="Llamadas · 7d"
-            sub="Llamadas · 7d"
+            label="Acciones · 7 días"
+            sub="Acciones · 7 días"
             value={usage.calls7d.toLocaleString()}
             icon={<Zap className="h-4 w-4" />}
           />
@@ -577,7 +582,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                   ? 'No hay llamadas registradas en esta ventana.'
                   : (usage.bySurface.unknown ?? 0) === surfaceTotal
                     ? 'Estas llamadas todavía no traen la superficie registrada.'
-                    : 'La app web, Claude por MCP y las rutinas que corren solas.'}
+                    : 'La app web, Claude o ChatGPT conectados, y las rutinas que corren solas.'}
               </p>
             </div>
           </Panel>
@@ -752,10 +757,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         {/* ------------------------------------------- what they've built */}
         <div className="grid gap-4 lg:grid-cols-3">
           <Panel className="p-4">
-            <SectionLabel>Pipelines que creó</SectionLabel>
+            <SectionLabel>Flujos que creó</SectionLabel>
             <div className="mt-3">
               {pipelines.length === 0 ? (
-                <EmptyNote>Todavía no ha creado ningún pipeline.</EmptyNote>
+                <EmptyNote>Todavía no ha creado ningún flujo.</EmptyNote>
               ) : (
                 <ul className="space-y-1.5">
                   {pipelines.map((p) => (
@@ -815,7 +820,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         <span
                           className={clsx(
                             'shrink-0 rounded-pill border px-2 py-0.5 text-micro font-semibold',
-                            JOB_STATUS_TONE[j.status] ?? 'border-border bg-surface-2 text-ink-faint',
+                            JOB_STATUS_TONE[j.status] ??
+                              'border-border bg-surface-2 text-ink-faint',
                           )}
                         >
                           {JOB_STATUS_LABEL[j.status] ?? j.status}
@@ -881,14 +887,14 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           ) : denials.length === 0 ? (
             <p className="mt-3 flex items-start gap-2 text-xs text-ink-muted">
               <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald" />
-              {teams.length === 1 ? 'Su equipo no le bloquea nada' : 'Sus equipos no le bloquean nada'}
+              {teams.length === 1
+                ? 'Su equipo no le bloquea nada'
+                : 'Sus equipos no le bloquean nada'}
               : puede usar todas las herramientas que le permita su agente.
             </p>
           ) : (
             <div className="mt-3">
-              <div className="text-micro font-semibold text-ink">
-                Bloqueado por sus equipos
-              </div>
+              <div className="text-micro font-semibold text-ink">Bloqueado por sus equipos</div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {denials.map((d) => {
                   const team = teams.find((t) => d.teams.includes(t.name));
@@ -933,7 +939,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             </div>
             <div>
               <div className="text-micro font-semibold text-amber">
-                Parcialmente restringidas (<span className="tabular">{partialFamilies.length}</span>)
+                Parcialmente restringidas (<span className="tabular">{partialFamilies.length}</span>
+                )
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {partialFamilies.length === 0 ? (

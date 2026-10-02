@@ -8,10 +8,11 @@ import {
 } from '@/lib/views/filter-param';
 import type { ComputedView } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { Bell, BellOff, Radio, X } from 'lucide-react';
+import { Bell, BellOff, Printer, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type SubmitTarget, ViewCanvas } from './ViewCanvas';
-import { ViewHero } from './blocks/ViewChrome';
+import { LiveStatus, ViewCover } from './blocks/ViewChrome';
+import { useBrandScope, useViewBrand } from './blocks/brand';
 
 /**
  * UNA VISTA QUE SE MANTIENE AL DÍA SOLA, Y QUE AVISA.
@@ -39,10 +40,19 @@ import { ViewHero } from './blocks/ViewChrome';
  * filtrar y la dirección trae `f` (la página de adentro no lo lee), se pide
  * filtrada al abrir.
  *
- * LA CABECERA GRANDE. Con `theme.header: 'hero'` y un `heading`, el lienzo
- * pinta la banda con el título, el subtítulo y la portada; quien lo monta no
- * pinta su propio título.
+ * LA PORTADA. Con un `heading`, el lienzo pinta la cabecera de la vista
+ * (ViewCover): el logo y el nombre de la empresa, el título, el subtítulo, el
+ * «en vivo · hace 12 s», los avisos, «Imprimir» y lo que quien la monta ponga
+ * en `actions` (compartir, versiones, editar). Con `theme.header: 'hero'` es
+ * la banda grande con la portada. Quien monta el lienzo no pinta su propio
+ * título.
  */
+
+const PRINTED_AT = new Intl.DateTimeFormat('es-CO', {
+  dateStyle: 'long',
+  timeStyle: 'short',
+  timeZone: 'America/Bogota',
+});
 
 interface Toast {
   id: number;
@@ -78,14 +88,25 @@ export function LiveViewCanvas({
   target,
   dataUrl,
   heading,
+  actions,
+  showBrand = true,
 }: {
   initial: ComputedView;
   target: SubmitTarget;
-  /** De dónde se refresca: /api/views/<id>/data o /api/views/public/data?token=… */
-  dataUrl: string;
-  /** Título y subtítulo para la cabecera `hero`, si el tema la pide. */
+  /**
+   * De dónde se refresca: /api/views/<id>/data o /api/views/public/data?token=….
+   * Null: no se refresca (el escaparate de desarrollo).
+   */
+  dataUrl: string | null;
+  /** Título y subtítulo de la portada. Sin esto, quien monta pinta su cabecera. */
   heading?: { title: string; subtitle?: string | null };
+  /** Controles de quien administra, a la derecha de la portada. */
+  actions?: React.ReactNode;
+  /** El logo en la portada; el enlace público lo lleva en su barra de arriba. */
+  showBrand?: boolean;
 }) {
+  const brand = useViewBrand();
+  const scope = useBrandScope();
   const [view, setView] = useState(initial);
   const [filters, setFilters] = useState<FilterState>(() => stateFromComputed(initial.filtersBar));
   const [filtering, setFiltering] = useState(false);
@@ -157,6 +178,10 @@ export function LiveViewCanvas({
    */
   const refresh = useCallback(
     async (force = false) => {
+      if (!dataUrl) {
+        setFiltering(false);
+        return;
+      }
       if (inFlight.current && !force) return;
       inFlight.current = true;
       const mine = ++seq.current;
@@ -277,39 +302,59 @@ export function LiveViewCanvas({
       await Notification.requestPermission().catch(() => undefined);
   }
 
-  return (
-    <div>
-      {heading && view.theme?.header === 'hero' && (
-        <ViewHero title={heading.title} subtitle={heading.subtitle} theme={view.theme} />
+  const status = (
+    <>
+      {view.refreshSeconds > 0 && (
+        <LiveStatus
+          failing={failing}
+          label={
+            failing ? 'Sin conexión, reintentando' : `En vivo · ${ago(Date.now() - updatedAt)}`
+          }
+        />
       )}
-      {(view.refreshSeconds > 0 || hasAlerts) && (
-        <div className="mb-3 flex flex-wrap items-center justify-end gap-2 text-micro text-ink-faint">
-          {view.refreshSeconds > 0 && (
-            <span className="inline-flex items-center gap-1.5">
-              <Radio
-                className={clsx('h-3.5 w-3.5', failing ? 'text-amber' : 'text-emerald')}
-                aria-hidden
-              />
-              {failing
-                ? 'Sin conexión, reintentando'
-                : `En vivo · actualizado ${ago(Date.now() - updatedAt)}`}
-            </span>
+      {hasAlerts && (
+        <button
+          type="button"
+          onClick={() => void toggleAlerts()}
+          aria-pressed={alertsOn}
+          className={clsx(
+            'inline-flex h-8 items-center gap-1.5 rounded-pill border px-3 text-micro font-semibold transition-colors',
+            alertsOn
+              ? 'border-primary/40 bg-primary-soft text-primary-ink'
+              : 'border-border bg-surface text-ink-muted shadow-card hover:text-ink',
           )}
-          {hasAlerts && (
-            <button
-              type="button"
-              onClick={() => void toggleAlerts()}
-              className={clsx(
-                'inline-flex items-center gap-1 rounded-pill border px-2.5 py-1 font-semibold transition-colors',
-                alertsOn
-                  ? 'border-primary/40 bg-primary-soft text-primary'
-                  : 'border-border bg-surface text-ink-muted hover:text-ink',
-              )}
-            >
-              {alertsOn ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
-              {alertsOn ? 'Avisos con sonido' : 'Activar avisos'}
-            </button>
-          )}
+        >
+          {alertsOn ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
+          {alertsOn ? 'Avisos con sonido' : 'Activar avisos'}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => window.print()}
+        title="Imprimir o guardar en PDF"
+        className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-border bg-surface px-3 text-micro font-semibold text-ink-muted shadow-card transition-colors hover:text-ink"
+      >
+        <Printer className="h-3.5 w-3.5" aria-hidden /> Imprimir
+      </button>
+    </>
+  );
+
+  return (
+    <div className={clsx('view-print-root', scope.className)} style={scope.style}>
+      {heading ? (
+        <ViewCover
+          title={heading.title}
+          subtitle={heading.subtitle}
+          theme={view.theme}
+          brand={brand}
+          showBrand={showBrand}
+          status={status}
+          actions={actions}
+          printedAt={PRINTED_AT.format(new Date(view.computedAt))}
+        />
+      ) : (
+        <div className="view-no-print mb-4 flex flex-wrap items-center justify-end gap-2">
+          {status}
         </div>
       )}
 
@@ -329,14 +374,16 @@ export function LiveViewCanvas({
 
       <div
         aria-live="polite"
-        className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2"
+        className="view-no-print pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2"
       >
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="pointer-events-auto flex items-start gap-3 rounded-card border border-primary/30 bg-surface p-3 shadow-pop"
+            className="pointer-events-auto flex items-start gap-3 rounded-card border border-primary/30 bg-surface p-3.5 shadow-pop"
           >
-            <Bell className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-primary-soft text-primary">
+              <Bell className="h-4 w-4" aria-hidden />
+            </span>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-ink">{t.title}</p>
               <p className="truncate text-xs text-ink-muted">{t.body}</p>

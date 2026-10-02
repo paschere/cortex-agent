@@ -9,6 +9,7 @@ import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { findPriorAction } from '@cortex/agent-tools';
+import { clsx } from 'clsx';
 import { AlarmClockOff, ArrowRight, Inbox, Radar, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { SignalCard } from './_components/SignalCard';
@@ -68,16 +69,16 @@ function SectionLabel({
   count: number;
   tone: StatusTone;
 }) {
-  // A section break reads as whitespace plus a soft fade now, not a ruled line
-  // underneath the label — the ledger look is what this direction moved away from.
+  // Un título de sección de verdad (h2, 18px, extrabold) con su cifra en una
+  // píldora mono: en el lienzo del autoservicio la jerarquía la llevan el
+  // tamaño y el peso, no una etiqueta pequeña en mayúsculas sobre una raya.
   return (
-    <div className="mb-3">
-      <div className="field-label flex items-center gap-2 pb-2">
+    <div className="mb-4 flex items-center gap-2.5">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-surface-2">
         {icon}
-        {children}
-        <span className={chipClass(tone)}>{count}</span>
-      </div>
-      <div className="rule-double" />
+      </span>
+      <h2 className="text-lg font-extrabold tracking-tight text-ink">{children}</h2>
+      <span className={clsx(chipClass(tone), 'tabular')}>{count}</span>
     </div>
   );
 }
@@ -171,18 +172,37 @@ export default async function ApprovalsPage() {
       />
 
       {nothingPending ? (
-        <Panel className="p-10 text-center text-sm text-ink-muted">
-          <Inbox className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="mb-1 text-base font-bold text-ink">No hay nada pendiente</p>
+        <Panel className="px-6 py-12 text-center text-sm text-ink-muted">
+          <span className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-card bg-emerald-soft text-emerald">
+            <Inbox className="h-6 w-6" />
+          </span>
+          <p className="mb-1 text-lg font-extrabold tracking-tight text-ink">
+            Nada espera tu permiso
+          </p>
           <p className="mx-auto max-w-md leading-relaxed">
-            Aquí aparece lo que Cortex no hace sin permiso: una acción que necesita tu visto bueno,
-            un prospecto nuevo por revisar o una rutina que falló. Los correos que ya redactó y
-            faltan por mandar están en{' '}
+            Cuando Cortex quiera mandar un correo, escribir en una tabla o cambiar algo por ti, te
+            lo pregunta aquí primero. También verás los prospectos nuevos y las rutinas que fallen.
+            Los correos que ya redactó y faltan por mandar están en{' '}
             <Link href="/actions" className="font-semibold text-primary hover:underline">
               Acciones
             </Link>
             .
           </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Link
+              href={`/chat?prompt=${encodeURIComponent('Redacta un correo cordial para un cliente que tiene una factura vencida, y muéstramelo antes de enviarlo.')}`}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-pill bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-strong"
+            >
+              Pedirle a Cortex que redacte algo
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/procesos"
+              className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-5 py-2 text-sm font-bold text-ink transition-colors hover:bg-surface-2"
+            >
+              Activar un proceso
+            </Link>
+          </div>
         </Panel>
       ) : (
         <div className="space-y-8">
@@ -190,11 +210,11 @@ export default async function ApprovalsPage() {
           {approvalRows.length > 0 && (
             <section>
               <SectionLabel
-                icon={<ShieldAlert className="h-3.5 w-3.5 text-amber" />}
+                icon={<ShieldAlert className="h-4 w-4 text-amber" />}
                 count={pending.length}
                 tone="amber"
               >
-                Confirmaciones pendientes
+                Esperan tu permiso
               </SectionLabel>
               <div className="space-y-3">
                 {[...pending, ...decided].map((p) => (
@@ -218,7 +238,7 @@ export default async function ApprovalsPage() {
           {signals.length > 0 && (
             <section>
               <SectionLabel
-                icon={<Radar className="h-3.5 w-3.5 text-primary" />}
+                icon={<Radar className="h-4 w-4 text-primary" />}
                 count={signals.length}
                 tone="primary"
               >
@@ -244,7 +264,7 @@ export default async function ApprovalsPage() {
           {failing.length > 0 && (
             <section>
               <SectionLabel
-                icon={<AlarmClockOff className="h-3.5 w-3.5 text-rose" />}
+                icon={<AlarmClockOff className="h-4 w-4 text-rose" />}
                 count={failing.length}
                 tone="rose"
               >
@@ -256,7 +276,7 @@ export default async function ApprovalsPage() {
                   const excerpt =
                     run.error && run.error.length > 180 ? `${run.error.slice(0, 180)}…` : run.error;
                   return (
-                    <Panel key={j.id} className="flex flex-col gap-2 p-4">
+                    <Panel key={j.id} className="flex flex-col gap-2.5 p-5">
                       <div className="flex items-start gap-3">
                         <AlarmClockOff className="mt-0.5 h-4 w-4 shrink-0 text-rose" />
                         <div className="min-w-0 flex-1">
@@ -266,17 +286,32 @@ export default async function ApprovalsPage() {
                           </div>
                         </div>
                       </div>
+                      {/* El error crudo es para quien lo diagnostica: plegado. Lo
+                          que se ofrece primero es pedirle a Cortex que lo lea. */}
                       {excerpt && (
-                        <p className="rounded-sm border border-rose/30 bg-rose-soft px-2.5 py-1.5 font-mono text-micro leading-snug text-rose">
-                          {excerpt}
-                        </p>
+                        <details className="text-micro">
+                          <summary className="cursor-pointer font-semibold text-ink-muted hover:text-ink">
+                            Ver el error
+                          </summary>
+                          <p className="mt-1.5 rounded-sm border border-rose/30 bg-rose-soft px-2.5 py-1.5 font-mono leading-snug text-rose">
+                            {excerpt}
+                          </p>
+                        </details>
                       )}
-                      <Link
-                        href="/schedules"
-                        className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-primary transition-colors hover:text-primary-strong"
-                      >
-                        Revisar en Rutinas <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
+                      <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <Link
+                          href={`/chat?prompt=${encodeURIComponent(`La rutina «${j.name}» falló. Revisa qué pasó y dime cómo arreglarla.`)}`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary transition-colors hover:text-primary-strong"
+                        >
+                          Que Cortex lo revise <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                        <Link
+                          href="/schedules"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                        >
+                          Ver en Rutinas
+                        </Link>
+                      </div>
                     </Panel>
                   );
                 })}

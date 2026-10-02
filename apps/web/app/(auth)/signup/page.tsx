@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { authErrorMessage } from '@/lib/auth-error-message';
 import { safeNextPath } from '@/lib/invite-landing';
 import {
   SIGNUP_CODE_COOKIE,
@@ -98,9 +99,10 @@ export default function SignupPage() {
       await authClient.signIn.social({ provider: 'google', callbackURL: nextUrl() });
     } catch (e) {
       setErr(
-        e instanceof Error
-          ? e.message
-          : 'No se pudo abrir el registro con Google. Inténtalo de nuevo o usa tu correo y contraseña.',
+        authErrorMessage(
+          e,
+          'No se pudo abrir el registro con Google. Inténtalo de nuevo o usa tu correo y contraseña.',
+        ),
       );
       setLoading(null);
     }
@@ -119,7 +121,12 @@ export default function SignupPage() {
       callbackURL: nextUrl(),
     });
     if (error) {
-      setErr(error.message ?? 'No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.');
+      setErr(
+        authErrorMessage(
+          error,
+          'No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.',
+        ),
+      );
       setLoading(null);
       return;
     }
@@ -171,7 +178,7 @@ export default function SignupPage() {
       <AuthMasthead note="Inteligencia conectada a tu operación." />
 
       <AuthBody>
-        <AuthTitle hint="Empieza gratis, sin tarjeta. Creas el espacio de tu empresa e invitas a tu equipo tú mismo.">
+        <AuthTitle hint="Sin tarjeta. Con tu código de invitación creas el espacio de tu empresa y después invitas a tu equipo tú mismo.">
           Crea tu cuenta
         </AuthTitle>
 

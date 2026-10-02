@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { authErrorMessage } from '@/lib/auth-error-message';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
@@ -36,8 +37,10 @@ function ResetPasswordForm() {
     setLoading(false);
     if (error) {
       setErr(
-        error.message ??
+        authErrorMessage(
+          error,
           'Este enlace ya no sirve. Pide uno nuevo desde «¿Olvidaste tu contraseña?».',
+        ),
       );
       return;
     }

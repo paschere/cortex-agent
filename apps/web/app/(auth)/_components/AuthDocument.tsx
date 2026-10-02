@@ -31,7 +31,7 @@ export function AuthDocument({ children }: { children: ReactNode }) {
  * mark that belongs to it.
  */
 export function AuthMasthead({
-  note = 'Cerebro operativo · logística postal y aduanera',
+  note = 'Inteligencia conectada a tu operación.',
 }: {
   note?: string;
 }) {

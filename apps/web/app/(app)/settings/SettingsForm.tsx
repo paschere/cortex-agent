@@ -248,7 +248,7 @@ export function SettingsForm({
             <li>
               <strong className="text-ink">Se resume de nuestro lado.</strong> Los mensajes se
               condensan en nuestros servidores para armar el resumen que recibes. El correo en sí no
-              se guarda, no entra a Brain Knowledge y no se le pasa al asistente con el que chateas.
+              se guarda, no entra al cerebro y no se le pasa al asistente con el que chateas.
             </li>
             <li>
               <strong className="text-ink">Te llega solo a ti.</strong> El resumen va a tu correo, a
@@ -429,8 +429,8 @@ export function SettingsForm({
                 <div className="flex items-start gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-xs leading-relaxed text-ink-muted">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
-                    La app de Cortex para Chat todavía no está configurada en este entorno, así que
-                    no se pueden enviar mensajes directos. Pídele a un administrador que la active.
+                    Los mensajes directos por Google Chat todavía no están habilitados en tu cuenta
+                    de Cortex. Los activa el equipo de Cortex: pídeselos si los necesitas.
                   </span>
                 </div>
               ) : dmReady ? (

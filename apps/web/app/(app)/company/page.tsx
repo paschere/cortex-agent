@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/ui/page-header';
+import { readBranding, toViewBrand } from '@/lib/branding/store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
@@ -11,6 +12,7 @@ import {
   renderCompanyFactsBlock,
 } from '@cortex/agent-tools';
 import { IdCard } from 'lucide-react';
+import { BrandPanel } from './_components/BrandPanel';
 import { CompanyBoard } from './_components/CompanyBoard';
 import { ReportingLine } from './_components/ReportingLine';
 import type { FactView, SectionView } from './_components/types';
@@ -67,10 +69,13 @@ export default async function CompanyPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  const [rows, directory] = await Promise.all([
+  const [rows, directory, branding] = await Promise.all([
     hydrateCompanyFacts(db, await listCompanyFacts(db)),
     listDirectory(db),
+    readBranding(db),
   ]);
+  // La marca (migración 0170): el logo por la ruta con sesión de esta empresa.
+  const brand = toViewBrand(branding, user.organization.name, (v) => `/api/branding/logo?v=${v}`);
 
   const facts: FactView[] = rows.map((r) => ({
     id: r.id,
@@ -105,6 +110,17 @@ export default async function CompanyPage() {
         title="Datos de la empresa"
         subtitle="Lo que Cortex sabe de ustedes sin que se lo cuenten cada vez. Va entero en cada respuesta, en el chat, en Google Chat y en las rutinas."
         icon={<IdCard className="h-5 w-5" aria-hidden />}
+      />
+      {/*
+        LA MARCA, ARRIBA DE LA FICHA. No entra al prompt de Cortex —es cómo se
+        VE la empresa en sus vistas, no lo que Cortex sabe de ella—, pero vive
+        en esta pantalla porque es «la empresa», la ve todo el equipo y sólo
+        la cambia un administrador, igual que la ficha.
+      */}
+      <BrandPanel
+        initial={{ ...brand, displayName: branding?.display_name ?? null }}
+        canEdit={user.role === 'org_admin'}
+        workspaceName={user.organization.name}
       />
       <CompanyBoard
         facts={facts}

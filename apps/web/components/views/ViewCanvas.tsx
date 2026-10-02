@@ -8,7 +8,10 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
-  CheckCircle2,
+  ArrowUpDown,
+  Check,
+  ChevronRight,
+  Inbox,
   Loader2,
   PanelRightOpen,
   Search,
@@ -31,8 +34,24 @@ import {
   useRecordOpener,
 } from './blocks/RecordDrawer';
 import { FilterBar, PageTabs } from './blocks/ViewChrome';
-import { Card, ViewThemeProvider } from './blocks/theme';
-import { EditableCell, RowActions, ViewWriterProvider, useViewWriter } from './view-writes';
+import { useBrandScope } from './blocks/brand';
+import {
+  Card,
+  EmptyState,
+  STATUS_COLUMN_RE,
+  StatusChip,
+  TONE_BAR,
+  ViewThemeProvider,
+  statusTone,
+} from './blocks/theme';
+import {
+  EditableCell,
+  EditableValue,
+  RowActions,
+  ViewWriterProvider,
+  useViewWriter,
+} from './view-writes';
+import './views.css';
 
 /**
  * EL LIENZO DE UNA VISTA.
@@ -57,7 +76,9 @@ import { EditableCell, RowActions, ViewWriterProvider, useViewWriter } from './v
 export type SubmitTarget =
   | { kind: 'app'; viewId: string }
   | { kind: 'public'; token: string }
-  | { kind: 'preview' };
+  | { kind: 'preview' }
+  /** El escaparate de desarrollo (/v/views-showcase): escribe de mentira, sin red. */
+  | { kind: 'demo' };
 
 export type SubmitFn = (
   blockId: string,
@@ -86,6 +107,11 @@ function submitterFor(target: SubmitTarget): SubmitFn | undefined {
       } catch {
         return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
       }
+    };
+  if (target.kind === 'demo')
+    return async () => {
+      await new Promise((r) => setTimeout(r, 500));
+      return { ok: true, message: 'Recibido. Gracias.' };
     };
   return undefined;
 }
@@ -128,6 +154,7 @@ export function ViewCanvas({
   const shown = visible ? view.blocks.filter((b) => visible.has(b.id)) : view.blocks;
   const theme = view.theme;
   const compact = theme?.density === 'compact';
+  const scope = useBrandScope();
 
   // La ficha abierta: se busca en la vista de AHORA, así que después de un
   // refresco muestra lo nuevo (o dice que la fila ya no está).
@@ -147,46 +174,57 @@ export function ViewCanvas({
         onChanged={onChanged}
       >
         <RecordOpenerProvider value={openRecord}>
-          {(view.filtersBar?.length ?? 0) > 0 && (
-            <FilterBar
-              items={view.filtersBar ?? []}
-              state={filters?.state ?? {}}
-              onChange={filters?.onChange}
-              pending={filters?.pending}
-            />
-          )}
-          {pages.length > 1 && current && (
-            <PageTabs
-              pages={pages}
-              current={current.id}
-              accent={theme?.accent ?? 'primary'}
-              idBase={idBase}
-              onSelect={(id) => (page ? page.onSelect(id) : setLocalPage(id))}
-            />
-          )}
-          <div
-            id={pages.length > 1 ? `${idBase}-panel` : undefined}
-            role={pages.length > 1 ? 'tabpanel' : undefined}
-            aria-labelledby={
-              pages.length > 1 && current ? `${idBase}-tab-${current.id}` : undefined
-            }
-            className={clsx('grid grid-cols-1 md:grid-cols-6', compact ? 'gap-3' : 'gap-4')}
-          >
-            {shown.map((block) => (
-              <section key={block.id} className={clsx('min-w-0', SPAN[block.width])}>
-                <Block block={block} target={target} submit={submit} />
-              </section>
-            ))}
-            {shown.length === 0 && (
-              <p className="py-10 text-center text-sm text-ink-faint md:col-span-6">
-                Esta página todavía no tiene bloques.
-              </p>
+          <div className={scope.className} style={scope.style}>
+            {(view.filtersBar?.length ?? 0) > 0 && (
+              <FilterBar
+                items={view.filtersBar ?? []}
+                state={filters?.state ?? {}}
+                onChange={filters?.onChange}
+                pending={filters?.pending}
+              />
             )}
-            {view.partial.length > 0 && (
-              <p className="text-micro text-ink-faint md:col-span-6">
-                Cifras calculadas sobre las 2.000 filas más recientes de {view.partial.join(', ')}.
-              </p>
+            {pages.length > 1 && current && (
+              <PageTabs
+                pages={pages}
+                current={current.id}
+                accent={theme?.accent ?? 'primary'}
+                idBase={idBase}
+                onSelect={(id) => (page ? page.onSelect(id) : setLocalPage(id))}
+              />
             )}
+            <div
+              id={pages.length > 1 ? `${idBase}-panel` : undefined}
+              role={pages.length > 1 ? 'tabpanel' : undefined}
+              aria-labelledby={
+                pages.length > 1 && current ? `${idBase}-tab-${current.id}` : undefined
+              }
+              aria-busy={filters?.pending || undefined}
+              className={clsx(
+                'grid grid-cols-1 transition-opacity duration-200 md:grid-cols-6',
+                compact ? 'gap-3' : 'gap-4 md:gap-5',
+                filters?.pending && 'opacity-60',
+              )}
+            >
+              {shown.map((block) => (
+                <section key={block.id} className={clsx('view-block min-w-0', SPAN[block.width])}>
+                  <Block block={block} target={target} submit={submit} />
+                </section>
+              ))}
+              {shown.length === 0 && (
+                <EmptyState
+                  className="md:col-span-6"
+                  icon={<Inbox className="h-5 w-5" aria-hidden />}
+                  title="Esta página todavía no tiene bloques"
+                  hint="Pídele a Cortex que agregue uno, o ábrela en el lienzo para armarla con las manos."
+                />
+              )}
+              {view.partial.length > 0 && (
+                <p className="text-micro text-ink-faint md:col-span-6">
+                  Cifras calculadas sobre las 2.000 filas más recientes de {view.partial.join(', ')}
+                  .
+                </p>
+              )}
+            </div>
           </div>
           <RecordDrawer
             block={openedBlock}
@@ -221,7 +259,7 @@ function Block({
   switch (block.type) {
     case 'text':
       return (
-        <div className="prose prose-sm max-w-none px-1 text-ink prose-headings:font-bold prose-headings:text-ink prose-p:leading-relaxed prose-p:text-ink-muted prose-a:text-primary prose-strong:text-ink prose-li:text-ink-muted">
+        <div className="prose max-w-none px-1 text-ink prose-headings:mb-2 prose-headings:font-extrabold prose-headings:tracking-tight prose-headings:text-ink prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-p:text-sm prose-p:leading-relaxed prose-p:text-ink-muted prose-a:font-semibold prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-primary prose-blockquote:font-normal prose-blockquote:not-italic prose-blockquote:text-ink-muted prose-strong:text-ink prose-code:rounded prose-code:bg-surface-2 prose-code:px-1 prose-code:font-mono prose-code:text-xs prose-code:text-ink prose-code:before:content-none prose-code:after:content-none prose-ol:text-sm prose-ul:text-sm prose-li:text-ink-muted prose-li:marker:text-primary prose-hr:border-border prose-th:text-ink prose-td:text-ink-muted">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             disallowedElements={['img', 'iframe', 'script']}
@@ -245,9 +283,14 @@ function Block({
       return (
         <Card title={block.title} source={block.source}>
           <ViewChart block={block} />
-          <p className="mt-3 text-micro text-ink-faint">
-            Total: <span className="tabular font-mono text-ink-muted">{block.total}</span>
-          </p>
+          {block.chart !== 'donut' && block.points.length > 0 && (
+            <p className="mt-4 flex items-center justify-between border-t border-border/70 pt-3 text-micro text-ink-faint">
+              <span>Total</span>
+              <span className="tabular font-mono text-xs font-semibold text-ink">
+                {block.total}
+              </span>
+            </p>
+          )}
         </Card>
       );
     case 'board':
@@ -270,7 +313,9 @@ function Block({
       return (
         <Card className="border-amber/40 bg-amber-soft/40">
           <div className="flex gap-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-amber-soft text-amber">
+              <AlertTriangle className="h-4 w-4" />
+            </span>
             <div>
               <p className="text-sm font-semibold text-ink">{block.title}</p>
               <p className="mt-1 text-xs leading-relaxed text-ink-muted">{block.message}</p>
@@ -284,10 +329,32 @@ function Block({
 /** Un clic en un control de la fila (celda editable, botón) no abre la ficha. */
 const INTERACTIVE = 'button, a, input, select, textarea, label';
 
-function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) {
+type TableBlock = Extract<ComputedBlock, { type: 'table' }>;
+
+/**
+ * Qué columnas se pintan como chips de estado: las que se llaman como un
+ * estado («Estado», «Etapa», «Prioridad»…), las de opciones que se editan, y
+ * las de texto cuyos valores son TODOS palabras de estado reconocidas.
+ */
+function statusColumns(block: TableBlock): Set<number> {
+  const out = new Set<number>();
+  block.columns.forEach((c, i) => {
+    if (i === 0 || c.kind !== 'text') return;
+    if (STATUS_COLUMN_RE.test(c.label.trim()) || c.edit?.type === 'select') {
+      out.add(i);
+      return;
+    }
+    const values = block.rows.map((r) => r.cells[i] ?? '').filter(Boolean);
+    if (values.length >= 2 && values.every((v) => statusTone(v) !== null)) out.add(i);
+  });
+  return out;
+}
+
+function Table({ block }: { block: TableBlock }) {
   const open = useRecordOpener(block.id, block.record);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
+  const chips = useMemo(() => statusColumns(block), [block]);
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     let list = q
@@ -309,32 +376,115 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
     return list;
   }, [block, query, sort]);
 
+  /** Lo que se ve en una celda: chip de estado, o el valor tal cual. */
+  const show = (cell: string, i: number) =>
+    chips.has(i) && cell ? <StatusChip value={cell} tone={statusTone(cell)} /> : cell;
+
   return (
     <Card
       title={block.title}
       source={`${block.total} ${block.total === 1 ? 'fila' : 'filas'} · ${block.source}`}
     >
       {block.searchable && block.rows.length > 5 && (
-        <label className="mb-3 flex items-center gap-2 rounded-pill border border-border bg-surface-2 px-3 py-1.5 focus-within:border-border-strong">
-          <Search className="h-3.5 w-3.5 text-ink-faint" />
+        <label className="view-no-print mb-4 flex h-10 items-center gap-2 rounded-pill border border-border bg-surface-2/70 px-4 transition-colors focus-within:border-border-strong focus-within:bg-surface">
+          <Search className="h-4 w-4 text-ink-faint" aria-hidden />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar en la tabla"
+            aria-label={`Buscar en ${block.title}`}
             className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
+          {query && (
+            <span className="tabular shrink-0 font-mono text-micro text-ink-faint">
+              {rows.length}
+            </span>
+          )}
         </label>
       )}
-      <div className="scroll-slim -mx-4 overflow-x-auto sm:-mx-5">
-        <table className="w-full min-w-[32rem] border-collapse text-sm">
+
+      {/* Teléfono: una tarjeta por fila, con sus campos en renglones. */}
+      <ul className="space-y-2.5 sm:hidden">
+        {rows.map((r) => (
+          <li key={r.id} className="rounded-sm border border-border bg-surface p-3.5 shadow-card">
+            <div className="flex items-start justify-between gap-3">
+              {open ? (
+                <button
+                  type="button"
+                  onClick={() => open(r.id)}
+                  className="flex min-w-0 items-center gap-1 text-left text-sm font-bold text-ink"
+                >
+                  <span className="truncate">{r.cells[0]}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+                </button>
+              ) : (
+                <p className="min-w-0 truncate text-sm font-bold text-ink">{r.cells[0]}</p>
+              )}
+            </div>
+            <dl className="mt-2.5 space-y-1.5">
+              {r.cells.slice(1).map((cell, j) => {
+                const i = j + 1;
+                const column = block.columns[i];
+                if (!column) return null;
+                return (
+                  <div key={column.key} className="flex items-center justify-between gap-3 text-xs">
+                    <dt className="shrink-0 text-ink-faint">{column.label}</dt>
+                    <dd
+                      className={clsx(
+                        'min-w-0 text-right text-ink',
+                        column.kind !== 'text' && 'tabular font-mono',
+                      )}
+                    >
+                      {column.edit ? (
+                        <EditableValue
+                          blockId={block.id}
+                          rowId={r.id}
+                          field={column.key}
+                          edit={column.edit}
+                          raw={r.sort[i] ?? null}
+                          display={cell}
+                          label={column.label}
+                        />
+                      ) : (
+                        show(cell, i)
+                      )}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+            {block.actions.length > 0 && (
+              <div className="mt-3 border-t border-border/70 pt-2.5">
+                <RowActions
+                  blockId={block.id}
+                  actions={block.actions}
+                  rowId={r.id}
+                  rowLabel={r.cells[0] ?? ''}
+                />
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <div
+        className={clsx(
+          'view-table-scroll scroll-slim -mx-4 hidden max-h-[34rem] overflow-auto sm:-mx-6',
+          rows.length > 0 && 'sm:block',
+        )}
+      >
+        <table className="view-table w-full min-w-[34rem] border-separate border-spacing-0 text-sm">
           <thead>
-            <tr className="border-b border-border">
+            <tr>
               {block.columns.map((c, i) => (
                 <th
                   key={c.key}
                   scope="col"
+                  aria-sort={
+                    sort?.col === i ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined
+                  }
                   className={clsx(
-                    'px-4 py-2 text-left text-micro font-semibold uppercase tracking-field text-ink-faint first:pl-4 sm:first:pl-5',
+                    'px-4 py-2.5 text-left text-micro font-semibold uppercase tracking-field text-ink-faint first:pl-6 last:pr-6',
                     c.kind === 'number' && 'text-right',
                   )}
                 >
@@ -345,22 +495,28 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
                         s?.col === i ? { col: i, dir: s.dir === 1 ? -1 : 1 } : { col: i, dir: -1 },
                       )
                     }
-                    className="inline-flex items-center gap-1 hover:text-ink"
+                    className={clsx(
+                      'group/sort inline-flex items-center gap-1 rounded-pill transition-colors hover:text-ink',
+                      sort?.col === i && 'text-ink',
+                    )}
                   >
                     {c.label}
-                    {sort?.col === i &&
-                      (sort.dir === 1 ? (
+                    {sort?.col === i ? (
+                      sort.dir === 1 ? (
                         <ArrowUp className="h-3 w-3" />
                       ) : (
                         <ArrowDown className="h-3 w-3" />
-                      ))}
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-0 transition-opacity group-hover/sort:opacity-60" />
+                    )}
                   </button>
                 </th>
               ))}
               {block.actions.length > 0 && (
-                <th scope="col" className="px-4 py-2" aria-label="Acciones" />
+                <th scope="col" className="px-4 py-2.5" aria-label="Acciones" />
               )}
-              {open && <th scope="col" className="w-10 px-2 py-2" aria-label="Ficha" />}
+              {open && <th scope="col" className="w-12 py-2.5 pr-5" aria-label="Ficha" />}
             </tr>
           </thead>
           <tbody>
@@ -377,17 +533,17 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
                     : undefined
                 }
                 className={clsx(
-                  'border-b border-border/60 last:border-0 hover:bg-surface-2/60',
+                  'group/row transition-colors duration-100 hover:bg-surface-2/60 [&>td]:border-b [&>td]:border-border/60 [&:last-child>td]:border-0',
                   open && 'cursor-pointer',
                 )}
               >
                 {r.cells.map((cell, i) => {
                   const column = block.columns[i];
                   const className = clsx(
-                    'px-4 py-2.5 align-top first:pl-4 sm:first:pl-5',
-                    i === 0 ? 'font-medium text-ink' : 'text-ink-muted',
+                    'px-4 py-3 align-middle first:pl-6 last:pr-6',
+                    i === 0 ? 'font-semibold text-ink' : 'text-ink-muted',
                     column?.kind !== 'text' && 'tabular font-mono text-xs',
-                    column?.kind === 'number' && 'text-right',
+                    column?.kind === 'number' && 'text-right text-ink',
                   );
                   return column?.edit ? (
                     <EditableCell
@@ -403,12 +559,12 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
                   ) : (
                     // biome-ignore lint/suspicious/noArrayIndexKey: las columnas son fijas por bloque.
                     <td key={i} className={className}>
-                      {cell}
+                      {show(cell, i)}
                     </td>
                   );
                 })}
                 {block.actions.length > 0 && (
-                  <td className="whitespace-nowrap px-4 py-2 text-right align-top">
+                  <td className="whitespace-nowrap px-4 py-2.5 text-right align-middle">
                     <RowActions
                       blockId={block.id}
                       actions={block.actions}
@@ -418,15 +574,15 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
                   </td>
                 )}
                 {open && (
-                  <td className="w-10 px-2 py-1.5 text-right align-top">
+                  <td className="w-12 py-2 pr-5 text-right align-middle">
                     <button
                       type="button"
                       onClick={() => open(r.id)}
                       aria-label={`Abrir la ficha de ${r.cells[0] ?? 'esta fila'}`}
                       title="Abrir la ficha"
-                      className="grid h-7 w-7 place-items-center rounded-pill text-ink-faint transition-colors duration-150 hover:bg-primary-soft hover:text-primary"
+                      className="grid h-8 w-8 place-items-center rounded-pill text-ink-faint opacity-60 transition-all duration-150 hover:bg-primary-soft hover:text-primary group-hover/row:opacity-100"
                     >
-                      <PanelRightOpen className="h-3.5 w-3.5" />
+                      <PanelRightOpen className="h-4 w-4" />
                     </button>
                   </td>
                 )}
@@ -434,19 +590,29 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && (
-          <p className="px-5 py-8 text-center text-sm text-ink-faint">
-            {query ? 'Nada coincide con esa búsqueda.' : 'Todavía no hay filas.'}
-          </p>
-        )}
       </div>
+      {rows.length === 0 && (
+        <EmptyState
+          className="mt-2"
+          icon={<Search className="h-5 w-5" aria-hidden />}
+          title={query ? 'Nada coincide con esa búsqueda' : 'Todavía no hay filas'}
+          hint={query ? 'Prueba con otra palabra.' : 'Las filas nuevas aparecen aquí solas.'}
+        />
+      )}
       {block.total > block.rows.length && (
-        <p className="mt-2 text-micro text-ink-faint">
+        <p className="mt-3 text-micro text-ink-faint">
           Se muestran {block.rows.length} de {block.total}.
         </p>
       )}
     </Card>
   );
+}
+
+/** Tono del punto de cada columna del tablero: el de su nombre si dice un estado. */
+function columnDot(label: string, i: number): string {
+  const tone = statusTone(label);
+  if (tone) return TONE_BAR[tone];
+  return ['bg-primary', 'bg-sky', 'bg-amber', 'bg-emerald', 'bg-rose'][i % 5] ?? 'bg-primary';
 }
 
 function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) {
@@ -464,8 +630,8 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
   }
   return (
     <Card title={block.title} source={block.source}>
-      <div className="scroll-slim -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
-        {block.columns.map((col) => (
+      <div className="scroll-slim -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">
+        {block.columns.map((col, ci) => (
           <div
             key={col.key}
             onDragOver={(e) => {
@@ -482,17 +648,23 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
               if (id) void moveTo(id, col.key);
             }}
             className={clsx(
-              'w-64 min-w-[15rem] flex-1 shrink-0 rounded-sm bg-surface-2 p-2.5 transition-colors',
-              over === col.key && 'bg-primary-soft/60 ring-2 ring-primary/40',
+              'flex w-[17rem] min-w-[16rem] flex-1 shrink-0 snap-start flex-col rounded-sm border border-border/60 bg-surface-2/70 p-2.5 transition-colors',
+              over === col.key && 'border-primary/50 bg-primary-soft/60 ring-2 ring-primary/40',
             )}
           >
-            <div className="mb-2 flex items-center justify-between px-1">
-              <span className="text-xs font-semibold text-ink">{col.label}</span>
-              <span className="tabular rounded-pill bg-surface px-2 py-0.5 font-mono text-micro text-ink-muted">
+            <div className="mb-2.5 flex items-center justify-between gap-2 px-1.5 pt-0.5">
+              <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-ink">
+                <span
+                  aria-hidden
+                  className={clsx('h-2 w-2 shrink-0 rounded-pill', columnDot(col.label, ci))}
+                />
+                <span className="truncate">{col.label}</span>
+              </span>
+              <span className="tabular rounded-pill bg-surface px-2 py-0.5 font-mono text-micro font-semibold text-ink-muted shadow-card">
                 {col.count}
               </span>
             </div>
-            <ul className="space-y-2">
+            <ul className="flex-1 space-y-2">
               {col.cards.map((card) => (
                 <li
                   key={card.id}
@@ -503,34 +675,34 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                   }}
                   onDragEnd={() => setDragging(null)}
                   className={clsx(
-                    'rounded-sm border border-border bg-surface p-3 shadow-card',
-                    canDrag && 'cursor-grab active:cursor-grabbing',
-                    dragging === card.id && 'opacity-50',
+                    'rounded-sm border border-border bg-surface p-3 shadow-card transition-all duration-150 hover:border-border-strong',
+                    canDrag && 'cursor-grab hover:-translate-y-px active:cursor-grabbing',
+                    dragging === card.id && 'rotate-1 opacity-50',
                   )}
                 >
                   {open ? (
                     <button
                       type="button"
                       onClick={() => open(card.id)}
-                      className="text-left text-sm font-medium text-ink underline-offset-4 hover:underline"
+                      className="text-left text-sm font-semibold text-ink underline-offset-4 hover:underline"
                     >
                       {card.label}
                     </button>
                   ) : (
-                    <p className="text-sm font-medium text-ink">{card.label}</p>
+                    <p className="text-sm font-semibold text-ink">{card.label}</p>
                   )}
                   {card.details.length > 0 && (
-                    <dl className="mt-1.5 space-y-0.5">
+                    <dl className="mt-2 space-y-1">
                       {card.details.map((d) => (
                         <div key={d.label} className="flex justify-between gap-2 text-micro">
-                          <dt className="text-ink-faint">{d.label}</dt>
-                          <dd className="truncate text-ink-muted">{d.value}</dd>
+                          <dt className="shrink-0 text-ink-faint">{d.label}</dt>
+                          <dd className="tabular truncate font-mono text-ink">{d.value}</dd>
                         </div>
                       ))}
                     </dl>
                   )}
                   {(block.actions.length > 0 || canDrag) && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                       <RowActions
                         blockId={block.id}
                         actions={block.actions}
@@ -559,12 +731,14 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                 </li>
               ))}
               {col.count > col.cards.length && (
-                <li className="px-1 text-micro text-ink-faint">
+                <li className="px-1.5 text-micro font-semibold text-ink-faint">
                   y {col.count - col.cards.length} más
                 </li>
               )}
               {col.count === 0 && (
-                <li className="px-1 py-3 text-center text-micro text-ink-faint">Vacío</li>
+                <li className="grid min-h-[5rem] place-items-center rounded-sm border border-dashed border-border-strong/70 px-2 text-center text-micro text-ink-faint">
+                  {canDrag ? 'Arrastra una tarjeta aquí' : 'Sin tarjetas'}
+                </li>
               )}
             </ul>
           </div>
@@ -576,7 +750,7 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
 }
 
 const INPUT =
-  'w-full rounded-sm border border-border-strong bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/30';
+  'h-11 w-full rounded-sm border border-border-strong bg-surface px-3.5 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint hover:border-ink-faint/50 focus:border-primary focus-visible:ring-4 focus-visible:ring-primary/15';
 
 function Form({
   block,
@@ -596,12 +770,17 @@ function Form({
   if (done) {
     return (
       <Card>
-        <div className="flex flex-col items-center gap-2 py-6 text-center">
-          <CheckCircle2 className="h-8 w-8 text-emerald" />
-          <p className="text-sm font-semibold text-ink">{done}</p>
+        <output className="flex flex-col items-center gap-3 py-8 text-center">
+          <span className="grid h-14 w-14 place-items-center rounded-pill bg-emerald-soft text-emerald ring-8 ring-emerald-soft/40">
+            <Check className="h-7 w-7" strokeWidth={2.5} aria-hidden />
+          </span>
+          <p className="text-base font-bold text-ink">{done}</p>
+          <p className="max-w-xs text-xs leading-relaxed text-ink-muted">
+            Lo enviado ya está en «{block.title}».
+          </p>
           <button
             type="button"
-            className="mt-2 text-xs font-semibold text-primary hover:underline"
+            className="mt-1 rounded-pill border border-border px-4 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-surface-2"
             onClick={() => {
               setDone(null);
               setValues({});
@@ -609,7 +788,7 @@ function Form({
           >
             Enviar otro
           </button>
-        </div>
+        </output>
       </Card>
     );
   }
@@ -617,10 +796,10 @@ function Form({
   return (
     <Card title={block.title}>
       {block.intro && (
-        <p className="-mt-1 mb-4 text-sm leading-relaxed text-ink-muted">{block.intro}</p>
+        <p className="-mt-1 mb-5 text-sm leading-relaxed text-ink-muted">{block.intro}</p>
       )}
       <form
-        className="grid gap-3 sm:grid-cols-2"
+        className="grid gap-4 sm:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
           if (disabled || !submit) return;
@@ -635,9 +814,19 @@ function Form({
         {block.fields.map((f) => (
           // biome-ignore lint/a11y/noLabelWithoutControl: el control está dentro, en una rama del ternario.
           <label key={f.key} className={clsx('block', f.type === 'text' && 'sm:col-span-2')}>
-            <span className="field-label mb-1 block">
-              {f.label}
-              {f.required && <span className="text-rose"> *</span>}
+            <span className="mb-1.5 flex items-baseline justify-between gap-2 text-xs font-semibold text-ink">
+              <span>
+                {f.label}
+                {f.required && (
+                  <span className="text-rose" aria-hidden>
+                    {' '}
+                    *
+                  </span>
+                )}
+              </span>
+              {!f.required && (
+                <span className="text-micro font-normal text-ink-faint">Opcional</span>
+              )}
             </span>
             {f.type === 'select' ? (
               <select
@@ -666,23 +855,27 @@ function Form({
                 inputMode={f.type === 'number' || f.type === 'money' ? 'decimal' : undefined}
                 step="any"
                 maxLength={400}
+                placeholder={f.type === 'money' ? '$ 0' : undefined}
                 value={values[f.key] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                className={INPUT}
+                className={clsx(INPUT, f.type !== 'text' && 'tabular font-mono')}
               />
             )}
           </label>
         ))}
         {error && (
-          <p role="alert" className="text-xs text-rose sm:col-span-2">
+          <p
+            role="alert"
+            className="rounded-sm border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose sm:col-span-2"
+          >
             {error}
           </p>
         )}
-        <div className="flex items-center gap-3 sm:col-span-2">
+        <div className="flex flex-col gap-3 pt-1 sm:col-span-2 sm:flex-row sm:items-center">
           <button
             type="submit"
             disabled={disabled || pending}
-            className="cortex-primary-button inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-45"
+            className="cortex-primary-button inline-flex h-11 items-center justify-center gap-2 rounded-pill bg-primary px-6 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong hover:shadow-pop disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             {block.submitLabel}

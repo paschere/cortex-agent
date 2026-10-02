@@ -65,7 +65,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ViewBlockPreview, ViewCanvas } from '../ViewCanvas';
 import { ShareDialog, type ToolbarView } from '../ViewToolbar';
-import { ViewHero } from '../blocks/ViewChrome';
+import { ViewCover } from '../blocks/ViewChrome';
+import { useBrandScope, useViewBrand } from '../blocks/brand';
 import { BlockLibrary, libraryPieces } from '../studio/BlockLibrary';
 import { CommandBar } from '../studio/CommandBar';
 import { type CatalogSource, DataPanel } from '../studio/DataPanel';
@@ -206,6 +207,8 @@ export function ViewEditor({
   onCancel: () => void;
 }) {
   const services = useEditorServices();
+  const brand = useViewBrand();
+  const brandScope = useBrandScope();
   const [history, setHistory] = useState<History>({
     draft: initial,
     past: [],
@@ -1132,7 +1135,9 @@ export function ViewEditor({
               )}
               <div
                 data-canvas-bg
+                style={brandScope.style}
                 className={clsx(
+                  brandScope.className,
                   'relative bg-canvas shadow-pop ring-1 ring-border transition-[border-radius,padding] duration-200 motion-reduce:transition-none',
                   narrow
                     ? 'rounded-card p-3'
@@ -1143,24 +1148,12 @@ export function ViewEditor({
               >
                 {/* La cabecera como la verá la vista guardada (la grande, si el tema la pide). */}
                 <div className="mb-5 px-1">
-                  {preview?.theme?.header === 'hero' ? (
-                    <ViewHero
-                      title={draft.name || 'Vista sin nombre'}
-                      subtitle={spec.subtitle ?? draft.description}
-                      theme={preview.theme}
-                    />
-                  ) : (
-                    <>
-                      <h1 className="text-xl font-bold tracking-tight text-ink">
-                        {draft.name || 'Vista sin nombre'}
-                      </h1>
-                      {(spec.subtitle || draft.description) && (
-                        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-muted">
-                          {spec.subtitle ?? draft.description}
-                        </p>
-                      )}
-                    </>
-                  )}
+                  <ViewCover
+                    title={draft.name || 'Vista sin nombre'}
+                    subtitle={spec.subtitle ?? draft.description}
+                    theme={preview?.theme}
+                    brand={brand}
+                  />
                   {/* Probando en el computador, las pestañas son las de la vista misma. */}
                   {pages.length > 0 && !(mode === 'test' && device === 'desktop' && !narrow) && (
                     <div

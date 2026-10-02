@@ -1,5 +1,7 @@
 'use client';
 
+import { hueDistance, hueOf } from '@/lib/branding/colors';
+import type { ViewBrand } from '@/lib/branding/shape';
 import type { ComputedTheme, Tone } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { createContext, useContext } from 'react';
@@ -12,7 +14,9 @@ import { createContext, useContext } from 'react';
  * mano en mano. Todo son tokens del sistema de diseño (`bg-primary-soft`,
  * `rounded-card`…): ni colores libres ni CSS del spec. Por eso la misma vista
  * se ve oscura dentro del espacio y clara en el enlace público sin una línea
- * más — los tokens cambian solos con `.cortex-workspace`.
+ * más — los tokens cambian solos con `.cortex-workspace` — y con el color de
+ * la empresa sin que ningún bloque lo sepa: `primary` ES la marca dentro de
+ * `.cortex-brand` (ver brand.tsx y views.css).
  *
  * También viven aquí el marco de cada bloque (`Card`) y los mapas tono →
  * clase, que comparten el lienzo y los bloques de components/views/blocks.
@@ -70,6 +74,114 @@ export const TONE_RING: Record<Tone, string> = {
   rose: 'border-rose/40',
 };
 
+/** El punto de color de un tono (leyendas, columnas, estados). */
+export const TONE_DOT = TONE_BAR;
+
+/**
+ * El color de un tono como valor CSS, para lo que se dibuja en SVG o con
+ * `style`: el acento usa `--view-fill` (el color de la marca para dibujar,
+ * ver views.css), los demás su token.
+ */
+export const TONE_COLOR: Record<Tone, string> = {
+  primary: 'rgb(var(--view-fill, var(--primary)))',
+  emerald: 'rgb(var(--emerald))',
+  amber: 'rgb(var(--amber))',
+  sky: 'rgb(var(--sky))',
+  rose: 'rgb(var(--rose))',
+};
+/** El segundo color de la marca (o `sky` sin marca), para la segunda serie. */
+export const SECOND_COLOR = 'rgb(var(--view-fill-2, var(--sky)))';
+
+/** El tono aproximado de cada token (en claro y en oscuro se parecen). */
+const TOKEN_HUE: Record<Exclude<Tone, 'primary'>, number> = {
+  sky: 200,
+  emerald: 160,
+  amber: 28,
+  rose: 345,
+};
+
+/**
+ * Los colores de una serie de gráfico, empezando por el tono del bloque, sin
+ * repetir. Con marca, después de sus dos colores van los tonos del sistema
+ * MÁS LEJANOS de ellos: una marca verde azulado no pone «esmeralda» al lado
+ * de su verde, donde nadie distinguiría los trozos de una dona.
+ */
+export function seriesColors(tone: Tone, brand?: ViewBrand | null): string[] {
+  const brandHues = [brand?.primary, brand?.secondary]
+    .map((h) => (h ? hueOf(h) : null))
+    .filter((h): h is number => h !== null);
+  const rest = (Object.keys(TOKEN_HUE) as Array<keyof typeof TOKEN_HUE>)
+    .map((t) => ({
+      t,
+      far: brandHues.length ? Math.min(...brandHues.map((h) => hueDistance(h, TOKEN_HUE[t]))) : 0,
+    }))
+    .sort((a, b) => b.far - a.far)
+    .map(({ t }) => TONE_COLOR[t]);
+  const order = brandHues.length
+    ? [TONE_COLOR[tone], tone === 'primary' ? SECOND_COLOR : TONE_COLOR.primary, ...rest]
+    : [
+        TONE_COLOR[tone],
+        tone === 'primary' ? SECOND_COLOR : TONE_COLOR.primary,
+        TONE_COLOR.emerald,
+        TONE_COLOR.amber,
+        TONE_COLOR.rose,
+        TONE_COLOR.sky,
+      ];
+  return [...new Set(order)];
+}
+
+/**
+ * EL TONO DE UN ESTADO, POR SU NOMBRE. «Pagada», «Entregado», «Vencida»,
+ * «Pendiente»: palabras que en español de oficina ya dicen su color. Lo que no
+ * se reconoce queda neutro — inventarle un color sería inventarle un sentido.
+ */
+const STATUS_WORDS: Array<[RegExp, Tone]> = [
+  [
+    /vencid|cancelad|rechazad|bloquead|perdid|mora|atrasad|fall|error|anulad|urgente|cr[ií]tic|alta\b/i,
+    'rose',
+  ],
+  // Lo negado antes que lo positivo: «Inactivo», «No pagada» no son verdes.
+  [/\binactiv|incomplet|sin pagar|no pagad|no entregad/i, 'amber'],
+  [
+    /pendiente|revisi[oó]n|espera|proceso|curso|alistando|borrador|parcial|riesgo|media\b|taller/i,
+    'amber',
+  ],
+  [
+    /pagad|entregad|aprobad|activ|complet|cerrad|listo|lista|confirmad|al d[ií]a|ganad|resuelt|disponible|hecho|baja\b/i,
+    'emerald',
+  ],
+  [/nuev|programad|ruta|enviad|abiert|recibid/i, 'sky'],
+];
+export function statusTone(value: string): Tone | null {
+  const v = value.trim();
+  if (!v || v.length > 32) return null;
+  for (const [re, tone] of STATUS_WORDS) if (re.test(v)) return tone;
+  return null;
+}
+
+/** Columnas que se pintan como chips de estado aunque el valor no se reconozca. */
+export const STATUS_COLUMN_RE = /^(estado|status|etapa|fase|prioridad|situaci[oó]n|resultado)$/i;
+
+export function StatusChip({ value, tone }: { value: string; tone: Tone | null }) {
+  return (
+    <span
+      className={clsx(
+        'inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-pill px-2.5 py-0.5 text-micro font-semibold',
+        tone ? TONE_SOFT[tone] : 'bg-surface-2 text-ink-muted',
+      )}
+    >
+      <span
+        aria-hidden
+        className={clsx(
+          'h-1.5 w-1.5 shrink-0 rounded-pill',
+          tone ? TONE_BAR[tone] : 'bg-ink-faint',
+        )}
+      />
+      <span className="truncate">{value}</span>
+    </span>
+  );
+}
+
 export function Card({
   title,
   source,
@@ -88,26 +200,62 @@ export function Card({
   return (
     <div
       className={clsx(
-        'h-full rounded-card border border-border bg-surface shadow-card',
-        density === 'compact' ? 'p-3 sm:p-4' : 'p-4 sm:p-5',
+        'view-card h-full min-w-0 rounded-card border border-border bg-surface shadow-card',
+        density === 'compact' ? 'p-3.5 sm:p-4' : 'p-4 sm:p-6',
         className,
       )}
     >
       {(title || source || action) && (
         <header
           className={clsx(
-            'flex items-baseline justify-between gap-3',
-            density === 'compact' ? 'mb-2' : 'mb-3',
+            'flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5',
+            density === 'compact' ? 'mb-3' : 'mb-4',
           )}
         >
-          {title && <h2 className="min-w-0 text-sm font-semibold text-ink">{title}</h2>}
+          {title && (
+            <h2 className="min-w-0 text-base font-bold leading-snug tracking-tight text-ink">
+              {title}
+            </h2>
+          )}
           {action}
           {source && !action && (
-            <span className="shrink-0 text-micro text-ink-faint">{source}</span>
+            <span className="max-w-full shrink-0 truncate rounded-pill bg-surface-2 px-2.5 py-0.5 text-micro font-medium text-ink-faint">
+              {source}
+            </span>
           )}
         </header>
       )}
       {children}
+    </div>
+  );
+}
+
+/** Un bloque sin nada que mostrar: qué va ahí, sin dramatismo. */
+export function EmptyState({
+  icon,
+  title,
+  hint,
+  className,
+}: {
+  icon?: React.ReactNode;
+  title: string;
+  hint?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={clsx(
+        'flex flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-border px-4 py-8 text-center',
+        className,
+      )}
+    >
+      {icon && (
+        <span className="grid h-10 w-10 place-items-center rounded-pill bg-surface-2 text-ink-faint">
+          {icon}
+        </span>
+      )}
+      <p className="text-sm font-semibold text-ink-muted">{title}</p>
+      {hint && <p className="max-w-xs text-xs leading-relaxed text-ink-faint">{hint}</p>}
     </div>
   );
 }

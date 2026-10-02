@@ -42,7 +42,7 @@ export function ContextFragments({ turn }: { turn: TurnView }) {
       <section>
         <h4 className="text-xs font-bold text-ink">Fragmentos del cerebro</h4>
         <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-          En este turno no se buscó nada en Brain Knowledge.{' '}
+          En este turno no se buscó nada en el cerebro.{' '}
           {retrieval.skipped && <span className="text-ink-faint">{retrieval.skipped}</span>}
         </p>
       </section>
@@ -62,8 +62,8 @@ export function ContextFragments({ turn }: { turn: TurnView }) {
       </div>
 
       <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-        <span className="font-semibold text-ink">{COVERAGE_LABEL[retrieval.coverage]}.</span>{' '}
-        Buscó «{retrieval.query}».
+        <span className="font-semibold text-ink">{COVERAGE_LABEL[retrieval.coverage]}.</span> Buscó
+        «{retrieval.query}».
       </p>
 
       {/* Printed as written, not paraphrased: this is the exact sentence Cortex
@@ -155,9 +155,7 @@ function Row({
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="truncate text-xs font-semibold text-ink">
-            {fragment.documentTitle}
-          </span>
+          <span className="truncate text-xs font-semibold text-ink">{fragment.documentTitle}</span>
           <span className="tabular shrink-0 text-micro text-ink-faint">
             frag. {fragment.chunkIndex + 1}
           </span>

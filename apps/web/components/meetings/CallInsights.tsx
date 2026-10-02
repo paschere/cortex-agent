@@ -120,9 +120,9 @@ export function BrainDecision({
       <div className="min-w-0 flex-1">
         <p className="font-medium text-ink">
           {status === 'kept'
-            ? 'Guardada en Brain Knowledge'
+            ? 'Guardada en el cerebro'
             : status === 'skipped'
-              ? 'Fuera de Brain Knowledge'
+              ? 'Fuera del cerebro'
               : 'Cortex todavía no decidió si va al Brain'}
           {who ? <span className="font-normal text-ink-faint"> · {who}</span> : null}
         </p>

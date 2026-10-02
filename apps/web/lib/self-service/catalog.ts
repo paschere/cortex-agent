@@ -153,6 +153,15 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
       'Crea una tabla de solicitudes del equipo (qué se pide, quién lo pide, responsable, fecha y estado) y una vista con un formulario que pueda compartir por enlace. Recuérdale al responsable si una solicitud lleva 3 días quieta.',
   },
   {
+    id: 'company_pulse',
+    area: 'Plata',
+    title: 'Pulso diario de la empresa',
+    body: 'Una vista con ventas, cartera vencida, caja, metas y pendientes, y un resumen escrito cada mañana con esas cifras.',
+    needs: 'Lo que ya tengas: programa contable, facturas, pagos o metas',
+    prompt:
+      'Dime cómo va la empresa en una vista y actualízala cada día: arma el pulso de la empresa con los datos que ya tengas (ventas contra el mes anterior, cartera vencida, lo que entró, lo recuperado, metas y pendientes), dime qué falta conectar, y programa que el resumen de hoy se escriba cada día hábil a las 7 a. m.',
+  },
+  {
     id: 'morning',
     area: 'Equipo',
     title: 'Resumen de la mañana',

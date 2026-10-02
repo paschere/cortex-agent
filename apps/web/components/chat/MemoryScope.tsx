@@ -197,7 +197,7 @@ export function ScopePicker({
 
           {spaces !== null && spaces.length === 0 && (
             <p className="px-2.5 py-3 text-xs leading-snug text-ink-faint">
-              Todavía no hay espacios en Brain Knowledge. Sube un documento y aparecerán aquí.
+              Todavía no hay espacios en el cerebro. Sube un documento y aparecerán aquí.
             </p>
           )}
 

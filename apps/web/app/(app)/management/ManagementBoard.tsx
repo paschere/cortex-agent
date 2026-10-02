@@ -139,7 +139,7 @@ export function ManagementBoard(props: Props) {
         {(
           [
             ['today', 'La operación'],
-            ['processes', 'Manuales de procesos'],
+            ['processes', 'Manuales'],
             ['settings', 'Configuración'],
           ] as const
         ).map(([value, label]) => (
@@ -168,8 +168,11 @@ export function ManagementBoard(props: Props) {
                   : 'Preparemos el primer encargo.'}
             </h2>
             <p>
-              {active.filter(risk).length} asuntos requieren atención ·{' '}
-              {active.filter((c) => c.data.state === 'review').length} esperan verificación humana.
+              {(() => {
+                const atRisk = active.filter(risk).length;
+                const inReview = active.filter((c) => c.data.state === 'review').length;
+                return `${atRisk} ${atRisk === 1 ? 'asunto requiere' : 'asuntos requieren'} atención · ${inReview} ${inReview === 1 ? 'espera' : 'esperan'} tu revisión.`;
+              })()}
               Consulta las señales antes de concluir que todo está al día.
             </p>
           </div>
@@ -185,10 +188,10 @@ export function ManagementBoard(props: Props) {
           </div>
           <nav aria-label="Fuentes de la agenda">
             <Link href={href('/goals')}>Metas</Link>
-            <Link href={href('/commitments')}>Compromisos</Link>
+            <Link href={href('/commitments')}>Vencimientos</Link>
             <Link href={href('/approvals')}>Aprobaciones</Link>
             <Link href={href('/schedules')}>Rutinas</Link>
-            <Link href={href('/feed')}>Consultar datos</Link>
+            <Link href={href('/feed')}>Bandeja de archivos</Link>
             <Link href={href('/management/operation')}>Operación de 30 días</Link>
             <Link href={href('/management/mission')}>Primera misión</Link>
             <Link href={href('/management/control')}>Autonomía y calidad</Link>
@@ -382,7 +385,10 @@ export function ManagementBoard(props: Props) {
                     <div className="divide-y divide-border">
                       {unassigned.length === 0 && (
                         <p className="py-4 text-sm text-ink-muted">
-                          Sin señales nuevas en las fuentes consultadas.
+                          Sin señales nuevas en las fuentes consultadas.{' '}
+                          <Link href={href('/integrations')} className="font-semibold text-primary">
+                            Conectar más fuentes
+                          </Link>
                         </p>
                       )}
                       {unassigned.map((s) => (

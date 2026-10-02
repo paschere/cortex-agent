@@ -69,7 +69,7 @@ describe('la app de QuickBooks de la instalación', () => {
   it('sin id o secreto no hay app: un mensaje claro, nada se cae', () => {
     expect(quickbooksAppConfig({})).toBeNull();
     expect(quickbooksSetupMissing({ QUICKBOOKS_CLIENT_ID: 'x' })).toContain(
-      'Falta configurar la app de QuickBooks',
+      'QuickBooks todavía no está habilitado',
     );
     expect(
       quickbooksAppConfig({ QUICKBOOKS_CLIENT_ID: 'a', QUICKBOOKS_CLIENT_SECRET: 'b' }),
@@ -100,7 +100,7 @@ describe('la app de QuickBooks de la instalación', () => {
   it('el programa sin app configurada abre una sesión que dice qué falta', async () => {
     vi.stubEnv('QUICKBOOKS_CLIENT_ID', '');
     vi.stubEnv('QUICKBOOKS_CLIENT_SECRET', '');
-    expect(quickbooksProvider.setupMissing?.()).toContain('Falta configurar');
+    expect(quickbooksProvider.setupMissing?.()).toContain('todavía no está habilitado');
     const session = quickbooksProvider.open({
       realm_id: '123',
       refresh_token: 'r',

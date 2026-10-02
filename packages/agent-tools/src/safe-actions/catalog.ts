@@ -226,6 +226,33 @@ const trackersUpsert: SafeActionPolicy<{ rowId?: string }, { row: { id: string }
     ),
 };
 
+/**
+ * El resumen del día de una vista (views.refresh_summary): una vez por vista y
+ * por DÍA DE BOGOTÁ, que es la clave y no el input entero. Dos corridas de la
+ * rutina a la vez no escriben dos versiones. `force` (la persona pidió
+ * reescribirlo) va sin guardia. La herramienta además mira el historial de la
+ * vista, que cubre lo que esta guardia no ve (cada corrida de una rutina tiene
+ * su propio alcance).
+ */
+const viewSummary: SafeActionPolicy<{ view: string; blockId?: string; force?: boolean }, unknown> =
+  {
+    windowMs: 20 * HOUR,
+    noun: 'el resumen del día',
+    key: (input) =>
+      input.force
+        ? null
+        : {
+            view: input.view,
+            blockId: input.blockId ?? 'resumen_hoy',
+            day: new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'America/Bogota',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }).format(new Date()),
+          },
+  };
+
 // --- Sin verificación (todavía): sólo la guardia de repetición -------------
 
 const chatPost: AnySafeActionPolicy = { windowMs: 6 * HOUR, noun: 'el mensaje' };
@@ -248,4 +275,5 @@ export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> 
   'github.create_issue': externalRecord,
   'github.create_issue_comment': chatPost,
   'gsheets.append_row': sheetRow,
+  'views.refresh_summary': viewSummary as unknown as AnySafeActionPolicy,
 };

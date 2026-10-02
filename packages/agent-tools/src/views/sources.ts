@@ -20,6 +20,8 @@ import {
 } from '../goals/shape';
 import { listGoals } from '../goals/store';
 import { type ManagementState, managementStateLabels, managementStates } from '../management/shape';
+import { RECOVERY_TRIGGER_LABEL } from '../payments/recovered';
+import { moneyRecovered } from '../payments/recovered-store';
 import {
   COUNTED_STATES,
   PAYMENT_KINDS,
@@ -28,7 +30,7 @@ import {
   type PaymentKind,
   signedAmount,
 } from '../payments/shape';
-import { listPayments, num } from '../payments/store';
+import { listPayments, num, overdueReceivableInvoices } from '../payments/store';
 import type { TrackerField } from '../trackers/schema';
 import { type ViewRow, todayIn } from './compute';
 import { type ViewSpec, isFeedSourceId, trackersOf } from './spec';
@@ -1188,6 +1190,162 @@ const rutinas: PlatformSource = {
 };
 
 // ---------------------------------------------------------------------------
+// Cartera vencida: la plata en riesgo, con las facturas de programa contable
+// ---------------------------------------------------------------------------
+
+const TRAMOS = ['1 a 30 días', '31 a 60 días', '61 a 90 días', 'Más de 90 días'];
+const CARTERA_ORIGEN = ['Documento confirmado', 'Siigo', 'Alegra', 'QuickBooks', 'Otro programa'];
+const SYSTEM_NAME: Record<string, string> = {
+  siigo: 'Siigo',
+  alegra: 'Alegra',
+  quickbooks: 'QuickBooks',
+};
+
+function tramoOf(days: number): string {
+  if (days <= 30) return TRAMOS[0] as string;
+  if (days <= 60) return TRAMOS[1] as string;
+  if (days <= 90) return TRAMOS[2] as string;
+  return TRAMOS[3] as string;
+}
+
+/**
+ * LA CARTERA VENCIDA COMO LA SUMA «PLATA EN RIESGO».
+ *
+ * `cortex.ventas` sólo ve facturas leídas de documentos y confirmadas. Una
+ * empresa que conectó Siigo, Alegra o QuickBooks (0165) tiene su cartera en
+ * `accounting_invoices`, y la cifra de plata en riesgo ya las suma juntas con
+ * una regla (`overdueReceivableInvoices`): el saldo del programa contable va
+ * tal cual, y una factura que existe en los dos lados cuenta una vez. Esta
+ * fuente es esa misma lista, fila por fila, para que el tablero y la cifra de
+ * la mañana digan lo mismo.
+ */
+const cartera: PlatformSource = {
+  id: 'cortex.cartera',
+  name: 'Cartera vencida',
+  description:
+    'Facturas por cobrar que ya pasaron su fecha y tienen saldo: las confirmadas a mano y las de Siigo, Alegra o QuickBooks, contadas una sola vez. Es la cartera de «plata en riesgo».',
+  sensitivity: 'shareable',
+  fields: [
+    field('numero', 'Número', 'text'),
+    field('cliente', 'Cliente', 'text'),
+    field('vence', 'Venció el', 'date'),
+    field('dias_mora', 'Días de mora', 'number'),
+    field('tramo', 'Tramo de mora', 'select', TRAMOS),
+    field('saldo', 'Saldo (COP)', 'money'),
+    field('moneda', 'Moneda', 'text'),
+    field('saldo_otra_moneda', 'Saldo en otra moneda', 'number'),
+    field('origen', 'De dónde viene', 'select', CARTERA_ORIGEN),
+  ],
+  async read(db, cap, today) {
+    const list = await overdueReceivableInvoices(db, { today });
+    const rows = list.slice(0, cap).map((inv) => {
+      const values: Values = {};
+      put(values, 'numero', inv.docNumber);
+      put(values, 'cliente', inv.counterparty);
+      put(values, 'vence', inv.dueOn);
+      put(values, 'dias_mora', inv.daysOverdue);
+      put(values, 'tramo', tramoOf(inv.daysOverdue));
+      put(values, 'moneda', inv.currency);
+      if (inv.currency.trim().toUpperCase() === COP) put(values, 'saldo', inv.balance);
+      else put(values, 'saldo_otra_moneda', inv.balance);
+      put(
+        values,
+        'origen',
+        inv.source === 'accounting'
+          ? (SYSTEM_NAME[inv.system ?? ''] ?? 'Otro programa')
+          : 'Documento confirmado',
+      );
+      return row(
+        `${inv.source ?? 'document'}:${inv.id}`,
+        inv.docNumber ?? inv.counterparty ?? 'Factura',
+        values,
+        null,
+      );
+    });
+    return { rows, truncated: list.length > cap };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Plata recuperada con Cortex
+// ---------------------------------------------------------------------------
+
+const MANUAL_RECOVERY = 'Cierre verificado en Gerencia';
+const RECOVERY_KIND: Record<string, string> = {
+  payment: 'Pago',
+  reversal: 'Devolución',
+  balance_drop: 'Baja de saldo',
+};
+
+/**
+ * LO QUE VOLVIÓ PORQUE CORTEX ACTUÓ (payments/recovered.ts tiene las reglas).
+ *
+ * Una fila por movimiento atribuido —un pago, una devolución que resta, una
+ * caída de saldo del programa contable— y una por lo manual verificado en
+ * Gerencia, con el día en que pasó. Así un KPI «este mes contra el anterior»
+ * suma lo mismo que la cifra de /payments. Es `internal`: lo manual lleva el
+ * título de un asunto de Gerencia, y cómo cobra la empresa no es para afuera.
+ */
+const recuperado: PlatformSource = {
+  id: 'cortex.recuperado',
+  name: 'Plata recuperada con Cortex',
+  description:
+    'Pagos de facturas vencidas que llegaron después de que Cortex cobró, avisó o hizo seguimiento (dentro de la ventana de atribución), más lo recuperado a mano y verificado en Gerencia. Una fila por movimiento, con su fecha.',
+  sensitivity: 'internal',
+  fields: [
+    field('fecha', 'Fecha', 'date'),
+    field('cliente', 'Cliente', 'text'),
+    field('factura', 'Factura', 'text'),
+    field('valor', 'Recuperado (COP)', 'money'),
+    field('moneda', 'Moneda', 'text'),
+    field('valor_otra_moneda', 'Recuperado en otra moneda', 'number'),
+    field('accion', 'Qué hizo Cortex', 'select', [
+      ...Object.values(RECOVERY_TRIGGER_LABEL),
+      MANUAL_RECOVERY,
+    ]),
+    field('tipo', 'Movimiento', 'select', [...Object.values(RECOVERY_KIND), 'Manual']),
+  ],
+  async read(db, cap, today) {
+    const recovered = await moneyRecovered(db, { today });
+    const all: ViewRow[] = [];
+    for (const inv of recovered.items) {
+      for (const m of inv.movements) {
+        const values: Values = {};
+        put(values, 'fecha', m.on);
+        put(values, 'cliente', inv.counterparty);
+        put(values, 'factura', inv.docNumber);
+        put(values, 'moneda', inv.currency);
+        if (inv.currency.trim().toUpperCase() === COP) put(values, 'valor', m.counted);
+        else put(values, 'valor_otra_moneda', m.counted);
+        put(values, 'accion', m.trigger.label);
+        put(values, 'tipo', RECOVERY_KIND[m.kind] ?? null);
+        all.push(
+          row(
+            `${inv.invoiceId}:${m.id}`,
+            inv.docNumber ?? inv.counterparty ?? 'Factura',
+            values,
+            null,
+          ),
+        );
+      }
+    }
+    for (const m of recovered.manual) {
+      const values: Values = {};
+      put(values, 'fecha', m.on);
+      put(values, 'valor', m.counted);
+      put(values, 'moneda', COP);
+      put(values, 'accion', MANUAL_RECOVERY);
+      put(values, 'tipo', 'Manual');
+      all.push(
+        row(`manual:${m.caseId}`, m.title.slice(0, 120) || 'Asunto de Gerencia', values, null),
+      );
+    }
+    all.sort((a, b) => String(b.values.fecha ?? '').localeCompare(String(a.values.fecha ?? '')));
+    return { rows: all.slice(0, cap), truncated: all.length > cap };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // El registro
 // ---------------------------------------------------------------------------
 
@@ -1195,6 +1353,8 @@ export const PLATFORM_SOURCES: ReadonlyMap<string, PlatformSource> = new Map(
   [
     ventas,
     pagos,
+    cartera,
+    recuperado,
     clientes,
     vencimientos,
     compromisos,

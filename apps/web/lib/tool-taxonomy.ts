@@ -69,7 +69,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   },
   sales: {
     name: 'Propuestas',
-    blurb: 'Redacción de propuestas para cliente, apoyada en el CRM y en Brain Knowledge.',
+    blurb: 'Redacción de propuestas para cliente, apoyada en el CRM y en el cerebro.',
     tone: 'amber',
     icon: 'Handshake',
   },
@@ -116,7 +116,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     icon: 'Wallet',
   },
   kb: {
-    name: 'Brain Knowledge',
+    name: 'Cerebro',
     blurb: 'La memoria de la empresa: busca en los documentos internos y escribe nuevos.',
     tone: 'sky',
     icon: 'BookOpen',
@@ -128,7 +128,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   attachments: {
     name: 'Archivos del chat',
     blurb:
-      'Los archivos que alguien soltó en una conversación diciendo «sólo para este chat», y la forma de arrepentirse: subirlos a Brain Knowledge sin volver a cargarlos.',
+      'Los archivos que alguien soltó en una conversación diciendo «sólo para este chat», y la forma de arrepentirse: subirlos al cerebro sin volver a cargarlos.',
     tone: 'sky',
     icon: 'Paperclip',
   },
@@ -189,7 +189,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   outlook: {
     name: 'Outlook',
     blurb:
-      'El correo de Microsoft 365: buscar, leer un hilo completo, dejar borradores, enviarlos y archivar en Brain Knowledge lo que se habla con clientes.',
+      'El correo de Microsoft 365: buscar, leer un hilo completo, dejar borradores, enviarlos y archivar en el cerebro lo que se habla con clientes.',
     tone: 'rose',
     icon: 'Mail',
   },
@@ -274,7 +274,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   views: {
     name: 'Vistas',
     blurb:
-      'Pantallas a la medida sobre las tablas de la empresa: tableros, portales y formularios. Se piden y se cambian escribiendo, y se comparten por enlace o con contraseña.',
+      'Pantallas a la medida sobre las tablas de la empresa: tableros, portales y formularios. Se piden y se cambian escribiendo, y se comparten por enlace o con contraseña. Incluye el pulso de la empresa, con su resumen escrito cada mañana.',
     tone: 'primary',
     icon: 'SquareKanban',
   },
@@ -405,8 +405,7 @@ export const CAPABILITY_GROUPS: CapabilityGroup[] = [
   {
     id: 'docs',
     name: 'Documentos y memoria',
-    blurb:
-      'Buscar en Brain Knowledge, abrir archivos del Drive y leer o escribir hojas de cálculo.',
+    blurb: 'Buscar en el cerebro, abrir archivos del Drive y leer o escribir hojas de cálculo.',
     tone: 'primary',
     icon: 'BookOpen',
   },
@@ -675,7 +674,7 @@ export const FAMILY_CREDENTIALS: Record<string, CredentialRequirement> = {
   },
   kb: {
     vars: ['VOYAGE_API_KEY'],
-    label: 'el motor de embeddings de Brain Knowledge',
+    label: 'el motor de embeddings del cerebro',
     blocking: false,
     effect: 'Sin él la búsqueda solo empareja palabras, no significado.',
   },

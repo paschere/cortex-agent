@@ -555,8 +555,10 @@ export const MAX_VIEW_PAGES = 8;
  * EL ASPECTO. Siempre con los tokens del sistema de diseño: un color de
  * acento de los cinco, una densidad y una cabecera. `hero` es una banda
  * grande con el título, el subtítulo y, si hay, una imagen de portada
- * `https:`. No hay colores libres ni CSS: una vista de un cliente se ve como
- * Cortex, en claro afuera y en el tema del espacio adentro.
+ * `https:`. No hay colores libres ni CSS en el spec. El color de la empresa
+ * (migración 0170, `company_branding`) no vive aquí: es el acento por defecto
+ * de todas sus vistas y lo aplica el navegador con el contraste resuelto
+ * (apps/web/lib/branding/colors.ts). `accent` distinto de `primary` gana.
  */
 export const DENSITIES = ['comfortable', 'compact'] as const;
 export const HEADER_STYLES = ['plain', 'hero'] as const;

@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { authErrorMessage } from '@/lib/auth-error-message';
 import { safeNextPath } from '@/lib/invite-landing';
 import { FileCheck2, Repeat2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
@@ -53,9 +54,10 @@ export default function LoginPage() {
       await authClient.signIn.social({ provider: 'google', callbackURL: nextUrl() });
     } catch (e) {
       setErr(
-        e instanceof Error
-          ? e.message
-          : 'No se pudo abrir el ingreso con Google. Inténtalo de nuevo o entra con tu correo y contraseña.',
+        authErrorMessage(
+          e,
+          'No se pudo abrir el ingreso con Google. Inténtalo de nuevo o entra con tu correo y contraseña.',
+        ),
       );
       setLoading(null);
     }
@@ -72,8 +74,10 @@ export default function LoginPage() {
     });
     if (error) {
       setErr(
-        error.message ??
+        authErrorMessage(
+          error,
           'Ese correo y esa contraseña no coinciden con ninguna cuenta. Revísalos e inténtalo de nuevo.',
+        ),
       );
       setLoading(null);
     }

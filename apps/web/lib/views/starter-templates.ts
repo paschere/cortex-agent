@@ -255,6 +255,29 @@ const ventasDelMes: ViewSpec = {
 
 export const STARTER_TEMPLATES: StarterTemplate[] = [
   {
+    // El pulso depende de qué datos tiene cada empresa (Siigo, facturas
+    // confirmadas, pagos, metas…), así que es de frase: el diseñador lo arma
+    // sólo con las fuentes que tienen filas. Desde el chat, «dime cómo va la
+    // empresa» lo arma `views.company_pulse` y programa su resumen diario.
+    id: 'pulso_empresa',
+    kind: 'prompt',
+    icon: 'trending',
+    category: 'Ventas y cartera',
+    sketch: [
+      S('text', 'full'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('chart', 'half'),
+      S('chart', 'half'),
+      S('table', 'full'),
+    ],
+    title: 'Pulso de la empresa',
+    body: 'Cómo va la empresa hoy: ventas contra el mes anterior, cartera vencida, lo que entró, metas y pendientes, con un resumen cada mañana.',
+    prompt:
+      'Pulso de la empresa: un tablero ejecutivo de cómo va la empresa hoy. Arriba un texto «Resumen de hoy». Luego las cifras clave contra el mes anterior: ventas del mes, cartera vencida (plata en riesgo), lo recuperado con Cortex, pagos recibidos, metas cumplidas y pendientes de Gerencia. Después las ventas y los pagos por mes, los clientes que más compran y quién debe más. Usa sólo las fuentes que tienen datos y dime qué falta conectar.',
+  },
+  {
     id: 'operacion_carga',
     kind: 'prompt',
     icon: 'truck',

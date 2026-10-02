@@ -62,7 +62,13 @@ describe('el registro de fuentes', () => {
       .filter((s) => s.sensitivity === 'internal')
       .map((s) => s.id)
       .sort();
-    expect(internal).toEqual(['cortex.compromisos', 'cortex.gestion', 'cortex.prospectos']);
+    // La plata recuperada es interna: lo manual lleva el título de un asunto de Gerencia.
+    expect(internal).toEqual([
+      'cortex.compromisos',
+      'cortex.gestion',
+      'cortex.prospectos',
+      'cortex.recuperado',
+    ]);
   });
 });
 

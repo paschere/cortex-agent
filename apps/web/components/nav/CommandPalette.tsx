@@ -125,13 +125,13 @@ const SECTIONS: Section[] = [
       },
       {
         href: '/feed',
-        label: 'Feed',
+        label: 'Bandeja de archivos',
         note: 'Archivos, enlaces y texto para consultar con Cortex',
         keywords: 'feed subir excel csv archivos enlaces urls consulta temporal',
       },
       {
         href: '/kb',
-        label: 'Brain Knowledge',
+        label: 'Cerebro',
         note: 'Lo que Cortex memorizó, fragmento por fragmento',
         keywords: 'kb conocimiento documentos cerebro buscar brain search espacios',
       },
@@ -154,12 +154,6 @@ const SECTIONS: Section[] = [
         label: 'Encargos',
         note: 'Le pides algo largo; trabaja solo y te pregunta si se atasca',
         keywords: 'errands encargar tarea larga autonomo mandado',
-      },
-      {
-        href: '/orchestrator',
-        label: 'Orquestador',
-        note: 'Un objetivo suelto, resuelto por varios subagentes a la vez',
-        keywords: 'plan grafo multiagente ejecutar orchestrator subagentes',
       },
       {
         href: '/pipelines',
@@ -185,12 +179,6 @@ const SECTIONS: Section[] = [
         label: MODULE.label,
         note: 'Vueltas en portales ajenos que aprendió viéndote hacerlas',
         keywords: 'browser navegador portales runt simit estado flujos web',
-      },
-      {
-        href: '/dev-work',
-        label: 'Desarrollo',
-        note: 'Cambios que Cortex hace en tu propio software',
-        keywords: 'dev work codigo repos github linear tareas tecnicas',
       },
     ],
   },
@@ -218,24 +206,10 @@ const SECTIONS: Section[] = [
       },
       {
         href: '/prospects',
-        label: 'Outreach',
+        label: 'Prospectos',
         note: 'Prospección comercial: empresas, señales y oportunidades por revisar',
         keywords:
           'outreach growth señales prospectos oportunidades industria comercial ventas clientes',
-      },
-      {
-        href: '/learning',
-        label: 'Aprendizaje',
-        note: 'Qué se ajustó solo, con qué evidencia, y qué esperas decidir',
-        keywords: 'learning memoria ajustes aprendio cambios automaticos',
-      },
-      // Not in the rail. The door on a screen is the header action on
-      // /learning; this is the door for somebody who knows the word.
-      {
-        href: '/evaluation',
-        label: 'Evaluación',
-        note: 'Si las respuestas mejoraron o empeoraron, con un número',
-        keywords: 'evaluation calidad pruebas suite corridas benchmark respuestas',
       },
     ],
   },
@@ -244,14 +218,15 @@ const SECTIONS: Section[] = [
     entries: [
       {
         href: '/integrations',
-        label: 'Integraciones',
+        label: 'Datos y conexiones',
         note: 'A qué sistemas llega Cortex en tu nombre',
-        keywords: 'google hubspot slack github linear payroll mcp servers outlook conectar',
+        keywords:
+          'integraciones google hubspot slack github linear payroll mcp servers outlook conectar siigo alegra',
       },
       {
         href: '/mcp-tokens',
-        label: 'Conectar Claude',
-        note: 'Usar Cortex desde Claude u otro cliente de IA',
+        label: 'Usar desde Claude o ChatGPT',
+        note: 'Preguntarle a Cortex desde el asistente que ya usas',
         keywords: 'claude code chatgpt mcp connector url token oauth conector',
       },
       {
@@ -263,9 +238,8 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    // Neither is in the rail: both are set-up-once screens reached from where
-    // the question comes up — /tools from Inicio, /agents from /tools when a
-    // tool is blocked and the answer is which agent may call it.
+    // /tools is not in the rail: it is a set-up-once screen reached from where
+    // the question comes up (Inicio). /agents moved to «Avanzado», below.
     heading: 'Configuración',
     entries: [
       {
@@ -273,12 +247,6 @@ const SECTIONS: Section[] = [
         label: 'Herramientas',
         note: 'Qué sabe hacer Cortex aquí, qué está frenado y por qué',
         keywords: 'tools catalogo permisos bloqueada habilitar capacidades',
-      },
-      {
-        href: '/agents',
-        label: 'Agentes',
-        note: 'Qué agentes existen y a qué herramientas llega cada uno',
-        keywords: 'agents bots equipo modelos personas artificiales',
       },
       {
         href: '/settings',
@@ -291,6 +259,48 @@ const SECTIONS: Section[] = [
         label: 'Plan y consumo',
         note: 'Qué incluye tu plan y cuánto llevas usado este mes',
         keywords: 'plan consumo facturacion limites cuota billing precio',
+      },
+    ],
+  },
+  {
+    // LO QUE MIRA QUIEN MANTIENE CORTEX, NO QUIEN LO USA.
+    // Orquestador, desarrollo, aprendizaje, evaluación y agentes son pantallas
+    // de quien administra el espacio: a un dueño o a un empleado sin rol de
+    // administración sólo le ofrecían palabras que no tenía por qué conocer.
+    // Siguen existiendo (y sus páginas no cambian); la paleta sólo deja de
+    // ofrecérselas a quien no administra.
+    heading: 'Avanzado',
+    adminOnly: true,
+    entries: [
+      {
+        href: '/orchestrator',
+        label: 'Orquestador',
+        note: 'Un objetivo suelto, resuelto por varios subagentes a la vez',
+        keywords: 'plan grafo multiagente ejecutar orchestrator subagentes',
+      },
+      {
+        href: '/dev-work',
+        label: 'Desarrollo',
+        note: 'Cambios que Cortex hace en tu propio software',
+        keywords: 'dev work codigo repos github linear tareas tecnicas',
+      },
+      {
+        href: '/learning',
+        label: 'Aprendizaje',
+        note: 'Qué se ajustó solo, con qué evidencia, y qué esperas decidir',
+        keywords: 'learning memoria ajustes aprendio cambios automaticos',
+      },
+      {
+        href: '/evaluation',
+        label: 'Evaluación',
+        note: 'Si las respuestas mejoraron o empeoraron, con un número',
+        keywords: 'evaluation calidad pruebas suite corridas benchmark respuestas',
+      },
+      {
+        href: '/agents',
+        label: 'Agentes',
+        note: 'Qué agentes existen y a qué herramientas llega cada uno',
+        keywords: 'agents bots equipo modelos personas artificiales',
       },
     ],
   },

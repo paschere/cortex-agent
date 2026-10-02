@@ -45,7 +45,7 @@ import { useMemo, useState, useTransition } from 'react';
 
 const ROLE_LABEL: Record<Role, string> = {
   org_admin: 'Admin de la empresa',
-  team_admin: 'Admin de equipo',
+  team_admin: 'Lidera un equipo',
   member: 'Miembro',
 };
 

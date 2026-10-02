@@ -12,9 +12,10 @@ import {
 import { chipClass } from '@/lib/status-chip';
 import clsx from 'clsx';
 import { Banknote, Loader2, Quote, Scale } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { recordPayment, resolveDispute } from '../actions';
-import { plural } from './format';
+import { plural, shortDate } from './format';
 import type {
   ActionResult,
   ClientOption,
@@ -61,16 +62,41 @@ function Receivables({ view }: { view: ReceivablesView }) {
       <PanelHead
         icon={<Banknote className="h-4 w-4" aria-hidden />}
         title="Cartera"
-        right={<span className="text-xs text-ink-faint">al {view.today}</span>}
+        right={<span className="tabular text-xs text-ink-faint">al {shortDate(view.today)}</span>}
       />
       {view.byCurrency.length === 0 ? (
         <div className="px-5 py-8 text-center">
           <p className="text-base font-semibold text-ink">Todavía no hay cartera que calcular</p>
           <p className="mt-1 text-sm text-ink-muted">
             {view.pendingExcluded > 0
-              ? `Hay ${plural(view.pendingExcluded, 'factura')} leída(s) que nadie ha confirmado. Ninguna entra en una cifra hasta que alguien las revise — y esa revisión es justo lo que convierte lo leído en algo que se puede sumar.`
-              : 'No hay ninguna factura confirmada con saldo pendiente.'}
+              ? `Hay ${plural(view.pendingExcluded, 'factura leída', 'facturas leídas')} que nadie ha confirmado. Ninguna entra en una cifra hasta que alguien las revise — y esa revisión es justo lo que convierte lo leído en algo que se puede sumar.`
+              : 'No hay ninguna factura confirmada con saldo pendiente. Conecta tu programa contable o sube tus facturas y Cortex calcula quién te debe.'}
           </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {view.pendingExcluded > 0 ? (
+              <Link
+                href="/finance"
+                className="inline-flex min-h-10 items-center rounded-pill bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-strong"
+              >
+                Revisar las facturas leídas
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/integrations#programas-contables"
+                  className="inline-flex min-h-10 items-center rounded-pill bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-strong"
+                >
+                  Conectar Siigo, Alegra o QuickBooks
+                </Link>
+                <Link
+                  href="/kb"
+                  className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-5 py-2 text-sm font-bold text-ink transition-colors hover:bg-surface-2"
+                >
+                  Subir facturas
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       ) : (
         <ul className="divide-y divide-border">
@@ -247,7 +273,7 @@ function Disputes({ disputes }: { disputes: DisputeView[] }) {
                     {busy === `${d.paymentId}-settle` ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                     ) : null}
-                    Dar por bueno este importe
+                    Dar por bueno este valor
                   </Button>
                   <Button
                     variant="outline"
@@ -331,14 +357,14 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
       <div className="space-y-3 px-5 py-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block" htmlFor="pago-importe">
-            <span className="field-label">Importe</span>
+            <span className="field-label">Valor</span>
             <Input
               id="pago-importe"
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="4200000"
-              aria-label="Importe del pago"
+              aria-label="Valor del pago"
             />
           </label>
           <label className="block">
@@ -466,8 +492,11 @@ function Ledger({ payments }: { payments: PaymentView[] }) {
         <div className="px-5 py-8 text-center">
           <p className="text-base font-semibold text-ink">Todavía no hay ningún pago</p>
           <p className="mt-1 text-sm text-ink-muted">
-            Anota el primero a la izquierda, o sube un comprobante de pago a Brain Knowledge: al
-            confirmarlo, el pago se registra solo con la frase de la que se leyó el importe.
+            Anota el primero en «Anotar un pago», o sube un comprobante de pago{' '}
+            <Link href="/kb" className="font-semibold text-primary hover:underline">
+              al cerebro
+            </Link>
+            : al confirmarlo, el pago se registra solo con la frase de la que se leyó el valor.
           </p>
         </div>
       ) : (
@@ -489,9 +518,7 @@ function Ledger({ payments }: { payments: PaymentView[] }) {
               >
                 {PAYMENT_STATE_LABEL[p.state]}
               </span>
-              <span className="text-micro text-ink-faint">
-                {plural(p.sourceCount, 'fuente')}
-              </span>
+              <span className="text-micro text-ink-faint">{plural(p.sourceCount, 'fuente')}</span>
             </li>
           ))}
         </ul>

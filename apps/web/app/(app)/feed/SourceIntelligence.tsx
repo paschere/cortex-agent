@@ -295,7 +295,7 @@ export function SourceIntelligence({
       setNotice(
         body.deduplicated
           ? 'La captura actual ya existía; se reutilizó su procedencia.'
-          : 'Combinación guardada como fuente privada de Feed.',
+          : 'Combinación guardada como fuente privada de tu bandeja.',
       );
       onCaptured?.();
       await load();
@@ -335,7 +335,7 @@ export function SourceIntelligence({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-              <Combine className="h-4 w-4" aria-hidden /> Inteligencia privada de Feed
+              <Combine className="h-4 w-4" aria-hidden /> Cruzar tus archivos
             </p>
             <h2
               id="source-intelligence-title"

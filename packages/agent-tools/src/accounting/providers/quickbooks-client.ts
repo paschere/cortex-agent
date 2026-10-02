@@ -69,8 +69,12 @@ export function quickbooksAppConfig(env: EnvLike = process.env): QuickBooksAppCo
   return { clientId, clientSecret, environment, apiBase: API_BASE[environment] };
 }
 
+// Lo lee un dueño en la tarjeta de «Programas contables»: no puede hacer nada
+// con nombres de variables de entorno. Lo que necesita saber es que esto lo
+// habilita Cortex, no él. (Para quien opera la instalación: faltan
+// QUICKBOOKS_CLIENT_ID y QUICKBOOKS_CLIENT_SECRET, de developer.intuit.com.)
 export const QUICKBOOKS_SETUP_MESSAGE =
-  'Falta configurar la app de QuickBooks en esta instalación (QUICKBOOKS_CLIENT_ID y QUICKBOOKS_CLIENT_SECRET). Quien administra Cortex la registra una vez en developer.intuit.com.';
+  'QuickBooks todavía no está habilitado en tu cuenta de Cortex. Lo activa el equipo de Cortex una sola vez: pídeselo y después lo conectas aquí entrando con tu usuario de Intuit.';
 
 export function quickbooksSetupMissing(env: EnvLike = process.env): string | null {
   return quickbooksAppConfig(env) ? null : QUICKBOOKS_SETUP_MESSAGE;

@@ -48,7 +48,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   gcal_create_event: { label: 'Crear evento en el calendario', icon: 'CalendarPlus' },
   gsheets_read_range: { label: 'Leer hoja de cálculo', icon: 'Table' },
   gsheets_append_row: { label: 'Agregar fila a la hoja', icon: 'TableProperties' },
-  kb_search: { label: 'Buscar en Brain Knowledge', icon: 'BookOpen' },
+  kb_search: { label: 'Buscar en el cerebro', icon: 'BookOpen' },
   // Only ever offered on a turn that carried a frame of a shared tab, so this
   // label can name the person's own screen without qualifying it. It shows up
   // in the busy line while the box is being worked out; the result is a picture
@@ -120,7 +120,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   outlook_list_threads: { label: 'Listar conversaciones de Outlook', icon: 'Inbox' },
   outlook_draft: { label: 'Redactar correo en Outlook', icon: 'Pencil' },
   outlook_send_draft: { label: 'Enviar el correo redactado en Outlook', icon: 'Send' },
-  outlook_archive_thread: { label: 'Guardar el correo en Brain Knowledge', icon: 'Archive' },
+  outlook_archive_thread: { label: 'Guardar el correo en el cerebro', icon: 'Archive' },
   mscal_list_events: { label: 'Ver el calendario de Outlook', icon: 'Calendar' },
   mscal_create_event: { label: 'Crear evento en el calendario de Outlook', icon: 'CalendarPlus' },
 
@@ -166,14 +166,14 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
 
   // Brain Knowledge. `kb_search` ya está arriba; éstas tres son las que
   // producían «Kb · Context», el renglón que empezó todo esto.
-  kb_list_spaces: { label: 'Ver los espacios de Brain Knowledge', icon: 'Library' },
-  kb_create_document: { label: 'Guardar en Brain Knowledge', icon: 'BookPlus' },
+  kb_list_spaces: { label: 'Ver los espacios del cerebro', icon: 'Library' },
+  kb_create_document: { label: 'Guardar en el cerebro', icon: 'BookPlus' },
   kb_share_space: { label: 'Cambiar quién ve un espacio', icon: 'Users' },
-  kb_context: { label: 'Reunir contexto de Brain Knowledge', icon: 'BookMarked' },
+  kb_context: { label: 'Reunir contexto del cerebro', icon: 'BookMarked' },
   // El adjunto de un turno mudándose al cerebro. Dice «el adjunto» y no «el
   // archivo» porque quien lo pide acaba de subirlo en esta misma conversación.
   feed_table_query: { label: 'Consultar la hoja de cálculo de Feed', icon: 'Table2' },
-  attachments_promote: { label: 'Guardar el adjunto en Brain Knowledge', icon: 'BookPlus' },
+  attachments_promote: { label: 'Guardar el adjunto en el cerebro', icon: 'BookPlus' },
 
   // Nómina y equipo. Es la familia que más cuidado necesita: cada una de estas
   // frases se dibuja al lado de cifras de plata de personas con nombre, así que
@@ -303,6 +303,9 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   views_update: { label: 'Cambiar una vista', icon: 'LayoutPanelTop' },
   views_share: { label: 'Compartir una vista', icon: 'Link2' },
   views_archive: { label: 'Archivar una vista', icon: 'Archive' },
+  views_company_pulse: { label: 'Armar el pulso de la empresa', icon: 'LayoutPanelTop' },
+  views_refresh_summary: { label: 'Actualizar el resumen del día', icon: 'LayoutPanelTop' },
+  views_schedule_pulse: { label: 'Programar el resumen diario', icon: 'CalendarClock' },
 
   // Informes.
   reports_generate: { label: 'Armar el informe', icon: 'FileBarChart' },
@@ -333,7 +336,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   meetings_speak: { label: 'Hablar en la reunión en vivo', icon: 'Volume2' },
   meetings_list_transcripts: { label: 'Ver qué reuniones dejaron transcripción', icon: 'Video' },
   meetings_get_transcript: { label: 'Leer la transcripción de la reunión', icon: 'ScrollText' },
-  meetings_import_transcript: { label: 'Guardar la reunión en Brain Knowledge', icon: 'Mic' },
+  meetings_import_transcript: { label: 'Guardar la reunión en el cerebro', icon: 'Mic' },
   meetings_prepare_briefing: { label: 'Preparar la reunión', icon: 'NotebookPen' },
   meetings_schedule_briefings: {
     label: 'Programar el aviso antes de cada reunión',
@@ -435,6 +438,13 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       // to other systems with nobody watching.
       const writes = input.allowUnattendedWrites ? ' · PUEDE ESCRIBIR sin supervisión' : '';
       return `Programar "${input.name}" — se ejecuta ${when}${writes}`;
+    }
+    case 'views_schedule_pulse': {
+      // La hora y los días a la vista: es lo que la persona aprueba.
+      const hour = typeof input.hour === 'number' ? input.hour : 7;
+      const minute = typeof input.minute === 'number' ? input.minute : 0;
+      const days = Array.isArray(input.weekdays) ? input.weekdays.join(',') : '1-5';
+      return `Programar el resumen diario de la vista «${input.view ?? 'pulso_empresa'}» — a las ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (${input.timezone ?? 'America/Bogota'}), días ${days}${input.notifyEmail ? ' · también por correo' : ''}`;
     }
     case 'vehicles_register':
       return `Registrar el vehículo de placa ${input.plate}`;

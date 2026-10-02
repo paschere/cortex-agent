@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { authErrorMessage } from '@/lib/auth-error-message';
 import Link from 'next/link';
 import { useState } from 'react';
 import {
@@ -30,7 +31,10 @@ export default function ForgotPasswordPage() {
     setLoading(false);
     if (error) {
       setErr(
-        error.message ?? 'No se pudo enviar la solicitud. Revisa el correo e inténtalo de nuevo.',
+        authErrorMessage(
+          error,
+          'No se pudo enviar la solicitud. Revisa el correo e inténtalo de nuevo.',
+        ),
       );
       return;
     }

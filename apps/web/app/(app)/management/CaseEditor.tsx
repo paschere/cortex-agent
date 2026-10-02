@@ -74,7 +74,7 @@ export function CaseEditor({
           </h2>
           <p className="mt-1 text-xs text-ink-muted">
             {item
-              ? 'Visible para la empresa. Guarda referencias necesarias; los adjuntos del Feed no se copian al cerebro.'
+              ? 'Visible para la empresa. Guarda referencias necesarias; los adjuntos de la bandeja no se copian al cerebro.'
               : 'Un resultado claro, una persona responsable y el primer paso para avanzar.'}
           </p>
         </div>
@@ -472,9 +472,12 @@ export function CaseEditor({
                         ? people.find((p) => p.id === value)?.name ||
                           people.find((p) => p.id === value)?.email ||
                           'Sin responsable'
-                        : typeof value === 'object'
-                          ? JSON.stringify(value, null, 2)
-                          : String(value ?? '—')}
+                        : key === 'state' && typeof value === 'string'
+                          ? (managementStateLabels[value as keyof typeof managementStateLabels] ??
+                            value)
+                          : typeof value === 'object'
+                            ? JSON.stringify(value, null, 2)
+                            : String(value ?? '—')}
                     </dd>
                   </div>
                 ))}

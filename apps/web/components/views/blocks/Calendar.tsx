@@ -2,10 +2,10 @@
 
 import type { ComputedBlock, Tone } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useRecordOpener } from './RecordDrawer';
-import { Card, TONE_BAR, TONE_SOFT, shortDay, upperFirst } from './theme';
+import { Card, EmptyState, TONE_BAR, TONE_SOFT, shortDay, upperFirst } from './theme';
 
 /**
  * EL CALENDARIO: CITAS, ENTREGAS, CLASES, VENCIMIENTOS.
@@ -76,17 +76,33 @@ function EventButton({
   compact?: boolean;
 }) {
   const className = clsx(
-    'flex w-full min-w-0 items-center gap-1.5 rounded-pill text-left transition-colors duration-150',
-    compact ? 'px-1.5 py-px text-micro' : 'px-2.5 py-1.5 text-sm',
-    event.tone ? TONE_SOFT[event.tone] : 'bg-surface-2 text-ink',
-    open && 'hover:brightness-95 focus-visible:ring-2 focus-visible:ring-primary/40',
+    'flex w-full min-w-0 items-center gap-1.5 text-left transition-colors duration-150',
+    compact
+      ? 'rounded-pill px-1.5 py-px text-micro'
+      : 'rounded-sm border border-border/70 bg-surface px-3 py-2 text-sm shadow-card',
+    compact && (event.tone ? TONE_SOFT[event.tone] : 'bg-surface-2 text-ink'),
+    open &&
+      (compact
+        ? 'hover:brightness-95 focus-visible:ring-2 focus-visible:ring-primary/40'
+        : 'hover:border-border-strong focus-visible:ring-2 focus-visible:ring-primary/40'),
   );
   const body = (
     <>
-      {!compact && event.tag && (
-        <span className="shrink-0 text-micro font-semibold opacity-80">{event.tag}</span>
+      {!compact && (
+        <span
+          aria-hidden
+          className={clsx(
+            'h-2 w-2 shrink-0 rounded-pill',
+            event.tone ? TONE_BAR[event.tone] : 'bg-ink-faint',
+          )}
+        />
       )}
-      <span className="truncate font-medium">{event.label}</span>
+      <span className={clsx('truncate', compact ? 'font-medium' : 'font-semibold text-ink')}>
+        {event.label}
+      </span>
+      {!compact && event.tag && (
+        <span className="ml-auto shrink-0 text-micro text-ink-faint">{event.tag}</span>
+      )}
     </>
   );
   return open ? (
@@ -159,7 +175,7 @@ function MonthView({
       }
     >
       <section aria-label={`${block.title}, ${monthTitle(month)}`}>
-        <div aria-hidden className="grid grid-cols-7 gap-1 pb-1">
+        <div aria-hidden className="grid grid-cols-7 gap-1 pb-1.5">
           {WEEKDAYS.map((d) => (
             <span
               key={d}
@@ -171,6 +187,7 @@ function MonthView({
         </div>
         <div className="grid grid-cols-7 gap-1">
           {cells.map((day, i) => {
+            const weekend = i % 7 >= 5;
             if (!day)
               // biome-ignore lint/suspicious/noArrayIndexKey: relleno fijo antes del día 1.
               return <span key={`pad-${i}`} aria-hidden className="min-h-10" />;
@@ -181,10 +198,12 @@ function MonthView({
               <div
                 key={day}
                 className={clsx(
-                  'relative flex min-h-10 flex-col rounded-sm border p-1 transition-colors duration-150 md:min-h-[5.5rem]',
+                  'relative flex min-h-11 flex-col rounded-sm border p-1 transition-colors duration-150 md:min-h-[5.75rem] md:p-1.5',
                   isChosen
-                    ? 'border-primary/50 bg-primary-soft/40'
-                    : 'border-border/70 bg-surface-2/40',
+                    ? 'border-primary/60 bg-primary-soft/50 ring-1 ring-primary/30'
+                    : weekend
+                      ? 'border-border/50 bg-surface-2/60 hover:border-border-strong'
+                      : 'border-border/60 bg-surface hover:border-border-strong',
                 )}
               >
                 <button
@@ -196,7 +215,7 @@ function MonthView({
                 />
                 <span
                   className={clsx(
-                    'tabular pointer-events-none relative self-start rounded-pill px-1 font-mono text-micro',
+                    'tabular pointer-events-none relative grid h-6 min-w-6 place-items-center self-start rounded-pill px-1 font-mono text-micro',
                     isToday ? 'bg-primary font-semibold text-white' : 'text-ink-muted',
                   )}
                 >
@@ -235,10 +254,17 @@ function MonthView({
         </div>
       </section>
 
-      <div className="mt-3 border-t border-border pt-3" aria-live="polite">
+      <div className="mt-4 border-t border-border pt-4" aria-live="polite">
         {chosen ? (
           <>
-            <p className="mb-2 text-xs font-semibold text-ink">{shortDay(chosen)}</p>
+            <p className="mb-2.5 flex items-center justify-between text-xs font-bold text-ink">
+              {shortDay(chosen)}
+              {chosenEvents.length > 0 && (
+                <span className="tabular rounded-pill bg-surface-2 px-2 py-0.5 font-mono text-micro font-semibold text-ink-muted">
+                  {chosenEvents.length}
+                </span>
+              )}
+            </p>
             {chosenEvents.length ? (
               <ul className="space-y-1.5">
                 {chosenEvents.map((e) => (
@@ -277,21 +303,32 @@ function Agenda({
   const days = [...byDay.keys()].sort();
   if (!days.length)
     return (
-      <p className="py-6 text-center text-sm text-ink-faint">
-        Nada entre hoy y el {shortDay(block.range.to)}.
-      </p>
+      <EmptyState
+        icon={<CalendarDays className="h-5 w-5" aria-hidden />}
+        title="Nada en la agenda"
+        hint={`Nada entre hoy y el ${shortDay(block.range.to)}.`}
+      />
     );
   return (
-    <ol className="space-y-3">
+    <ol className="space-y-4">
       {days.map((day) => (
-        <li key={day} className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-2 sm:gap-3">
+        <li key={day} className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3">
           <span
             className={clsx(
-              'pt-1.5 text-xs font-semibold',
-              day === block.today ? 'text-primary' : 'text-ink-muted',
+              'flex h-14 flex-col items-center justify-center rounded-sm border text-center',
+              day === block.today
+                ? 'border-primary/40 bg-primary-soft text-primary-ink'
+                : 'border-border bg-surface-2/60 text-ink-muted',
             )}
           >
-            {day === block.today ? 'Hoy' : shortDay(day)}
+            <span className="text-micro font-semibold uppercase leading-none tracking-field">
+              {day === block.today
+                ? 'Hoy'
+                : WEEKDAYS[(new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7]}
+            </span>
+            <span className="tabular mt-1 font-mono text-lg font-semibold leading-none text-ink">
+              {Number(day.slice(8))}
+            </span>
           </span>
           <ul className="space-y-1.5">
             {(byDay.get(day) ?? []).map((e) => (
@@ -309,7 +346,7 @@ function Agenda({
 function Legend({ legend }: { legend: Array<{ label: string; tone: Tone }> }) {
   if (!legend.length) return null;
   return (
-    <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+    <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5">
       {legend.map((l) => (
         <li key={l.label} className="inline-flex items-center gap-1.5 text-micro text-ink-muted">
           <span className={clsx('h-2 w-2 rounded-pill', TONE_BAR[l.tone])} aria-hidden />

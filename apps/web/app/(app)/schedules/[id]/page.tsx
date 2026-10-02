@@ -1,7 +1,7 @@
 import { Panel } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
-import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { requireSession } from '@/lib/session';
+import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   AlarmClock,
@@ -165,7 +165,9 @@ export default async function RoutineDetailPage({
         <div className="min-w-0 flex-1 basis-[18rem]">
           <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold tracking-tight text-ink">
             {job.name}
-            <span className={chipClass(STATUS_TONE[job.status])}>{JOB_STATUS_LABEL[job.status]}</span>
+            <span className={chipClass(STATUS_TONE[job.status])}>
+              {JOB_STATUS_LABEL[job.status]}
+            </span>
             {job.isGlobal && (
               <span
                 className={chipClass('primary')}
@@ -234,12 +236,17 @@ export default async function RoutineDetailPage({
               <div className="space-y-2">
                 <span className="inline-flex items-center gap-1.5 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-micro font-semibold text-primary">
                   <Wrench className="h-3 w-3" />
-                  {job.toolId ?? 'herramienta desconocida'}
+                  {job.toolId ?? 'acción sin nombre'}
                 </span>
                 {toolInput != null && (
-                  <pre className="scroll-slim overflow-x-auto rounded-card border border-border bg-surface-2 px-3.5 py-3 font-mono text-micro leading-[1.6] text-ink-muted">
-                    {JSON.stringify(toolInput, null, 2)}
-                  </pre>
+                  <details className="text-micro">
+                    <summary className="cursor-pointer font-semibold text-ink-muted hover:text-ink">
+                      Ver los datos técnicos
+                    </summary>
+                    <pre className="scroll-slim mt-2 overflow-x-auto rounded-card border border-border bg-surface-2 px-3.5 py-3 font-mono text-micro leading-[1.6] text-ink-muted">
+                      {JSON.stringify(toolInput, null, 2)}
+                    </pre>
+                  </details>
                 )}
               </div>
             )}

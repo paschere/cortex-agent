@@ -180,8 +180,8 @@ export function MissionWorkspace({
             </p>
             <h2 className="mt-2 text-lg font-bold">¿Dónde está el dato que lo demuestra?</h2>
             <p className="mt-1 text-sm text-ink-muted">
-              Las fuentes de Feed son privadas y temporales. La simulación guardará un snapshot
-              verificable antes de crear asuntos compartidos.
+              Las fuentes de la bandeja son privadas y temporales. La simulación guardará un
+              snapshot verificable antes de crear asuntos compartidos.
             </p>
           </div>
           {mission.sources.length > 0 ? (
@@ -203,8 +203,8 @@ export function MissionWorkspace({
             </label>
           ) : (
             <div className="rounded-lg border border-amber/30 bg-amber/5 p-3 text-sm text-ink-muted">
-              Todavía no hay una fuente disponible. Añade un archivo, texto, enlace o conexión en
-              Feed para continuar.
+              Todavía no hay una fuente disponible. Añade un archivo, texto, enlace o conexión en la
+              bandeja de archivos para continuar.
             </div>
           )}
           <div className="flex flex-wrap gap-3">
@@ -315,7 +315,7 @@ export function MissionWorkspace({
           {truncated &&
             'La lectura de asuntos está limitada; algunas cifras pueden estar incompletas. '}
           {mission.sourceCount === null &&
-            'No se pudo comprobar Feed; reintenta antes de decidir que no hay fuentes.'}
+            'No se pudo comprobar la bandeja; reintenta antes de decidir que no hay fuentes.'}
         </p>
       )}
       {mission.errors.length > 0 && (

@@ -810,7 +810,7 @@ export function composeLearning(f: LearningFact): JournalLine[] {
         `learning-adjust:${f.adjustedAt}`,
         f.adjustedAt,
         'learning',
-        `Repasé cómo se está usando Brain Knowledge y ajusté ${count(f.adjustments, 'fragmento', 'fragmentos', 'm')}.`,
+        `Repasé cómo se está usando el cerebro y ajusté ${count(f.adjustments, 'fragmento', 'fragmentos', 'm')}.`,
         { tone: 'primary', href: '/learning' },
       ),
     );

@@ -73,7 +73,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   // tiene delante, en el bloque de adjuntos del turno. Si no hay ninguno, lo
   // dirá — que es mejor menú que una fila que aparece y desaparece según lo que
   // haya en el chat.
-  'attachments.promote': 'Guarda en Brain Knowledge el archivo que te adjunté',
+  'attachments.promote': 'Guarda en el cerebro el archivo que te adjunté',
 
   'browser.list_flows': `Muéstrame los ${MODULE.many} que ya aprendiste`,
   'browser.run_flow': `Corre el ${MODULE.one} `,
@@ -207,11 +207,11 @@ export const TOOL_PHRASE: Record<string, string> = {
   'inbox.overview': '¿Qué me espera?',
   'inbox.priorities': '¿Qué tengo pendiente en el correo hoy?',
 
-  'kb.context': 'Ármame el contexto de Brain Knowledge sobre ',
-  'kb.create_document': 'Guarda esto en Brain Knowledge: ',
+  'kb.context': 'Ármame el contexto del cerebro sobre ',
+  'kb.create_document': 'Guarda esto en el cerebro: ',
   'kb.share_space': 'Dale acceso al espacio ',
-  'kb.list_spaces': 'Muéstrame los espacios de Brain Knowledge',
-  'kb.search': 'Busca en Brain Knowledge ',
+  'kb.list_spaces': 'Muéstrame los espacios del cerebro',
+  'kb.search': 'Busca en el cerebro ',
 
   'linear.create_comment': 'Comenta en el issue de Linear ',
   'linear.create_issue': 'Crea un issue en Linear: ',
@@ -228,7 +228,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'meetings.speak': 'Dile en voz alta a la reunión: ',
   'meetings.live_status': '¿Qué se está diciendo ahora en la reunión?',
   'meetings.get_transcript': 'Léeme la transcripción de la reunión ',
-  'meetings.import_transcript': 'Guarda en Brain Knowledge la reunión ',
+  'meetings.import_transcript': 'Guarda en el cerebro la reunión ',
   'meetings.list_transcripts': 'Muéstrame las reuniones que dejaron transcripción',
   'meetings.prepare_briefing': 'Prepárame para la reunión ',
   'meetings.schedule_briefings': 'Prepárame un briefing antes de cada reunión de mañana',
@@ -236,7 +236,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'mscal.create_event': 'Agéndame en Outlook una reunión ',
   'mscal.list_events': 'Muéstrame la agenda de Outlook de ',
 
-  'outlook.archive_thread': 'Archiva en Brain Knowledge el hilo de Outlook ',
+  'outlook.archive_thread': 'Archiva en el cerebro el hilo de Outlook ',
   'outlook.draft': 'Redáctame en Outlook un correo para ',
   'outlook.list_threads': 'Muéstrame los correos de Outlook con ',
   'outlook.read_thread': 'Léeme el hilo de Outlook ',
@@ -301,6 +301,9 @@ export const TOOL_PHRASE: Record<string, string> = {
   'accounting.status': '¿Cómo va la conexión con el programa contable?',
   'accounting.sync_now': 'Trae ya lo nuevo del programa contable',
   'views.archive': 'Archiva la vista ',
+  'views.company_pulse': 'Dime cómo va la empresa en una vista',
+  'views.refresh_summary': 'Actualiza el resumen de hoy de la vista ',
+  'views.schedule_pulse': 'Actualiza cada mañana el resumen del pulso de la empresa',
   'views.create': 'Hazme una vista con ',
   'views.get': 'Muéstrame la vista ',
   'views.list': 'Muéstrame las vistas que tenemos',

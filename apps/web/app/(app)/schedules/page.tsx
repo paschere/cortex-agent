@@ -114,7 +114,7 @@ export default async function SchedulesPage() {
     <>
       <PageHeader
         title="Rutinas"
-        subtitle="Trabajos que Cortex ejecuta solo, a la hora que le digas. Los creas hablando en el chat. Las rutinas globales corren para todo el equipo y envían el resultado por correo."
+        subtitle="Los procesos que Cortex corre solo a una hora fija: un resumen cada lunes, un aviso cada mañana. Los creas hablando en el chat. Las rutinas globales corren para todo el equipo y mandan el resultado por correo."
         icon={<AlarmClock className="h-5 w-5" />}
         actions={<RefreshButton />}
       />

@@ -22,15 +22,15 @@ const CARDS: Record<Direction, Card> = {
     href: '/integrations',
     icon: ArrowUpRight,
     title: 'Cortex → tus sistemas',
-    body: 'A qué está conectado Cortex: Google Workspace, HubSpot, nómina, Slack y cualquier servidor MCP que le conectes.',
-    cta: 'Integraciones',
+    body: 'Lo que Cortex puede leer y usar por ti: tu correo, el calendario, la contabilidad, WhatsApp y lo demás que conectes.',
+    cta: 'Datos y conexiones',
   },
   inbound: {
     href: '/mcp-tokens',
     icon: ArrowDownLeft,
-    title: 'Tu cliente de IA → Cortex',
-    body: 'Al revés: llegar a Cortex desde Claude, Claude Code, ChatGPT o cualquier cliente MCP, con tus propios permisos.',
-    cta: 'Conectar Claude',
+    title: 'Claude o ChatGPT → Cortex',
+    body: 'Al revés: preguntarle a Cortex desde el asistente que ya usas, con tus mismos permisos.',
+    cta: 'Usar desde Claude o ChatGPT',
   },
 };
 

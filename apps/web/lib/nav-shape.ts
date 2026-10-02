@@ -178,8 +178,8 @@ export const CHAT: NavItem = { href: '/chat', label: 'Chat', icon: MessageSquare
  * deja a la vista mientras pasa.
  */
 export const CALLS: NavItem = { href: '/calls', label: 'Llamadas', icon: PhoneCall };
-export const BRAIN: NavItem = { href: '/kb', label: 'Brain Knowledge', icon: BookOpen };
-export const FEED: NavItem = { href: '/feed', label: 'Feed', icon: Inbox };
+export const BRAIN: NavItem = { href: '/kb', label: 'Cerebro', icon: BookOpen };
+export const FEED: NavItem = { href: '/feed', label: 'Bandeja de archivos', icon: Inbox };
 export const MANAGEMENT: NavItem = { href: '/management', label: 'Gerencia', icon: Briefcase };
 export const SETUP: NavItem = { href: '/onboarding', label: 'Puesta en marcha', icon: Settings };
 /** Tableros, portales y formularios armados hablando (migración 0156). Fija
@@ -287,7 +287,7 @@ export const SECTIONS: NavSection[] = [
       HOME,
       { href: '/goals', label: 'Metas', icon: Target },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
-      { href: '/prospects', label: 'Outreach', icon: Radar },
+      { href: '/prospects', label: 'Prospectos', icon: Radar },
     ],
   },
   {
@@ -296,7 +296,7 @@ export const SECTIONS: NavSection[] = [
     id: 'sources',
     label: 'De dónde saco todo',
     items: [
-      { href: '/integrations', label: 'Integraciones', icon: Plug },
+      { href: '/integrations', label: 'Datos y conexiones', icon: Plug },
       { href: '/integrations/whatsapp', label: 'WhatsApp', icon: MessageCircle },
     ],
   },

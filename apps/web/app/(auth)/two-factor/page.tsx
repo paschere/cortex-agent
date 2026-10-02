@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { authErrorMessage } from '@/lib/auth-error-message';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import {
@@ -35,10 +36,12 @@ export default function TwoFactorPage() {
     setLoading(false);
     if (error) {
       setErr(
-        error.message ??
-          (useBackup
+        authErrorMessage(
+          error,
+          useBackup
             ? 'Ese código de respaldo no fue aceptado. Cada uno sirve una sola vez: prueba con otro.'
-            : 'Ese código no fue aceptado. Los códigos cambian cada 30 segundos: escribe el actual.'),
+            : 'Ese código no fue aceptado. Los códigos cambian cada 30 segundos: escribe el actual.',
+        ),
       );
       return;
     }

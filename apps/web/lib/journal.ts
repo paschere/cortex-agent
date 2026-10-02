@@ -176,7 +176,7 @@ export async function readJournal(
     slice('las rutinas', () => readRoutines(db, userId, sinceIso, since)),
     slice('los encargos', () => readErrands(db, sinceIso, since)),
     slice('lo que aprendí de cómo trabajas', () => readMemories(db, userId, sinceIso, since)),
-    slice('el repaso de Brain Knowledge', () => readLearning(db, sinceIso, since)),
+    slice('el repaso del cerebro', () => readLearning(db, sinceIso, since)),
     slice('los correos sin respuesta', () => readLingering(db, userId, now)),
   ]);
 
@@ -615,10 +615,7 @@ async function readLearning(db: Db, sinceIso: string, since: number): Promise<Jo
       .limit(1),
   ]);
 
-  const adjustments = mustReadList<{ created_at: string }>(
-    adjRes,
-    'los ajustes de Brain Knowledge',
-  );
+  const adjustments = mustReadList<{ created_at: string }>(adjRes, 'los ajustes del cerebro');
   const proposals = mustReadList<{ created_at: string }>(propRes, 'las conclusiones que dejé');
 
   const adjustedAt = instant(adjustments[0]?.created_at);

@@ -2,16 +2,22 @@
 
 import type { ComputedBlock, Tone } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { ArrowDownRight, ArrowRight, ArrowUpRight } from 'lucide-react';
-import { Card, TONE_BAR, TONE_TEXT } from './theme';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Target } from 'lucide-react';
+import { useId } from 'react';
+import { Card, TONE_BAR, TONE_COLOR, TONE_SOFT } from './theme';
 
 /**
  * LA CIFRA, Y EL KPI CONTRA EL PERÍODO ANTERIOR.
  *
  * Sin `compare`, la cifra de siempre: el número grande, la meta si la hay y
  * cuántas filas lo sostienen. Con `compare`, el número es el del período
- * («Este mes»), con una flecha y el cambio contra el anterior, y una línea
- * pequeña con los últimos períodos.
+ * («Este mes»), con una ficha que dice el cambio contra el anterior y una
+ * línea con los últimos períodos debajo — el único dato con tiempo que trae
+ * una cifra, así que la línea sólo sale cuando lo hay.
+ *
+ * El número va en tinta, grande y monoespaciado: es lo que se lee primero y
+ * tiene que leerse igual en cualquier marca. El tono del bloque marca el punto
+ * del título, la línea y la barra de la meta.
  *
  * El color de la flecha dice si el cambio es BUENO, no hacia dónde va: subir
  * las ventas es verde, subir las devoluciones es rosa (`goodWhen`). Y nunca
@@ -26,67 +32,87 @@ const PERCENT = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 export function MetricBlock({ block }: { block: Metric }) {
   const pct = block.goal ? Math.max(0, Math.min(block.goal.ratio, 1)) : 0;
   const compare = block.compare;
+  const long = block.display.length > 13;
   return (
-    <Card>
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="field-label min-w-0">{block.title}</p>
+    <Card className="flex flex-col">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex min-w-0 items-center gap-2 text-xs font-semibold text-ink-muted">
+          <span
+            aria-hidden
+            className={clsx('h-2 w-2 shrink-0 rounded-pill', TONE_BAR[block.tone])}
+          />
+          <span className="truncate">{block.title}</span>
+        </p>
         {compare && (
-          <span className="shrink-0 text-micro text-ink-faint">{compare.currentLabel}</span>
+          <span className="shrink-0 rounded-pill bg-surface-2 px-2.5 py-0.5 text-micro font-semibold text-ink-muted">
+            {compare.currentLabel}
+          </span>
         )}
       </div>
       <p
         className={clsx(
-          'tabular mt-2 font-mono text-display font-semibold leading-none tracking-tight',
-          TONE_TEXT[block.tone],
+          'tabular mt-3 font-mono font-semibold leading-none tracking-tight text-ink',
+          long ? 'text-xl' : 'text-display',
         )}
       >
         {block.display}
       </p>
-      {compare && <Trend compare={compare} tone={block.tone} />}
+      {compare && <Trend compare={compare} />}
+      {compare && compare.series.length >= 2 && (
+        <div className="mt-auto pt-4">
+          <Sparkline series={compare.series} tone={block.tone} />
+        </div>
+      )}
       {block.goal ? (
-        <div className="mt-4">
-          <div className="h-1.5 overflow-hidden rounded-pill bg-surface-2">
+        <div className="mt-auto pt-5">
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-micro">
+            <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
+              <Target className="h-3.5 w-3.5" aria-hidden />
+              {Math.round(block.goal.ratio * 100)} % de la meta
+            </span>
+            <span className="tabular font-mono text-ink-faint">{block.goal.display}</span>
+          </div>
+          {/* biome-ignore lint/a11y/useFocusableInteractive: una barra de avance se lee, no se usa. */}
+          <div
+            role="progressbar"
+            aria-label={`${block.title}: avance hacia la meta`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(pct * 100)}
+            className="h-2 overflow-hidden rounded-pill bg-surface-2"
+          >
             <div
               className={clsx(
-                'h-full rounded-pill transition-[width] duration-500 ease-out',
-                TONE_BAR[block.tone],
+                'view-grow-x h-full rounded-pill',
+                block.goal.ratio >= 1 ? 'bg-emerald' : TONE_BAR[block.tone],
               )}
               style={{ width: `${pct * 100}%` }}
             />
           </div>
-          <p className="mt-1.5 text-micro text-ink-faint">
-            {Math.round(block.goal.ratio * 100)}% de la meta ·{' '}
-            <span className="tabular font-mono">{block.goal.display}</span>
-          </p>
         </div>
       ) : (
         !compare && (
-          <p className="mt-3 text-micro text-ink-faint">
+          <p className="mt-auto pt-4 text-micro text-ink-faint">
             {block.caption ??
               `${block.rows} ${block.rows === 1 ? 'fila' : 'filas'} · ${block.source}`}
           </p>
         )
       )}
-      {compare && block.caption && (
-        <p className="mt-2 text-micro text-ink-faint">{block.caption}</p>
+      {(compare || block.goal) && block.caption && (
+        <p className="mt-2 text-micro leading-relaxed text-ink-faint">{block.caption}</p>
       )}
     </Card>
   );
 }
 
-function Trend({ compare, tone }: { compare: NonNullable<Metric['compare']>; tone: Tone }) {
+function Trend({ compare }: { compare: NonNullable<Metric['compare']> }) {
   const Arrow =
     compare.direction === 'up'
       ? ArrowUpRight
       : compare.direction === 'down'
         ? ArrowDownRight
         : ArrowRight;
-  const color =
-    compare.good === null
-      ? 'bg-surface-2 text-ink-muted'
-      : compare.good
-        ? 'bg-emerald-soft text-emerald'
-        : 'bg-rose-soft text-rose';
+  const tone: Tone | null = compare.good === null ? null : compare.good ? 'emerald' : 'rose';
   const delta =
     compare.delta === null
       ? compare.direction === 'flat'
@@ -94,69 +120,91 @@ function Trend({ compare, tone }: { compare: NonNullable<Metric['compare']>; ton
         : 'nuevo'
       : `${compare.delta > 0 ? '+' : ''}${PERCENT.format(compare.delta * 100)} %`;
   return (
-    <div className="mt-3 space-y-2">
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-faint">
-        <span
-          className={clsx(
-            'tabular inline-flex items-center gap-0.5 rounded-pill px-1.5 py-0.5 font-mono font-semibold',
-            color,
-          )}
-        >
-          <Arrow className="h-3 w-3" aria-hidden />
-          {delta}
-        </span>
-        <span>
-          {compare.previousLabel}:{' '}
-          <span className="tabular font-mono text-ink-muted">{compare.previousDisplay}</span>
-        </span>
-      </p>
-      <Sparkline series={compare.series} tone={tone} />
-    </div>
+    <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-faint">
+      <span
+        className={clsx(
+          'tabular inline-flex items-center gap-0.5 rounded-pill py-0.5 pl-1.5 pr-2 font-mono font-semibold',
+          tone ? TONE_SOFT[tone] : 'bg-surface-2 text-ink-muted',
+        )}
+      >
+        <Arrow className="h-3.5 w-3.5" aria-hidden />
+        {delta}
+        {compare.good !== null && (
+          <span className="sr-only">{compare.good ? ' (bien)' : ' (mal)'}</span>
+        )}
+      </span>
+      <span>
+        {compare.previousLabel}{' '}
+        <span className="tabular font-mono text-ink-muted">{compare.previousDisplay}</span>
+      </span>
+    </p>
   );
 }
 
 /**
- * Una línea mínima, sin ejes: la forma de los últimos períodos. Es dibujo, no
- * dato — el lector de pantalla recibe la serie en texto.
+ * Una línea mínima, sin ejes: la forma de los últimos períodos, con el área
+ * en degradado y el punto de hoy. Es dibujo, no dato — el lector de pantalla
+ * recibe la serie en texto.
  */
 export function Sparkline({
   series,
   tone,
 }: { series: Array<{ label: string; value: number }>; tone: Tone }) {
+  const gradient = `spark-${useId().replace(/:/g, '')}`;
   if (series.length < 2) return null;
   const values = series.map((s) => s.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
   const W = 100;
-  const H = 28;
+  const H = 36;
   const pts = values.map((v, i) => {
     const x = (i / (values.length - 1)) * W;
-    const y = H - 2 - ((v - min) / span) * (H - 4);
+    const y = H - 3 - ((v - min) / span) * (H - 8);
     return [x, y] as const;
   });
   const line = pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+  const last = pts[pts.length - 1] ?? [W, H / 2];
+  const color = TONE_COLOR[tone];
   return (
-    <figure className={clsx('m-0', TONE_TEXT[tone])}>
+    <figure className="relative m-0">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
-        className="h-8 w-full overflow-visible"
+        className="h-10 w-full overflow-visible"
         aria-hidden="true"
       >
-        <polygon points={`0,${H} ${line} ${W},${H}`} fill="currentColor" opacity={0.1} />
+        <defs>
+          <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <polygon points={`0,${H} ${line} ${W},${H}`} fill={`url(#${gradient})`} />
         <polyline
           points={line}
           fill="none"
-          stroke="currentColor"
-          strokeWidth={1.75}
+          stroke={color}
+          strokeWidth={2}
           strokeLinejoin="round"
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      <figcaption className="sr-only">
-        {series.map((s) => `${s.label}: ${s.value}`).join('; ')}
+      {/* El punto de hoy, en HTML para que no se deforme con el SVG estirado. */}
+      <span
+        aria-hidden
+        className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-pill border-2 border-surface"
+        style={{
+          left: `${(last[0] / W) * 100}%`,
+          top: `${(last[1] / H) * 100}%`,
+          background: color,
+        }}
+      />
+      <figcaption className="mt-1 flex justify-between text-micro text-ink-faint">
+        <span>{series[0]?.label}</span>
+        <span>{series[series.length - 1]?.label}</span>
+        <span className="sr-only">{series.map((s) => `${s.label}: ${s.value}`).join('; ')}</span>
       </figcaption>
     </figure>
   );

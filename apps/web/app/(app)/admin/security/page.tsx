@@ -467,7 +467,7 @@ export default async function SecurityPage() {
             </span>
           </div>
           {policies.length === 0 ? (
-            <EmptyNote>Todavía no hay políticas configuradas.</EmptyNote>
+            <EmptyNote>Todavía no hay políticas propias: rigen las de fábrica.</EmptyNote>
           ) : (
             <ul className="grid gap-3 md:grid-cols-3">
               {policies.map((p) => {
@@ -493,8 +493,14 @@ export default async function SecurityPage() {
           )}
           <p className="mt-3 text-micro leading-relaxed text-ink-faint">
             Las políticas se muestran tal como están guardadas. Todavía no se pueden editar desde
-            aquí: cambia los valores en <span className="tabular">security_policies</span> y toman
-            efecto en la siguiente llamada.
+            aquí: si quieres cambiar alguna, pídeselo al equipo de Cortex o{' '}
+            <Link
+              href={`/chat?prompt=${encodeURIComponent('Quiero cambiar una política de seguridad de Cortex en mi empresa: ')}`}
+              className="font-semibold text-primary hover:underline"
+            >
+              cuéntaselo a Cortex
+            </Link>
+            ; el cambio toma efecto en la siguiente acción.
           </p>
         </Panel>
 

@@ -423,7 +423,7 @@ describe('un nombre de archivo dicho como lo diría una persona', () => {
   it('pero el archivo real no se pierde: baja a la procedencia', () => {
     const card = withDoc('Grabación — Aug 12, 2026, 8:57 PM.webm', 'meeting');
     expect(card?.hint).toContain('Grabación — Aug 12, 2026, 8:57 PM');
-    expect(card?.hint).toContain('Brain Knowledge');
+    expect(card?.hint).toContain('cerebro');
   });
 
   it('un título puesto a mano se respeta entero', () => {

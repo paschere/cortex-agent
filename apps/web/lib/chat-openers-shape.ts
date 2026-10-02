@@ -359,8 +359,8 @@ function groundedByFamily(seeds: OpenerSeeds): Candidate[][] {
       // inventó, y así nadie pierde de vista QUÉ archivo se va a leer.
       hint:
         meeting && named.startsWith('la reunión')
-          ? `${clean} · Brain Knowledge`
-          : `${meeting ? 'Reunión' : 'Documento'} en Brain Knowledge · ${age}`,
+          ? `${clean} · cerebro`
+          : `${meeting ? 'Reunión' : 'Documento'} en el cerebro · ${age}`,
       icon: meeting ? 'Mic' : 'FileText',
       tone: meeting ? 'sky' : 'primary',
       kind: 'grounded',

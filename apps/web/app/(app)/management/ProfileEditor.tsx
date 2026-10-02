@@ -217,7 +217,7 @@ export function ProfileEditor({
           </div>
         </div>
         <div className="rounded-2xl border border-border p-5">
-          <h3 className="font-semibold">Manuales de procesos</h3>
+          <h3 className="font-semibold">Manuales</h3>
           <p className="mt-2 text-sm text-ink-muted">
             Cuenta, dicta y revisa cada proceso en su propio espacio.
           </p>

@@ -135,8 +135,8 @@ export const STATIC_COMMAND_GROUP: PaletteGroup = {
     {
       id: '/buscar',
       label: '/buscar',
-      hint: 'Buscar en Brain Knowledge',
-      expands: 'Busca en Brain Knowledge lo que tengamos sobre ',
+      hint: 'Buscar en el cerebro',
+      expands: 'Busca en el cerebro lo que tengamos sobre ',
       keywords: 'kb memoria conocimiento documentos',
       mono: true,
     },

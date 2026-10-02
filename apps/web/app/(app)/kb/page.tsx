@@ -129,7 +129,7 @@ export default async function KnowledgeBasePage({
   return (
     <>
       <PageHeader
-        title="Brain Knowledge"
+        title="El cerebro de tu empresa"
         subtitle={livingSubtitle({
           chunks: stats.chunks,
           spaces: summaries.length,

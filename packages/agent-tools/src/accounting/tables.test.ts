@@ -122,7 +122,7 @@ describe('las tablas de un programa contable', () => {
       ]);
       // La llave de QuickBooks (refresh token) nunca es un campo de la pantalla.
       expect(providers[2]?.credentialFields).toEqual([]);
-      expect(providers[2]?.setupMissing).toContain('Falta configurar la app de QuickBooks');
+      expect(providers[2]?.setupMissing).toContain('QuickBooks todavía no está habilitado');
       expect(providers[0]?.setupMissing).toBeNull();
       process.env.QUICKBOOKS_CLIENT_ID = 'id';
       process.env.QUICKBOOKS_CLIENT_SECRET = 'secreto';

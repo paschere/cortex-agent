@@ -84,7 +84,7 @@ export function Feed({
   async function refresh() {
     const res = await fetch(href('/api/feed'));
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? 'No se pudo actualizar Feed.');
+    if (!res.ok) throw new Error(data.error ?? 'No se pudo actualizar la bandeja.');
     setEntries(data.entries);
   }
 
@@ -121,7 +121,7 @@ export function Feed({
       versionTarget
         ? `Nueva versión guardada en ${versionTarget.name}.`
         : data.deduplicated
-          ? 'El contenido ya estaba en tu Feed. Se reutilizó la entrada, sin duplicarla ni ampliar su vencimiento.'
+          ? 'El contenido ya estaba en tu bandeja. Se reutilizó la entrada, sin duplicarla ni ampliar su vencimiento.'
           : 'Fuente leída. Cortex propone su uso por pestaña; permanece temporal hasta que decidas guardarla.',
     );
     setVersionTarget(null);
@@ -198,7 +198,7 @@ export function Feed({
       if (action === 'delete') {
         setSelected(null);
         setDetail(null);
-        setNotice('Entrada eliminada de Feed.');
+        setNotice('Entrada eliminada de la bandeja.');
       } else {
         setDetail({ ...detail, promoted_document_id: data.result.documentId });
         setSaving(false);
@@ -240,7 +240,7 @@ export function Feed({
   return (
     <div className="w-full space-y-6">
       <PageHeader
-        title="Feed"
+        title="Bandeja de archivos"
         icon={<Inbox className="h-5 w-5" />}
         subtitle="Trae archivos, enlaces o texto para trabajar con Cortex. Solo tú puedes verlos; duran siete días y tú decides qué guardar en el cerebro."
         actions={
@@ -312,7 +312,7 @@ export function Feed({
             {...getRootProps()}
             className={`flex cursor-pointer flex-col items-center rounded-sm border border-dashed px-4 py-8 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${isDragActive ? 'border-primary bg-primary-soft' : 'border-border-strong bg-surface-2'}`}
           >
-            <input {...getInputProps({ 'aria-label': 'Subir archivos a Feed' })} />
+            <input {...getInputProps({ 'aria-label': 'Subir archivos a la bandeja' })} />
             {busy ? (
               <Loader2 className="mb-3 animate-spin text-primary" aria-hidden />
             ) : (
@@ -394,7 +394,7 @@ export function Feed({
               className={`${buttonClass} bg-primary text-white hover:bg-primary-strong`}
             >
               {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}Añadir a
-              Feed
+              la bandeja
             </button>
           </form>
         )}
@@ -455,7 +455,7 @@ export function Feed({
             <div className="relative mb-3">
               <Search size={16} className="absolute left-3 top-3 text-ink-faint" aria-hidden />
               <input
-                aria-label="Buscar en Feed"
+                aria-label="Buscar en la bandeja"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar por nombre o enlace"
@@ -711,7 +711,7 @@ export function Feed({
                       onClick={() => void act('delete')}
                       className={`${buttonClass} text-rose`}
                     >
-                      Eliminar de Feed
+                      Eliminar de la bandeja
                     </button>
                     <button
                       type="button"
@@ -1166,7 +1166,7 @@ function ApiSourcePanel({
           className={`${buttonClass} bg-primary text-white`}
         >
           {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}{' '}
-          Consultar y añadir al Feed
+          Consultar y añadir a la bandeja
         </button>
       </form>
       {canConfigure ? (

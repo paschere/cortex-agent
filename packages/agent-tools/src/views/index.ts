@@ -8,6 +8,7 @@
  */
 
 import './tools';
+import './pulse-tools';
 
 export {
   viewsArchive,
@@ -17,6 +18,20 @@ export {
   viewsShare,
   viewsUpdate,
 } from './tools';
+export {
+  viewsCompanyPulse,
+  viewsRefreshSummary,
+  viewsSchedulePulse,
+  pulseRoutineInput,
+  readPulseInventory,
+  refreshViewSummary,
+  summaryWrittenOn,
+  modelSummaryWriter,
+  type RefreshOutcome,
+  type RefreshOptions,
+  type SummaryWriter,
+} from './pulse-tools';
+export * from './pulse';
 
 export * from './spec';
 export * from './compute';

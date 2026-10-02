@@ -155,7 +155,7 @@ export default async function SettingsPage() {
   return (
     <>
       <PageHeader
-        title="Configuración"
+        title="Ajustes"
         subtitle="Tu cuenta, qué puede hacer Cortex por ti y por dónde te escribe"
         icon={<SettingsIcon className="h-5 w-5" />}
       />

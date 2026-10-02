@@ -83,7 +83,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
       <AuthMasthead />
 
       <AuthBody>
-        <AuthTitle hint="Al aceptar, tu cuenta queda ligada al espacio de trabajo y a sus agentes, su Brain Knowledge y sus integraciones.">
+        <AuthTitle hint="Al aceptar, tu cuenta queda ligada al espacio de trabajo y a sus agentes, su cerebro y sus integraciones.">
           Invitación al espacio de trabajo
         </AuthTitle>
 

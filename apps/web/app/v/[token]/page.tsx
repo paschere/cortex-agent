@@ -1,4 +1,5 @@
 import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
+import { loadPublicBrand } from '@/lib/branding/store';
 import { isUnlocked, openPublicView, unlockCookieName } from '@/lib/views/public';
 import {
   canWriteView,
@@ -11,13 +12,16 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { PasswordGate } from './PasswordGate';
+import { PublicShell as Shell } from './PublicShell';
 
 /**
  * UNA VISTA, VISTA DESDE AFUERA.
  *
  * Fuera del shell de la app a propósito: quien abre esto no es del equipo y no
- * tiene nada que hacer con un menú de Cortex. Ve el nombre de la empresa, la
- * vista y una línea al pie. Los datos se calculan al abrir — un enlace a un
+ * tiene nada que hacer con un menú de Cortex. Ve la marca de la empresa (su
+ * logo, su nombre, su color; migración 0170), la vista y una línea al pie.
+ * El logo se pide por /api/views/public/logo con ESTE token: sólo el de la
+ * empresa dueña de la vista. Los datos se calculan al abrir — un enlace a un
  * tablero muestra el tablero de hoy, no el del día en que se compartió — con
  * un handle del espacio de la vista; ver lib/views/public.ts.
  *
@@ -43,12 +47,13 @@ export default async function PublicViewPage({
   const opened = await openPublicView(token);
   if (!opened) notFound();
   const { view, db, organizationName } = opened;
+  const brand = await loadPublicBrand(db, organizationName, token);
 
   if (view.visibility === 'password') {
     const jar = await cookies();
     if (!(await isUnlocked(db, view.id, jar.get(unlockCookieName(view.id))?.value))) {
       return (
-        <Shell organization={organizationName}>
+        <Shell brand={brand}>
           <PasswordGate token={token} name={view.name} />
         </Shell>
       );
@@ -71,26 +76,18 @@ export default async function PublicViewPage({
     },
   );
   const subtitle = view.spec.subtitle ?? view.description ?? null;
-  const hero = computed.theme?.header === 'hero';
   void countPublicOpen(db, view).catch(() => undefined);
 
   return (
-    <Shell organization={organizationName}>
-      {!hero && (
-        <header className="mb-6">
-          <h1 className="text-xl font-bold tracking-tight text-ink">{view.name}</h1>
-          {subtitle && (
-            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">{subtitle}</p>
-          )}
-        </header>
-      )}
+    <Shell brand={brand}>
       <LiveViewCanvas
         initial={computed}
         target={{ kind: 'public', token }}
         dataUrl={`/api/views/public/data?token=${encodeURIComponent(token)}`}
         heading={{ title: view.name, subtitle }}
+        showBrand={false}
       />
-      <p className="mt-8 text-micro text-ink-faint">
+      <p className="view-no-print mt-10 border-t border-border pt-4 text-micro text-ink-faint">
         Datos al{' '}
         {new Intl.DateTimeFormat('es-CO', {
           dateStyle: 'long',
@@ -100,19 +97,5 @@ export default async function PublicViewPage({
         .
       </p>
     </Shell>
-  );
-}
-
-function Shell({ organization, children }: { organization: string; children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen bg-canvas">
-      <div className="border-b border-border bg-surface/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <span className="truncate text-sm font-semibold text-ink">{organization}</span>
-          <span className="shrink-0 text-micro text-ink-faint">Hecho con Cortex</span>
-        </div>
-      </div>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
-    </div>
   );
 }

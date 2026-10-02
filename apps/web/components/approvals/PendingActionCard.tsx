@@ -175,7 +175,7 @@ export function PendingActionCard({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setErrorMessage((data as { error?: string }).error ?? 'Unknown error');
+        setErrorMessage((data as { error?: string }).error ?? 'No se pudo guardar tu respuesta.');
         setStatus('error');
         return;
       }
@@ -199,7 +199,7 @@ export function PendingActionCard({
         router.refresh();
       }
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Request failed');
+      setErrorMessage('No hubo conexión con Cortex.');
       setStatus('error');
     }
   }

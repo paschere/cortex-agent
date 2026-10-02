@@ -41,8 +41,14 @@ export default async function ViewsPage() {
     ...new Set(views.map((v) => v.updated_by ?? v.created_by).filter((id): id is string => !!id)),
   ];
   if (ids.length) {
-    const { data } = await db.from('users').select('id,name,email').in('id', ids);
-    for (const row of (data ?? []) as Array<{ id: string; name: string | null; email: string }>)
+    const { data, error } = await db.from('users').select('id,name,email').in('id', ids);
+    // Decisión a la vista: sin directorio, las tarjetas dicen sólo cuándo.
+    if (error) console.warn('[views] no se pudo leer quién editó:', error.message);
+    for (const row of (error ? [] : (data ?? [])) as Array<{
+      id: string;
+      name: string | null;
+      email: string;
+    }>)
       people.set(
         row.id,
         row.id === user.id ? 'ti' : ((row.name?.trim() || row.email).split(' ')[0] ?? row.email),

@@ -149,7 +149,7 @@ export default async function DashboardPage() {
       <section className="animate-rise mb-5 flex flex-col gap-4 pt-1">
         <div>
           <p className="tabular text-sm font-semibold capitalize text-ink-faint">{todayLabel}</p>
-          <h1 className="mt-1 text-balance text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl">
+          <h1 className="mt-1 text-balance text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl lg:text-[2.5rem] lg:leading-[1.1]">
             Hola, {firstName}. ¿Qué resolvemos hoy?
           </h1>
           <p
@@ -245,9 +245,11 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Latest routine runs */}
-        <Panel className="p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="field-label">Rutinas — últimas ejecuciones</div>
+        <Panel className="p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-base font-bold tracking-tight text-ink">
+              Rutinas: lo último que corrió
+            </h2>
             <Link
               href="/schedules"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
@@ -259,7 +261,10 @@ export default async function DashboardPage() {
             <Empty
               title="Ninguna rutina se ha ejecutado"
               body="Una rutina es un trabajo que Cortex ejecuta solo, a la hora que le digas. Pídele una en el chat y sus ejecuciones aparecen aquí."
-              action={{ href: '/chat', label: 'Pedirle una rutina a Cortex' }}
+              action={{
+                href: `/chat?prompt=${encodeURIComponent('Crea una rutina que cada lunes a las 8 a. m. me mande un resumen de lo que vence esta semana y lo que espera mi aprobación.')}`,
+                label: 'Crear mi primera rutina',
+              }}
             />
           ) : (
             <ul className="divide-y divide-border">
@@ -294,9 +299,11 @@ export default async function DashboardPage() {
         </Panel>
 
         {/* Recent conversations */}
-        <Panel className="p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="field-label">Conversaciones recientes</div>
+        <Panel className="p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-base font-bold tracking-tight text-ink">
+              Conversaciones recientes
+            </h2>
             <Link
               href="/chat"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
@@ -307,8 +314,11 @@ export default async function DashboardPage() {
           {conversations.length === 0 ? (
             <Empty
               title="Todavía no hay conversaciones"
-              body="Aquí queda todo lo que le preguntas a Cortex, con las herramientas que usó para responderte."
-              action={{ href: '/chat', label: 'Abrir el chat' }}
+              body="Aquí queda todo lo que le preguntas a Cortex, con lo que consultó para responderte."
+              action={{
+                href: `/chat?prompt=${encodeURIComponent('¿Qué sabes de mi empresa y qué te falta para ayudarme mejor?')}`,
+                label: 'Hacer la primera pregunta',
+              }}
             />
           ) : (
             <ul className="divide-y divide-border">
@@ -342,72 +352,76 @@ export default async function DashboardPage() {
 
       {/* Atajos: una fila de píldoras, no una rejilla de tarjetas idénticas —
           son maneras de irse de aquí, no contenido, y no pueden pesar lo mismo
-          que las colas de arriba. */}
+          que las colas de arriba. Con los nombres que usa el resto del
+          producto: procesos, el cerebro y rutinas — nada de «pipeline». */}
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <span className="field-label mr-1">Atajos</span>
         <QuickAction href="/chat" icon={<Sparkles className="h-3.5 w-3.5" />} label="Nuevo chat" />
         <QuickAction
-          href="/pipelines"
+          href="/procesos"
           icon={<Workflow className="h-3.5 w-3.5" />}
-          label="Ejecutar un pipeline"
+          label="Activar un proceso"
         />
         <QuickAction
           href="/kb"
           icon={<BookOpen className="h-3.5 w-3.5" />}
-          label="Buscar en Brain Knowledge"
+          label="Buscar en el cerebro"
         />
         <QuickAction
           href="/schedules"
           icon={<AlarmClock className="h-3.5 w-3.5" />}
-          label="Rutinas"
+          label="Rutinas con hora"
         />
       </div>
 
-      {/* Connect Cortex anywhere — the connector URL lives here because it is the
-          one thing people come back for; the per-client walkthrough lives on
-          /mcp-tokens so the two surfaces cannot drift apart. */}
+      {/* Llevar Cortex a Claude o ChatGPT. Es para quien ya usa uno de esos
+          asistentes: la explicación cabe en una línea y lo técnico (la URL del
+          conector) queda plegado — un dueño que no sabe qué es «MCP» no tiene
+          por qué leerlo para usar su Inicio. El paso a paso vive en /mcp-tokens
+          para que las dos superficies no se separen. */}
       <Panel className="mt-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-primary">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary">
               <Plug className="h-4 w-4" />
             </span>
             <div className="min-w-0">
               <h2 className="text-base font-bold tracking-tight text-ink">
-                Conecta Cortex donde trabajes
+                ¿Usas Claude o ChatGPT? Lleva a Cortex allá
               </h2>
-              <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-ink-muted">
-                El mismo cerebro —todas las herramientas, Brain Knowledge, los pipelines y las
-                rutinas— dentro de Claude, Claude Code, ChatGPT o cualquier cliente MCP. Corre con
-                tus propios permisos y cada acción queda auditada.
+              <p className="mt-0.5 max-w-2xl text-sm leading-relaxed text-ink-muted">
+                Pregúntale por tu empresa desde el asistente que ya usas, con lo mismo que sabe aquí
+                y con tus mismos permisos. Cada acción queda registrada.
               </p>
             </div>
           </div>
           <Link
             href="/mcp-tokens"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-4 py-2 text-sm font-bold text-ink transition-colors hover:bg-surface-2"
           >
-            Configurar un cliente
+            Ver cómo se hace
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
-        <div className="mt-4">
-          <div className="field-label">URL del conector</div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
-            <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-sm font-semibold text-ink">
-              {mcpUrl}
-            </code>
-            <CopyButton text={mcpUrl} label="Copiar la URL" />
+        <details className="group mt-4 border-t border-border pt-3">
+          <summary className="cursor-pointer list-none text-xs font-semibold text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+            <span className="group-open:hidden">Mostrar la dirección para copiar</span>
+            <span className="hidden group-open:inline">Ocultar la dirección</span>
+          </summary>
+          <div className="mt-3">
+            <div className="field-label">Dirección de Cortex para Claude o ChatGPT</div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2.5">
+              <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-sm font-semibold text-ink">
+                {mcpUrl}
+              </code>
+              <CopyButton text={mcpUrl} label="Copiar" />
+            </div>
+            <p className="mt-2 text-micro text-ink-faint">
+              Entras con tu cuenta de Google: no hay ninguna clave que pegar.
+            </p>
           </div>
-          <p className="mt-2 text-micro text-ink-faint">
-            Claude te identifica con tu cuenta de Google: no hay ningún token que pegar.{' '}
-            <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
-              Paso a paso para Claude, ChatGPT y Claude Code
-            </Link>
-            .
-          </p>
-        </div>
+        </details>
 
         {/* Trust strip */}
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-micro">
@@ -426,7 +440,7 @@ export default async function DashboardPage() {
           <TrustItem
             href={isAdmin ? '/admin/audit' : undefined}
             icon={<ScrollText className="h-3.5 w-3.5" />}
-            label="Cada acción queda auditada"
+            label="Cada acción queda registrada"
           />
         </div>
       </Panel>

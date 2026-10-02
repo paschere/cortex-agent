@@ -1,18 +1,18 @@
-import Link from 'next/link';
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import { revalidatePath } from 'next/cache';
-import { ShieldBan, UserMinus, UserPlus, Users2, UsersRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
+import { ShieldBan, UserMinus, UserPlus, Users2, UsersRound } from 'lucide-react';
+import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 
 const FIELD =
   'rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50';
 
 const ROLE_LABEL: Record<string, string> = {
-  org_admin: 'Admin de la organización',
-  team_admin: 'Admin de equipo',
+  org_admin: 'Administra la empresa',
+  team_admin: 'Lidera un equipo',
   member: 'Miembro',
 };
 
@@ -52,9 +52,12 @@ async function addTeamMember(formData: FormData) {
   const userId = (formData.get('userId') as string | null)?.trim();
   if (!teamId || !userId) return;
   const sb = getOrgScopedClient(user.organization.id);
-  await sb.from('team_members').upsert({ team_id: teamId, user_id: userId }, {
-    onConflict: 'team_id,user_id',
-  });
+  await sb.from('team_members').upsert(
+    { team_id: teamId, user_id: userId },
+    {
+      onConflict: 'team_id,user_id',
+    },
+  );
   revalidatePath('/admin/teams');
 }
 
