@@ -467,6 +467,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // sobre su propia caja.
   ledger_scenarios: tenant(),
   ledger_recurring: tenant(),
+  // 0175: la caja mínima de la empresa. Tenant: una fila por empresa, llave
+  // `organization_id`; es la decisión de una empresa sobre su propia caja.
+  ledger_settings: tenant(),
 
   // --- Vistas (migración 0156) ------------------------------------------------
   // Pantallas armadas sobre las tablas de arriba. Tenant las tres. La vista es

@@ -214,18 +214,43 @@ export const REGISTRY_ONLY_SOURCES: readonly WorkSourceKind[] = [
 ];
 
 /**
- * ¿Se puede marcar hecho desde «Mi semana»? Sólo lo propio y abierto, y sólo
- * cuando hay un camino que ya existe y es seguro: un compromiso se cumple como
- * en /commitments; lo que vive sólo en el registro se cierra en el registro.
- * Un asunto de Gerencia (tiene revisión), una fila de tabla (su estado es de
- * la tabla) o una aprobación (la decide quien la pidió) se abren en su fuente.
+ * ¿Se puede marcar hecho desde «Mi semana» o el detalle de una persona? Sólo
+ * lo abierto, y sólo cuando hay un camino que ya existe y es seguro:
+ *
+ *   - Un compromiso se cumple como en /commitments; lo que vive sólo en el
+ *     registro se cierra en el registro. Sólo lo propio.
+ *   - Una fila de tabla, si la empresa dijo qué campo es el estado y qué valor
+ *     es «hecho» (`markableTrackers`): se escribe ese valor EN la tabla, por el
+ *     camino de `trackers.upsert`. Lo propio, o lo de cualquiera para quien
+ *     administra o es dueño (`manages`).
+ *   - Un asunto de Gerencia (tiene revisión) o una aprobación (la decide quien
+ *     la pidió) se abren en su fuente.
  */
 export function canMarkDone(
   item: Pick<WorkItem, 'status' | 'assigneeId' | 'source'>,
   viewerId: string,
+  opts: { manages?: boolean; markableTrackers?: ReadonlySet<string> } = {},
 ): boolean {
-  if (item.status !== 'open' || item.assigneeId !== viewerId) return false;
+  if (item.status !== 'open') return false;
+  if (item.source.kind === 'tracker_row') {
+    const tracker = item.source.system ?? '';
+    if (!opts.markableTrackers?.has(tracker)) return false;
+    return item.assigneeId === viewerId || opts.manages === true;
+  }
+  if (item.assigneeId !== viewerId) return false;
   return item.source.kind === 'commitment' || REGISTRY_ONLY_SOURCES.includes(item.source.kind);
+}
+
+/**
+ * Las tablas conectadas cuyas filas se pueden marcar hechas desde aquí: las
+ * que tienen campo de estado y al menos un valor «hecho» en su mapeo.
+ */
+export function markableTrackers(
+  mappings: ReadonlyArray<{ tracker: string; statusField: string | null; doneValues: string[] }>,
+): Set<string> {
+  return new Set(
+    mappings.filter((m) => m.statusField && m.doneValues.length > 0).map((m) => m.tracker),
+  );
 }
 
 /** Lo que no se puede pasar a otra persona desde aquí (ver `reassignWorkItems`). */

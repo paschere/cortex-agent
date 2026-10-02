@@ -20,6 +20,7 @@ export {
 export * from './types';
 export {
   ledgerDecideRecurring,
+  ledgerSetMinimumCash,
   ledgerDeclareRecurring,
   ledgerExplainWeek,
   ledgerForecast,

@@ -4,13 +4,19 @@ import type { MappingSuggestion, TeamActionResult } from '@/components/team/type
 import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { managesTeam } from '@/lib/team/read';
 import { REGISTRY_ONLY_SOURCES, canMarkDone, isIsoDay } from '@/lib/team/shape';
+import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import {
+  bogotaToday,
   getTrackerBySlug,
   getWorkItemsByIds,
   markMet,
+  markTrackerItemDone,
   personLabelOf,
+  readWorkSettings,
   syncWork,
+  undoTrackerItemDone,
   updateWorkPerson,
   upsertWorkItems,
   workAssign,
@@ -32,9 +38,14 @@ import { revalidatePath } from 'next/cache';
  * fuera son la regla de `updateWorkPerson`. La confirmación es el diálogo de
  * la pantalla: aquí no se escribe nada que la persona no haya visto.
  *
- *   - Pasar trabajo de otra persona: sólo quien administra (`org_admin`).
+ *   - «Quien administra» = `org_admin` o DUEÑO de la empresa (`managesTeam`).
+ *   - Pasar trabajo de otra persona: sólo quien administra.
  *   - Qué se mide y quién ve qué: sólo quien administra.
- *   - Marcar hecho: sólo lo propio, y sólo por un camino que ya existe.
+ *   - Marcar hecho: sólo lo propio, y sólo por un camino que ya existe. Una
+ *     fila de tabla conectada: quien responde por ella o quien administra; se
+ *     escribe el valor «hecho» EN la tabla por el camino de `trackers.upsert`
+ *     (con sus permisos de equipo) y se re-sincroniza esa tabla. Se puede
+ *     deshacer desde el mismo aviso.
  *   - Días fuera: los propios, cualquiera; los de otro, quien administra.
  */
 
@@ -61,7 +72,7 @@ export async function reassignWork(input: {
   const started = performance.now();
   try {
     const user = await requireSession();
-    if (user.role !== 'org_admin')
+    if (!managesTeam(user))
       return {
         ok: false,
         error: 'Sólo quien administra la empresa puede pasar trabajo de otra persona.',
@@ -122,6 +133,34 @@ export async function reassignWork(input: {
   }
 }
 
+/**
+ * La fila de tabla detrás de un ítem, marcada hecha (o devuelta) y el registro
+ * re-sincronizado para esa tabla. Las reglas viven en work/store.ts
+ * (`markTrackerItemDone`); aquí además se respeta lo que el equipo de la
+ * persona tenga prohibido sobre las tablas (`trackers.upsert`).
+ */
+async function trackerRowGuard(
+  db: ReturnType<typeof getOrgScopedClient>,
+  user: { id: string },
+): Promise<string | null> {
+  const denied = await deniedToolPatterns(db, user.id, { failClosed: true });
+  return isToolDenied('trackers.upsert', denied)
+    ? 'Tu equipo no tiene permiso para cambiar tablas.'
+    : null;
+}
+
+async function resyncTracker(
+  db: ReturnType<typeof getOrgScopedClient>,
+  organizationId: string,
+  tracker: string,
+) {
+  try {
+    await syncWork(db, organizationId, { onlyTracker: tracker });
+  } catch (err) {
+    logger.warn({ err, tracker }, 'team: la fila cambió pero el registro no se refrescó');
+  }
+}
+
 export async function markWorkDone(input: { itemId: string }): Promise<TeamActionResult> {
   const started = performance.now();
   try {
@@ -131,9 +170,56 @@ export async function markWorkDone(input: { itemId: string }): Promise<TeamActio
     const db = getOrgScopedClient(user.organization.id);
     const [item] = await getWorkItemsByIds(db, [id]);
     if (!item) return { ok: false, error: 'Ese ítem ya no está en el registro.' };
+    if (item.status !== 'open') return { ok: true, note: 'Ya estaba cerrado.' };
+
+    if (item.source.kind === 'tracker_row') {
+      const manages = managesTeam(user);
+      if (item.assigneeId !== user.id && !manages)
+        return {
+          ok: false,
+          error:
+            'Sólo quien responde por ese trabajo, o quien administra la empresa, lo marca hecho.',
+        };
+      const refusal = await trackerRowGuard(db, user);
+      if (refusal) return { ok: false, error: refusal };
+      const settings = await readWorkSettings(db);
+      const change = await markTrackerItemDone(db, {
+        item,
+        mappings: settings.trackerMappings,
+        actor: { id: user.id, admin: manages },
+        today: bogotaToday(),
+      });
+      await resyncTracker(db, user.organization.id, change.tracker);
+      await writeAuditEvent({
+        db,
+        userId: user.id as UUID,
+        toolId: 'work.mark_done',
+        input: { itemId: id },
+        status: 'ok',
+        latencyMs: Math.round(performance.now() - started),
+        surface: 'web',
+        decision: 'confirmed',
+        metadata: {
+          source: 'tracker_row',
+          tracker: change.tracker,
+          rowId: change.rowId,
+          field: change.field,
+          from: change.previous,
+          to: change.value,
+          forOther: item.assigneeId !== user.id,
+        },
+      });
+      // Sin revalidar aquí: la fila se queda en pantalla unos segundos para
+      // poder deshacer; el botón refresca la página cuando pasa la ventana.
+      return {
+        ok: true,
+        note: `Hecho: «${item.title}» quedó «${change.value}» en ${change.trackerName}.`,
+        undo: { previous: change.previous, clearDoneAt: change.doneAtField !== null },
+      };
+    }
+
     if (item.assigneeId !== user.id)
       return { ok: false, error: 'Sólo puedes marcar como hecho tu propio trabajo.' };
-    if (item.status !== 'open') return { ok: true, note: 'Ya estaba cerrado.' };
     if (!canMarkDone(item, user.id))
       return { ok: false, error: 'Este se cierra en su fuente: ábrelo desde el enlace.' };
 
@@ -185,6 +271,68 @@ export async function markWorkDone(input: { itemId: string }): Promise<TeamActio
   }
 }
 
+/**
+ * Deshacer un «Marcar hecho» de una fila de tabla: el campo de estado vuelve a
+ * lo que tenía. Mismas reglas que al marcar (quién, permisos de equipo), y sólo
+ * si la fila sigue «hecha» con el valor que se puso (`undoTrackerItemDone`).
+ */
+export async function undoMarkWorkDone(input: {
+  itemId: string;
+  previous: string | number | null;
+  clearDoneAt: boolean;
+}): Promise<TeamActionResult> {
+  const started = performance.now();
+  try {
+    const user = await requireSession();
+    const id = String(input?.itemId ?? '');
+    if (!UUID_RE.test(id)) return { ok: false, error: 'Ese ítem no existe.' };
+    const raw = input?.previous;
+    const previous =
+      typeof raw === 'number' && Number.isFinite(raw)
+        ? raw
+        : typeof raw === 'string'
+          ? raw.slice(0, 400)
+          : null;
+    const db = getOrgScopedClient(user.organization.id);
+    const [item] = await getWorkItemsByIds(db, [id]);
+    if (!item) return { ok: false, error: 'Ese ítem ya no está en el registro.' };
+    if (item.source.kind !== 'tracker_row')
+      return { ok: false, error: 'Sólo se deshace aquí lo marcado en una tabla.' };
+    const manages = managesTeam(user);
+    if (item.assigneeId !== user.id && !manages)
+      return {
+        ok: false,
+        error: 'Sólo quien lo marcó, o quien administra la empresa, lo deshace.',
+      };
+    const refusal = await trackerRowGuard(db, user);
+    if (refusal) return { ok: false, error: refusal };
+    const settings = await readWorkSettings(db);
+    await undoTrackerItemDone(db, {
+      item,
+      mappings: settings.trackerMappings,
+      actor: { id: user.id, admin: manages },
+      previous,
+      clearDoneAt: input?.clearDoneAt === true,
+    });
+    await resyncTracker(db, user.organization.id, item.source.system ?? '');
+    await writeAuditEvent({
+      db,
+      userId: user.id as UUID,
+      toolId: 'work.mark_done',
+      input: { itemId: id, undo: true },
+      status: 'ok',
+      latencyMs: Math.round(performance.now() - started),
+      surface: 'web',
+      decision: 'confirmed',
+      metadata: { source: 'tracker_row', tracker: item.source.system, undo: true, to: previous },
+    });
+    revalidatePath(PATH, 'layout');
+    return { ok: true, note: `Deshecho: «${item.title}» vuelve a estar abierto.` };
+  } catch (err) {
+    return { ok: false, error: message(err, 'No se pudo deshacer.') };
+  }
+}
+
 export async function saveAwayDays(input: {
   personId: string;
   add: string[];
@@ -199,7 +347,7 @@ export async function saveAwayDays(input: {
     if (!add.length && !remove.length) return { ok: false, error: 'No hay días para cambiar.' };
     const db = getOrgScopedClient(user.organization.id);
     const meta = await updateWorkPerson(db, {
-      actor: { id: user.id, admin: user.role === 'org_admin' },
+      actor: { id: user.id, admin: managesTeam(user) },
       userId: personId,
       change: { addAwayDays: add, removeAwayDays: remove },
     });
@@ -218,7 +366,7 @@ export async function saveAwayDays(input: {
 export async function suggestWorkMapping(input: { tracker: string }): Promise<MappingSuggestion> {
   try {
     const user = await requireSession();
-    if (user.role !== 'org_admin')
+    if (!managesTeam(user))
       return { ok: false, error: 'Sólo quien administra decide qué trabajo se mide.' };
     const ctx = toolContext(user);
     const out = await workSuggestMapping.handler(
@@ -275,7 +423,7 @@ export async function configureWork(input: {
   const started = performance.now();
   try {
     const user = await requireSession();
-    if (user.role !== 'org_admin')
+    if (!managesTeam(user))
       return { ok: false, error: 'Sólo quien administra decide qué trabajo se mide.' };
     const ctx = toolContext(user);
     if (input?.mapTracker) {

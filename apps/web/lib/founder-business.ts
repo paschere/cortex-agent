@@ -208,8 +208,9 @@ async function readPulse(
 
 /**
  * La caja de hoy y cuántas semanas alcanza, con la MISMA proyección de
- * /finance (ledger/plans.ts) y su caja mínima por defecto (un mes de gastos
- * fijos: todavía no hay una caja mínima guardada por empresa).
+ * /finance (ledger/plans.ts) y la caja mínima GUARDADA de la empresa
+ * (`ledger_settings`, migración 0175); si nadie la ha fijado, un mes de gastos
+ * fijos. `runForecast` la lee sola cuando no se le pasa `minimumCash`.
  * Sin cuentas ni movimientos en el libro no hay caja que mostrar: «sin dato»,
  * nunca «$ 0».
  */

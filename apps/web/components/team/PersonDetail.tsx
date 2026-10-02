@@ -106,7 +106,9 @@ export function PersonDetail({ screen, actions }: { screen: PersonScreen; action
       >
         <ItemList
           items={screen.open}
-          actions={screen.self ? actions : null}
+          // Cada fila dice si se puede marcar (`canMarkDone`): lo propio, o una
+          // fila de tabla para quien administra o es dueño.
+          actions={actions}
           empty="No tiene nada abierto."
         />
         {screen.openTotal > screen.open.length && (

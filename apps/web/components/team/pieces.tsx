@@ -231,7 +231,7 @@ export function ItemList({
 }: {
   items: ItemRowModel[];
   showOwner?: boolean;
-  actions?: Pick<TeamActions, 'markDone'> | null;
+  actions?: Pick<TeamActions, 'markDone' | 'undoMarkDone'> | null;
   empty?: string;
 }) {
   if (!items.length)
@@ -285,7 +285,12 @@ export function ItemList({
               <Pill>{i.sourceLabel}</Pill>
             )}
             {actions && i.canMarkDone && (
-              <MarkDoneButton itemId={i.id} title={i.title} markDone={actions.markDone} />
+              <MarkDoneButton
+                itemId={i.id}
+                title={i.title}
+                markDone={actions.markDone}
+                undoMarkDone={actions.undoMarkDone}
+              />
             )}
           </div>
         </li>

@@ -19,6 +19,7 @@ import {
   daysInRange,
   formatHours,
   initials,
+  markableTrackers,
   periodFor,
   readPeriodKey,
   sourcePath,
@@ -78,6 +79,38 @@ describe('las piezas', () => {
       false,
     );
     expect(canMarkDone({ ...base, source: { kind: 'chat', ref: 'h' } }, 'other')).toBe(false);
+  });
+
+  it('una fila de tabla con estado «hecho»: quien responde, o quien administra o es dueño', () => {
+    const row = {
+      status: 'open' as const,
+      assigneeId: 'me',
+      source: { kind: 'tracker_row' as const, system: 'despachos', ref: 'r1' },
+    };
+    const markable = markableTrackers([
+      { tracker: 'despachos', statusField: 'estado', doneValues: ['Despachado'] },
+      { tracker: 'sin-estado', statusField: null, doneValues: [] },
+      { tracker: 'sin-hecho', statusField: 'estado', doneValues: [] },
+    ]);
+    expect([...markable]).toEqual(['despachos']);
+    expect(canMarkDone(row, 'me', { markableTrackers: markable })).toBe(true);
+    expect(canMarkDone(row, 'other', { markableTrackers: markable })).toBe(false);
+    expect(canMarkDone(row, 'other', { markableTrackers: markable, manages: true })).toBe(true);
+    expect(
+      canMarkDone({ ...row, source: { ...row.source, system: 'sin-estado' } }, 'me', {
+        markableTrackers: markable,
+        manages: true,
+      }),
+    ).toBe(false);
+    expect(canMarkDone({ ...row, status: 'done' }, 'me', { markableTrackers: markable })).toBe(
+      false,
+    );
+    // Quien administra no cierra los compromisos de otros desde aquí.
+    expect(
+      canMarkDone({ ...row, source: { kind: 'commitment', ref: 'c1' } }, 'other', {
+        manages: true,
+      }),
+    ).toBe(false);
     expect(sourcePath({ source: { kind: 'tracker_row', system: 'guias', ref: 'r' } })).toBe(
       '/trackers/guias',
     );

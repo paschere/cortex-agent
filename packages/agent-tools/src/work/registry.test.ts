@@ -1,6 +1,7 @@
 import { ForbiddenError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
+import { isCompanyManager, isWorkspaceOwner } from '../directory/store';
 import { createFakeSupabase } from '../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../tenancy/scoped-client';
 import type { ToolContext } from '../types';
@@ -15,9 +16,18 @@ import {
   trackerRowToWork,
 } from './adapters';
 import { factsRef, resolvePerson, trackerMappingSchema } from './shape';
-import { listWorkItems, updateWorkPerson, upsertWorkItems, workPersonChangeRefusal } from './store';
+import {
+  getWorkItemsByIds,
+  listWorkItems,
+  markTrackerItemDone,
+  readWorkSettings,
+  undoTrackerItemDone,
+  updateWorkPerson,
+  upsertWorkItems,
+  workPersonChangeRefusal,
+} from './store';
 import { syncWork } from './sync';
-import { workAssign, workConfigure, workQuery, workRecord } from './tools';
+import { workAssign, workConfigure, workQuery, workRecord, workUpdatePerson } from './tools';
 
 /**
  * El registro de trabajo contra un PostgREST de mentira con dos empresas: los
@@ -586,6 +596,106 @@ describe('una tabla mapeada se vuelve trabajo', () => {
     expect(out.assigned).toBe(0);
     expect(out.refused[0]?.reason).toMatch(/tu propio trabajo/);
   });
+
+  it('«Marcar hecho» en una fila: el estado «hecho» EN la tabla, el registro al día, y se deshace', async () => {
+    const { db, tables } = world(trackerSeed());
+    await workConfigure.handler({ mapTracker } as never, ctx(db, ADMIN));
+    const { trackerMappings: mappings } = await readWorkSettings(db);
+    const open = (tables.work_items ?? []).find((i) => i.source_ref === 'r2');
+    const [item] = await getWorkItemsByIds(db, [String(open?.id)]);
+    if (!item) throw new Error('falta el ítem');
+    const row = () => (tables.tracker_rows ?? []).find((r) => r.id === 'r2');
+
+    // Laura no responde por él ni administra: no.
+    await expect(
+      markTrackerItemDone(db, {
+        item,
+        mappings,
+        actor: { id: LAURA, admin: false },
+        today: '2026-10-02',
+      }),
+    ).rejects.toThrow(ForbiddenError);
+    expect(row()?.values).toMatchObject({ estado: 'Pendiente' });
+
+    // Andrés, que responde por él: el primer valor «hecho» queda en la tabla.
+    const change = await markTrackerItemDone(db, {
+      item,
+      mappings,
+      actor: { id: ANDRES, admin: false },
+      today: '2026-10-02',
+    });
+    expect(change).toMatchObject({
+      tracker: 'despachos',
+      rowId: 'r2',
+      field: 'estado',
+      previous: 'Pendiente',
+      value: 'Despachado',
+      doneAtField: null,
+    });
+    expect(row()?.values).toMatchObject({ pedido: 'P-2', estado: 'Despachado' });
+    await syncWork(db, ORG, { onlyTracker: 'despachos' });
+    expect((tables.work_items ?? []).find((i) => i.source_ref === 'r2')?.status).toBe('done');
+
+    // Deshacer: vuelve a «Pendiente» y el registro lo reabre.
+    await undoTrackerItemDone(db, {
+      item,
+      mappings,
+      actor: { id: ANDRES, admin: false },
+      previous: change.previous,
+      clearDoneAt: false,
+    });
+    expect(row()?.values).toMatchObject({ estado: 'Pendiente' });
+    await syncWork(db, ORG, { onlyTracker: 'despachos' });
+    expect((tables.work_items ?? []).find((i) => i.source_ref === 'r2')?.status).toBe('open');
+
+    // Si alguien cambió la fila después, deshacer no la pisa.
+    await expect(
+      undoTrackerItemDone(db, {
+        item,
+        mappings,
+        actor: { id: ANDRES, admin: false },
+        previous: 'Pendiente',
+        clearDoneAt: false,
+      }),
+    ).rejects.toThrow(/ya cambió/);
+
+    // Quien administra (o es dueño) marca lo de otro.
+    await markTrackerItemDone(db, {
+      item,
+      mappings,
+      actor: { id: ADMIN, admin: true },
+      today: '2026-10-02',
+    });
+    expect(row()?.values).toMatchObject({ estado: 'Despachado' });
+  });
+
+  it('sin estado «hecho» en el mapeo, o con un ítem que no es de tabla, no se marca', async () => {
+    const { db, tables } = world(trackerSeed());
+    await workConfigure.handler(
+      { mapTracker: { ...mapTracker, statusField: null, doneValues: [] } } as never,
+      ctx(db, ADMIN),
+    );
+    const { trackerMappings: mappings } = await readWorkSettings(db);
+    const open = (tables.work_items ?? []).find((i) => i.source_ref === 'r2');
+    const [item] = await getWorkItemsByIds(db, [String(open?.id)]);
+    if (!item) throw new Error('falta el ítem');
+    await expect(
+      markTrackerItemDone(db, {
+        item,
+        mappings,
+        actor: { id: ANDRES, admin: false },
+        today: '2026-10-02',
+      }),
+    ).rejects.toThrow(/qué estado es «hecho»/);
+    await expect(
+      markTrackerItemDone(db, {
+        item: { ...item, source: { kind: 'chat', system: null, ref: 'x' } },
+        mappings,
+        actor: { id: ANDRES, admin: true },
+        today: '2026-10-02',
+      }),
+    ).rejects.toThrow(/no es una fila de tabla/);
+  });
 });
 
 describe('quién ve qué', () => {
@@ -744,5 +854,100 @@ describe('días fuera: de la persona y del administrador', () => {
         change: { team: 'X' },
       }),
     ).rejects.toThrow(/no es de este espacio/);
+  });
+});
+
+describe('el dueño de la empresa administra el equipo', () => {
+  /**
+   * Andrés es `member` en el directorio pero DUEÑO de la empresa en better-auth
+   * (ba_member.role = 'owner'): tiene los mismos poderes de equipo que un
+   * `org_admin`. Los ids de better-auth no son los del directorio; los une el
+   * correo, sin mayúsculas.
+   */
+  const ownership = (opts: { kind?: string; role?: string; org?: string } = {}) => ({
+    ba_organization: [
+      { id: ORG, name: 'Andina', kind: opts.kind ?? 'company' },
+      { id: OTHER, name: 'Otra', kind: 'company' },
+    ],
+    ba_user: [{ id: 'ba-andres', email: 'Andres@Andina.co', name: 'Andrés Peña' }],
+    ba_member: [
+      {
+        id: 'm-andres',
+        organizationId: opts.org ?? ORG,
+        userId: 'ba-andres',
+        role: opts.role ?? 'owner',
+      },
+    ],
+  });
+
+  it('isCompanyManager: org_admin o dueño de una empresa; nada más', async () => {
+    expect(await isCompanyManager(world(ownership()).db, ANDRES)).toBe(true);
+    expect(await isWorkspaceOwner(world(ownership()).db, ANDRES)).toBe(true);
+    expect(await isCompanyManager(world(ownership()).db, ADMIN)).toBe(true);
+    expect(await isCompanyManager(world(ownership()).db, LAURA)).toBe(false);
+    // Miembro, no dueño.
+    expect(await isCompanyManager(world(ownership({ role: 'member' })).db, ANDRES)).toBe(false);
+    // Dueño de OTRA empresa: aquí no cuenta.
+    expect(await isCompanyManager(world(ownership({ org: OTHER })).db, ANDRES)).toBe(false);
+    // Ser dueño de un espacio personal nunca da permisos de empresa.
+    expect(await isCompanyManager(world(ownership({ kind: 'personal' })).db, ANDRES)).toBe(false);
+    // Sin persona, o con un handle sin empresa, no.
+    expect(await isCompanyManager(world(ownership()).db, null)).toBe(false);
+    expect(await isWorkspaceOwner(world(ownership()).raw, ANDRES)).toBe(false);
+  });
+
+  it('configura, reasigna lo de otros, ve todo y edita días fuera de cualquiera', async () => {
+    const { db, tables } = world(ownership());
+    await workRecord.handler(
+      { person: LAURA, workType: 'despacho', title: 'Despacho Laura', status: 'open' } as never,
+      ctx(db, ADMIN),
+    );
+    await workRecord.handler(
+      { person: 'Don Jorge', workType: 'despacho', title: 'Sin cuenta', status: 'open' } as never,
+      ctx(db, ADMIN),
+    );
+
+    // Ve todo, también lo que no tiene responsable.
+    const all = await workQuery.handler({} as never, ctx(db, ANDRES));
+    expect(all.items.map((i) => i.title).sort()).toEqual(['Despacho Laura', 'Sin cuenta']);
+    const view = await readPlatformSource(db, 'cortex.trabajo', 100, '2026-09-30', {
+      viewerId: ANDRES,
+    });
+    expect(view?.rows).toHaveLength(2);
+
+    // Reasigna lo de Laura.
+    const laura = (tables.work_items ?? []).find((i) => i.title === 'Despacho Laura');
+    const moved = await workAssign.handler(
+      { itemIds: [String(laura?.id)], person: 'yo' } as never,
+      ctx(db, ANDRES),
+    );
+    expect(moved.assigned).toBe(1);
+
+    // Configura qué se mide.
+    const configured = await workConfigure.handler(
+      { teamVisibility: 'team' } as never,
+      ctx(db, ANDRES),
+    );
+    expect(configured).toBeTruthy();
+
+    // Días fuera de otra persona.
+    const away = await workUpdatePerson.handler(
+      { person: 'Laura', addAwayDays: ['2026-10-05'] } as never,
+      ctx(db, ANDRES),
+    );
+    expect(away.awayDays).toEqual(['2026-10-05']);
+  });
+
+  it('el mismo Andrés, sin ser dueño, sigue sin poder', async () => {
+    const { db } = world(ownership({ role: 'member' }));
+    await expect(
+      workConfigure.handler({ teamVisibility: 'all' } as never, ctx(db, ANDRES)),
+    ).rejects.toThrow(ForbiddenError);
+    await expect(
+      workUpdatePerson.handler(
+        { person: 'Laura', addAwayDays: ['2026-10-05'] } as never,
+        ctx(db, ANDRES),
+      ),
+    ).rejects.toThrow(ForbiddenError);
   });
 });

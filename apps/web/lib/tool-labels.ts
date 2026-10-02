@@ -292,6 +292,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     label: 'Confirmar o ignorar un movimiento que se repite',
     icon: 'CalendarCheck',
   },
+  ledger_set_minimum_cash: { label: 'Fijar la caja mínima de la empresa', icon: 'ShieldAlert' },
 
   // Metas. `goals_set` está arriba porque se para a pedir permiso.
   goals_offer_metrics: { label: 'Ver qué se puede medir aquí', icon: 'Ruler' },

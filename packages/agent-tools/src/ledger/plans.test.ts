@@ -12,10 +12,13 @@ import {
   declareRecurring,
   deleteScenario,
   detectedRecurring,
+  effectiveMinimumCash,
+  getLedgerSettings,
   listRecurringDecisions,
   listScenarios,
   monthlyPnl,
   runForecast,
+  saveLedgerSettings,
   saveScenario,
 } from './plans';
 import { PAYROLL_CONFIDENTIAL_KEY, PAYROLL_CONFIDENTIAL_LABEL } from './privacy';
@@ -51,6 +54,7 @@ function world(seed: Record<string, Row[]> = {}) {
       ledger_sync_state: [],
       ledger_scenarios: [],
       ledger_recurring: [],
+      ledger_settings: [],
       audit_events: [],
       users: [
         { id: ADMIN, organization_id: ORG, role: 'org_admin', email: 'a@x.co' },
@@ -462,5 +466,97 @@ describe('las herramientas de la caja', () => {
     )) as { scenarioId: string; guidance: string };
     expect(saved.guidance).toContain('Guardé el escenario «Nexa se atrasa».');
     expect(w.tables.ledger_scenarios).toHaveLength(1);
+  });
+});
+
+describe('la caja mínima de la empresa (0175)', () => {
+  /** El miembro es DUEÑO de la empresa en better-auth: también la fija. */
+  const ownership = (role = 'owner') => ({
+    ba_organization: [{ id: ORG, name: 'Planes', kind: 'company' }],
+    ba_user: [{ id: 'ba-m', email: 'M@x.co' }],
+    ba_member: [{ id: 'mm', organizationId: ORG, userId: 'ba-m', role }],
+  });
+
+  it('sin fila no hay nada decidido; la explícita manda; otra moneda no cuenta', async () => {
+    const w = world();
+    expect(await getLedgerSettings(w.db)).toMatchObject({ minimumCash: null, currency: 'COP' });
+    const settings = { minimumCash: 20_000_000, currency: 'COP' };
+    expect(effectiveMinimumCash(null, settings, 'COP')).toBe(20_000_000);
+    expect(effectiveMinimumCash(undefined, settings, 'cop')).toBe(20_000_000);
+    expect(effectiveMinimumCash(5_000_000, settings, 'COP')).toBe(5_000_000);
+    expect(effectiveMinimumCash(0, settings, 'COP')).toBe(0);
+    expect(effectiveMinimumCash(null, settings, 'USD')).toBeNull();
+    expect(effectiveMinimumCash(null, { minimumCash: null, currency: 'COP' }, 'COP')).toBeNull();
+  });
+
+  it('la fija quien administra o es dueño; un miembro no', async () => {
+    const w = world();
+    await expect(saveLedgerSettings(w.db, { minimumCash: 1, userId: MEMBER })).rejects.toThrow(
+      /administra la empresa o es su dueño/,
+    );
+    expect(w.tables.ledger_settings).toHaveLength(0);
+
+    const saved = await saveLedgerSettings(w.db, { minimumCash: 20_000_000, userId: ADMIN });
+    expect(saved).toMatchObject({ minimumCash: 20_000_000, currency: 'COP', updatedBy: ADMIN });
+    // Guardar otra vez reemplaza: una fila por empresa.
+    await saveLedgerSettings(w.db, { minimumCash: 25_000_000, userId: ADMIN });
+    expect(w.tables.ledger_settings).toHaveLength(1);
+    expect((await getLedgerSettings(w.db)).minimumCash).toBe(25_000_000);
+    await expect(saveLedgerSettings(w.db, { minimumCash: -1, userId: ADMIN })).rejects.toThrow(
+      /cero en adelante/,
+    );
+
+    const owned = world(ownership());
+    await saveLedgerSettings(owned.db, { minimumCash: 7_000_000, userId: MEMBER });
+    expect((await getLedgerSettings(owned.db)).minimumCash).toBe(7_000_000);
+    const notOwner = world(ownership('member'));
+    await expect(
+      saveLedgerSettings(notOwner.db, { minimumCash: 7_000_000, userId: MEMBER }),
+    ).rejects.toThrow(/dueño/);
+  });
+
+  it('la proyección mide contra la guardada cuando nadie pide otra', async () => {
+    const w = world();
+    await seedHistory(w);
+    const before = await buildForecastInput(w.db, { today: TODAY });
+    expect(before.minimumCash).toBeNull();
+    await saveLedgerSettings(w.db, { minimumCash: 28_000_000, userId: ADMIN });
+    const stored = await runForecast(w.db, { today: TODAY });
+    expect(stored.base.minimumCash).toBe(28_000_000);
+    expect(stored.base.assumptions.join(' ')).toMatch(/la que se fijó/);
+    const explicit = await runForecast(w.db, { today: TODAY, minimumCash: 1_000_000 });
+    expect(explicit.base.minimumCash).toBe(1_000_000);
+    const dollars = await buildForecastInput(w.db, { today: TODAY, currency: 'USD' });
+    expect(dollars.minimumCash).toBeNull();
+  });
+
+  it('ledger.set_minimum_cash: «avísame si la caja baja de 20 millones»', async () => {
+    const w = world();
+    await seedHistory(w);
+    const tool = getTool('ledger.set_minimum_cash');
+    expect(tool?.requiresConfirmation).toBe(true);
+    const out = (await tool?.handler({ amount: 20_000_000, currency: 'COP' }, ctxFor(w))) as {
+      minimumCash: number | null;
+      guidance: string;
+    };
+    expect(out.minimumCash).toBe(20_000_000);
+    expect(out.guidance).toMatch(/caja mínima de la empresa queda en \$ 20 M/);
+    expect((await getLedgerSettings(w.db)).minimumCash).toBe(20_000_000);
+
+    const forecast = (await getTool('ledger.forecast')?.handler({}, ctxFor(w, MEMBER))) as {
+      minimumCash: number;
+    };
+    expect(forecast.minimumCash).toBe(20_000_000);
+
+    await expect(tool?.handler({ amount: 1, currency: 'COP' }, ctxFor(w, MEMBER))).rejects.toThrow(
+      /dueño/,
+    );
+
+    const cleared = (await tool?.handler({ amount: null, currency: 'COP' }, ctxFor(w))) as {
+      minimumCash: number | null;
+      guidance: string;
+    };
+    expect(cleared.minimumCash).toBeNull();
+    expect(cleared.guidance).toMatch(/quité la caja mínima/);
   });
 });

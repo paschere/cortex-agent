@@ -83,7 +83,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   ledger: {
     name: 'Libro de plata',
     blurb:
-      'Toda la plata de la empresa en un solo libro: lo que entró y salió y lo que está por cobrar y por pagar, venga del programa contable, del extracto del banco, de los pagos, de una factura leída o del chat, contado una sola vez y con su categoría. De aquí salen ventas, gastos, margen y caja, y la proyección de caja a 13 semanas con sus escenarios («¿y si el cliente paga tarde?», «¿y si contrato a dos personas?»).',
+      'Toda la plata de la empresa en un solo libro: lo que entró y salió y lo que está por cobrar y por pagar, venga del programa contable, del extracto del banco, de los pagos, de una factura leída o del chat, contado una sola vez y con su categoría. De aquí salen ventas, gastos, margen y caja, y la proyección de caja a 13 semanas con sus escenarios («¿y si el cliente paga tarde?», «¿y si contrato a dos personas?») medida contra la caja mínima que fija la empresa.',
     tone: 'emerald',
     icon: 'Coins',
   },

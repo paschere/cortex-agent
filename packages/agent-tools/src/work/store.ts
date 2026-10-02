@@ -1,7 +1,7 @@
-import { ForbiddenError, ValidationError } from '@cortex/core';
+import { ForbiddenError, NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { type DirectoryRow, listDirectory } from '../directory/store';
-import { getTrackerBySlug } from '../trackers/store';
+import { type DirectoryRow, isCompanyManager, listDirectory } from '../directory/store';
+import { getTrackerBySlug, upsertRow } from '../trackers/store';
 import type { WorkDraft } from './adapters';
 import {
   type SyncedSource,
@@ -403,12 +403,13 @@ export async function listWorkPeopleMeta(db: SupabaseClient): Promise<Map<string
   );
 }
 
-/** ¿Quién administra? `users.role = 'org_admin'`; si no se puede saber, no. */
+/**
+ * ¿Administra el trabajo del equipo? `org_admin` o DUEÑO de la empresa
+ * (directory/store.ts `isCompanyManager`): reasigna, configura qué se mide,
+ * edita los días fuera de cualquiera y ve todo.
+ */
 export async function isWorkAdmin(db: SupabaseClient, userId: string | null): Promise<boolean> {
-  if (!userId) return false;
-  const { data, error } = await db.from('users').select('role').eq('id', userId).maybeSingle();
-  if (error) return false;
-  return (data as { role?: string } | null)?.role === 'org_admin';
+  return isCompanyManager(db, userId);
 }
 
 /** El directorio en la forma que usan la resolución de nombres y las cifras. */
@@ -622,4 +623,146 @@ export async function reassignWorkItems(
     else refuse('El ítem ya no está en el registro.');
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// «Marcar hecho» en una fila de tabla
+// ---------------------------------------------------------------------------
+
+/** Lo que cambió en la fila, para poder deshacerlo. */
+export interface TrackerDoneChange {
+  tracker: string;
+  trackerName: string;
+  rowId: string;
+  /** El campo de estado del mapeo y lo que tenía antes. */
+  field: string;
+  previous: string | number | null;
+  /** El primer valor «hecho» del mapeo, que quedó puesto. */
+  value: string;
+  /** El campo de fecha de cierre, si se llenó con hoy (estaba vacío). */
+  doneAtField: string | null;
+}
+
+type DoneItem = Pick<WorkRecord, 'id' | 'status' | 'assigneeId' | 'source'>;
+
+/**
+ * La fila de tabla detrás de un ítem, con su mapeo, si se puede marcar hecha.
+ * La regla: sólo quien responde por el ítem, o quien administra la empresa o
+ * es su dueño (`actor.admin`, `isWorkAdmin`); y sólo si la empresa dijo qué
+ * campo es el estado y qué valor quiere decir «hecho».
+ */
+async function doneTarget(
+  db: SupabaseClient,
+  input: {
+    item: DoneItem;
+    mappings: readonly TrackerMapping[];
+    actor: { id: string; admin: boolean };
+  },
+) {
+  const { item } = input;
+  if (item.source.kind !== 'tracker_row')
+    throw new ValidationError('Ese ítem no es una fila de tabla.');
+  if (!input.actor.admin && item.assigneeId !== input.actor.id)
+    throw new ForbiddenError(
+      'Sólo quien responde por ese trabajo, o quien administra la empresa, lo marca como hecho.',
+    );
+  const mapping = input.mappings.find((m) => m.tracker === item.source.system);
+  if (!mapping) throw new ValidationError('Esa tabla ya no está conectada al registro de trabajo.');
+  const doneValue = mapping.doneValues[0];
+  if (!mapping.statusField || !doneValue)
+    throw new ValidationError(
+      'Esa tabla no dice qué estado es «hecho»: configúralo en «Qué se mide».',
+    );
+  const tracker = await getTrackerBySlug(db, mapping.tracker);
+  if (!tracker) throw new NotFoundError('Esa tabla ya no existe.');
+  const statusField = tracker.fields.find((f) => f.key === mapping.statusField);
+  if (!statusField)
+    throw new ValidationError(
+      `El campo de estado «${mapping.statusField}» ya no está en la tabla.`,
+    );
+  const { data: current, error } = await db
+    .from('tracker_rows')
+    .select('id, label, values')
+    .eq('id', item.source.ref)
+    .eq('tracker_id', tracker.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!current) throw new NotFoundError('La fila ya no existe en la tabla.');
+  const values = { ...(((current as Row).values ?? {}) as Record<string, string | number>) };
+  return { mapping, tracker, statusField, doneValue, values, label: str((current as Row).label) };
+}
+
+/**
+ * Pone el primer valor «hecho» del mapeo en el campo de estado de la fila, por
+ * el MISMO camino que `trackers.upsert` (`upsertRow`: valida cada campo contra
+ * el esquema de la tabla, una lista de opciones incluida). Si el mapeo tiene
+ * fecha de cierre y está vacía, la llena con `today`. No toca el registro:
+ * quien llama re-sincroniza esa tabla (`syncWork` con `onlyTracker`).
+ */
+export async function markTrackerItemDone(
+  db: SupabaseClient,
+  input: {
+    item: DoneItem;
+    mappings: readonly TrackerMapping[];
+    actor: { id: string; admin: boolean };
+    today: string;
+  },
+): Promise<TrackerDoneChange> {
+  if (input.item.status !== 'open') throw new ValidationError('Ese trabajo ya estaba cerrado.');
+  const t = await doneTarget(db, input);
+  const previous = t.values[t.statusField.key] ?? null;
+  const next: Record<string, unknown> = { ...t.values, [t.statusField.key]: t.doneValue };
+  let doneAtField: string | null = null;
+  const doneAt = t.mapping.doneAtField
+    ? t.tracker.fields.find((f) => f.key === t.mapping.doneAtField)
+    : undefined;
+  if (doneAt && (doneAt.type === 'date' || doneAt.type === 'text') && !t.values[doneAt.key]) {
+    next[doneAt.key] = input.today;
+    doneAtField = doneAt.key;
+  }
+  await upsertRow(db, {
+    tracker: t.tracker,
+    rowId: input.item.source.ref,
+    values: next,
+    label: t.label ?? undefined,
+    userId: input.actor.id,
+  });
+  return {
+    tracker: t.tracker.slug,
+    trackerName: t.tracker.name,
+    rowId: input.item.source.ref,
+    field: t.statusField.key,
+    previous,
+    value: t.doneValue,
+    doneAtField,
+  };
+}
+
+/**
+ * Deshace un «Marcar hecho»: el campo de estado vuelve a lo que tenía (y la
+ * fecha de cierre que se llenó, a vacía). Sólo si la fila sigue con el valor
+ * que se puso: si alguien la cambió después, no se pisa.
+ */
+export async function undoTrackerItemDone(
+  db: SupabaseClient,
+  input: {
+    item: DoneItem;
+    mappings: readonly TrackerMapping[];
+    actor: { id: string; admin: boolean };
+    previous: string | number | null;
+    clearDoneAt: boolean;
+  },
+): Promise<void> {
+  const t = await doneTarget(db, input);
+  if (String(t.values[t.statusField.key] ?? '') !== t.doneValue)
+    throw new ValidationError('La fila ya cambió desde entonces; ábrela en su tabla.');
+  const next: Record<string, unknown> = { ...t.values, [t.statusField.key]: input.previous ?? '' };
+  if (input.clearDoneAt && t.mapping.doneAtField) next[t.mapping.doneAtField] = '';
+  await upsertRow(db, {
+    tracker: t.tracker,
+    rowId: input.item.source.ref,
+    values: next,
+    label: t.label ?? undefined,
+    userId: input.actor.id,
+  });
 }

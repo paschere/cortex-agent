@@ -4,7 +4,7 @@ import type { TrackerOption } from '@/components/team/types';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { teamHrefs } from '@/lib/team/read';
+import { isFounder, managesTeam, teamHrefs } from '@/lib/team/read';
 import { CONNECT_WORK_PROMPT, chatPath } from '@/lib/team/shape';
 import { workspaceHref } from '@/lib/workspace-context';
 import { listTrackers, listWorkItems, readWorkSettings } from '@cortex/agent-tools';
@@ -17,12 +17,13 @@ export const dynamic = 'force-dynamic';
 
 /**
  * «QUÉ SE MIDE»: conectar tablas como trabajo, qué tipos se miden y quién ve
- * qué. Sólo quien administra; los demás vuelven a «Equipo».
+ * qué. Sólo quien administra o es dueño de la empresa; los demás vuelven a
+ * «Equipo».
  */
 export default async function TeamMeasurePage() {
   const user = await requireSession();
-  const hrefs = teamHrefs(user.organization.id, { founder: false });
-  if (user.role !== 'org_admin') redirect(hrefs.team({ periodo: 'semana', tipo: null }));
+  const hrefs = teamHrefs(user.organization.id, { founder: isFounder(user) });
+  if (!managesTeam(user)) redirect(hrefs.team({ periodo: 'semana', tipo: null }));
   const db = getOrgScopedClient(user.organization.id);
   const [settings, trackers, { items }] = await Promise.all([
     readWorkSettings(db),

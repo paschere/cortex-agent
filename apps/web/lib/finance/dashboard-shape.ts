@@ -160,7 +160,16 @@ export interface FinanceDashboard {
   isAdmin: boolean;
   includeEstimatedSales: boolean;
   activeScenarioId: string | null;
+  /** La caja mínima pedida en la dirección (`?minimo=`), sólo para esta vista. */
   minimumCash: number | null;
+  /**
+   * La caja mínima GUARDADA de la empresa (`ledger_settings`, 0175) en la
+   * moneda del panel; `null` si nadie la ha fijado. Es la que usan la
+   * proyección, el centro de mando, el pulso y la revisión semanal.
+   */
+  companyMinimumCash: number | null;
+  /** Puede guardar la caja mínima de la empresa: administra o es dueño. */
+  canSaveMinimum: boolean;
   /** Empresa sin nada en el libro: se muestra una sola tarjeta de bienvenida. */
   empty: boolean;
   cash: Piece<CashToday>;

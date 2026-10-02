@@ -30,6 +30,8 @@ export {
   DIRECTORY_COLUMNS,
   adaptDirectoryPerson,
   emailsFor,
+  isCompanyManager,
+  isWorkspaceOwner,
   listDirectory,
   loadManagerLinks,
   loadManagerMap,

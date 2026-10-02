@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { organizationIdOf } from '../tenancy/scoped-client';
 import {
   type DirectoryPerson,
   type ManagerLink,
@@ -107,6 +108,83 @@ export async function orgAdmins(db: SupabaseClient, limit = 10): Promise<string[
   return ((data ?? []) as Array<{ id: string }>).map((u) => u.id);
 }
 
+// ---------------------------------------------------------------------------
+// Quién manda en la empresa: administradores y dueños
+// ---------------------------------------------------------------------------
+
+/**
+ * ¿Es esta persona DUEÑA de la empresa del handle?
+ *
+ * Dueño = `ba_member.role = 'owner'` en una organización `kind = 'company'`,
+ * la misma definición que apps/web/lib/founder-guard.ts. El espacio personal no
+ * cuenta: ser dueño de él nunca da permisos de empresa.
+ *
+ * `users.id` (el directorio del espacio) y `ba_member."userId"` (la cuenta de
+ * better-auth) son ids distintos; los une el correo, sin mayúsculas, como en
+ * apps/web/lib/session-directory.ts. Se lee en cada llamada, nunca de algo
+ * cacheado: perder la propiedad corta el poder en la petición siguiente. Ante
+ * cualquier error de lectura, la respuesta es «no» (falla cerrado).
+ */
+export async function isWorkspaceOwner(
+  db: SupabaseClient,
+  userId: string | null | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+  const { data, error } = await db.from('users').select('email').eq('id', userId).maybeSingle();
+  if (error) return false;
+  return ownsByEmail(db, (data as { email?: string | null } | null)?.email);
+}
+
+/** ¿El correo de esta persona es el de un dueño de la empresa del handle? */
+async function ownsByEmail(db: SupabaseClient, rawEmail: string | null | undefined) {
+  const organizationId = organizationIdOf(db);
+  const email = rawEmail?.trim().toLowerCase();
+  if (!email || !organizationId) return false;
+  const [org, owners] = await Promise.all([
+    db.from('ba_organization').select('kind').eq('id', organizationId).maybeSingle(),
+    db
+      .from('ba_member')
+      .select('userId')
+      .eq('organizationId', organizationId)
+      .eq('role', 'owner')
+      .limit(20),
+  ]);
+  if (org.error || owners.error) return false;
+  if ((org.data as { kind?: string } | null)?.kind !== 'company') return false;
+  const ownerIds = ((owners.data ?? []) as Array<{ userId: string }>).map((m) => m.userId);
+  if (!ownerIds.length) return false;
+  const { data, error } = await db.from('ba_user').select('id, email').in('id', ownerIds);
+  if (error) return false;
+  return ((data ?? []) as Array<{ email?: string | null }>).some(
+    (u) => u.email?.trim().toLowerCase() === email,
+  );
+}
+
+/**
+ * ¿Administra la empresa? `users.role = 'org_admin'` O es su dueño.
+ *
+ * Decisión del dueño (2026-10): quien fundó la empresa tiene los mismos poderes
+ * de equipo que un administrador —reasignar, configurar qué se mide, editar los
+ * días fuera de cualquiera, ver todo— y fija la caja mínima de la empresa. Una
+ * sola puerta para que el chat, las vistas y las pantallas digan lo mismo. Una
+ * lectura del directorio por llamada; las de better-auth, sólo si no administra.
+ */
+export async function isCompanyManager(
+  db: SupabaseClient,
+  userId: string | null | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+  const { data, error } = await db
+    .from('users')
+    .select('role, email')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) return false;
+  const row = data as { role?: string; email?: string | null } | null;
+  if (row?.role === 'org_admin') return true;
+  return ownsByEmail(db, row?.email);
+}
+
 /** Correo de cada id pedido. Los que no estén en el espacio no salen. */
 export async function emailsFor(
   db: SupabaseClient,
@@ -159,8 +237,7 @@ export async function setManager(db: SupabaseClient, input: SetManagerInput): Pr
     const managers = managerMapOf(people.map((p) => ({ id: p.id, managerId: p.manager_id })));
     if (wouldCycle(managers, person.id, manager.id)) {
       throw new ValidationError(
-        `${personLabel(person)} ya está por encima de ${personLabel(manager)} en la línea, ` +
-          'así que ponerlo de jefe cerraría un círculo y el escalado no llegaría a nadie.',
+        `${personLabel(person)} ya está por encima de ${personLabel(manager)} en la línea, así que ponerlo de jefe cerraría un círculo y el escalado no llegaría a nadie.`,
       );
     }
   }

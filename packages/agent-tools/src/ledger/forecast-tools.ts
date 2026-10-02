@@ -9,6 +9,7 @@ import {
   buildForecastInput,
   decideDetectedRecurring,
   declareRecurring,
+  saveLedgerSettings,
   saveScenario,
 } from './plans';
 import {
@@ -34,6 +35,10 @@ import { type ForecastResult, LEDGER_CATEGORIES, type Scenario } from './types';
  *   ledger.save_scenario     guardar un escenario para volver a él.
  *   ledger.declare_recurring «pagamos el crédito, 2 M el 28 de cada mes».
  *   ledger.decide_recurring  confirmar o ignorar algo que el motor detectó.
+ *   ledger.set_minimum_cash  «avísame si la caja baja de 20 millones»: la caja
+ *                            mínima de la empresa (0175), contra la que miden
+ *                            la proyección, el centro de mando, el pulso y la
+ *                            revisión semanal. Sólo quien administra o es dueño.
  *
  * Las de lectura no escriben nada; las otras piden confirmación. La nómina
  * sale con nombres sólo para quien administra la empresa (privacy.ts).
@@ -235,7 +240,7 @@ export const ledgerForecast = registerTool({
       .min(0)
       .nullish()
       .describe(
-        'La caja mínima con la que la persona está tranquila. Por defecto, un mes de gastos fijos.',
+        'Sólo si la persona pide otro piso para ESTA pregunta. Por defecto, la caja mínima guardada de la empresa (ledger.set_minimum_cash) o, sin ella, un mes de gastos fijos.',
       ),
     currency: CURRENCY,
   }),
@@ -555,6 +560,65 @@ export const ledgerDecideRecurring = registerTool({
         input.decision === 'ignored'
           ? 'Listo: eso ya no entra en la proyección de caja. Si vuelve a repetirse, dímelo y lo confirmo.'
           : 'Listo: quedó confirmado como algo que se repite.',
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+
+export const ledgerSetMinimumCash = registerTool({
+  id: 'ledger.set_minimum_cash',
+  description:
+    'Fijar la caja mínima de la empresa: «avísame si la caja baja de 20 millones», «nuestra caja mínima son 50 M», «quita la caja mínima». Queda guardada: la proyección de caja, el centro de mando (semanas de caja), el pulso y la revisión semanal miden contra ella y avisan cuando la caja va a bajar de ahí. Sólo quien administra la empresa o es su dueño. Requiere confirmación.',
+  inputSchema: z.object({
+    amount: z
+      .number()
+      .min(0)
+      .max(1e13)
+      .nullable()
+      .describe(
+        'La caja mínima, en la moneda: «20 millones» = 20000000. null la quita y vuelve a un mes de gastos fijos.',
+      ),
+    currency: CURRENCY,
+  }),
+  outputSchema: z.object({
+    minimumCash: z.number().nullable(),
+    currency: z.string(),
+    runwayWeeks: z.number().nullable(),
+    guidance: z.string(),
+  }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    const currency = input.currency ?? 'COP';
+    const saved = await saveLedgerSettings(ctx.db, {
+      minimumCash: input.amount,
+      currency,
+      userId: ctx.userId,
+    });
+    let runwayWeeks: number | null = null;
+    let runway = '';
+    try {
+      const built = await buildForecastInput(ctx.db, { today: bogotaToday(), currency });
+      const result = forecast({ ...built, scenario: null });
+      const nothing =
+        (result.accountCount ?? 0) === 0 && result.weeks.every((w) => w.items.length === 0);
+      if (!nothing) {
+        runwayWeeks = cashRunwayWeeks(result);
+        runway = runwayText(result);
+      }
+    } catch (err) {
+      ctx.logger.warn({ err }, 'forecast after setting the minimum cash failed');
+    }
+    const head =
+      saved.minimumCash === null
+        ? 'Listo: quité la caja mínima. La proyección vuelve a medir contra un mes de gastos fijos.'
+        : `Listo: la caja mínima de la empresa queda en ${formatMoney(saved.minimumCash, saved.currency)}. Si la proyección baja de ahí, lo verás como alerta en Finanzas, en el centro de mando, en el pulso y en la revisión semanal.`;
+    return {
+      minimumCash: saved.minimumCash,
+      currency: saved.currency,
+      runwayWeeks,
+      guidance: [head, runway].filter(Boolean).join(' '),
     };
   },
 });

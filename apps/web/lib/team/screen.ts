@@ -363,7 +363,16 @@ function sortOpen(a: ItemRowModel, b: ItemRowModel): number {
 
 export function itemRow(
   i: WorkItemLike,
-  ctx: { today: string; names: ReadonlyMap<string, string>; viewerId: string; hrefs: TeamHrefs },
+  ctx: {
+    today: string;
+    names: ReadonlyMap<string, string>;
+    viewerId: string;
+    hrefs: TeamHrefs;
+    /** Administra o es dueño: puede marcar hechas las filas de tabla de otros. */
+    manages?: boolean;
+    /** Tablas con estado «hecho» en su mapeo (`markableTrackers`). */
+    markableTrackers?: ReadonlySet<string>;
+  },
 ): ItemRowModel {
   const due = bogotaDay(i.dueAt);
   const opened = bogotaDay(i.openedAt) ?? ctx.today;
@@ -391,7 +400,10 @@ export function itemRow(
     ageDays: Math.max(0, daysBetweenIso(opened, ctx.today)),
     sourceLabel: SOURCE_LABEL[i.source.kind] ?? 'Registro',
     sourceHref: path ? ctx.hrefs.source(path) : null,
-    canMarkDone: canMarkDone(i, ctx.viewerId),
+    canMarkDone: canMarkDone(i, ctx.viewerId, {
+      manages: ctx.manages,
+      markableTrackers: ctx.markableTrackers,
+    }),
   };
 }
 
@@ -531,7 +543,7 @@ export interface TeamScreenInput {
     id: string;
     /** Ve a todo el equipo: administra o es dueño de la empresa. */
     seesAll: boolean;
-    /** Puede pasar trabajo de otros (`org_admin`, la regla de work.assign). */
+    /** Puede pasar trabajo de otros (`org_admin` o dueño, la regla de work.assign). */
     canReassign: boolean;
     canConfigure: boolean;
   };
@@ -776,7 +788,15 @@ export interface PersonScreenInput {
   personId: string;
   periodKey: PeriodKey;
   today: string;
-  viewer: { id: string; seesAll: boolean; canEditAway: boolean };
+  viewer: {
+    id: string;
+    seesAll: boolean;
+    canEditAway: boolean;
+    /** Administra o es dueño: marca hechas las filas de tabla de cualquiera. */
+    manages?: boolean;
+  };
+  /** Tablas cuyas filas se pueden marcar hechas (`markableTrackers` de shape.ts). */
+  markableTrackers?: ReadonlySet<string>;
   hrefs: TeamHrefs;
   /** Para /team/yo: los enlaces de período apuntan a «Mi semana». */
   mode?: 'person' | 'self';
@@ -802,7 +822,14 @@ export function buildPersonScreen(input: PersonScreenInput): PersonScreen | null
   const { person } = entry;
   const self = input.viewer.id === personId;
   const names = new Map(report.people.map((e) => [e.person.id, e.person.name]));
-  const ctx = { today, names, viewerId: input.viewer.id, hrefs };
+  const ctx = {
+    today,
+    names,
+    viewerId: input.viewer.id,
+    hrefs,
+    manages: input.viewer.manages ?? false,
+    markableTrackers: input.markableTrackers,
+  };
   const cut = cutOf(report);
 
   const mine = history.filter((i) => i.assigneeId === personId);

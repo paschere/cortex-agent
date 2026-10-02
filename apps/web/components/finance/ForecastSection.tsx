@@ -7,6 +7,7 @@ import {
   dashboardHref,
   formatDay,
   formatMoney,
+  fullMoney,
   parseMoneyInput,
 } from '@/lib/finance/dashboard-shape';
 import type { ForecastAlert } from '@cortex/agent-tools/src/ledger/types';
@@ -14,10 +15,11 @@ import { clsx } from 'clsx';
 import { AlertOctagon, AlertTriangle, CalendarRange, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { CashFlowChart } from './CashFlowChart';
 import { WeekDrawer } from './WeekDrawer';
 import { NoData, Section, fieldClass, pillLink } from './pieces';
+import type { FinanceActions } from './types';
 
 const ALERT_STYLE: Record<ForecastAlert['severity'], { box: string; icon: typeof Info }> = {
   critical: { box: 'border-rose/25 bg-rose-soft text-rose', icon: AlertOctagon },
@@ -36,12 +38,19 @@ export function ForecastSection({
   scenarioId,
   includeEstimatedSales,
   minimumCash,
+  companyMinimumCash = null,
+  saveMinimumCash,
 }: {
   forecast: Piece<ForecastPanel>;
   self: string;
   scenarioId: string | null;
   includeEstimatedSales: boolean;
+  /** `?minimo=`: sólo para esta vista. */
   minimumCash: number | null;
+  /** La guardada de la empresa (0175). */
+  companyMinimumCash?: number | null;
+  /** Sólo para quien administra o es dueño; sin ella no hay botón de guardar. */
+  saveMinimumCash?: FinanceActions['saveMinimumCash'];
 }) {
   const [week, setWeek] = useState<string | null>(null);
   const data = forecast.ok ? forecast.data : null;
@@ -154,7 +163,13 @@ export function ForecastSection({
           />
 
           <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border pt-3">
-            <MinimumForm self={self} params={params} />
+            <MinimumForm
+              self={self}
+              params={params}
+              currency={data.currency}
+              companyMinimum={companyMinimumCash}
+              save={saveMinimumCash}
+            />
             {data.base.assumptions.length > 0 && (
               <details className="max-w-xl text-xs text-ink-muted">
                 <summary className="cursor-pointer select-none font-semibold hover:text-ink">
@@ -181,41 +196,117 @@ export function ForecastSection({
   );
 }
 
+/**
+ * LA CAJA MÍNIMA. «Marcar» la pone sólo en esta vista (`?minimo=`). «Guardar
+ * como mínimo de la empresa» la guarda para todos (`ledger_settings`): la
+ * proyección, el centro de mando, el pulso y la revisión semanal miden contra
+ * ella. Ese botón sólo sale a quien administra o es dueño, y el servidor lo
+ * vuelve a revisar. Se puede deshacer desde el mismo aviso.
+ */
 function MinimumForm({
   self,
   params,
+  currency,
+  companyMinimum,
+  save,
 }: {
   self: string;
   params: { scenarioId: string | null; includeEstimatedSales: boolean; minimumCash: number | null };
+  currency: string;
+  companyMinimum: number | null;
+  save?: FinanceActions['saveMinimumCash'];
 }) {
   const router = useRouter();
+  const shown = params.minimumCash ?? companyMinimum;
   const [value, setValue] = useState(
-    params.minimumCash != null ? new Intl.NumberFormat('es-CO').format(params.minimumCash) : '',
+    shown != null ? new Intl.NumberFormat('es-CO').format(shown) : '',
   );
+  const [note, setNote] = useState<{ ok: boolean; text: string; undo?: number | null } | null>(
+    null,
+  );
+  const [pending, start] = useTransition();
+  const afterSave = () => {
+    // Lo guardado manda: si la vista traía su propio `?minimo=`, se quita.
+    if (params.minimumCash != null)
+      router.push(dashboardHref(self, { ...params, minimumCash: null }, 'flujo'), {
+        scroll: false,
+      });
+    else router.refresh();
+  };
+  const store = (amount: string | null, previous: number | null | undefined) =>
+    start(async () => {
+      if (!save) return;
+      const r = await save({ amount, currency });
+      if (r.ok) {
+        setNote({ ok: true, text: r.note, undo: previous });
+        afterSave();
+      } else setNote({ ok: false, text: r.error });
+    });
+  const differs = params.minimumCash != null && params.minimumCash !== companyMinimum;
   return (
-    <form
-      className="flex items-end gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const min = parseMoneyInput(value);
-        router.push(dashboardHref(self, { ...params, minimumCash: min }, 'flujo'), {
-          scroll: false,
-        });
-      }}
-    >
-      <label className="block">
-        <span className="field-label text-ink-faint">Caja mínima que quiero tener</span>
-        <input
-          className={`${fieldClass} tabular mt-1 w-40 font-mono`}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="20.000.000"
-          inputMode="decimal"
-        />
-      </label>
-      <button type="submit" className={pillLink}>
-        Marcar
-      </button>
-    </form>
+    <div className="space-y-1.5">
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const min = parseMoneyInput(value);
+          router.push(dashboardHref(self, { ...params, minimumCash: min }, 'flujo'), {
+            scroll: false,
+          });
+        }}
+      >
+        <label className="block">
+          <span className="field-label text-ink-faint">Caja mínima que quiero tener</span>
+          <input
+            className={`${fieldClass} tabular mt-1 w-40 font-mono`}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="20.000.000"
+            inputMode="decimal"
+          />
+        </label>
+        <button type="submit" className={pillLink}>
+          Marcar
+        </button>
+        {save && (
+          <button
+            type="button"
+            className={clsx(pillLink, 'border-primary/30 text-primary-ink')}
+            disabled={pending}
+            onClick={() => store(value.trim() || null, companyMinimum)}
+          >
+            {pending ? 'Guardando…' : 'Guardar como mínimo de la empresa'}
+          </button>
+        )}
+      </form>
+      <p className="text-xs text-ink-muted">
+        {companyMinimum != null
+          ? `Mínimo de la empresa: ${fullMoney(companyMinimum, currency)}.`
+          : 'La empresa no ha fijado una caja mínima: se mide contra un mes de gastos fijos.'}
+        {differs ? ' Esta vista usa la que marcaste.' : ''}
+      </p>
+      {note && (
+        <output
+          aria-live="polite"
+          className={clsx('block text-xs font-medium', note.ok ? 'text-emerald' : 'text-rose')}
+        >
+          {note.text}
+          {note.ok && note.undo !== undefined && save && (
+            <button
+              type="button"
+              className="ml-1.5 font-semibold text-primary hover:underline"
+              disabled={pending}
+              onClick={() => {
+                const previous = note.undo;
+                setNote(null);
+                store(previous != null ? String(Math.round(previous)) : null, undefined);
+              }}
+            >
+              Deshacer
+            </button>
+          )}
+        </output>
+      )}
+    </div>
   );
 }

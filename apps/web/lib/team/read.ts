@@ -24,13 +24,18 @@ import { addDaysIso, chatPath, mondayOfIso } from './shape';
  * Todo pasa por el registro de trabajo (packages/agent-tools/src/work): el
  * reporte lo arma `loadTeamReport` con el motor puro, y quién ve qué lo decide
  * `workScope` (work/access.ts), la misma regla del chat y de las vistas. Lo
- * único que se agrega aquí: quien es DUEÑO de la empresa (fundador) ve a todo
- * el equipo aunque no administre, como en /team/activity.
+ * único que se agrega aquí: quien es DUEÑO de la empresa (fundador) administra
+ * el equipo igual que un `org_admin` (ve todo, reasigna, configura, edita días
+ * fuera), como en /team/activity.
  */
 
 export interface TeamViewer {
   id: string;
-  /** `users.role = 'org_admin'`: la regla de work.assign y work.configure. */
+  /**
+   * Administra el equipo: `users.role = 'org_admin'` O dueño de la empresa
+   * (`managesTeam`). La regla de work.assign, work.configure y los días fuera
+   * de otros, igual que `isWorkAdmin` en el chat.
+   */
   admin: boolean;
   /** Dueño de la empresa (no de un espacio personal). */
   founder: boolean;
@@ -44,9 +49,19 @@ export function isFounder(user: SessionUser): boolean {
   return user.organization.kind === 'company' && user.organization.role === 'owner';
 }
 
+/**
+ * ¿Puede administrar el equipo? Quien administra (`org_admin`) o el DUEÑO de la
+ * empresa: decisión del dueño, los fundadores tienen los mismos poderes de
+ * equipo que un administrador. El rol del espacio sale de `ba_member` en esta
+ * petición (lib/session.ts), nunca del navegador.
+ */
+export function managesTeam(user: SessionUser): boolean {
+  return user.role === 'org_admin' || isFounder(user);
+}
+
 export async function teamViewer(db: SupabaseClient, user: SessionUser): Promise<TeamViewer> {
-  const admin = user.role === 'org_admin';
   const founder = isFounder(user);
+  const admin = managesTeam(user);
   if (admin || founder) return { id: user.id, admin, founder, seesAll: true, visibleIds: null };
   const scope = await workScope(db, user.id);
   return {

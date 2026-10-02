@@ -1,6 +1,6 @@
 'use server';
 
-import { parseAdjustments, parseMoneyInput } from '@/lib/finance/dashboard-shape';
+import { fullMoney, parseAdjustments, parseMoneyInput } from '@/lib/finance/dashboard-shape';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { bogotaToday, writeAuditEvent } from '@cortex/agent-tools';
@@ -8,6 +8,7 @@ import {
   decideDetectedRecurring,
   declareRecurring,
   deleteScenario,
+  saveLedgerSettings,
   saveScenario,
 } from '@cortex/agent-tools/src/ledger/plans';
 import { ensureAccount } from '@cortex/agent-tools/src/ledger/store';
@@ -23,6 +24,9 @@ import { revalidatePath } from 'next/cache';
  *   - El saldo de una cuenta y los gastos fijos cambian la caja que ve toda la
  *     empresa: sólo quien administra (`org_admin`).
  *   - Un escenario es un «¿y si…?» que no toca el libro: lo arma cualquiera.
+ *   - La caja mínima de la empresa mueve el centro de mando, el pulso y la
+ *     revisión semanal de todos: quien administra o es DUEÑO de la empresa.
+ *     Se revisa aquí con la sesión y otra vez en la base (`saveLedgerSettings`).
  *
  * Nada calcula aquí: delegan en el almacén del libro y en ledger/plans, las
  * mismas funciones que usan las herramientas del chat.
@@ -211,5 +215,56 @@ export async function decideRecurringAction(input: {
     };
   } catch (err) {
     return { ok: false, error: message(err, 'No se pudo guardar la decisión.') };
+  }
+}
+
+export async function saveMinimumCashAction(input: {
+  amount: string | null;
+  currency?: string;
+}): Promise<FinanceActionResult> {
+  const started = performance.now();
+  try {
+    const user = await requireSession();
+    const owner = user.organization.kind === 'company' && user.organization.role === 'owner';
+    if (user.role !== 'org_admin' && !owner)
+      return {
+        ok: false,
+        error: 'Sólo quien administra la empresa o es su dueño puede fijar la caja mínima.',
+      };
+    const raw = String(input?.amount ?? '').trim();
+    const amount = raw ? parseMoneyInput(raw) : null;
+    if (raw && (amount == null || amount < 0))
+      return { ok: false, error: 'Escribe la caja mínima, por ejemplo 20.000.000.' };
+    const currency = String(input?.currency ?? 'COP')
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, error: 'La moneda no es válida.' };
+    const db = getOrgScopedClient(user.organization.id);
+    const saved = await saveLedgerSettings(db, {
+      minimumCash: amount && amount > 0 ? amount : null,
+      currency,
+      userId: user.id,
+    });
+    await writeAuditEvent({
+      db,
+      userId: user.id as UUID,
+      toolId: 'ledger.set_minimum_cash',
+      input: { amount: saved.minimumCash, currency: saved.currency },
+      status: 'ok',
+      latencyMs: Math.round(performance.now() - started),
+      surface: 'web',
+      decision: 'confirmed',
+      metadata: { from: 'finance' },
+    });
+    revalidatePath(PATH);
+    return {
+      ok: true,
+      note:
+        saved.minimumCash === null
+          ? 'Quité la caja mínima de la empresa: se mide contra un mes de gastos fijos.'
+          : `Listo: ${fullMoney(saved.minimumCash, saved.currency)} es la caja mínima de la empresa. El centro de mando, el pulso y la revisión semanal miden contra ella.`,
+    };
+  } catch (err) {
+    return { ok: false, error: message(err, 'No se pudo guardar la caja mínima.') };
   }
 }

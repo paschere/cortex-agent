@@ -226,6 +226,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   ledger_save_scenario: 'Guardar un escenario de caja',
   ledger_declare_recurring: 'Anotar un ingreso o gasto que se repite',
   ledger_decide_recurring: 'Confirmar o ignorar un movimiento que se repite',
+  ledger_set_minimum_cash: 'Fijar la caja mínima de la empresa',
   goals_offer_metrics: 'Ver qué se puede medir aquí',
   goals_list: 'Ver las metas y cómo van',
   goals_measure: 'Medir cómo vamos este período',

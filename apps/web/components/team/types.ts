@@ -4,7 +4,19 @@
  * mentira que contestan igual sin guardar nada.
  */
 
-export type TeamActionResult = { ok: true; note: string } | { ok: false; error: string };
+/**
+ * Lo que se necesita para deshacer un «Marcar hecho» en una fila de tabla: el
+ * valor que tenía su campo de estado y si se llenó la fecha de cierre. El
+ * servidor vuelve a revisar todo al deshacer; esto sólo dice a qué volver.
+ */
+export interface MarkDoneUndo {
+  previous: string | number | null;
+  clearDoneAt: boolean;
+}
+
+export type TeamActionResult =
+  | { ok: true; note: string; undo?: MarkDoneUndo }
+  | { ok: false; error: string };
 
 export interface MappingFieldOption {
   key: string;
@@ -49,6 +61,8 @@ export interface TeamActions {
     moves: Array<{ toId: string; itemIds: string[] }>;
   }): Promise<TeamActionResult>;
   markDone(input: { itemId: string }): Promise<TeamActionResult>;
+  /** Deshacer un «Marcar hecho» de una fila de tabla, desde el mismo aviso. */
+  undoMarkDone?(input: { itemId: string } & MarkDoneUndo): Promise<TeamActionResult>;
   saveAway(input: {
     personId: string;
     add: string[];

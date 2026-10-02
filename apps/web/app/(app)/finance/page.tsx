@@ -14,6 +14,7 @@ import {
   decideRecurringAction,
   declareRecurringAction,
   deleteScenarioAction,
+  saveMinimumCashAction,
   saveScenarioAction,
   updateBalance,
 } from './actions';
@@ -27,7 +28,9 @@ export const dynamic = 'force-dynamic';
  *
  * Parámetros: `?escenario=<id>` pinta un escenario guardado encima de la
  * proyección, `?estimadas=1` suma las ventas estimadas y `?minimo=<pesos>`
- * marca la caja mínima.
+ * marca una caja mínima sólo para esta vista; sin él, manda la guardada de la
+ * empresa (`ledger_settings`), que se fija con «Guardar como mínimo de la
+ * empresa» o diciéndoselo a Cortex (`ledger.set_minimum_cash`).
  */
 export default async function FinancePage({
   searchParams,
@@ -40,12 +43,17 @@ export default async function FinancePage({
   // `org_admin` es el rol que la sesión le pone al dueño o admin de la empresa.
   const isAdmin = user.role === 'org_admin';
   const canClassify = user.organization.role === 'owner' || user.organization.role === 'admin';
+  // La caja mínima de la empresa la guarda quien administra o es su dueño; la
+  // acción lo vuelve a revisar en la base (ledger/plans.ts `saveLedgerSettings`).
+  const canSaveMinimum =
+    isAdmin || (user.organization.kind === 'company' && user.organization.role === 'owner');
   const href = (path: string) => workspaceHref(user.organization.id, path);
 
   const [dashboard, sourceRead] = await Promise.all([
     readFinanceDashboard(db, {
       userId: user.id,
       isAdmin,
+      canSaveMinimum,
       today: bogotaToday(),
       ...params,
     }),
@@ -95,6 +103,7 @@ export default async function FinancePage({
         deleteScenario: deleteScenarioAction,
         declareRecurring: declareRecurringAction,
         decideRecurring: decideRecurringAction,
+        saveMinimumCash: saveMinimumCashAction,
       }}
       documents={
         <details

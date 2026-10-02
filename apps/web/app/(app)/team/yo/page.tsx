@@ -3,7 +3,7 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { readPersonHistory, readTeamReport, teamHrefs, teamViewer } from '@/lib/team/read';
 import { buildPersonScreen } from '@/lib/team/screen';
-import { periodFor, readPeriodKey } from '@/lib/team/shape';
+import { markableTrackers, periodFor, readPeriodKey } from '@/lib/team/shape';
 import { bogotaToday } from '@cortex/agent-tools';
 import { notFound } from 'next/navigation';
 import { TEAM_ACTIONS } from '../team-actions';
@@ -28,7 +28,7 @@ export default async function MyWeekPage({
   const periodKey = readPeriodKey(q.periodo);
   const db = getOrgScopedClient(user.organization.id);
   const today = bogotaToday();
-  const [viewer, { report }, history] = await Promise.all([
+  const [viewer, { report, settings }, history] = await Promise.all([
     teamViewer(db, user),
     readTeamReport(db, user.organization.id, periodFor(periodKey, today), today),
     readPersonHistory(db, user.id, today),
@@ -41,6 +41,7 @@ export default async function MyWeekPage({
     periodKey,
     today,
     viewer: { id: user.id, seesAll: false, canEditAway: true },
+    markableTrackers: markableTrackers(settings.trackerMappings),
     hrefs,
     mode: 'self',
     fallback: { id: user.id, name: user.name?.trim() || user.email },

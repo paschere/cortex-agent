@@ -25,6 +25,7 @@ const actions: FinanceActions = {
   deleteScenario: ok,
   declareRecurring: ok,
   decideRecurring: ok,
+  saveMinimumCash: ok,
 };
 
 const base: Parameters<typeof fixtureDashboard>[0] = {
@@ -82,6 +83,14 @@ describe('el panel de Finanzas', () => {
     expect(html).not.toContain('Confirmar');
     expect(html).not.toContain('Agregar uno');
     expect(html).not.toContain('Actualizar saldo');
+    expect(html).not.toContain('Guardar como mínimo de la empresa');
+  });
+
+  it('la caja mínima: quien administra o es dueño la guarda para la empresa', () => {
+    const html = render();
+    expect(html).toContain('Caja mínima que quiero tener');
+    expect(html).toContain('Guardar como mínimo de la empresa');
+    expect(html).toContain('La empresa no ha fijado una caja mínima');
   });
 
   it('una lectura caída deja su sección en «sin dato» y el resto en pie', () => {

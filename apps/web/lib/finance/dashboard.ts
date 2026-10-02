@@ -2,6 +2,8 @@ import 'server-only';
 
 import { compareScenarios } from '@cortex/agent-tools/src/ledger/forecast-explain';
 import {
+  effectiveMinimumCash,
+  getLedgerSettings,
   listRecurringDecisions,
   listScenarios,
   monthlyPnl,
@@ -44,10 +46,13 @@ import {
 export interface ReadFinanceDashboardInput {
   userId: string;
   isAdmin: boolean;
+  /** Administra o es dueño: puede guardar la caja mínima de la empresa. */
+  canSaveMinimum?: boolean;
   /** Hoy, día de Bogotá (`YYYY-MM-DD`). */
   today: string;
   scenarioId?: string | null;
   includeEstimatedSales?: boolean;
+  /** `?minimo=`: un piso sólo para esta vista. Sin él, el guardado de la empresa. */
   minimumCash?: number | null;
 }
 
@@ -61,7 +66,7 @@ export async function readFinanceDashboard(
   const includeEstimatedSales = input.includeEstimatedSales ?? true;
   const minimumCash = input.minimumCash ?? null;
 
-  const [accounts, ledger, run, scenarios, pnl, decisions] = await Promise.all([
+  const [accounts, ledger, run, scenarios, pnl, decisions, settings] = await Promise.all([
     settle(() => listAccounts(db), 'No se pudieron leer las cuentas.'),
     settle(() => loadLedger(db, { today, historyDays: 400 }), 'No se pudo leer el libro.'),
     settle(
@@ -80,9 +85,16 @@ export async function readFinanceDashboard(
       'No se pudieron calcular los resultados del mes.',
     ),
     settle(() => listRecurringDecisions(db), 'No se pudieron leer los gastos fijos.'),
+    settle(() => getLedgerSettings(db), 'No se pudo leer la caja mínima de la empresa.'),
   ]);
 
   const currency = run.ok ? run.data.base.currency : 'COP';
+  // La guardada de la empresa, si es de esta moneda. `runForecast` ya la usó
+  // cuando la dirección no trae `?minimo=`; aquí sólo se dice cuál fue.
+  const companyMinimumCash = settings.ok
+    ? effectiveMinimumCash(null, settings.data, currency)
+    : null;
+  const shownMinimum = minimumCash ?? companyMinimumCash;
 
   const cash = accounts.ok
     ? {
@@ -106,7 +118,7 @@ export async function readFinanceDashboard(
   const forecast = run.ok
     ? {
         ok: true as const,
-        data: forecastPanel(run.data, { isAdmin, currency, minimumCash }),
+        data: forecastPanel(run.data, { isAdmin, currency, minimumCash: shownMinimum }),
       }
     : run;
 
@@ -159,6 +171,8 @@ export async function readFinanceDashboard(
     includeEstimatedSales,
     activeScenarioId: forecast.ok && forecast.data.scenario ? (input.scenarioId ?? null) : null,
     minimumCash,
+    companyMinimumCash,
+    canSaveMinimum: input.canSaveMinimum ?? false,
     empty,
     cash,
     forecast,

@@ -273,6 +273,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'ledger.save_scenario': 'Guarda como escenario que ',
   'ledger.declare_recurring': 'Todos los meses pagamos ',
   'ledger.decide_recurring': 'Confirma el movimiento que se repite de ',
+  'ledger.set_minimum_cash': 'Avísame si la caja baja de ',
 
   'payroll.client_report': 'Dame el costo del equipo puesto en el cliente ',
   'payroll.cost_projection': 'Proyéctame lo que va a costar el equipo en ',

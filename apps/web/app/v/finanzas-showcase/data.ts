@@ -135,6 +135,8 @@ export function fixtureDashboard(opts: {
     includeEstimatedSales: opts.includeEstimatedSales,
     activeScenarioId: scenario?.id ?? null,
     minimumCash,
+    companyMinimumCash: null,
+    canSaveMinimum: opts.isAdmin,
     empty: opts.empty,
     cash: { ok: true, data: buildCash(accountsFromCash(accounts), today, 'COP') },
     forecast: {

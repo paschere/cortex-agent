@@ -32,6 +32,15 @@ const ACTIONS: FinanceActions = {
         input.status === 'confirmed' ? 'Confirmado (de mentira).' : 'Ya no es fijo (de mentira).',
     };
   },
+  async saveMinimumCash(input) {
+    await wait();
+    return {
+      ok: true,
+      note: input.amount
+        ? `Guardé ${input.amount} como caja mínima de la empresa (de mentira).`
+        : 'Quité la caja mínima de la empresa (de mentira).',
+    };
+  },
 };
 
 export function FinanzasFixture({ dark, data, self }: { dark: boolean; data: Data; self: string }) {

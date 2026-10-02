@@ -160,7 +160,7 @@ function itemLine(i: ItemOut): string {
 
 async function requireAdmin(ctx: ToolContext, what: string): Promise<void> {
   if (!(await isWorkAdmin(ctx.db, ctx.userId)))
-    throw new ForbiddenError(`Sólo un administrador de la empresa puede ${what}.`);
+    throw new ForbiddenError(`Sólo quien administra la empresa o es su dueño puede ${what}.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -516,7 +516,7 @@ export const workRecordBatch = registerTool({
 export const workAssign = registerTool({
   id: 'work.assign',
   description:
-    'Reassign work items to another person of the team (by item id from work.query). The change is made in the source when there is one (a commitment changes owner; a table row changes its responsible field) and the new person is notified. Management cases are reassigned in Gerencia (management.record) and approvals cannot be reassigned. An admin can reassign anything; anyone else only their own items. Requires confirmation.',
+    'Reassign work items to another person of the team (by item id from work.query). The change is made in the source when there is one (a commitment changes owner; a table row changes its responsible field) and the new person is notified. Management cases are reassigned in Gerencia (management.record) and approvals cannot be reassigned. An admin or the company owner can reassign anything; anyone else only their own items. Requires confirmation.',
   inputSchema: z.object({
     itemIds: z.array(z.string().uuid()).min(1).max(100),
     person: z.string().trim().min(1).max(160).describe('Who takes it: a name, an email or "yo".'),
@@ -658,7 +658,7 @@ export const workSuggestMapping = registerTool({
 export const workConfigure = registerTool({
   id: 'work.configure',
   description:
-    'Configure the work registry (admins only): which work types are measured (others are not stored), which Cortex sources feed it (management cases, commitments, table rows, approvals), who sees whose work (self, team or all; admins always see everything), and map a company table to work (mapTracker: which field is the responsible, status + done values, due date, quantity + unit, work type) or unmap one. Mapping a table loads its rows right away. Use work.suggest_mapping first. Requires confirmation.',
+    'Configure the work registry (admins and the company owner only): which work types are measured (others are not stored), which Cortex sources feed it (management cases, commitments, table rows, approvals), who sees whose work (self, team or all; admins always see everything), and map a company table to work (mapTracker: which field is the responsible, status + done values, due date, quantity + unit, work type) or unmap one. Mapping a table loads its rows right away. Use work.suggest_mapping first. Requires confirmation.',
   inputSchema: z.object({
     measuredTypes: z
       .array(workTypeSchema)
@@ -790,7 +790,7 @@ export const workConfigure = registerTool({
 export const workUpdatePerson = registerTool({
   id: 'work.update_person',
   description:
-    "Set a person's team, role label or away days (vacation, sick leave — away days do not count against them in work metrics). Anyone can add or remove their OWN away days; team, role and other people's data only an admin. Requires confirmation.",
+    "Set a person's team, role label or away days (vacation, sick leave — away days do not count against them in work metrics). Anyone can add or remove their OWN away days; team, role and other people's data only an admin or the company owner. Requires confirmation.",
   inputSchema: z.object({
     person: z
       .string()
@@ -855,7 +855,7 @@ const STALE_MS = 6 * 3_600_000;
 export const workQuery = registerTool({
   id: 'work.query',
   description:
-    'Read the work registry: items by person, work type and status (open, done, overdue, unassigned). Everyone sees all their own work; admins see the whole team (and unassigned work); others see their team only if the company allows it. Use it for «¿qué tengo pendiente?», «¿qué tiene vencido Laura?», «¿qué hay sin asignar?», «¿cuántas guías despachó el equipo esta semana?». Read-only.',
+    'Read the work registry: items by person, work type and status (open, done, overdue, unassigned). Everyone sees all their own work; admins and the company owner see the whole team (and unassigned work); others see their team only if the company allows it. Use it for «¿qué tengo pendiente?», «¿qué tiene vencido Laura?», «¿qué hay sin asignar?», «¿cuántas guías despachó el equipo esta semana?». Read-only.',
   inputSchema: z.object({
     person: z
       .string()

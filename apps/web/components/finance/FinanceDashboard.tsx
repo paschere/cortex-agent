@@ -67,6 +67,8 @@ export function FinanceDashboard({
               self={links.self}
               scenarioId={data.activeScenarioId}
               {...params}
+              companyMinimumCash={data.companyMinimumCash}
+              saveMinimumCash={data.canSaveMinimum ? actions.saveMinimumCash : undefined}
             />
           </div>
           <ScenarioSection

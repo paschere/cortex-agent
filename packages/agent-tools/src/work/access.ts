@@ -8,7 +8,8 @@ import { type WorkPersonMeta, isWorkAdmin, listWorkPeopleMeta, readWorkSettings 
  * Tres reglas, decididas por el dueño y no negociables en el código:
  *
  *   1. Cada persona puede ver TODO lo que se mide de ella. Siempre.
- *   2. Quien administra la empresa (`users.role = 'org_admin'`) ve a todo el
+ *   2. Quien administra la empresa (`users.role = 'org_admin'`) o es su DUEÑO
+ *      (`ba_member.role = 'owner'`, directory/store.ts `isCompanyManager`) ve a todo el
  *      equipo, y lo que no tiene responsable.
  *   3. Los demás ven lo suyo, salvo que la empresa abra la visibilidad
  *      (`work_settings.team_visibility`): `team` = lo de las personas de su

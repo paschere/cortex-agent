@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { ForbiddenError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { isCompanyManager } from '../directory/store';
 import { forecast } from './forecast';
 import { compareScenarios } from './forecast-explain';
 import { PAYROLL_CONFIDENTIAL_KEY, isPayrollCategory } from './privacy';
@@ -25,6 +27,9 @@ import type {
  *   RECURRENTES    `ledger_recurring`: lo declarado («el crédito, 2 M el 28»)
  *                  se suma a lo detectado; lo detectado se confirma o se
  *                  ignora por su `detectedKey`, y lo ignorado no entra.
+ *   CAJA MÍNIMA    `ledger_settings` (0175): el piso de la empresa. Sólo lo
+ *                  fija quien administra o es dueño (`saveLedgerSettings`);
+ *                  la proyección lo usa cuando nadie pide otro.
  *   PROYECCIÓN     `buildForecastInput` lee el libro y los planes y arma la
  *                  entrada del motor puro; `runForecast` la corre (base, y el
  *                  escenario contra la base si se pide).
@@ -406,6 +411,107 @@ export async function decideDetectedRecurring(
 }
 
 // ---------------------------------------------------------------------------
+// La caja mínima de la empresa (migración 0175)
+// ---------------------------------------------------------------------------
+
+export interface LedgerSettings {
+  /** La caja con la que la empresa está tranquila. `null` = sin decidir. */
+  minimumCash: number | null;
+  currency: string;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+const EMPTY_SETTINGS: LedgerSettings = {
+  minimumCash: null,
+  currency: 'COP',
+  updatedBy: null,
+  updatedAt: null,
+};
+
+interface SettingsRow {
+  minimum_cash: number | string | null;
+  currency: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+const SETTINGS_COLUMNS = 'minimum_cash, currency, updated_by, updated_at';
+
+function rowToSettings(row: SettingsRow | null): LedgerSettings {
+  if (!row) return { ...EMPTY_SETTINGS };
+  const min = num(row.minimum_cash);
+  return {
+    minimumCash: min !== null && min >= 0 ? min : null,
+    currency: (row.currency ?? 'COP').toUpperCase(),
+    updatedBy: row.updated_by ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+/** La caja mínima guardada de la empresa. Sin fila, nada decidido. */
+export async function getLedgerSettings(db: SupabaseClient): Promise<LedgerSettings> {
+  const { data, error } = await db.from('ledger_settings').select(SETTINGS_COLUMNS).maybeSingle();
+  if (error) throw error;
+  return rowToSettings((data as SettingsRow | null) ?? null);
+}
+
+/**
+ * Guardar (o quitar, con `null`) la caja mínima de la empresa.
+ *
+ * LA REGLA VIVE AQUÍ, no en la pantalla ni en la herramienta: sólo quien
+ * administra la empresa o es su dueño (`isCompanyManager`) la cambia, porque
+ * es una decisión de la empresa que mueve el centro de mando, el pulso y la
+ * revisión semanal de todos. La herramienta del chat y la acción de /finance
+ * llaman esto; ninguna puede saltarse la revisión.
+ */
+export async function saveLedgerSettings(
+  db: SupabaseClient,
+  input: { minimumCash: number | null; currency?: string; userId: string },
+): Promise<LedgerSettings> {
+  if (!(await isCompanyManager(db, input.userId)))
+    throw new ForbiddenError(
+      'Sólo quien administra la empresa o es su dueño puede fijar la caja mínima.',
+    );
+  const currency = (input.currency ?? 'COP').trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency))
+    throw new ValidationError('La moneda tiene que ser de tres letras.');
+  const min = input.minimumCash;
+  if (min !== null && (!Number.isFinite(min) || min < 0 || min > 1e13))
+    throw new ValidationError('La caja mínima tiene que ser un valor de cero en adelante.');
+  const { data, error } = await db
+    .from('ledger_settings')
+    .upsert(
+      {
+        minimum_cash: min === null ? null : round2(min),
+        currency,
+        updated_by: input.userId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'organization_id' },
+    )
+    .select(SETTINGS_COLUMNS)
+    .single();
+  if (error) throw error;
+  return rowToSettings(data as SettingsRow);
+}
+
+/**
+ * La caja mínima que vale para una proyección: la que se pidió, si se pidió; si
+ * no, la guardada de la empresa en ESA moneda (un piso en pesos no dice nada de
+ * una caja en dólares); si no, `null` y el motor usa un mes de gastos fijos.
+ */
+export function effectiveMinimumCash(
+  explicit: number | null | undefined,
+  settings: Pick<LedgerSettings, 'minimumCash' | 'currency'>,
+  currency: string,
+): number | null {
+  if (explicit !== null && explicit !== undefined) return explicit;
+  if (settings.minimumCash === null) return null;
+  return settings.currency === currency.trim().toUpperCase() ? settings.minimumCash : null;
+}
+
+// ---------------------------------------------------------------------------
 // La proyección, lista para usar
 // ---------------------------------------------------------------------------
 
@@ -420,6 +526,10 @@ export interface ForecastOptions {
   scenario?: Scenario | null;
   /** Por defecto, sí. */
   includeEstimatedSales?: boolean;
+  /**
+   * El piso contra el que se mide la caja. Sin él (o `null`), la caja mínima
+   * guardada de la empresa (`ledger_settings`); sin ésa, un mes de gastos fijos.
+   */
   minimumCash?: number | null;
   horizonWeeks?: number;
 }
@@ -433,10 +543,12 @@ export async function buildForecastInput(
   opts: ForecastOptions,
 ): Promise<ForecastInput> {
   const currency = (opts.currency ?? 'COP').trim().toUpperCase();
-  const [ledger, decisions, saved] = await Promise.all([
+  const explicitMinimum = opts.minimumCash ?? null;
+  const [ledger, decisions, saved, settings] = await Promise.all([
     loadLedger(db, { today: opts.today, historyDays: 400, currency }),
     listRecurringDecisions(db),
     !opts.scenario && opts.scenarioId ? getScenario(db, opts.scenarioId) : Promise.resolve(null),
+    explicitMinimum === null ? getLedgerSettings(db) : Promise.resolve(EMPTY_SETTINGS),
   ]);
   if (!opts.scenario && opts.scenarioId && !saved) throw new Error('No encontré ese escenario.');
   const keysOf = (status: RecurringStatus) =>
@@ -455,7 +567,7 @@ export async function buildForecastInput(
     confirmedRecurring: keysOf('confirmed'),
     scenario: opts.scenario ?? saved ?? null,
     includeEstimatedSales: opts.includeEstimatedSales ?? true,
-    minimumCash: opts.minimumCash ?? null,
+    minimumCash: effectiveMinimumCash(explicitMinimum, settings, currency),
     ...(opts.horizonWeeks ? { horizonWeeks: opts.horizonWeeks } : {}),
   };
 }

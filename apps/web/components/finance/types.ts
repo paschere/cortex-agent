@@ -34,6 +34,11 @@ export interface FinanceActions {
     detectedKey: string;
     status: 'confirmed' | 'ignored';
   }): Promise<FinanceActionResult>;
+  /** La caja mínima de la empresa. `amount` vacío o nulo la quita. */
+  saveMinimumCash(input: {
+    amount: string | null;
+    currency?: string;
+  }): Promise<FinanceActionResult>;
 }
 
 /** Direcciones ya dentro de la empresa activa (`workspaceHref`). */
