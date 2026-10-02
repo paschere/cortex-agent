@@ -8,11 +8,21 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import qrTerminal from 'qrcode-terminal';
-import { usePostgresAuthState } from './auth-state';
+import { isPaired, usePostgresAuthState } from './auth-state';
 import type { Config } from './config';
 import { CortexClient, type GroupContextLine, type OutboundMessage } from './cortex';
 import { extractDirectText, extractGroupMessage, extractMentionSignals } from './extract';
 import { baileysLogger, logger } from './logger';
+import {
+  CLOSE_CODES,
+  IDLE_HINT,
+  NO_REQUEST,
+  type PairingRequest,
+  backoffFor,
+  decideOnClose,
+  decideOnHeartbeat,
+  idleStatus,
+} from './pairing';
 
 /**
  * The connection.
@@ -49,18 +59,21 @@ import { baileysLogger, logger } from './logger';
  *   credentials are DEAD. Retrying with them is an infinite loop against a
  *   device that no longer exists, and it is the fastest way to get the number
  *   flagged. So: wipe the stored session, report it so the screen can say
- *   "hay que volver a emparejar", and come back once — after a long pause —
- *   with an empty session, which is what puts a fresh QR on the screen. One
- *   restart into pairing mode, never a loop.
+ *   "hay que volver a vincular", and go idle.
+ *
+ * ── PAIRING ─────────────────────────────────────────────────────────────────
+ *
+ * Without a paired session this process does NOT talk to WhatsApp on its own.
+ * It heartbeats to Cortex (status `waiting`) until an admin asks for a pairing
+ * on the Cortex screen; then it opens a registration socket and keeps a fresh
+ * QR — or an 8-character code for "Vincular con el número de teléfono" — coming
+ * for as long as somebody is looking, and goes quiet again when they stop. The
+ * decisions live in `pairing.ts` as pure functions, with the reasons.
  */
 
-export type Status = 'disconnected' | 'pairing' | 'connected' | 'logged_out';
+export type Status = 'disconnected' | 'waiting' | 'pairing' | 'connected' | 'logged_out';
 
-/** Full jitter: several instances restarting together must not synchronise. */
-function backoffFor(attempt: number, config: Config): number {
-  const ceiling = Math.min(config.maxBackoffMs, config.minBackoffMs * 2 ** Math.min(attempt, 10));
-  return Math.round(config.minBackoffMs + Math.random() * (ceiling - config.minBackoffMs));
-}
+type Auth = Awaited<ReturnType<typeof usePostgresAuthState>>;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -73,10 +86,24 @@ export class WhatsappBridge {
   private phoneNumber: string | null = null;
   /** Rendered PNG data URL, so the browser needs no QR library. */
   private qrDataUrl: string | null = null;
+  /** The 8-character code from `requestPairingCode`, while its socket lives. */
+  private pairingCode: string | null = null;
+
+  /**
+   * Whether the session in hand belongs to a device WhatsApp accepted. Null
+   * until the first read of the stored session; see `isPaired`.
+   */
+  private paired: boolean | null = null;
+  /** The latest pairing request Cortex reported. See `pairing.ts`. */
+  private request: PairingRequest = NO_REQUEST;
+  /** The pairing mode the current socket was opened for (null = QR). */
+  private socketPhone: string | null = null;
 
   private attempt = 0;
   private stopping = false;
   private connecting = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
 
   /** Group jids an operator switched ARCHIVING on for. Nothing else is buffered. */
   private allowed = new Map<string, number>();
@@ -114,6 +141,8 @@ export class WhatsappBridge {
     status: Status;
     phoneNumber: string | null;
     hasQr: boolean;
+    hasPairingCode: boolean;
+    pairingRequested: boolean;
     buffered: number;
     archivedGroups: number;
     replyGroups: number;
@@ -123,6 +152,8 @@ export class WhatsappBridge {
       status: this.status,
       phoneNumber: this.phoneNumber,
       hasQr: Boolean(this.qrDataUrl),
+      hasPairingCode: Boolean(this.pairingCode),
+      pairingRequested: this.request.requested,
       buffered: this.buffer.length,
       archivedGroups: this.allowed.size,
       replyGroups: this.replyGroups.size,
@@ -139,9 +170,11 @@ export class WhatsappBridge {
   // -------------------------------------------------------------------------
 
   async start(): Promise<void> {
-    this.timers.push(setInterval(() => void this.heartbeat(), this.config.heartbeatMs));
     this.timers.push(setInterval(() => void this.flushBuffer(), this.config.batchIntervalMs));
     this.timers.push(setInterval(() => void this.cortex.flush(), this.config.ingestTickMs));
+    this.scheduleHeartbeat();
+    // A paired session reconnects straight away. An unpaired one reads the
+    // stored state, finds nothing, reports in and waits — `connect` decides.
     await this.connect();
   }
 
@@ -149,6 +182,9 @@ export class WhatsappBridge {
     this.stopping = true;
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];
+    if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+    this.clearReconnect();
     // Anything heard in the last few seconds is still only in memory. Losing it
     // would be a hole in the archive that nothing later would notice.
     await this.flushBuffer();
@@ -159,19 +195,68 @@ export class WhatsappBridge {
     }
   }
 
+  /**
+   * The heartbeat is a loop of timeouts rather than an interval because its
+   * period depends on the state: every `heartbeatMs` while connected, and every
+   * `pairingHeartbeatMs` (≤ 15 s) otherwise — the reply is how a pairing request
+   * reaches an idle bridge, and somebody is standing there with the phone.
+   */
+  private scheduleHeartbeat(): void {
+    if (this.stopping) return;
+    const every =
+      this.status === 'connected' ? this.config.heartbeatMs : this.config.pairingHeartbeatMs;
+    this.heartbeatTimer = setTimeout(() => {
+      void this.heartbeat().finally(() => this.scheduleHeartbeat());
+    }, every);
+  }
+
+  private clearReconnect(): void {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+  }
+
+  private scheduleReconnect(delayMs: number): void {
+    if (this.stopping) return;
+    this.clearReconnect();
+    logger.warn({ attempt: this.attempt, waitMs: delayMs }, 'reconnecting to WhatsApp');
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.connect();
+    }, delayMs);
+  }
+
   private async connect(): Promise<void> {
-    if (this.connecting || this.stopping) return;
+    if (this.connecting || this.stopping || this.sock) return;
+    this.clearReconnect();
     this.connecting = true;
 
+    let auth: Auth;
+    let sock: WASocket;
+    let pairingPhone: string | null = null;
     try {
-      const auth = await usePostgresAuthState(this.cortex);
+      auth = await usePostgresAuthState(this.cortex);
+      this.paired = auth.paired;
       const { version } = await fetchLatestBaileysVersion().catch(() => ({
         // A pinned fallback beats refusing to start: WhatsApp accepts slightly
         // stale protocol versions, and the fetch is a convenience.
         version: undefined as unknown as [number, number, number],
       }));
 
-      const sock = makeWASocket({
+      // THE RULE THIS WHOLE CHANGE IS ABOUT: without a session, nobody asking
+      // means no socket. Checked after the awaits so a request that lapsed
+      // while the state was loading is honoured.
+      if (!auth.paired && !this.request.requested) {
+        this.connecting = false;
+        await this.goIdle();
+        return;
+      }
+      if (this.stopping) {
+        this.connecting = false;
+        return;
+      }
+      pairingPhone = auth.paired ? null : this.request.phone;
+
+      sock = makeWASocket({
         ...(version ? { version } : {}),
         auth: {
           creds: auth.state.creds,
@@ -188,68 +273,152 @@ export class WhatsappBridge {
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
       });
-      this.sock = sock;
-
-      sock.ev.on('creds.update', () => {
-        void auth.saveCreds();
-      });
-
-      sock.ev.on('connection.update', (update) => {
-        void this.onConnectionUpdate(update, auth.flush);
-      });
-
-      sock.ev.on('messages.upsert', (event) => {
-        // `notify` is a live message. `append` is history sync replaying things
-        // that were already delivered, and answering one of those would mean
-        // replying to a question somebody asked three days ago.
-        if (event.type !== 'notify') return;
-        for (const message of event.messages) void this.onMessage(message);
-      });
-
-      sock.ev.on('groups.upsert', () => void this.publishGroups());
-      sock.ev.on('groups.update', () => void this.publishGroups());
     } catch (err) {
       this.lastError = (err as Error).message;
       logger.error({ err: this.lastError }, 'could not open the WhatsApp connection');
       this.connecting = false;
-      await this.scheduleReconnect();
+      this.attempt += 1;
+      this.scheduleReconnect(backoffFor(this.attempt, this.config));
       return;
     }
+
+    this.sock = sock;
+    this.socketPhone = pairingPhone;
+    if (!auth.paired) {
+      this.status = 'pairing';
+      this.lastError = null;
+      logger.info(
+        { mode: pairingPhone ? 'code' : 'qr' },
+        'pairing requested from Cortex; opening a registration socket',
+      );
+    }
+    const currentAuth = auth;
+    let codeRequested = false;
+
+    sock.ev.on('creds.update', () => {
+      void currentAuth.saveCreds();
+    });
+
+    sock.ev.on('connection.update', (update) => {
+      // A socket this process already let go of (a lapsed request, a switch
+      // between QR and code) still emits its own close. It is not news.
+      if (sock !== this.sock) return;
+      // A pairing CODE is requested on the registration socket once WhatsApp
+      // has finished the handshake — the first QR is the signal that it has.
+      if (update.qr && pairingPhone && !codeRequested && !isPaired(currentAuth.state.creds)) {
+        codeRequested = true;
+        void this.requestCode(sock, pairingPhone);
+      }
+      void this.onConnectionUpdate(sock, update, currentAuth);
+    });
+
+    sock.ev.on('messages.upsert', (event) => {
+      // `notify` is a live message. `append` is history sync replaying things
+      // that were already delivered, and answering one of those would mean
+      // replying to a question somebody asked three days ago.
+      if (event.type !== 'notify') return;
+      for (const message of event.messages) void this.onMessage(message);
+    });
+
+    sock.ev.on('groups.upsert', () => void this.publishGroups());
+    sock.ev.on('groups.update', () => void this.publishGroups());
 
     this.connecting = false;
   }
 
-  private async scheduleReconnect(): Promise<void> {
-    if (this.stopping) return;
-    this.attempt += 1;
-    const wait = backoffFor(this.attempt, this.config);
-    logger.warn({ attempt: this.attempt, waitMs: wait }, 'reconnecting to WhatsApp');
-    await sleep(wait);
-    await this.connect();
+  /**
+   * Off WhatsApp until somebody asks. Only ever reached without a paired
+   * session: a paired bridge is never idle, it is connected or reconnecting.
+   */
+  private async goIdle(): Promise<void> {
+    this.clearReconnect();
+    const sock = this.sock;
+    this.sock = null;
+    this.socketPhone = null;
+    this.qrDataUrl = null;
+    this.pairingCode = null;
+    this.attempt = 0;
+    if (sock) {
+      try {
+        sock.end(undefined);
+      } catch {
+        // Already gone.
+      }
+    }
+    const before = this.status;
+    this.status = idleStatus(before);
+    if (this.status === 'waiting') this.lastError = IDLE_HINT;
+    if (before !== this.status || sock) {
+      logger.info('no pairing requested; staying off WhatsApp until somebody asks from Cortex');
+    }
+    await this.heartbeat();
+  }
+
+  /** The person switched between QR and code, or typed another number. */
+  private restartPairing(): void {
+    const sock = this.sock;
+    this.sock = null;
+    this.socketPhone = null;
+    this.qrDataUrl = null;
+    this.pairingCode = null;
+    try {
+      sock?.end(undefined);
+    } catch {
+      // Already gone.
+    }
+    void this.connect();
+  }
+
+  private async requestCode(sock: WASocket, phone: string): Promise<void> {
+    try {
+      const code = await sock.requestPairingCode(phone);
+      if (sock !== this.sock) return;
+      this.pairingCode = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      this.lastError = null;
+      // The code itself is NOT logged: it is a short-lived credential, and the
+      // Cortex screen is where the person who asked for it is looking.
+      logger.info('pairing code issued; it is on the Cortex screen');
+    } catch (err) {
+      if (sock !== this.sock) return;
+      this.lastError =
+        'WhatsApp no entregó un código para ese número. Revisa que tenga el indicativo del país y que sea el del teléfono dedicado; mientras tanto puedes escanear el QR.';
+      logger.warn({ err: (err as Error).message }, 'could not get a pairing code');
+    }
+    await this.heartbeat();
   }
 
   private async onConnectionUpdate(
+    sock: WASocket,
     update: { connection?: string; lastDisconnect?: { error?: Error }; qr?: string },
-    flushState: () => Promise<void>,
+    auth: Auth,
   ): Promise<void> {
     if (update.qr) {
       this.status = 'pairing';
-      // Two renderings of the same code, deliberately. The terminal one is what
-      // an operator tailing `railway logs` can scan without opening anything
-      // else; the PNG is what the Cortex screen shows to somebody who has no
-      // access to the logs at all.
-      qrTerminal.generate(update.qr, { small: true });
-      logger.info('scan the QR above, or open Cortex → WhatsApp, to pair this number');
-      this.qrDataUrl = await QRCode.toDataURL(update.qr, { margin: 1, width: 512 }).catch(
+      if (!this.socketPhone) {
+        // Two renderings of the same code, deliberately. The terminal one is
+        // what an operator tailing `railway logs` can scan without opening
+        // anything else; the PNG is what the Cortex screen shows to somebody
+        // who has no access to the logs at all.
+        qrTerminal.generate(update.qr, { small: true });
+        logger.info('scan the QR above, or open Cortex → WhatsApp, to pair this number');
+      }
+      const rendered = await QRCode.toDataURL(update.qr, { margin: 1, width: 512 }).catch(
         () => null,
       );
+      // The socket may have been let go while the image rendered.
+      if (sock !== this.sock) return;
+      this.qrDataUrl = rendered;
       await this.heartbeat();
     }
 
     if (update.connection === 'open') {
       this.status = 'connected';
+      this.paired = true;
       this.attempt = 0;
       this.qrDataUrl = null;
+      this.pairingCode = null;
+      this.socketPhone = null;
+      this.request = NO_REQUEST;
       this.lastError = null;
       this.phoneNumber = this.sock?.user?.id?.split(':')[0]?.split('@')[0] ?? null;
       logger.info({ phoneNumber: this.phoneNumber }, 'connected to WhatsApp');
@@ -260,37 +429,70 @@ export class WhatsappBridge {
 
     if (update.connection !== 'close') return;
 
-    const statusCode = (update.lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
-    const loggedOut = statusCode === DisconnectReason.loggedOut;
+    if (this.sock === sock) this.sock = null;
+    this.socketPhone = null;
+    this.qrDataUrl = null;
+    this.pairingCode = null;
+
+    const error = update.lastDisconnect?.error as (Boom & Error) | undefined;
+    const statusCode = error?.output?.statusCode;
 
     // Whatever is still buffered in the auth store belongs to a session that
     // was valid a moment ago. Push it before deciding what to do.
-    await flushState().catch(() => undefined);
+    await auth.flush().catch(() => undefined);
 
-    if (loggedOut) {
-      this.status = 'logged_out';
-      this.lastError =
-        'WhatsApp cerró la sesión de este dispositivo. Hay que volver a emparejar escaneando el código QR.';
-      logger.error(
-        'WhatsApp logged this device out. The stored credentials are dead and will NOT be retried; wiping them so the next connection asks for a fresh pairing.',
-      );
-      await this.cortex.wipeState();
-      await this.heartbeat();
+    const paired = isPaired(auth.state.creds);
+    this.paired = paired;
+    const decision = decideOnClose(
+      {
+        paired,
+        statusCode,
+        request: this.request,
+        // The restart WhatsApp demands right after a successful pairing is the
+        // first close of a brand-new session, not the Nth failure of an old one.
+        attempt: this.status === 'pairing' ? 0 : this.attempt,
+        stopping: this.stopping,
+      },
+      this.config,
+    );
 
-      // One restart, after a long pause, with an empty session — which is what
-      // produces a QR to re-pair with. Not a retry loop: there is nothing to
-      // retry, and hammering a logged-out account is exactly the behaviour that
-      // gets a number flagged.
-      this.attempt = 0;
-      await sleep(this.config.maxBackoffMs);
-      await this.connect();
-      return;
+    switch (decision.kind) {
+      case 'stop':
+        return;
+
+      case 'logged_out':
+        this.status = 'logged_out';
+        this.paired = false;
+        this.lastError =
+          'WhatsApp cerró la sesión de este dispositivo. Hay que volver a vincular el número desde esta pantalla.';
+        logger.error(
+          'WhatsApp logged this device out. The stored credentials are dead and will NOT be retried; wiping them and waiting for somebody to ask for a new pairing.',
+        );
+        await this.cortex.wipeState();
+        // Not a retry loop and not even one automatic restart: there is nothing
+        // to retry, hammering a logged-out account is exactly the behaviour that
+        // gets a number flagged, and a fresh pairing needs a person anyway.
+        await this.goIdle();
+        return;
+
+      case 'idle':
+        await this.goIdle();
+        return;
+
+      case 'reconnect':
+        this.attempt = decision.attempt;
+        if (paired) {
+          this.status = 'disconnected';
+          this.lastError = error?.message ?? null;
+        } else if (statusCode !== CLOSE_CODES.timedOut) {
+          // Still pairing; between QR windows is not worth a message, a real
+          // failure is.
+          this.lastError = error?.message ?? null;
+        }
+        await this.heartbeat();
+        this.scheduleReconnect(decision.delayMs);
+        return;
     }
-
-    this.status = 'disconnected';
-    this.lastError = (update.lastDisconnect?.error as Error | undefined)?.message ?? null;
-    await this.heartbeat();
-    await this.scheduleReconnect();
   }
 
   // -------------------------------------------------------------------------
@@ -302,6 +504,7 @@ export class WhatsappBridge {
       status: this.status,
       phoneNumber: this.phoneNumber,
       qr: this.qrDataUrl,
+      pairingCode: this.pairingCode,
       error: this.lastError,
     });
     if (!reply) return;
@@ -317,6 +520,42 @@ export class WhatsappBridge {
       if (!this.replyGroups.has(jid)) this.recent.delete(jid);
     }
     this.dmEnabled = reply.dmEnabled;
+
+    this.request = {
+      requested: reply.pairingRequested === true,
+      phone:
+        typeof reply.pairingPhone === 'string' && /^\d{8,15}$/.test(reply.pairingPhone)
+          ? reply.pairingPhone
+          : null,
+    };
+    this.applyPairingRequest();
+  }
+
+  /** Never awaited from the heartbeat: opening a socket must not stall the beat. */
+  private applyPairingRequest(): void {
+    if (this.stopping) return;
+    const action = decideOnHeartbeat({
+      paired: this.paired,
+      socketActive: Boolean(this.sock) || this.connecting,
+      reconnectPending: this.reconnectTimer !== null,
+      socketPhone: this.socketPhone,
+      request: this.request,
+    });
+    switch (action.kind) {
+      case 'connect':
+        void this.connect();
+        return;
+      case 'close':
+        logger.info('the pairing request lapsed; closing the registration socket');
+        void this.goIdle();
+        return;
+      case 'restart':
+        logger.info('the pairing mode changed; reopening the registration socket');
+        this.restartPairing();
+        return;
+      case 'none':
+        return;
+    }
   }
 
   private async publishGroups(): Promise<void> {

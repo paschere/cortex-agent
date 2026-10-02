@@ -1,5 +1,7 @@
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { authenticateBridge } from '@/lib/whatsapp/bridge';
+import { pairingReply } from '@/lib/whatsapp/pairing';
+import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -20,25 +22,46 @@ import { type NextRequest, NextResponse } from 'next/server';
  * never cross the network. The second lock is in the ingest route, which checks
  * again before writing — because a bridge running an old configuration must not
  * be able to archive something nobody chose.
+ *
+ * PAIRING TRAVELS HERE TOO (migration 0169). An unpaired bridge stays off
+ * WhatsApp until this reply says `pairingRequested` — an admin asked on the
+ * Cortex screen within the last three minutes — and, for the code flow,
+ * `pairingPhone`. The bridge reports back the QR or the 8-character code.
  */
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-type Status = 'disconnected' | 'pairing' | 'connected' | 'logged_out';
+type Status = 'disconnected' | 'waiting' | 'pairing' | 'connected' | 'logged_out';
 
 interface HeartbeatBody {
   status?: Status;
   phoneNumber?: string | null;
   /** `data:image/png;base64,…`, already rendered by the bridge. */
   qr?: string | null;
+  /**
+   * The 8-character code for «Vincular con el número de teléfono», while the
+   * socket that asked for it is alive. `null` means it is gone; absent means an
+   * older bridge that knows nothing about codes.
+   */
+  pairingCode?: string | null;
   error?: string | null;
 }
 
-const STATUSES = new Set<Status>(['disconnected', 'pairing', 'connected', 'logged_out']);
+const STATUSES = new Set<Status>(['disconnected', 'waiting', 'pairing', 'connected', 'logged_out']);
 
 /** WhatsApp rotates the pairing code roughly every 20 seconds. */
 const QR_TTL_MS = 60_000;
+
+/**
+ * The bridge re-reports a live code on every pairing heartbeat (≤ 15 s), so a
+ * short TTL is enough to keep it on screen and makes a code whose socket died
+ * without saying so disappear on its own.
+ */
+const CODE_TTL_MS = 60_000;
+
+/** Baileys' codes are 8 Crockford base-32 characters. */
+const PAIRING_CODE = /^[A-Z0-9]{8}$/;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const auth = authenticateBridge(req);
@@ -62,17 +85,44 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (status === 'connected') {
     row.last_connected_at = now.toISOString();
     // A connected session has nothing to scan. Clearing it stops the pairing
-    // panel showing a dead code to somebody who is already connected.
+    // panel showing a dead code to somebody who is already connected — and the
+    // request is fulfilled, so it must not reopen a registration socket later.
     row.pairing_qr = null;
     row.pairing_qr_expires_at = null;
-  } else if (body.qr) {
-    row.pairing_qr = body.qr;
-    row.pairing_qr_expires_at = new Date(now.getTime() + QR_TTL_MS).toISOString();
+    row.pairing_code = null;
+    row.pairing_code_expires_at = null;
+    row.pairing_requested_at = null;
+    row.pairing_phone = null;
+  } else {
+    if (body.qr) {
+      row.pairing_qr = body.qr;
+      row.pairing_qr_expires_at = new Date(now.getTime() + QR_TTL_MS).toISOString();
+    }
+    if (body.pairingCode !== undefined) {
+      const code =
+        typeof body.pairingCode === 'string' ? body.pairingCode.trim().toUpperCase() : '';
+      const valid = PAIRING_CODE.test(code);
+      row.pairing_code = valid ? code : null;
+      row.pairing_code_expires_at = valid
+        ? new Date(now.getTime() + CODE_TTL_MS).toISOString()
+        : null;
+    }
   }
 
   await db.from('whatsapp_sessions').upsert(row, { onConflict: 'organization_id' });
 
-  const { data: session } = await db.from('whatsapp_sessions').select('dm_enabled').maybeSingle();
+  const sessionRead = await db
+    .from('whatsapp_sessions')
+    .select('dm_enabled, pairing_requested_at, pairing_phone')
+    .maybeSingle();
+  // Checked by hand rather than thrown: this reply also carries the archive
+  // allow-list, and a missing pairing column (a migration behind) must not stop
+  // a connected bridge from learning which groups to read. Worst case it reads
+  // as "nobody asked to pair", which is the safe answer.
+  const session = sessionRead.error ? null : sessionRead.data;
+  if (sessionRead.error) {
+    logger.warn(`whatsapp-bridge: could not read the session row — ${sessionRead.error.message}`);
+  }
 
   // Both lists in one read, and they are genuinely different lists. Since
   // migration 0072 archiving a group and answering in it are separate
@@ -104,5 +154,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
      */
     replyGroups: rows.filter((g) => g.reply_enabled).map((g) => g.jid),
     dmEnabled: session?.dm_enabled !== false,
+    ...pairingReply(session, now),
   });
 }

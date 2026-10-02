@@ -30,6 +30,15 @@ export interface HeartbeatReply {
    */
   replyGroups: string[];
   dmEnabled: boolean;
+  /**
+   * Somebody asked, within the last few minutes, to pair this number. Only
+   * meaningful while the bridge has no session: an unpaired bridge talks to
+   * WhatsApp ONLY while this is true. Optional because an older Cortex does not
+   * send it, and absent must read as "nobody asked".
+   */
+  pairingRequested?: boolean;
+  /** E.164 digits to request a pairing CODE for; null/absent means show a QR. */
+  pairingPhone?: string | null;
 }
 
 /** One line of the recent conversation, for context on a mention. */
@@ -115,6 +124,8 @@ export class CortexClient {
     status: string;
     phoneNumber?: string | null;
     qr?: string | null;
+    /** The 8-character code from `requestPairingCode`, while it is alive. */
+    pairingCode?: string | null;
     error?: string | null;
   }): Promise<HeartbeatReply | null> {
     return this.call<HeartbeatReply>('/api/whatsapp/bridge/heartbeat', { method: 'POST', body });

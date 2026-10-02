@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Copy,
+  KeyRound,
   Loader2,
   MessageCircle,
   Plug,
@@ -19,7 +21,7 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * The one screen for the WhatsApp connection.
@@ -33,8 +35,9 @@ import { useState } from 'react';
  * somebody discover it with their thumb.
  *
  * Below the checklist the three blocks appear in that same order. The pairing
- * QR shows inside the first one only while it is relevant: a screen that always
- * shows a QR code trains people to ignore it.
+ * QR (or the 8-character code) shows inside the first one only after an admin
+ * asks for it: the bridge stays off WhatsApp until then, and a screen that
+ * always shows a QR code trains people to ignore it.
  *
  * The copy is deliberately blunt about what archiving means. This is the one
  * screen in the product where switching something on files other people's
@@ -43,7 +46,7 @@ import { useState } from 'react';
  */
 
 interface Connection {
-  status: 'disconnected' | 'pairing' | 'connected' | 'logged_out';
+  status: 'disconnected' | 'waiting' | 'pairing' | 'connected' | 'logged_out';
   bridgeAlive: boolean;
   phoneNumber: string | null;
   qr: string | null;
@@ -51,7 +54,18 @@ interface Connection {
   lastSeenAt: string | null;
   lastError: string | null;
   dmEnabled: boolean;
+  /** False when the bridge has never reported for this workspace. */
+  reported: boolean;
+  /** The pairing somebody asked for, while it is alive (lib/whatsapp/pairing.ts). */
+  pairing: {
+    requested: boolean;
+    mode: 'qr' | 'code' | null;
+    phone: string | null;
+    code: string | null;
+  };
 }
+
+type PairingInput = { mode: 'qr' } | { mode: 'code'; phone: string } | { mode: 'cancel' };
 
 interface Group {
   id: string;
@@ -110,7 +124,18 @@ interface Status {
   people: Person[];
   me: { id: string; name: string; phone: string | null };
   unlinkedNumbers: UnlinkedNumber[];
+  /** The bridge reports, but for another workspace. Admins only. */
+  bridgeElsewhere: boolean;
+  /** This workspace's id, for WHATSAPP_ORGANIZATION_ID. Admins only. */
+  workspaceId: string | null;
 }
+
+/**
+ * How often an open screen renews a live pairing request. The request lapses
+ * three minutes after the last renewal (PAIRING_REQUEST_TTL_MS in
+ * lib/whatsapp/pairing.ts, which is server-only and so not imported here).
+ */
+const PAIRING_KEEPALIVE_MS = 45_000;
 
 async function fetchStatus(): Promise<Status> {
   const r = await fetch('/api/whatsapp/status');
@@ -141,8 +166,8 @@ function telefono(phone: string): string {
 
 const STEP_COPY: Record<'pair' | 'link' | 'groups', { title: string; line: string }> = {
   pair: {
-    title: 'Empareja el número de la empresa',
-    line: 'Escanea el código con el teléfono dedicado. Sin esto no entra ni sale nada.',
+    title: 'Vincula el número de la empresa',
+    line: 'Con un código QR o con el número del teléfono dedicado. Sin esto no entra ni sale nada.',
   },
   link: {
     title: 'Vincula tu número',
@@ -241,21 +266,98 @@ function SetupChecklist({ facts }: { facts: SetupFacts }) {
 
 /* ----------------------------------------------------------------- conexión */
 
-function ConnectionPanel({ connection }: { connection: Connection }) {
-  const { status, bridgeAlive } = connection;
+/** «ABCD1234» → «ABCD-1234», the way WhatsApp prints it on the phone. */
+function codigo(code: string): string {
+  return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
+}
+
+/**
+ * The bridge reports, but for another workspace.
+ *
+ * Without this the screen could only say "el servicio no está reportando",
+ * which is false and sends somebody to Railway logs for what is one variable.
+ * The API answers a bare yes/no — nothing about the other workspace — and only
+ * to admins, who are the ones who can change it.
+ */
+function ElsewherePanel({ workspaceId }: { workspaceId: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Panel>
+      <PanelHead title="1 · Conexión" right="en otro espacio" />
+      <div className="flex items-start gap-3 px-5 py-4">
+        <IconChip tone="amber">
+          <AlertTriangle className="h-4 w-4" />
+        </IconChip>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-ink">
+            El número está configurado para otro espacio de trabajo
+          </div>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
+            El número de WhatsApp de Cortex está configurado para otro espacio de trabajo. Para
+            usarlo aquí, cambia <span className="font-mono text-ink">WHATSAPP_ORGANIZATION_ID</span>{' '}
+            del servicio <span className="font-mono text-ink">whatsapp-bridge</span> al id de este
+            espacio:
+          </p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <code className="rounded-card border border-border bg-surface-2 px-3 py-1.5 font-mono text-xs text-ink">
+              {workspaceId}
+            </code>
+            <Button
+              variant="outline"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(workspaceId)
+                  .then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2_000);
+                  })
+                  .catch(() => undefined);
+              }}
+            >
+              {copied ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Copiado' : 'Copiar'}
+            </Button>
+          </div>
+          <p className="mt-2 text-micro leading-relaxed text-ink-faint">
+            Al cambiarla, el número deja de servirle al otro espacio. Un número atiende a un solo
+            espacio de trabajo.
+          </p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function ConnectionPanel({
+  connection,
+  isAdmin,
+  busy,
+  onPair,
+}: {
+  connection: Connection;
+  isAdmin: boolean;
+  busy: boolean;
+  onPair: (input: PairingInput) => void;
+}) {
+  const { status, bridgeAlive, pairing } = connection;
+  const [phone, setPhone] = useState(connection.phoneNumber ? `+${connection.phoneNumber}` : '');
+  const [askingNumber, setAskingNumber] = useState(false);
 
   // The bridge going quiet is a different problem from WhatsApp dropping the
-  // session, and they need different answers, so they are never shown as one
-  // "disconnected".
+  // session, and both are different from "nobody has asked to pair yet", so
+  // none of them is ever shown as one "disconnected".
   const state = !bridgeAlive
     ? ('offline' as const)
     : status === 'connected'
       ? ('connected' as const)
-      : status === 'pairing'
+      : pairing.requested
         ? ('pairing' as const)
         : status === 'logged_out'
           ? ('logged_out' as const)
-          : ('down' as const);
+          : status === 'disconnected'
+            ? ('down' as const)
+            : // 'waiting', or 'pairing' left over from a request that just lapsed.
+              ('waiting' as const);
 
   const COPY = {
     connected: {
@@ -266,17 +368,29 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
         ? `En línea con el número ${telefono(connection.phoneNumber)}.`
         : 'En línea.',
     },
-    pairing: {
+    waiting: {
       tone: 'amber' as const,
       icon: <QrCode className="h-4 w-4" />,
-      title: 'Esperando el emparejamiento',
-      line: 'Escanea el código con el teléfono dedicado: WhatsApp → Dispositivos vinculados → Vincular un dispositivo.',
+      title: 'Esperando que alguien lo vincule',
+      line: isAdmin
+        ? 'El servicio está listo. Ten a mano el teléfono dedicado y elige cómo vincularlo: escaneando un código QR o escribiendo un código en el teléfono.'
+        : 'El servicio está listo, pero falta vincular el número de la empresa. Eso lo hace un administrador desde esta pantalla.',
+    },
+    pairing: {
+      tone: 'amber' as const,
+      icon:
+        pairing.mode === 'code' ? <KeyRound className="h-4 w-4" /> : <QrCode className="h-4 w-4" />,
+      title: pairing.mode === 'code' ? 'Vinculando con el número' : 'Vinculando con código QR',
+      line:
+        pairing.mode === 'code'
+          ? 'En el teléfono dedicado: WhatsApp → Dispositivos vinculados → Vincular un dispositivo → «Vincular con el número de teléfono» → escribe el código.'
+          : 'En el teléfono dedicado: WhatsApp → Dispositivos vinculados → Vincular un dispositivo, y apunta la cámara al código.',
     },
     logged_out: {
       tone: 'rose' as const,
       icon: <AlertTriangle className="h-4 w-4" />,
       title: 'WhatsApp cerró la sesión',
-      line: 'El dispositivo fue desvinculado desde el teléfono o por WhatsApp. Hay que volver a emparejar; nada de lo ya archivado se pierde.',
+      line: 'El dispositivo fue desvinculado desde el teléfono o por WhatsApp. Hay que volver a vincularlo; nada de lo ya archivado se pierde.',
     },
     down: {
       tone: 'amber' as const,
@@ -292,6 +406,12 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
     },
   }[state];
 
+  // The idle hint the bridge sends says the same as the copy above, in other
+  // words; showing both is noise. Real errors still show.
+  const showError =
+    connection.lastError && state !== 'connected' && state !== 'waiting' && state !== 'offline';
+  const canPair = isAdmin && (state === 'waiting' || state === 'logged_out' || state === 'pairing');
+
   return (
     <Panel>
       <PanelHead
@@ -303,7 +423,7 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-ink">{COPY.title}</div>
           <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{COPY.line}</p>
-          {connection.lastError && state !== 'connected' && (
+          {showError && (
             <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs leading-relaxed text-ink">
               {connection.lastError}
             </p>
@@ -311,19 +431,123 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
         </div>
       </div>
 
-      {connection.qr && state !== 'connected' && (
+      {state === 'pairing' && pairing.mode === 'qr' && (
         <div className="flex flex-col items-center gap-2 border-t border-border px-5 py-5">
-          {/* A plain <img>: the source is a data: URL that changes every few
-              seconds, so there is nothing for next/image to optimise or cache. */}
-          <img
-            src={connection.qr}
-            alt="Código QR para vincular WhatsApp"
-            className="h-56 w-56 rounded-card border border-border bg-white p-2"
-          />
+          {connection.qr ? (
+            // A plain <img>: the source is a data: URL that changes every few
+            // seconds, so there is nothing for next/image to optimise or cache.
+            <img
+              src={connection.qr}
+              alt="Código QR para vincular WhatsApp"
+              className="h-56 w-56 rounded-card border border-border bg-white p-2"
+            />
+          ) : (
+            <div className="grid h-56 w-56 place-items-center rounded-card border border-dashed border-border text-xs text-ink-faint">
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Preparando el código…
+              </span>
+            </div>
+          )}
           <p className="max-w-sm text-center text-xs leading-relaxed text-ink-faint">
-            El código cambia cada pocos segundos. Si se vence, esta pantalla muestra el siguiente
-            sola.
+            El código cambia cada pocos segundos y esta pantalla muestra el siguiente sola. Sigue
+            llegando mientras la tengas abierta.
           </p>
+        </div>
+      )}
+
+      {state === 'pairing' && pairing.mode === 'code' && (
+        <div className="flex flex-col items-center gap-3 border-t border-border px-5 py-5">
+          {pairing.code ? (
+            <div
+              className="rounded-card border border-border bg-surface-2 px-6 py-4 font-mono text-4xl font-bold tracking-[0.2em] text-ink"
+              aria-label={`Código para vincular: ${pairing.code.split('').join(' ')}`}
+            >
+              {codigo(pairing.code)}
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 py-4 text-xs text-ink-faint">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Pidiendo el código a WhatsApp para{' '}
+              {pairing.phone ? telefono(pairing.phone) : 'ese número'}…
+            </div>
+          )}
+          <ol className="max-w-sm list-decimal space-y-1 pl-5 text-xs leading-relaxed text-ink-muted">
+            <li>
+              En el teléfono dedicado abre WhatsApp →{' '}
+              <b className="font-semibold text-ink">Dispositivos vinculados</b> →{' '}
+              <b className="font-semibold text-ink">Vincular un dispositivo</b>.
+            </li>
+            <li>
+              Toca <b className="font-semibold text-ink">«Vincular con el número de teléfono»</b>{' '}
+              (abajo, debajo de la cámara).
+            </li>
+            <li>Escribe el código. Si se vence, aquí aparece uno nuevo solo.</li>
+          </ol>
+        </div>
+      )}
+
+      {canPair && (
+        <div className="border-t border-border px-5 py-3.5">
+          <div className="flex flex-wrap items-center gap-2">
+            {!(state === 'pairing' && pairing.mode === 'qr') && (
+              <Button
+                variant={state === 'pairing' ? 'outline' : 'default'}
+                disabled={busy}
+                onClick={() => {
+                  setAskingNumber(false);
+                  onPair({ mode: 'qr' });
+                }}
+              >
+                <QrCode className="h-3.5 w-3.5" />
+                Mostrar código QR
+              </Button>
+            )}
+            {!(state === 'pairing' && pairing.mode === 'code') && (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => setAskingNumber((open) => !open)}
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Vincular con mi número
+              </Button>
+            )}
+            {state === 'pairing' && (
+              <Button variant="ghost" disabled={busy} onClick={() => onPair({ mode: 'cancel' })}>
+                Cancelar
+              </Button>
+            )}
+          </div>
+
+          {askingNumber && !(state === 'pairing' && pairing.mode === 'code') && (
+            <form
+              className="mt-3 flex flex-wrap items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!phone.trim()) return;
+                setAskingNumber(false);
+                onPair({ mode: 'code', phone });
+              }}
+            >
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+57 300 111 2233"
+                aria-label="Número del teléfono dedicado"
+                inputMode="tel"
+                className="h-9 w-full max-w-[210px] rounded-card border border-border bg-surface px-3 font-mono text-sm text-ink placeholder:text-ink-faint focus:border-primary/40"
+              />
+              <Button type="submit" disabled={busy || !phone.trim()}>
+                {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Pedir código
+              </Button>
+              <p className="w-full text-micro leading-relaxed text-ink-faint">
+                El número del teléfono dedicado, con indicativo. WhatsApp da un código de 8
+                caracteres para escribir en ese teléfono; no hay que escanear nada.
+              </p>
+            </form>
+          )}
         </div>
       )}
 
@@ -389,9 +613,8 @@ function MyNumberPanel({
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-ink">Cortex ya te contesta</div>
             <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
-              Escribe desde{' '}
-              <span className="font-mono text-xs text-ink">{telefono(me.phone)}</span> y la
-              conversación corre con tu identidad y tus permisos, igual que en la web.
+              Escribe desde <span className="font-mono text-xs text-ink">{telefono(me.phone)}</span>{' '}
+              y la conversación corre con tu identidad y tus permisos, igual que en la web.
             </p>
           </div>
           {waHref && (
@@ -930,6 +1153,45 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
     onError: (err: Error) => setMessage({ tone: 'bad', text: err.message }),
   });
 
+  const pair = useMutation({
+    mutationFn: async (input: PairingInput) => {
+      const r = await fetch('/api/whatsapp/pairing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      const j = (await r.json()) as { note?: string; error?: string };
+      if (!r.ok) throw new Error(j.error ?? 'No se pudo pedir el código.');
+      return j.note ?? 'Listo.';
+    },
+    onSuccess: async (note) => {
+      setMessage({ tone: 'ok', text: note });
+      await invalidate();
+    },
+    onError: (err: Error) => setMessage({ tone: 'bad', text: err.message }),
+  });
+
+  // While somebody is pairing, the open screen IS the request: renewing it is
+  // what keeps a fresh code coming, and closing the tab lets it lapse on its
+  // own three minutes later — the bridge then goes back to leaving WhatsApp
+  // alone. Only an admin's screen renews it, as only an admin can start it.
+  const pairingAlive =
+    isAdmin &&
+    data?.isAdmin === true &&
+    data.connection.pairing.requested &&
+    data.connection.status !== 'connected';
+  useEffect(() => {
+    if (!pairingAlive) return;
+    const timer = setInterval(() => {
+      void fetch('/api/whatsapp/pairing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'keepalive' }),
+      }).catch(() => undefined);
+    }, PAIRING_KEEPALIVE_MS);
+    return () => clearInterval(timer);
+  }, [pairingAlive]);
+
   const unlinkNumber = useMutation({
     mutationFn: async (phone: string) => {
       const r = await fetch(`/api/whatsapp/links?phone=${encodeURIComponent(phone)}`, {
@@ -960,7 +1222,11 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
   const active = data.groups.filter((g) => g.archiving || g.replying);
   const rest = data.groups.filter((g) => !g.archiving && !g.replying);
   const busy =
-    saveGroup.isPending || setReplying.isPending || linkNumber.isPending || unlinkNumber.isPending;
+    saveGroup.isPending ||
+    setReplying.isPending ||
+    linkNumber.isPending ||
+    unlinkNumber.isPending ||
+    pair.isPending;
 
   const facts: SetupFacts = {
     connected: data.connection.status === 'connected' && data.connection.bridgeAlive,
@@ -984,7 +1250,16 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
 
       <SetupChecklist facts={facts} />
 
-      <ConnectionPanel connection={data.connection} />
+      {!data.connection.reported && data.bridgeElsewhere && data.workspaceId ? (
+        <ElsewherePanel workspaceId={data.workspaceId} />
+      ) : (
+        <ConnectionPanel
+          connection={data.connection}
+          isAdmin={isAdmin && data.isAdmin}
+          busy={busy}
+          onPair={(input) => pair.mutate(input)}
+        />
+      )}
 
       <MyNumberPanel
         me={data.me}

@@ -183,6 +183,10 @@ const ALLOWED = new Map<string, string>([
     'whatsapp_links is keyed by the phone number install-wide, so "already linked somewhere else" is invisible to a scoped read and would surface as a constraint error instead of an explanation. One read, for that message only; the write is scoped.',
   ],
   [
+    'app/api/whatsapp/status/route.ts',
+    'The bridge reports into the workspace named by its WHATSAPP_ORGANIZATION_ID. When that is another workspace, this one has no session row and a scoped read can only say "not reporting". One unscoped existence check — admins only, only when there is no row here — turns into a yes/no that tells the admin to change the variable; no id, number or timestamp of the other workspace leaves the route.',
+  ],
+  [
     'app/api/meetings/live/voice-answer/route.ts',
     'The meet-bot posts here with a service token and an organization id, no session. Resolving that org to a directory user (the owner) is what the raw client is for; the turn itself then runs on a handle scoped to that workspace.',
   ],

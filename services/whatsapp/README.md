@@ -28,6 +28,7 @@ socket.
 | `src/config.ts` | Everything it needs, read once and validated loudly |
 | `src/auth-state.ts` | The session, in Postgres instead of on disk — the piece that stops re-pairing on every deploy |
 | `src/socket.ts` | The connection: reconnect policy, group filtering, the DM path, and what the account will and will not do |
+| `src/pairing.ts` | When an unpaired bridge talks to WhatsApp — only while somebody asks from Cortex — as pure, tested functions |
 | `src/extract.ts` | A Baileys protobuf into the flat shape Cortex stores |
 | `src/cortex.ts` | The only way it reaches anything that persists |
 | `src/server.ts` | `GET /health` (open) and `GET /qr` (token) |
@@ -40,6 +41,10 @@ export WHATSAPP_BRIDGE_TOKEN=$(openssl rand -base64 32)   # same value in .env.l
 export WHATSAPP_ORGANIZATION_ID=<ba_organization.id>
 pnpm --filter @cortex/whatsapp-bridge dev
 ```
+
+Pair from the Cortex screen (Integraciones → WhatsApp → «Mostrar código QR» or
+«Vincular con mi número»): without a request the bridge stays idle. Tests:
+`pnpm --filter @cortex/whatsapp-bridge test`.
 
 Pair against a **test number**, never a personal one, and never against the same
 number a production bridge is using — two clients on one session fight over it.

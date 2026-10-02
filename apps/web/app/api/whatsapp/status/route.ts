@@ -1,5 +1,6 @@
 import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
+import { pairingView } from '@/lib/whatsapp/pairing';
 import { isGroupReplyScope, listVisibleSpaces } from '@cortex/agent-tools';
 import { NextResponse } from 'next/server';
 
@@ -38,7 +39,7 @@ export async function GET(): Promise<NextResponse> {
   const { data: connection } = await db
     .from('whatsapp_sessions')
     .select(
-      'status, phone_number, pairing_qr, pairing_qr_expires_at, last_connected_at, last_seen_at, last_error, dm_enabled',
+      'status, phone_number, pairing_qr, pairing_qr_expires_at, last_connected_at, last_seen_at, last_error, dm_enabled, pairing_requested_at, pairing_phone, pairing_code, pairing_code_expires_at',
     )
     .maybeSingle();
 
@@ -47,6 +48,27 @@ export async function GET(): Promise<NextResponse> {
   const qrFresh =
     Boolean(connection?.pairing_qr) &&
     Date.parse((connection?.pairing_qr_expires_at as string | null) ?? '') > Date.now();
+  const pairing = pairingView(connection);
+
+  // EL PUENTE ESTÁ, PERO PARA OTRO ESPACIO DE TRABAJO.
+  //
+  // El puente se presenta con `WHATSAPP_ORGANIZATION_ID` y todo lo que reporta
+  // cae en la fila de ESE espacio. Si es otro, esta pantalla no tiene fila y
+  // sólo podría decir «el servicio no está reportando» — falso, y mandaría a
+  // alguien a revisar Railway por un problema que es una variable. La lectura
+  // es sin acotar (es justamente la fila que el cliente acotado no ve) y sale de
+  // aquí convertida en un sí o un no: ni qué espacio, ni qué número, ni cuándo.
+  // Sólo para administradores, que son quienes pueden cambiar la variable.
+  let bridgeElsewhere = false;
+  if (!connection && isAdmin) {
+    const elsewhere = await getSupabaseServiceClient()
+      .from('whatsapp_sessions')
+      .select('organization_id')
+      .neq('organization_id', session.organization.id)
+      .gt('last_seen_at', new Date(Date.now() - STALE_AFTER_MS).toISOString())
+      .limit(1);
+    bridgeElsewhere = !elsewhere.error && (elsewhere.data ?? []).length > 0;
+  }
 
   const { data: groupRows } = await db
     .from('whatsapp_groups')
@@ -141,7 +163,15 @@ export async function GET(): Promise<NextResponse> {
       lastSeenAt: (connection?.last_seen_at as string | null) ?? null,
       lastError: (connection?.last_error as string | null) ?? null,
       dmEnabled: connection?.dm_enabled !== false,
+      /** False when the bridge has never reported for this workspace. */
+      reported: Boolean(connection),
+      pairing,
     },
+    // Only ever true for an admin, and only a yes/no: see above.
+    bridgeElsewhere,
+    // The id to put in WHATSAPP_ORGANIZATION_ID. Admins only — it is not a
+    // secret, but nobody else can act on it.
+    workspaceId: isAdmin ? session.organization.id : null,
     groups: (
       (groupRows ?? []) as Array<{
         id: string;

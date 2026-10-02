@@ -120,32 +120,97 @@ pnpm db:push     # or apply infra/supabase/migrations/0068_whatsapp.sql
 Watch the logs. On a first boot you should see:
 
 ```
-no stored session; this boot will need a QR scan
+no stored session; waiting for somebody to ask for a pairing from Cortex
 ```
+
+and then nothing else from WhatsApp: an unpaired bridge only heartbeats to
+Cortex (every 10 s) until somebody asks to pair it. See below.
 
 ---
 
 ## Pairing, the first time
 
-1. Open **Cortex → WhatsApp** (in the sidebar, under Connections). The status
-   will say *Esperando el emparejamiento* and show a QR code.
-2. On the **dedicated phone**, open WhatsApp → **Dispositivos vinculados** →
-   **Vincular un dispositivo**.
-3. Scan the code on the Cortex screen. It refreshes on its own every few
-   seconds, so a code that expires is not a problem — wait for the next one.
+**The bridge does not talk to WhatsApp until somebody asks.** Without a paired
+session it stays idle — the screen says *Esperando que alguien lo vincule* — and
+only heartbeats to Cortex. (The first version opened a socket and showed QR
+codes in a loop whether or not anybody was looking; in production it reached
+~16 000 attempts with five minutes between windows, so whoever opened the
+screen almost never found a live code. It was also exactly the kind of
+machine-shaped traffic the rest of this service avoids.)
+
+An **org admin** opens **Cortex → Integraciones → WhatsApp** with the
+**dedicated phone** in hand and picks one of two buttons:
+
+### «Vincular con mi número» (no scanning — easiest from a laptop)
+
+1. Type the dedicated phone's number with its country code: `+57 300 111 2233`.
+2. Within a few seconds the screen shows an **8-character code**, e.g.
+   `ABCD-1234`.
+3. On the phone: WhatsApp → **Dispositivos vinculados** → **Vincular un
+   dispositivo** → **«Vincular con el número de teléfono»** (below the camera) →
+   type the code.
 4. The screen turns green (*Conectado*) with the number.
 
-**Two other ways to get the code**, for when Cortex is not reachable:
+### «Mostrar código QR»
+
+1. Within a few seconds a QR appears. It refreshes on its own every ~20 seconds.
+2. On the phone: WhatsApp → **Dispositivos vinculados** → **Vincular un
+   dispositivo**, and scan it.
+
+### How the request works
+
+- Pressing a button stores a **pairing request** on the workspace
+  (`whatsapp_sessions.pairing_requested_at`, and `pairing_phone` for the code
+  flow — migration `0169`). The bridge's heartbeat reply carries it as
+  `pairingRequested` / `pairingPhone`, and the bridge opens a registration
+  socket on the next beat.
+- **While the screen is open** it renews the request every 45 s, so codes keep
+  coming: when WhatsApp ends a QR window ("QR refs attempts ended", ~2–3 min)
+  the bridge opens the next one after 3 s, with no growing backoff. A code
+  (`pairing_code`) lives as long as its socket; when it lapses a new one
+  appears on its own.
+- **Close the screen** (or press **Cancelar**) and the request lapses after
+  three minutes; the bridge closes the socket and goes idle again.
+- Switching between QR and code, or typing another number, restarts the
+  attempt.
+- Once paired, nothing here applies: reconnects use the normal exponential
+  backoff, and a pairing request is ignored.
+
+Endpoint: `POST /api/whatsapp/pairing` with `{ mode: 'qr' }`,
+`{ mode: 'code', phone }`, `{ mode: 'keepalive' }` or `{ mode: 'cancel' }` —
+admins only, scoped to the caller's workspace.
+
+**Two other ways to get the QR**, for when the Cortex screen is not reachable —
+both still need a request to be alive, because an idle bridge has no QR:
 
 - It is printed as ASCII in the service logs: `railway logs`.
 - `GET https://<the-railway-domain>/qr?token=<WHATSAPP_BRIDGE_TOKEN>` renders it
   as a page you can point a camera at.
 
-**You should only ever do this once.** If you find yourself scanning a QR after
+**You should only ever do this once.** If you find yourself pairing again after
 every deploy, the session is not being stored — check `CORTEX_BASE_URL` and the
 token, because the bridge refuses to start with an empty session when it cannot
 read the stored one (precisely so a network blip does not silently discard a
 working pairing).
+
+### "El número está configurado para otro espacio de trabajo"
+
+The bridge reports into the workspace named by its `WHATSAPP_ORGANIZATION_ID`.
+If you open the screen in a different workspace, an admin sees this message
+with the current workspace's id and a copy button. To move the number here,
+set `WHATSAPP_ORGANIZATION_ID` on the Railway `whatsapp-bridge` service to that
+id and redeploy. One number serves one workspace; the other one stops getting
+it. (The screen only learns *that* a bridge is reporting elsewhere — never
+which workspace, number or anything else about it.)
+
+### Timing knobs (Railway variables, optional)
+
+| Variable | Default | |
+|---|---|---|
+| `WHATSAPP_PAIRING_HEARTBEAT_MS` | `10000` | Heartbeat while not connected; capped at 15 s so a request is picked up quickly |
+| `WHATSAPP_PAIRING_RETRY_MS` | `3000` | Pause before the next QR window while a request is alive |
+| `WHATSAPP_PAIRING_MAX_BACKOFF_MS` | `30000` | Ceiling for unexpected failures while pairing |
+| `WHATSAPP_HEARTBEAT_MS` | `30000` | Heartbeat while connected |
 
 ---
 
@@ -312,13 +377,20 @@ WhatsApp one. `railway logs`, check the deploy is running. **Nothing already
 archived is lost** and no messages sent while it is down are archived — WhatsApp
 delivers a short backlog on reconnect, so a brief outage usually self-heals.
 
+### The screen says "Esperando que alguien lo vincule"
+
+Normal for an unpaired number: the service is up and waiting. An admin presses
+**Mostrar código QR** or **Vincular con mi número** (see *Pairing* above). If the
+code never appears, check that the bridge is on a version with on-demand pairing
+(`services/whatsapp/src/pairing.ts`) — an older bridge ignores the request.
+
 ### The screen says "WhatsApp cerró la sesión"
 
 Somebody unlinked the device from the phone, or WhatsApp did. The stored
-credentials are dead; the bridge wipes them, deliberately does **not** retry in a
-loop (hammering a logged-out account is the fastest way to get flagged), and
-comes back once after a few minutes showing a fresh QR. Re-pair as above. Your
-group choices and everything archived are untouched.
+credentials are dead; the bridge wipes them, deliberately does **not** retry
+(hammering a logged-out account is the fastest way to get flagged), and goes
+idle. Re-pair as above with either button. Your group choices and everything
+archived are untouched.
 
 ### The screen says "Sin conexión"
 
@@ -384,5 +456,9 @@ archived, into which space, and since when. Turning one off takes one click.
   images and files.
 - `services/whatsapp/src/socket.ts` — the reconnection policy and what the
   account will and will not do.
+- `services/whatsapp/src/pairing.ts` — when an unpaired bridge talks to WhatsApp
+  (only on request), as pure functions with tests in `services/whatsapp/tests`.
+- `infra/supabase/migrations/0169_whatsapp_pairing_request.sql` and
+  `apps/web/lib/whatsapp/pairing.ts` — the pairing request and its lifetime.
 - `docs/operations/google-chat-app.md` — the other messaging surface; the agent
   turn itself is shared code.

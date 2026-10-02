@@ -45,11 +45,22 @@ export interface Config {
   batchSize: number;
   /** How often the connection reports in and refreshes its allow-list. */
   heartbeatMs: number;
+  /**
+   * The same, while NOT connected — idle and waiting for somebody to ask for a
+   * pairing, or pairing. Shorter on purpose: the heartbeat reply is how a
+   * "Mostrar código QR" press reaches this process, and a person standing there
+   * with the phone should not wait half a minute for anything to happen.
+   */
+  pairingHeartbeatMs: number;
   /** How often Cortex is asked to fold finished conversations into documents. */
   ingestTickMs: number;
   /** Reconnect backoff bounds. */
   minBackoffMs: number;
   maxBackoffMs: number;
+  /** Pause before opening the next QR window while a pairing request is alive. */
+  pairingRetryMs: number;
+  /** Ceiling for unexpected failures while pairing. */
+  pairingMaxBackoffMs: number;
   /**
    * How this client identifies itself to WhatsApp. FIXED, and it matters that
    * it is fixed: WhatsApp keeps a list of linked devices, and a client whose
@@ -73,9 +84,14 @@ export function loadConfig(): Config {
     batchIntervalMs: number('WHATSAPP_BATCH_INTERVAL_MS', 30_000),
     batchSize: number('WHATSAPP_BATCH_SIZE', 50),
     heartbeatMs: number('WHATSAPP_HEARTBEAT_MS', 30_000),
+    // Capped at 15 s whatever the env says: above that a pairing request feels
+    // ignored.
+    pairingHeartbeatMs: Math.min(number('WHATSAPP_PAIRING_HEARTBEAT_MS', 10_000), 15_000),
     ingestTickMs: number('WHATSAPP_INGEST_TICK_MS', 5 * 60_000),
     minBackoffMs: number('WHATSAPP_MIN_BACKOFF_MS', 2_000),
     maxBackoffMs: number('WHATSAPP_MAX_BACKOFF_MS', 5 * 60_000),
+    pairingRetryMs: number('WHATSAPP_PAIRING_RETRY_MS', 3_000),
+    pairingMaxBackoffMs: number('WHATSAPP_PAIRING_MAX_BACKOFF_MS', 30_000),
     browser: ['Cortex', 'Chrome', '1.0.0'],
     maxVoiceBytes: number('WHATSAPP_MAX_VOICE_BYTES', 12 * 1024 * 1024),
     maxDocumentBytes: number('WHATSAPP_MAX_DOCUMENT_BYTES', 20 * 1024 * 1024),

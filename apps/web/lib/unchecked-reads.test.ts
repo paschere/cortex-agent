@@ -86,7 +86,6 @@ const BASELINE = new Map<string, number>([
   ['app/api/kb/meetings/route.ts', 2],
   ['app/api/mcp-servers/[id]/refresh/route.ts', 2],
   ['app/api/pipelines/[slug]/duplicate/route.ts', 2],
-  ['app/api/whatsapp/bridge/heartbeat/route.ts', 2],
   ['app/api/whatsapp/bridge/messages/route.ts', 2],
   ['app/api/whatsapp/links/route.ts', 2],
   ['lib/browser-delivery.ts', 2],
@@ -132,6 +131,9 @@ const BASELINE = new Map<string, number>([
   ['app/api/schedules/[id]/route.ts', 1],
   ['app/api/schedules/[id]/run/route.ts', 1],
   ['app/api/settings/test-chat/route.ts', 1],
+  // 2 → 1 el 2026-10-02: la lectura de la sesión en el latido mira su error
+  // (vinculación bajo pedido, migración 0169).
+  ['app/api/whatsapp/bridge/heartbeat/route.ts', 1],
   ['app/api/whatsapp/bridge/state/route.ts', 1],
   ['app/api/whatsapp/groups/route.ts', 1],
   ['inngest/functions/dev-task-status.ts', 1],

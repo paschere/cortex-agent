@@ -67,6 +67,28 @@ export interface RemoteAuthState {
   flush: () => Promise<void>;
   /** True when this boot started from a stored session rather than from zero. */
   restored: boolean;
+  /**
+   * True when the stored session belongs to a device WhatsApp accepted. False
+   * for an empty session AND for the leftovers of a pairing that never
+   * finished — see `isPaired`.
+   */
+  paired: boolean;
+}
+
+/**
+ * Whether these credentials belong to a device WhatsApp actually accepted.
+ *
+ * NOT "are there credentials". `requestPairingCode` writes `creds.me` (the
+ * phone number it is pairing with) and emits `creds.update` BEFORE anybody types
+ * the code, so an abandoned code request leaves a stored session with `me` set
+ * and no device behind it. Baileys decides between registering and logging in
+ * on `creds.me` alone, so reusing those leftovers would try to LOG IN as a device
+ * that does not exist — refused as `loggedOut` at best. `creds.account` (the
+ * signed device identity) is only written on `pair-success`, by either QR or
+ * code, so it is the one field that means "paired".
+ */
+export function isPaired(creds: { account?: unknown } | null | undefined): boolean {
+  return Boolean(creds?.account);
 }
 
 function encode(value: unknown): unknown {
@@ -88,13 +110,22 @@ export async function usePostgresAuthState(cortex: CortexClient): Promise<Remote
     );
   }
 
-  const creds: AuthenticationCreds = remote.creds
-    ? decode<AuthenticationCreds>(remote.creds)
-    : initAuthCreds();
-  const restored = Boolean(remote.creds);
+  const stored = remote.creds ? decode<AuthenticationCreds>(remote.creds) : null;
+  const paired = isPaired(stored);
+  if (stored && !paired) {
+    logger.warn(
+      'the stored session is a pairing that never finished; starting from a fresh one instead of reusing it',
+    );
+  }
+  // Only a paired session is worth restoring. Half-finished pairing leftovers
+  // are replaced in memory and overwritten in Cortex by the next `creds.update`.
+  const creds: AuthenticationCreds = paired && stored ? stored : initAuthCreds();
+  const restored = paired;
 
   const cache: KeyStore = {};
-  for (const [type, entries] of Object.entries(remote.keys ?? {})) {
+  // Keys from a pairing that never finished belong to an identity that no
+  // longer exists; a fresh session starts with an empty store.
+  for (const [type, entries] of Object.entries(paired ? (remote.keys ?? {}) : {})) {
     cache[type] = {};
     for (const [id, value] of Object.entries(entries)) {
       (cache[type] as Record<string, unknown>)[id] = value;
@@ -109,7 +140,7 @@ export async function usePostgresAuthState(cortex: CortexClient): Promise<Remote
     },
     restored
       ? 'restored the WhatsApp session from Cortex — no re-pairing needed'
-      : 'no stored session; this boot will need a QR scan',
+      : 'no stored session; waiting for somebody to ask for a pairing from Cortex',
   );
 
   // What has changed since the last push. `null` means "delete this key", which
@@ -194,6 +225,7 @@ export async function usePostgresAuthState(cortex: CortexClient): Promise<Remote
   return {
     state,
     restored,
+    paired,
     async saveCreds(): Promise<void> {
       credsDirty = true;
       schedule();

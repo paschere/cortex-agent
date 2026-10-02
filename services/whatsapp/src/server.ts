@@ -16,9 +16,9 @@ import type { WhatsappBridge } from './socket';
  *
  *   GET /qr      The pairing code as a PNG, behind the shared token. The Cortex
  *                screen normally shows this without anyone touching the
- *                service, and it is also printed in the logs; this exists for
- *                the case where Cortex cannot be reached and somebody still
- *                needs to pair the number.
+ *                service, and it is also printed in the logs. There is only a
+ *                code while a pairing has been requested from the Cortex screen:
+ *                an unpaired bridge stays off WhatsApp until somebody asks.
  *
  * Everything else is 404. This process is not an API — it holds a socket open.
  */
@@ -70,7 +70,8 @@ export function startServer(bridge: WhatsappBridge, config: Config): Server {
       const qr = bridge.currentQr();
       if (!qr) {
         json(res, 404, {
-          error: 'There is no pairing code right now.',
+          error:
+            'There is no pairing code right now. Ask for one on Cortex → Integraciones → WhatsApp («Mostrar código QR»); the bridge only talks to WhatsApp while somebody is pairing.',
           status: bridge.snapshot().status,
         });
         return;
