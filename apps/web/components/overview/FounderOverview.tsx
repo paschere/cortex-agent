@@ -1,68 +1,115 @@
 'use client';
 
 /**
- * El centro de mando del fundador: todas sus empresas en una pantalla.
+ * El centro de mando del fundador: cómo va cada negocio y dónde actuar hoy.
  *
  * ===========================================================================
- * QUÉ CAMBIÓ Y POR QUÉ
+ * QUÉ CAMBIÓ Y POR QUÉ (2026-10)
  * ===========================================================================
- * Antes esto era una rejilla de tarjetas iguales con cuatro contadores y una
- * banda oscura pintada con hexadecimales a mano (#18171d, zinc-400…), que en el
- * tema claro se leía como un bloque ajeno y en el oscuro duplicaba la paleta.
- * Ahora todo sale de los tokens (`surface`, `ink`, `primary-soft`…), así que
- * la pantalla hereda el tema del espacio autenticado sin una línea propia.
+ * La versión anterior era, sobre todo, administración de Cortex: plan,
+ * asientos, cupo de respuestas, integraciones, rutinas. Útil una vez al mes.
+ * Quien dirige varias empresas abre esta pantalla para saber CÓMO VA CADA
+ * NEGOCIO y A CUÁL ENTRAR, así que ahora el orden es ése:
  *
- * Y lo que enseña es lo que un fundador necesita para decidir dónde entrar:
- * por empresa propia, la señal de salud, el plan con sus asientos, el consumo
- * de respuestas, cuánta gente hay y cuánta está por llegar, integraciones,
- * rutinas y cuándo hubo actividad por última vez — además de los cuatro
- * pendientes de siempre. Las empresas donde la cuenta es gerente o
- * colaboradora siguen saliendo, sólo con sus pendientes: su administración es
- * de otro fundador.
+ *  1. Totales grandes entre las empresas propias: plata en riesgo, recuperado
+ *     este mes, decisiones que esperan, procesos con error y cuántas empresas
+ *     piden atención.
+ *  2. «Dónde actuar hoy»: las cinco cosas más importantes entre todas, cada
+ *     una con su botón a ESA empresa (founder-business-shape.ts las ordena).
+ *  3. Una tarjeta por empresa con su marca, su estado en palabras («Al día»,
+ *     «Pide atención», «Sin datos todavía») y sus cifras de negocio.
+ *  4. Plan y uso, plegado al final (PlanAndUse.tsx).
+ *
+ * ===========================================================================
+ * LO RÁPIDO PRIMERO, LAS CIFRAS DESPUÉS
+ * ===========================================================================
+ * Los pendientes y la salud del plan llegan con la página. Las cifras de
+ * negocio (cartera, recuperado, ventas, procesos) cuestan más —son una docena
+ * de lecturas por empresa— y llegan como una promesa que el servidor sigue
+ * resolviendo mientras la página ya se ve (overview/page.tsx). Mientras tanto,
+ * esqueletos; si una empresa no responde, «sin dato», nunca un cero.
  *
  * Dos vistas del mismo dato —tarjetas para leer, tabla para comparar— y un
- * filtro por grupo empresarial. La elección de vista se recuerda en este
- * navegador; es una comodidad, no un dato, y si el almacenamiento no está
- * disponible la pantalla funciona igual.
+ * filtro por grupo empresarial. La vista elegida se recuerda en este
+ * navegador; en el teléfono siempre son tarjetas, que una tabla de nueve
+ * columnas no cabe.
  */
 
 import {
-  type ConsoleRow,
-  type GroupFilter,
-  answersPercent,
-  filterRows,
-  founderTotals,
-  seatsLabel,
-} from '@/lib/founder-console-shape';
-import type { HealthTone } from '@/lib/founder-rules';
-import { relativeTime } from '@/lib/relative-time';
-import { type StatusTone, chipClass } from '@/lib/status-chip';
+  type BusinessMap,
+  type CompanyBusiness,
+  businessTotals,
+  compactCop,
+  companyStatus,
+  fullCop,
+  otherCurrency,
+  pulseHref,
+  rankActionItems,
+} from '@/lib/founder-business-shape';
+import { type ConsoleRow, type GroupFilter, filterRows } from '@/lib/founder-console-shape';
+import { workspaceHref } from '@/lib/workspace-context';
 import { clsx } from 'clsx';
 import {
-  Activity,
   ArrowRight,
   Bell,
-  Building2,
   CalendarClock,
   CircleAlert,
+  Gauge,
   Home,
   LayoutGrid,
   List,
   LockKeyhole,
-  Plug,
-  Repeat,
   Send,
   Settings2,
   ShieldCheck,
   UserPlus,
-  Users,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { ActNowList, BrandMark, BusinessFacts, StatusChip } from './BusinessPieces';
 import { OpenWorkspace } from './OpenWorkspace';
+import { PlanAndUse } from './PlanAndUse';
 
 type View = 'grid' | 'table';
 const VIEW_KEY = 'cortex:founder-console:view';
+
+type BusinessSource = Promise<BusinessMap> | BusinessMap | null;
+
+function isPromise(value: BusinessSource): value is Promise<BusinessMap> {
+  return !!value && typeof (value as Promise<BusinessMap>).then === 'function';
+}
+
+/**
+ * Las cifras de negocio cuando lleguen. Tras un `router.refresh()` llega una
+ * promesa nueva: se conservan las cifras anteriores hasta que la nueva
+ * resuelva, para que las tarjetas no parpadeen a esqueleto.
+ */
+function useBusiness(source: BusinessSource): { business: BusinessMap | null; loading: boolean } {
+  const [state, setState] = useState<{ business: BusinessMap | null; loading: boolean }>(() =>
+    isPromise(source) ? { business: null, loading: true } : { business: source, loading: false },
+  );
+  useEffect(() => {
+    if (!isPromise(source)) {
+      setState({ business: source, loading: false });
+      return;
+    }
+    let alive = true;
+    source.then(
+      (business) => {
+        if (alive) setState({ business, loading: false });
+      },
+      () => {
+        // El servidor nunca la rechaza (founder-business.ts); si pasara, cada
+        // cifra dice «sin dato» en vez de quedarse cargando para siempre.
+        if (alive) setState({ business: {}, loading: false });
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [source]);
+  return state;
+}
 
 function roleLabel(role: ConsoleRow['role']) {
   if (role === 'owner') return 'Fundador';
@@ -70,123 +117,191 @@ function roleLabel(role: ConsoleRow['role']) {
   return 'Colaborador';
 }
 
-const HEALTH_TONE: Record<HealthTone, StatusTone> = {
-  emerald: 'emerald',
-  amber: 'amber',
-  rose: 'rose',
-  neutral: 'neutral',
-};
-
 const signals = [
-  { key: 'approvals', label: 'Aprobaciones', caption: 'Pendientes de decisión', Icon: ShieldCheck },
-  { key: 'actions', label: 'Acciones', caption: 'Listas para revisar', Icon: Send },
-  { key: 'deadlines', label: 'Vencimientos', caption: 'Fechas por atender', Icon: CalendarClock },
-  { key: 'blocked', label: 'Bloqueos', caption: 'Procesos que no avanzan', Icon: CircleAlert },
+  { key: 'approvals', label: 'Aprobaciones', Icon: ShieldCheck },
+  { key: 'actions', label: 'Acciones', Icon: Send },
+  { key: 'deadlines', label: 'Vencimientos', Icon: CalendarClock },
+  { key: 'blocked', label: 'Bloqueos', Icon: CircleAlert },
 ] as const;
 
-const OPEN_CLASS =
-  'inline-flex min-h-8 items-center gap-1.5 rounded-pill px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60';
+const PRIMARY_PILL =
+  'inline-flex min-h-9 items-center gap-1.5 rounded-pill bg-primary px-4 text-xs font-bold text-white transition-colors hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60';
+const QUIET_PILL =
+  'inline-flex min-h-9 items-center gap-1.5 rounded-pill border border-border bg-surface px-3 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
+const ICON_PILL =
+  'grid h-9 w-9 shrink-0 place-items-center rounded-pill text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
 
-function HealthChip({ row }: { row: ConsoleRow }) {
-  if (row.pulse.status === 'unavailable')
-    return <span className={chipClass('rose')}>Sin lectura</span>;
-  if (!row.health) {
-    return row.pulse.pending > 0 ? (
-      <span className={chipClass('amber')}>
-        {row.pulse.pending} {row.pulse.pending === 1 ? 'pendiente' : 'pendientes'}
-      </span>
-    ) : (
-      <span className={chipClass('neutral')}>Al día</span>
-    );
-  }
-  const tone = HEALTH_TONE[row.health.health.tone];
-  return (
-    <span className={chipClass(tone)}>
-      <span
-        aria-hidden
-        className={clsx(
-          'h-1.5 w-1.5 rounded-full',
-          tone === 'emerald' && 'bg-emerald',
-          tone === 'amber' && 'bg-amber',
-          tone === 'rose' && 'bg-rose',
-          tone === 'neutral' && 'bg-ink-faint',
-        )}
-      />
-      {row.health.health.label}
-    </span>
-  );
-}
+/* ------------------------------------------------------------------------- */
+/* Totales                                                                   */
+/* ------------------------------------------------------------------------- */
 
-function AnswersMeter({ row }: { row: ConsoleRow }) {
-  const answers = row.health?.answers ?? null;
-  const pct = answersPercent(answers);
-  if (!answers) return <span className="text-ink-faint">—</span>;
-  const bar =
-    answers.state === 'blocked'
-      ? 'bg-rose'
-      : answers.state === 'grace' || answers.state === 'warning'
-        ? 'bg-amber'
-        : 'bg-primary';
-  return (
-    <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="tabular text-ink">{answers.used.toLocaleString('es-CO')}</span>
-        <span className="tabular text-micro text-ink-faint">
-          {answers.limit === null ? 'sin límite' : `de ${answers.limit.toLocaleString('es-CO')}`}
-        </span>
-      </div>
-      {pct !== null && (
-        <div
-          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-2"
-          role="meter"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={pct}
-          aria-label={`Respuestas usadas: ${pct}%`}
-        >
-          <div
-            className={clsx('h-full rounded-full', bar)}
-            style={{ width: `${Math.max(pct, 3)}%` }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Fact({
-  icon,
+function Tile({
   label,
   value,
+  caption,
   tone,
+  loading,
+  title,
+  className,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: React.ReactNode;
-  tone?: 'rose' | 'amber';
+  caption: React.ReactNode;
+  tone?: 'rose' | 'amber' | 'emerald';
+  loading?: boolean;
+  title?: string;
+  className?: string;
 }) {
   return (
-    <div className="min-w-0">
-      <dt className="flex items-center gap-1.5 text-micro text-ink-faint">
-        <span aria-hidden>{icon}</span>
-        {label}
-      </dt>
-      <dd
-        className={clsx(
-          'tabular mt-1 truncate text-sm font-semibold',
-          tone === 'rose' ? 'text-rose' : tone === 'amber' ? 'text-amber' : 'text-ink',
-        )}
-      >
-        {value}
-      </dd>
+    <div className={clsx('min-w-0 px-4 py-4 sm:px-5 sm:py-5', className)}>
+      <p className="truncate text-xs font-semibold text-ink-muted">{label}</p>
+      {loading ? (
+        <span className="mt-3 block h-9 w-28 animate-pulse rounded-sm bg-surface-2" />
+      ) : (
+        <p
+          title={title}
+          className={clsx(
+            'stat-num mt-2 truncate text-xl sm:text-display',
+            tone === 'rose' && 'text-rose',
+            tone === 'amber' && 'text-amber',
+            tone === 'emerald' && 'text-emerald',
+            !tone && 'text-ink',
+          )}
+        >
+          {value}
+        </p>
+      )}
+      <p className="mt-1 line-clamp-2 text-micro text-ink-faint sm:truncate">
+        {loading ? 'Leyendo…' : caption}
+      </p>
     </div>
   );
 }
 
-function CompanyCard({ row }: { row: ConsoleRow }) {
+function missingNote(missing: number): string {
+  return missing === 1 ? 'sin dato de 1 empresa' : `sin dato de ${missing} empresas`;
+}
+
+function TotalsBand({
+  rows,
+  business,
+  loading,
+  companies,
+}: {
+  rows: ConsoleRow[];
+  business: BusinessMap | null;
+  loading: boolean;
+  companies: number;
+}) {
+  const now = useMemo(() => new Date(), []);
+  const t = useMemo(() => businessTotals(rows, business, now), [rows, business, now]);
+  const owned = t.owned > 0;
+  const others = t.riskOthers.map((o) => otherCurrency(o.amount, o.currency)).join(' · ');
+  const tiles = [
+    owned && (
+      <Tile
+        key="risk"
+        label="Plata en riesgo"
+        loading={loading}
+        value={t.riskMissing === t.owned ? 'Sin dato' : compactCop(t.riskCop)}
+        title={fullCop(t.riskCop)}
+        tone={t.riskCop > 0 ? 'rose' : undefined}
+        caption={
+          [others && `+ ${others}`, t.riskMissing > 0 && missingNote(t.riskMissing)]
+            .filter(Boolean)
+            .join(' · ') || 'Cartera vencida, pagos y multas'
+        }
+      />
+    ),
+    owned && (
+      <Tile
+        key="recovered"
+        label="Recuperado este mes"
+        loading={loading}
+        value={t.recoveredMissing === t.owned ? 'Sin dato' : compactCop(t.recoveredCop)}
+        title={fullCop(t.recoveredCop)}
+        tone={t.recoveredCop > 0 ? 'emerald' : undefined}
+        caption={
+          t.recoveredMissing > 0
+            ? missingNote(t.recoveredMissing)
+            : 'Pagos que llegaron tras avisar'
+        }
+      />
+    ),
+    <Tile
+      key="decisions"
+      label="Decisiones pendientes"
+      value={t.decisions.toLocaleString('es-CO')}
+      tone={t.decisions > 0 ? 'amber' : undefined}
+      caption="Te esperan en todos tus espacios"
+    />,
+    owned && (
+      <Tile
+        key="failing"
+        label="Procesos con error"
+        loading={loading}
+        value={t.failingMissing === t.owned ? 'Sin dato' : t.failing.toLocaleString('es-CO')}
+        tone={t.failing > 0 ? 'amber' : undefined}
+        caption={
+          t.failingMissing > 0 ? missingNote(t.failingMissing) : 'Rutinas y sincronizaciones'
+        }
+      />
+    ),
+    <Tile
+      key="attention"
+      label="Empresas que piden atención"
+      loading={loading && owned}
+      value={
+        <>
+          {t.attention}
+          <span className="text-lg text-ink-faint sm:text-xl"> / {companies}</span>
+        </>
+      }
+      tone={t.attention > 0 ? 'amber' : 'emerald'}
+      caption={t.attention > 0 ? 'Mira «Dónde actuar hoy»' : 'Todas al día'}
+    />,
+  ].filter(Boolean);
+
+  return (
+    <section
+      aria-label="Tus empresas hoy"
+      className={clsx(
+        'grid overflow-hidden rounded-card border border-border bg-surface shadow-card',
+        'grid-cols-2 [&>*:last-child:nth-child(odd)]:col-span-2 lg:[&>*:last-child:nth-child(odd)]:col-span-1',
+        tiles.length === 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-2',
+        'divide-x divide-y divide-border lg:divide-y-0',
+      )}
+    >
+      {tiles}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* Tarjeta                                                                   */
+/* ------------------------------------------------------------------------- */
+
+function CompanyCard({
+  row,
+  business,
+  loading,
+  groupName,
+  now,
+}: {
+  row: ConsoleRow;
+  business: CompanyBusiness | null | undefined;
+  loading: boolean;
+  groupName: string | null;
+  now: Date;
+}) {
   const personal = row.kind === 'personal';
-  const Icon = personal ? Home : Building2;
-  const health = row.health;
+  const status =
+    row.owned && loading && business === undefined ? null : companyStatus(row, business, now);
+  const decisions = row.pulse.status === 'ready' ? row.pulse.approvals + row.pulse.actions : null;
+  const sub = personal
+    ? 'Espacio personal · Solo tú'
+    : [groupName, roleLabel(row.role)].filter(Boolean).join(' · ');
+
   return (
     <article
       className={clsx(
@@ -195,32 +310,65 @@ function CompanyCard({ row }: { row: ConsoleRow }) {
       )}
     >
       <header className="flex items-start gap-3 px-4 pb-3 pt-4">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary">
-          <Icon className="h-4 w-4" aria-hidden />
-        </span>
+        {personal ? (
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-surface-2 text-ink-muted">
+            <Home className="h-4 w-4" aria-hidden />
+          </span>
+        ) : (
+          <BrandMark name={row.name} brand={business?.brand} />
+        )}
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <h3 className="truncate text-base font-semibold text-ink">{row.name}</h3>
-            {row.active && <span className={chipClass('primary')}>En esta pestaña</span>}
-          </div>
+          <h3 className="truncate text-base font-bold text-ink">
+            {row.owned ? (
+              <Link
+                href={`/overview/companies/${encodeURIComponent(row.id)}`}
+                className="hover:text-primary"
+              >
+                {row.name}
+              </Link>
+            ) : (
+              row.name
+            )}
+          </h3>
           <p className="mt-0.5 truncate text-xs text-ink-faint">
-            {personal
-              ? 'Espacio personal · Solo tú'
-              : `${roleLabel(row.role)}${health?.planName ? ` · Plan ${health.planName}` : ''}`}
+            {sub}
+            {row.active ? ' · en esta pestaña' : ''}
           </p>
         </div>
-        <HealthChip row={row} />
+        <StatusChip status={status} />
       </header>
 
-      {row.pulse.status === 'ready' ? (
-        <dl className="grid grid-cols-4 border-y border-border">
-          {signals.map(({ key, label, Icon: SignalIcon }, index) => (
+      {status && status.reasons.length > 0 && (
+        <p
+          className={clsx(
+            'mx-4 mb-3 line-clamp-2 rounded-sm px-3 py-2 text-xs leading-snug',
+            status.tone === 'rose' && 'bg-rose-soft text-rose',
+            status.tone === 'amber' && 'bg-amber-soft text-amber',
+            status.tone === 'neutral' && 'bg-surface-2 text-ink-muted',
+            status.tone === 'emerald' && 'bg-emerald-soft text-emerald',
+          )}
+        >
+          {status.reasons.join(' · ')}
+        </p>
+      )}
+
+      {row.owned ? (
+        <div className="border-t border-border px-4 py-4">
+          <BusinessFacts
+            business={loading && business === undefined ? undefined : (business ?? null)}
+            decisions={decisions}
+            now={now}
+          />
+        </div>
+      ) : row.pulse.status === 'ready' ? (
+        <dl className="grid grid-cols-4 border-t border-border">
+          {signals.map(({ key, label, Icon }, index) => (
             <div
               key={key}
               className={clsx('min-w-0 px-3 py-3', index > 0 && 'border-l border-border')}
             >
               <dt className="flex items-center gap-1 text-micro text-ink-faint">
-                <SignalIcon className="h-3 w-3 shrink-0" aria-hidden />
+                <Icon className="h-3 w-3 shrink-0" aria-hidden />
                 <span className="truncate">{label}</span>
               </dt>
               <dd className="tabular mt-1 text-lg font-semibold text-ink">
@@ -230,107 +378,109 @@ function CompanyCard({ row }: { row: ConsoleRow }) {
           ))}
         </dl>
       ) : (
-        <p className="border-y border-border px-4 py-4 text-xs leading-relaxed text-rose">
-          Cortex no pudo leer este espacio. Los demás resultados siguen separados y disponibles.
+        <p className="border-t border-border px-4 py-4 text-xs leading-relaxed text-ink-muted">
+          Cortex no pudo leer este espacio ahora. Los demás siguen separados y disponibles.
         </p>
       )}
 
-      {health && health.status === 'ready' && (
-        <div className="space-y-4 px-4 py-4">
-          <div>
-            <p className="mb-1.5 text-micro text-ink-faint">Respuestas este mes</p>
-            <AnswersMeter row={row} />
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
-            <Fact
-              icon={<Users className="h-3 w-3" />}
-              label="Asientos"
-              value={seatsLabel(health.seats)}
-              tone={health.seats?.full ? 'amber' : undefined}
-            />
-            <Fact
-              icon={<UserPlus className="h-3 w-3" />}
-              label="Por aceptar"
-              value={health.pendingInvitations}
-            />
-            <Fact
-              icon={<Plug className="h-3 w-3" />}
-              label="Integraciones"
-              value={health.integrations ?? '—'}
-            />
-            <Fact
-              icon={<Repeat className="h-3 w-3" />}
-              label="Rutinas activas"
-              value={health.routines?.active ?? '—'}
-            />
-            <Fact
-              icon={<CircleAlert className="h-3 w-3" />}
-              label="Fallos · 7 días"
-              value={health.routines?.failedRecently ?? '—'}
-              tone={(health.routines?.failedRecently ?? 0) > 0 ? 'amber' : undefined}
-            />
-            <Fact
-              icon={<Activity className="h-3 w-3" />}
-              label="Actividad"
-              value={
-                health.lastActivityAt ? (
-                  <span suppressHydrationWarning>{relativeTime(health.lastActivityAt)}</span>
-                ) : (
-                  'Sin registro'
-                )
-              }
-            />
-          </dl>
-        </div>
-      )}
-      {health && health.status === 'unavailable' && (
-        <p className="px-4 py-4 text-xs text-ink-muted">
-          El plan y el consumo de esta empresa no respondieron. Sus pendientes sí están arriba.
-        </p>
-      )}
-
-      <footer className="mt-auto flex items-center justify-between gap-2 border-t border-border px-3 py-2.5">
+      <footer className="mt-auto flex flex-wrap items-center gap-2 border-t border-border px-3 py-2.5">
+        <OpenWorkspace workspaceId={row.id} href="/dashboard" className={PRIMARY_PILL}>
+          Entrar <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </OpenWorkspace>
         {row.owned ? (
-          <Link
-            href={`/overview/companies/${encodeURIComponent(row.id)}`}
-            className="inline-flex min-h-8 items-center gap-1.5 rounded-pill px-3 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-          >
-            <Settings2 className="h-3.5 w-3.5" aria-hidden /> Administrar
-          </Link>
+          <>
+            <a
+              href={pulseHref(row.id, row.name, business?.pulseView ?? null)}
+              className={QUIET_PILL}
+            >
+              <Gauge className="h-3.5 w-3.5" aria-hidden />
+              <span className="sm:hidden">Pulso</span>
+              <span className="hidden sm:inline">Ver su pulso</span>
+            </a>
+            <a href={workspaceHref(row.id, '/admin/users')} className={QUIET_PILL}>
+              <UserPlus className="h-3.5 w-3.5" aria-hidden /> Invitar
+            </a>
+            <Link
+              href={`/overview/companies/${encodeURIComponent(row.id)}`}
+              aria-label={`Administrar ${row.name}`}
+              title="Ficha, nombre y equipo"
+              className={clsx(ICON_PILL, 'ml-auto')}
+            >
+              <Settings2 className="h-4 w-4" aria-hidden />
+            </Link>
+          </>
         ) : (
-          <span className="px-3 text-micro text-ink-faint">
+          <span className="ml-auto px-2 text-micro text-ink-faint">
             {personal ? 'Cerebro propio de tu espacio' : 'Lo administra su fundador'}
           </span>
         )}
-        <OpenWorkspace
-          workspaceId={row.id}
-          href={row.pulse.pending > 0 ? '/approvals' : '/chat'}
-          className={OPEN_CLASS}
-        >
-          {row.pulse.pending > 0 ? 'Revisar' : 'Abrir'}{' '}
-          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-        </OpenWorkspace>
       </footer>
     </article>
   );
 }
 
-function CompanyTable({ rows }: { rows: ConsoleRow[] }) {
+/* ------------------------------------------------------------------------- */
+/* Tabla                                                                     */
+/* ------------------------------------------------------------------------- */
+
+function Cell({
+  value,
+  sub,
+  tone,
+  loading,
+}: {
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: 'rose' | 'amber' | 'emerald' | 'muted';
+  loading?: boolean;
+}) {
+  if (loading)
+    return <span className="ml-auto block h-4 w-16 animate-pulse rounded-sm bg-surface-2" />;
+  return (
+    <>
+      <span
+        className={clsx(
+          'block font-semibold',
+          value !== 'Sin dato' && 'tabular',
+          tone === 'rose' && 'text-rose',
+          tone === 'amber' && 'text-amber',
+          tone === 'emerald' && 'text-emerald',
+          tone === 'muted' && 'font-normal text-ink-faint',
+          !tone && 'text-ink',
+        )}
+      >
+        {value}
+      </span>
+      {sub && <span className="block text-micro text-ink-faint">{sub}</span>}
+    </>
+  );
+}
+
+function CompanyTable({
+  rows,
+  business,
+  loading,
+  now,
+}: {
+  rows: ConsoleRow[];
+  business: BusinessMap | null;
+  loading: boolean;
+  now: Date;
+}) {
   return (
     <div className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[880px] text-xs">
+        <table className="w-full min-w-[960px] text-xs">
           <thead className="border-b border-border-strong bg-surface-2 text-left">
             <tr>
-              <th className="field-label px-4 py-2.5">Espacio</th>
-              <th className="field-label px-3 py-2.5">Salud</th>
-              <th className="field-label px-3 py-2.5">Plan · asientos</th>
-              <th className="field-label w-40 px-3 py-2.5">Respuestas</th>
-              <th className="field-label px-3 py-2.5 text-right">Personas</th>
-              <th className="field-label px-3 py-2.5 text-right">Integr.</th>
-              <th className="field-label px-3 py-2.5 text-right">Rutinas</th>
-              <th className="field-label px-3 py-2.5 text-right">Pendientes</th>
-              <th className="field-label px-3 py-2.5">Actividad</th>
+              <th className="field-label px-4 py-2.5">Empresa</th>
+              <th className="field-label px-3 py-2.5">Estado</th>
+              <th className="field-label px-3 py-2.5 text-right">Plata en riesgo</th>
+              <th className="field-label px-3 py-2.5 text-right">Recuperado (mes)</th>
+              <th className="field-label px-3 py-2.5 text-right">Ventas del mes</th>
+              <th className="field-label px-3 py-2.5 text-right">Decisiones</th>
+              <th className="field-label px-3 py-2.5 text-right">Procesos con error</th>
+              <th className="field-label px-3 py-2.5 text-right">Puesta en marcha</th>
               <th className="px-3 py-2.5">
                 <span className="sr-only">Acciones</span>
               </th>
@@ -338,103 +488,131 @@ function CompanyTable({ rows }: { rows: ConsoleRow[] }) {
           </thead>
           <tbody>
             {rows.map((row) => {
-              const health = row.health;
+              const b = row.owned
+                ? (business?.[row.id] ?? (loading ? undefined : null))
+                : undefined;
+              const pending = row.owned && b === undefined;
+              const status = pending ? null : companyStatus(row, b, now);
+              const decisions =
+                row.pulse.status === 'ready' ? row.pulse.approvals + row.pulse.actions : null;
+              const na = <Cell value="—" tone="muted" />;
               return (
                 <tr
                   key={row.id}
                   className="border-t border-border align-middle hover:bg-surface-2/50"
                 >
                   <td className="px-4 py-3">
-                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
                       {row.kind === 'personal' ? (
-                        <Home className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-surface-2 text-ink-muted">
+                          <Home className="h-3.5 w-3.5" aria-hidden />
+                        </span>
                       ) : (
-                        <Building2 className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
+                        <BrandMark name={row.name} brand={b?.brand} size="sm" />
                       )}
                       <span className="min-w-0">
-                        <span className="block truncate font-semibold text-ink">{row.name}</span>
+                        {row.owned ? (
+                          <Link
+                            href={`/overview/companies/${encodeURIComponent(row.id)}`}
+                            className="block truncate font-semibold text-ink hover:text-primary"
+                          >
+                            {row.name}
+                          </Link>
+                        ) : (
+                          <span className="block truncate font-semibold text-ink">{row.name}</span>
+                        )}
                         <span className="block text-micro text-ink-faint">
                           {row.kind === 'personal' ? 'Personal' : roleLabel(row.role)}
-                          {row.active ? ' · en esta pestaña' : ''}
                         </span>
                       </span>
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
-                    <HealthChip row={row} />
+                    <StatusChip status={status} />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-ink-muted">
-                    {health?.planName ? (
-                      <>
-                        <span className="text-ink">{health.planName}</span>
-                        <span className="tabular block text-micro text-ink-faint">
-                          {seatsLabel(health.seats)}
-                        </span>
-                      </>
+                  <td className="whitespace-nowrap px-3 py-3 text-right">
+                    {row.owned ? (
+                      <Cell
+                        loading={pending}
+                        value={b?.risk ? compactCop(b.risk.total) : 'Sin dato'}
+                        tone={
+                          !b?.risk ? 'muted' : b.risk.receivablesOverdue > 0 ? 'rose' : undefined
+                        }
+                        sub={
+                          b?.risk && b.risk.overdueInvoices > 0
+                            ? `${b.risk.overdueInvoices} vencidas`
+                            : undefined
+                        }
+                      />
                     ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-3 py-3">
-                    <AnswersMeter row={row} />
-                  </td>
-                  <td className="tabular whitespace-nowrap px-3 py-3 text-right text-ink">
-                    {health ? (
-                      <>
-                        {health.members}
-                        {health.pendingInvitations > 0 && (
-                          <span className="block text-micro text-ink-faint">
-                            +{health.pendingInvitations} por aceptar
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="tabular px-3 py-3 text-right text-ink">
-                    {health?.integrations ?? '—'}
-                  </td>
-                  <td className="tabular whitespace-nowrap px-3 py-3 text-right text-ink">
-                    {health?.routines ? (
-                      <>
-                        {health.routines.active}
-                        {health.routines.failedRecently > 0 && (
-                          <span className="block text-micro text-amber">
-                            {health.routines.failedRecently} con fallo
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="tabular px-3 py-3 text-right font-semibold text-ink">
-                    {row.pulse.status === 'ready' ? row.pulse.pending : '—'}
-                  </td>
-                  <td className="tabular whitespace-nowrap px-3 py-3 text-ink-muted">
-                    {health?.lastActivityAt ? (
-                      <span suppressHydrationWarning>{relativeTime(health.lastActivityAt)}</span>
-                    ) : (
-                      '—'
+                      na
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {row.owned && (
-                        <Link
-                          href={`/overview/companies/${encodeURIComponent(row.id)}`}
-                          aria-label={`Administrar ${row.name}`}
-                          title="Administrar"
-                          className="grid h-8 w-8 place-items-center rounded-pill text-ink-muted hover:bg-surface-2 hover:text-ink"
-                        >
-                          <Settings2 className="h-3.5 w-3.5" aria-hidden />
-                        </Link>
-                      )}
-                      <OpenWorkspace workspaceId={row.id} href="/chat" className={OPEN_CLASS}>
-                        Abrir <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-                      </OpenWorkspace>
-                    </div>
+                    {row.owned ? (
+                      <Cell
+                        loading={pending}
+                        value={b?.recovered ? compactCop(b.recovered.month) : 'Sin dato'}
+                        tone={
+                          !b?.recovered ? 'muted' : b.recovered.month > 0 ? 'emerald' : undefined
+                        }
+                      />
+                    ) : (
+                      na
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right">
+                    {row.owned ? (
+                      <Cell
+                        loading={pending}
+                        value={b?.sales ? compactCop(b.sales.month) : 'Sin dato'}
+                        tone={b?.sales ? undefined : 'muted'}
+                        sub={
+                          b?.sales?.previous != null
+                            ? `mes pasado ${compactCop(b.sales.previous)}`
+                            : undefined
+                        }
+                      />
+                    ) : (
+                      na
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right">
+                    <Cell
+                      value={decisions ?? 'Sin dato'}
+                      tone={decisions === null ? 'muted' : undefined}
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right">
+                    {row.owned ? (
+                      <Cell
+                        loading={pending}
+                        value={b?.failing ? b.failing.total : 'Sin dato'}
+                        tone={!b?.failing ? 'muted' : b.failing.total > 0 ? 'amber' : undefined}
+                      />
+                    ) : (
+                      na
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right">
+                    {row.owned ? (
+                      <Cell
+                        loading={pending}
+                        value={b?.setup ? `${b.setup.percent} %` : 'Sin dato'}
+                        tone={!b?.setup ? 'muted' : b.setup.percent === 100 ? 'emerald' : undefined}
+                      />
+                    ) : (
+                      na
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right">
+                    <OpenWorkspace
+                      workspaceId={row.id}
+                      href="/dashboard"
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-pill px-3 text-xs font-bold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
+                    >
+                      Entrar <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                    </OpenWorkspace>
                   </td>
                 </tr>
               );
@@ -446,25 +624,34 @@ function CompanyTable({ rows }: { rows: ConsoleRow[] }) {
   );
 }
 
+/* ------------------------------------------------------------------------- */
+
 export interface FounderOverviewProps {
   rows: ConsoleRow[];
-  totals: { approvals: number; actions: number; deadlines: number; blocked: number };
   unavailable: number;
   groups: Array<{ id: string; name: string }>;
   ownedCount: number;
   ownedLimit: number;
+  /** Las cifras de negocio de las empresas propias; llegan después de la página. */
+  business: BusinessSource;
+  /** Sólo para el escaparate de desarrollo: la vista inicial. */
+  initialView?: View;
 }
 
 export function FounderOverview({
   rows,
-  totals,
   unavailable,
   groups,
   ownedCount,
   ownedLimit,
+  business: source,
+  initialView = 'grid',
 }: FounderOverviewProps) {
-  const [view, setView] = useState<View>('grid');
+  const [view, setView] = useState<View>(initialView);
   const [filter, setFilter] = useState<GroupFilter>('all');
+  const { business, loading } = useBusiness(source);
+  // El reloj de «hace 3 días»: fijo durante la visita, igual en todas las tarjetas.
+  const now = useMemo(() => new Date(), []);
 
   useEffect(() => {
     try {
@@ -489,124 +676,60 @@ export function FounderOverview({
       ? filter
       : 'all';
   const visible = useMemo(() => filterRows(rows, effectiveFilter), [rows, effectiveFilter]);
-  const admin = useMemo(() => founderTotals(rows), [rows]);
-  const capPct = ownedLimit > 0 ? Math.min(100, Math.round((ownedCount / ownedLimit) * 100)) : 0;
+  const groupName = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
+  const companies = rows.filter((row) => row.kind === 'company').length;
+  const actNow = useMemo(
+    () =>
+      rankActionItems(
+        rows.map((row) => ({
+          row,
+          business: row.owned ? (business?.[row.id] ?? (loading ? undefined : null)) : undefined,
+        })),
+        { now },
+      ),
+    [rows, business, loading, now],
+  );
+  const businessOf = (row: ConsoleRow): CompanyBusiness | null | undefined =>
+    row.owned ? (business?.[row.id] ?? (loading ? undefined : null)) : undefined;
 
   const filters: Array<{ id: GroupFilter; label: string }> = [
-    { id: 'all', label: 'Todos' },
+    { id: 'all', label: 'Todas' },
     ...groups.map((group) => ({ id: group.id, label: group.name })),
     ...(groups.length > 0 ? [{ id: 'ungrouped' as const, label: 'Sin grupo' }] : []),
   ];
 
   return (
     <div className="space-y-6">
-      {/* Banda de pendientes: lo que espera una decisión, sumado entre espacios. */}
+      <TotalsBand rows={rows} business={business} loading={loading} companies={companies} />
+
       <section
-        aria-label="Pendientes de todos tus espacios"
-        className="grid grid-cols-2 overflow-hidden rounded-card border border-border bg-surface shadow-card lg:grid-cols-4"
+        aria-labelledby="donde-actuar"
+        className="rounded-card border border-border bg-surface p-4 shadow-card sm:p-5"
       >
-        {signals.map(({ key, label, caption, Icon }, index) => (
-          <div
-            key={key}
-            className={clsx(
-              'min-w-0 px-4 py-4 sm:px-5 sm:py-5',
-              index % 2 === 1 && 'border-l border-border',
-              index > 1 && 'border-t border-border lg:border-t-0',
-              index === 2 && 'lg:border-l',
-            )}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <p className="truncate text-xs font-medium text-ink-muted">{label}</p>
-              <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-            </div>
-            <p className="stat-num mt-3 text-display text-ink">{totals[key]}</p>
-            <p className="mt-1 truncate text-micro text-ink-faint">{caption}</p>
-          </div>
-        ))}
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="donde-actuar" className="text-lg font-extrabold text-ink">
+            Dónde actuar hoy
+          </h2>
+          <p className="text-micro text-ink-faint">
+            Lo más importante entre todas tus empresas, primero lo que más pesa.
+          </p>
+        </div>
+        <ActNowList items={actNow} loading={loading && ownedCount > 0} />
       </section>
 
-      {/* Administración: sólo cuenta empresas propias. */}
-      {ownedCount > 0 && (
-        <section
-          aria-label="Administración de tus empresas"
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-        >
-          <div className="rounded-card border border-border bg-surface px-4 py-3.5">
-            <div className="flex items-baseline justify-between gap-2">
-              <p className="text-xs text-ink-muted">Empresas propias</p>
-              <p className="tabular text-sm font-semibold text-ink">
-                {ownedCount} de {ownedLimit}
-              </p>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
-              <div
-                className={clsx('h-full rounded-full', capPct >= 100 ? 'bg-amber' : 'bg-primary')}
-                style={{ width: `${Math.max(capPct, 4)}%` }}
-              />
-            </div>
-            <p className="mt-1.5 text-micro text-ink-faint">
-              {ownedCount >= ownedLimit
-                ? 'Llegaste al tope de empresas por cuenta.'
-                : `Puedes crear ${ownedLimit - ownedCount} más.`}
-            </p>
-          </div>
-          <Link
-            href="/overview/people"
-            className="group rounded-card border border-border bg-surface px-4 py-3.5 transition-colors hover:border-border-strong"
-          >
-            <p className="flex items-center justify-between text-xs text-ink-muted">
-              Personas en tus empresas
-              <ArrowRight className="h-3.5 w-3.5 text-ink-faint transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" />
-            </p>
-            <p className="tabular mt-1 text-lg font-semibold text-ink">{admin.members}</p>
-            <p className="text-micro text-ink-faint">
-              {admin.pendingInvitations > 0
-                ? `${admin.pendingInvitations} ${admin.pendingInvitations === 1 ? 'invitación' : 'invitaciones'} por aceptar`
-                : 'Sin invitaciones pendientes'}
-            </p>
-          </Link>
-          <div className="rounded-card border border-border bg-surface px-4 py-3.5">
-            <p className="text-xs text-ink-muted">Rutinas con fallos · 7 días</p>
-            <p
-              className={clsx(
-                'tabular mt-1 text-lg font-semibold',
-                admin.failedRoutines > 0 ? 'text-amber' : 'text-ink',
-              )}
-            >
-              {admin.failedRoutines}
-            </p>
-            <p className="text-micro text-ink-faint">Ejecuciones con error en tus empresas</p>
-          </div>
-          <div className="rounded-card border border-border bg-surface px-4 py-3.5">
-            <p className="text-xs text-ink-muted">Empresas que piden atención</p>
-            <p
-              className={clsx(
-                'tabular mt-1 text-lg font-semibold',
-                admin.attention > 0 ? 'text-amber' : 'text-emerald',
-              )}
-            >
-              {admin.attention}
-            </p>
-            <p className="text-micro text-ink-faint">Cupo, cobro, rutinas o bloqueos</p>
-          </div>
-        </section>
-      )}
-
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-ink">Tus espacios</h2>
+          <h2 className="text-lg font-extrabold text-ink">Tus empresas</h2>
           <p className="mt-1 text-xs text-ink-muted">
-            Cada empresa mantiene sus datos, conexiones y cerebro separados.
+            Cada una mantiene sus datos, conexiones y cerebro separados. «Entrar» la abre en esta
+            pestaña sin cambiar las demás.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/notifications"
-            className="inline-flex min-h-9 items-center gap-2 rounded-pill border border-border bg-surface px-3 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
-          >
+          <Link href="/notifications" className={QUIET_PILL}>
             <Bell className="h-4 w-4" aria-hidden /> Bandeja global
           </Link>
-          <fieldset className="inline-flex rounded-pill border border-border bg-surface p-0.5">
+          <fieldset className="hidden rounded-pill border border-border bg-surface p-0.5 md:inline-flex">
             <legend className="sr-only">Vista</legend>
             {(
               [
@@ -667,31 +790,52 @@ export function FounderOverview({
         <output className="flex items-start gap-2 rounded-card border border-amber/30 bg-amber-soft px-4 py-3 text-xs leading-relaxed text-ink-muted">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber" aria-hidden />
           {unavailable === 1
-            ? '1 espacio no respondió; sus cifras no están incluidas.'
-            : `${unavailable} espacios no respondieron; sus cifras no están incluidas.`}
+            ? '1 espacio no respondió; sus pendientes no están incluidos.'
+            : `${unavailable} espacios no respondieron; sus pendientes no están incluidos.`}
         </output>
       )}
 
       {visible.length === 0 ? (
         <p className="rounded-card border border-dashed border-border px-4 py-10 text-center text-sm text-ink-muted">
-          Ningún espacio en este grupo todavía.
+          Ninguna empresa en este grupo todavía.
         </p>
-      ) : view === 'grid' ? (
-        <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {visible.map((row) => (
-            <CompanyCard key={row.id} row={row} />
-          ))}
-        </section>
       ) : (
-        <CompanyTable rows={visible} />
+        <>
+          {view === 'table' && (
+            <div className="hidden md:block">
+              <CompanyTable rows={visible} business={business} loading={loading} now={now} />
+            </div>
+          )}
+          <section
+            aria-label="Empresas"
+            className={clsx(
+              'grid gap-4 md:grid-cols-2 2xl:grid-cols-3',
+              view === 'table' && 'md:hidden',
+            )}
+          >
+            {visible.map((row) => (
+              <CompanyCard
+                key={row.id}
+                row={row}
+                business={businessOf(row)}
+                loading={loading}
+                groupName={row.groupId ? (groupName.get(row.groupId) ?? null) : null}
+                now={now}
+              />
+            ))}
+          </section>
+        </>
       )}
+
+      <PlanAndUse rows={rows} ownedCount={ownedCount} ownedLimit={ownedLimit} />
 
       <aside className="flex items-start gap-3 rounded-card border border-border bg-surface-2 px-4 py-3 text-xs leading-relaxed text-ink-muted">
         <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
         <p>
-          Esta consola consolida cantidades operativas. Los valores financieros permanecen por
-          empresa y moneda; Cortex no suma monedas o periodos incompatibles. Plan, asientos y
-          personas sólo se muestran en las empresas que fundaste.
+          Las cifras de plata se suman sólo en pesos y sólo entre las empresas que fundaste; lo que
+          esté en otra moneda va aparte, con su código. «Sin dato» quiere decir que esa cifra no se
+          pudo leer ahora, no que sea cero. En las empresas donde eres gerente o colaborador ves tus
+          pendientes; su negocio lo ve su fundador.
         </p>
       </aside>
     </div>

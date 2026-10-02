@@ -1,3 +1,8 @@
+import {
+  CompanyBusinessSection,
+  CompanyBusinessSkeleton,
+  CompanyRecentActivity,
+} from '@/components/overview/CompanySections';
 import { FounderPeople } from '@/components/overview/FounderPeople';
 import { RenameCompany } from '@/components/overview/RenameCompany';
 import { PageHeader } from '@/components/ui/page-header';
@@ -25,11 +30,16 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * La ficha de UNA empresa propia: salud, plan, equipo y atajos para entrar.
+ * La ficha de UNA empresa propia: cómo va su negocio, lo que pasó en ella,
+ * y debajo su plan, su equipo y los atajos para entrar.
+ *
+ * El negocio y la actividad son lecturas más pesadas (cartera, recuperado,
+ * jornada) y van cada una en su Suspense: el plan y el equipo se ven primero.
  *
  * El id de la URL sólo dice CUÁL; lo que permite verla es que esté entre las
  * empresas de las que la cuenta es fundadora, leídas de `ba_member` en esta
@@ -75,13 +85,6 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
         title={company.name}
         subtitle={`Empresa que fundaste${health.planName ? ` · Plan ${health.planName}` : ''}${health.createdAt ? ` · creada el ${new Date(health.createdAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}`}
         icon={<Building2 className="h-5 w-5" />}
-        actions={
-          <span
-            className={chipClass(health.health.tone === 'neutral' ? 'neutral' : health.health.tone)}
-          >
-            {health.health.label}
-          </span>
-        }
       />
 
       {health.status === 'unavailable' && (
@@ -90,10 +93,28 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
         </p>
       )}
 
-      <section
-        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-        aria-label="Estado de la empresa"
-      >
+      <div className="mb-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <Suspense fallback={<CompanyBusinessSkeleton />}>
+          <CompanyBusinessSection company={company} email={context.user.email} health={health} />
+        </Suspense>
+        <Suspense
+          fallback={
+            <div className="h-64 animate-pulse rounded-card border border-border bg-surface" />
+          }
+        >
+          <CompanyRecentActivity company={company} email={context.user.email} />
+        </Suspense>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <h2 className="text-lg font-extrabold text-ink">Plan y uso</h2>
+        <span
+          className={chipClass(health.health.tone === 'neutral' ? 'neutral' : health.health.tone)}
+        >
+          {health.health.label}
+        </span>
+      </div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Plan y uso">
         <StatCard
           label="Asientos"
           value={seatsLabel(health.seats)}

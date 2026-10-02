@@ -3,6 +3,7 @@ import { CompanyGroups } from '@/components/overview/CompanyGroups';
 import { FounderOverview } from '@/components/overview/FounderOverview';
 import { FounderTabs } from '@/components/overview/FounderTabs';
 import { PageHeader } from '@/components/ui/page-header';
+import { readOwnedBusiness } from '@/lib/founder-business';
 import { readFounderConsole } from '@/lib/founder-console';
 import { buildConsoleRows } from '@/lib/founder-console-shape';
 import { requireFounderContext } from '@/lib/founder-guard';
@@ -19,12 +20,23 @@ export const dynamic = 'force-dynamic';
  * Todas las lecturas se hacen aquí, en el servidor, a partir de las membresías
  * y propiedades que `requireFounderContext` leyó de `ba_member`; el componente
  * de cliente sólo filtra y cambia de vista sobre lo que ya recibió.
+ *
+ * Dos tiempos: los pendientes y el plan de cada empresa se esperan (son
+ * conteos baratos) y la página se pinta con ellos; las cifras de negocio
+ * —cartera, recuperado, ventas, procesos, puesta en marcha— se piden en
+ * paralelo y viajan como una PROMESA sin esperar: React la sigue resolviendo
+ * en el mismo flujo de respuesta y las tarjetas se llenan cuando llega
+ * (founder-business.ts lee de a pocas empresas, cada cifra con su tope).
  */
 export default async function OverviewPage({
   searchParams,
 }: { searchParams: Promise<{ inicio?: string }> }) {
   const { inicio } = await searchParams;
   const context = await requireFounderContext();
+  // Con una sola empresa propia y llegando desde `/`, lo más probable es que
+  // esta página redirija: no se gasta la lectura de negocio hasta saberlo.
+  const mayRedirect = inicio === '1' && context.owned.length <= 1;
+  let business = mayRedirect ? null : readOwnedBusiness(context.owned, context.user.email);
   const data = await readFounderConsole(context.accountId, context.user.email, context.owned);
   const rows = buildConsoleRows(
     data.overview,
@@ -44,13 +56,14 @@ export default async function OverviewPage({
       redirect(companies[0] ? workspaceHref(companies[0].id, '/dashboard') : '/dashboard');
     }
   }
+  business ??= readOwnedBusiness(context.owned, context.user.email);
   return (
     <>
       <PageHeader
         title={founder ? 'Centro de mando' : 'Inicio global'}
         subtitle={
           founder
-            ? 'Salud, consumo, equipo y pendientes de cada empresa que diriges, en una sola vista.'
+            ? 'Cómo va cada empresa que diriges y dónde actuar hoy, en una sola vista.'
             : 'Decisiones, riesgos y pendientes de todos los espacios a los que tienes acceso.'
         }
         icon={<LayoutDashboard className="h-5 w-5" />}
@@ -69,7 +82,7 @@ export default async function OverviewPage({
       <FounderTabs current="companies" showPeople={founder} />
       <FounderOverview
         rows={rows}
-        totals={data.overview.totals}
+        business={business}
         unavailable={data.overview.unavailable}
         groups={data.groups.map((group) => ({ id: group.id, name: group.name }))}
         ownedCount={data.ownedCount}
