@@ -78,6 +78,10 @@ export const JOBS: JobSpec[] = [
   // Carpetas de Drive que llenan tablas (0162): cada 10 minutos, el pulso de
   // drive/sync. Ver apps/web/inngest/functions/drive-table.ts.
   { name: 'drive-table/dispatch', cron: '*/10 * * * *', retryLimit: 1, concurrency: 1 },
+  // Programas contables (Siigo…) que llenan tablas y cartera (0165): cada 15
+  // minutos decide qué conexiones tocan (cada una tiene su intervalo, 60 min
+  // por defecto). Ver apps/web/inngest/functions/accounting-sync.ts.
+  { name: 'accounting/dispatch', cron: '*/15 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'actions/sweep.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'management/workflow.dispatch', cron: '*/15 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'management/workflow.advance', retryLimit: 2, concurrency: 5 },
@@ -115,6 +119,10 @@ export const JOBS: JobSpec[] = [
   // Lee documentos con el modelo: sin reintento (la siguiente corrida retoma
   // lo que falte) y una corrida por carpeta a la vez.
   { name: 'drive-table/run', retryLimit: 0, concurrency: 2, singletonKeyFrom: 'syncId' },
+  // Sin clave única: una carga a medias se re-encola a sí misma mientras corre,
+  // y la toma en la base (`claimAccountingConnection`) ya impide dos a la vez.
+  // Sin reintento: la siguiente corrida retoma desde el cursor.
+  { name: 'accounting/run', retryLimit: 0, concurrency: 3 },
   { name: 'goals/watch.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'learning/pass.workspace', retryLimit: 1, concurrency: 1 },
   { name: 'memory/derive.user', retryLimit: 1, concurrency: 5 },

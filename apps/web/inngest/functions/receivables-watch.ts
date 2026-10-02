@@ -13,6 +13,7 @@ import {
   claimReceivableNotice,
   emailsFor,
   moneyAtRisk,
+  noticeColumn,
   orgAdmins,
   overdueReceivableInvoices,
   overdueStage,
@@ -93,7 +94,14 @@ export const receivablesWatchWorkspaceJob: JobHandler = async ({ event, step }) 
     for (const invoice of overdue) {
       const stage = overdueStage(invoice.daysOverdue);
       if (!stage) continue;
-      if (await claimReceivableNotice(db, { invoiceId: invoice.id, stage, sentOn: today }))
+      if (
+        await claimReceivableNotice(db, {
+          invoiceId: invoice.id,
+          stage,
+          sentOn: today,
+          source: invoice.source,
+        })
+      )
         claimed.push({ invoice, stage });
     }
     if (!claimed.length) return { crossed: 0 };
@@ -103,7 +111,7 @@ export const receivablesWatchWorkspaceJob: JobHandler = async ({ event, step }) 
         await db
           .from('receivable_notices')
           .delete()
-          .eq('extraction_id', c.invoice.id)
+          .eq(noticeColumn(c.invoice.source), c.invoice.id)
           .eq('stage', c.stage)
           .eq('sent_on', today);
     };

@@ -212,6 +212,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   trackers_syncs: 'Ver las tablas que se llenan solas',
   trackers_sync_from_drive_folder: 'Llenar una tabla desde una carpeta de Drive',
   trackers_drive_syncs: 'Ver las carpetas de Drive que llenan tablas',
+  accounting_status: 'Ver cómo va el programa contable',
+  accounting_sync_now: 'Traer ya los datos del programa contable',
   trackers_define: 'Crear o cambiar una tabla',
   trackers_list: 'Ver las tablas inventadas',
   trackers_query: 'Consultar la tabla',

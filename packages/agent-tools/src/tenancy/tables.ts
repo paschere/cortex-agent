@@ -441,6 +441,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // Tenant las dos: el libro guarda lo que se leyó de documentos de la empresa.
   drive_folder_syncs: tenant(),
   drive_folder_sync_files: tenant(),
+  // 0165: la conexión con un programa contable (Siigo…) y las facturas por
+  // cobrar que trae. Tenant las dos: la primera guarda la llave cifrada de la
+  // empresa en ese programa; la segunda, su cartera.
+  accounting_connections: tenant(),
+  accounting_invoices: tenant(),
 
   // --- Vistas (migración 0156) ------------------------------------------------
   // Pantallas armadas sobre las tablas de arriba. Tenant las tres. La vista es

@@ -1,3 +1,4 @@
+import { accountingDispatch, accountingRun } from './accounting-sync';
 import { actionsSweepDispatch, actionsSweepWorkspace } from './actions-sweep';
 import { activationDispatch, activationRun } from './activation-followup';
 import { commitmentsWatchDispatch, commitmentsWatchWorkspace } from './commitments-watch';
@@ -47,6 +48,8 @@ export {
   tableSyncSetup,
   driveTableDispatch,
   driveTableRun,
+  accountingDispatch,
+  accountingRun,
   goalsWatchDispatch,
   goalsWatchWorkspace,
   gmailBackfillUser,
@@ -95,6 +98,8 @@ export const functions = [
   tableSyncSetup,
   driveTableDispatch,
   driveTableRun,
+  accountingDispatch,
+  accountingRun,
   goalsWatchDispatch,
   goalsWatchWorkspace,
   gmailBackfillUser,

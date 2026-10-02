@@ -808,6 +808,10 @@ export interface ReceivablesResult {
   byCurrency: ReceivablesCurrency[];
   /** Sobre cuántas facturas confirmadas está hecha la cifra. */
   confirmedInvoices: number;
+  /** Facturas abiertas traídas de un programa contable conectado (0165), con su saldo. */
+  accountingInvoices: number;
+  /** De qué programas ('siigo'). */
+  accountingSystems: string[];
   /** Facturas leídas que nadie ha revisado. NO están en la cifra. */
   pendingExcluded: number;
   /** Confirmadas pero sin moneda escrita: no se pueden restar contra nada. */
@@ -839,6 +843,7 @@ const SCAN_LIMIT = 1000;
 function applyPayments(payments: PaymentRow[]) {
   const appliedTo = new Map<string, number>();
   const linkedPayments: Array<{ key: string; amount: number }> = [];
+  const unlinked: Array<{ invoiceNumber: string | null; amount: number }> = [];
   let unappliedPayments = 0;
   let unappliedAmount = 0;
   for (const p of payments) {
@@ -850,13 +855,122 @@ function applyPayments(payments: PaymentRow[]) {
     } else {
       unappliedPayments += 1;
       unappliedAmount += signed;
+      unlinked.push({ invoiceNumber: p.invoice_number ?? null, amount: signed });
     }
   }
-  return { appliedTo, linkedPayments, unappliedPayments, unappliedAmount };
+  return { appliedTo, linkedPayments, unlinked, unappliedPayments, unappliedAmount };
+}
+
+// ---------------------------------------------------------------------------
+// Facturas de un programa contable conectado (0165)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que la cartera lee de una factura traída de Siigo (u otro programa).
+ *
+ * LA REGLA: el saldo lo dice el programa contable, que ya descontó sus propios
+ * recibos, así que a estas facturas NO se les resta nada de `payments` —sería
+ * descontar dos veces el mismo abono—. Y una factura que también existe como
+ * documento confirmado, con el mismo número, cuenta UNA vez: la del documento,
+ * que una persona revisó.
+ */
+const ACCOUNTING_INVOICE_COLUMNS =
+  'id, source_system, doc_number, client_id, counterparty_name, currency, total, balance, issued_on, due_on';
+
+interface AccountingInvoiceRow {
+  id: string;
+  source_system: string;
+  doc_number: string;
+  client_id: string | null;
+  counterparty_name: string | null;
+  currency: string;
+  total: number | string;
+  balance: number | string;
+  issued_on: string | null;
+  due_on: string | null;
+}
+
+/** «FV-2-22», «fv 2 22» y «FV2-22» son el mismo número. */
+export function docNumberKey(raw: string | null | undefined): string {
+  return (raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+async function openAccountingInvoices(
+  db: SupabaseClient,
+  opts: { clientId?: string; dueBefore?: string },
+): Promise<AccountingInvoiceRow[]> {
+  let q = db
+    .from('accounting_invoices')
+    .select(ACCOUNTING_INVOICE_COLUMNS)
+    .gt('balance', 0)
+    .eq('annulled', false);
+  if (opts.clientId) q = q.eq('client_id', opts.clientId);
+  if (opts.dueBefore) q = q.lt('due_on', opts.dueBefore);
+  const { data, error } = await q.limit(SCAN_LIMIT);
+  if (error) throw error;
+  return (data ?? []) as AccountingInvoiceRow[];
+}
+
+/** Los números de las facturas por cobrar confirmadas como documento. */
+async function confirmedReceivableNumbers(db: SupabaseClient): Promise<Set<string>> {
+  const { data, error } = await db
+    .from('document_extractions')
+    .select('doc_number')
+    .eq('review_state', 'confirmed')
+    .eq('doc_type', 'invoice')
+    .eq('financial_role', 'receivable')
+    .limit(SCAN_LIMIT);
+  if (error) throw error;
+  return new Set(
+    ((data ?? []) as Array<{ doc_number: string | null }>)
+      .map((r) => docNumberKey(r.doc_number))
+      .filter(Boolean),
+  );
+}
+
+/**
+ * De los pagos sin factura enlazada, los que nombran una factura de un programa
+ * contable: ésos ya están descontados en el saldo que dice el programa, así
+ * que no son «pagos que no se pudieron atribuir».
+ */
+async function paymentsSettledInAccounting(
+  db: SupabaseClient,
+  unlinked: Array<{ invoiceNumber: string | null; amount: number }>,
+): Promise<{ count: number; amount: number }> {
+  const numbers = [
+    ...new Set(unlinked.map((u) => u.invoiceNumber).filter((n): n is string => Boolean(n))),
+  ];
+  if (!numbers.length) return { count: 0, amount: 0 };
+  const known = new Set<string>();
+  for (let i = 0; i < numbers.length; i += 200) {
+    const { data, error } = await db
+      .from('accounting_invoices')
+      .select('doc_number')
+      .in('doc_number', numbers.slice(i, i + 200))
+      .limit(SCAN_LIMIT);
+    if (error) throw error;
+    for (const r of (data ?? []) as Array<{ doc_number: string }>) known.add(r.doc_number);
+  }
+  let count = 0;
+  let amount = 0;
+  for (const u of unlinked)
+    if (u.invoiceNumber && known.has(u.invoiceNumber)) {
+      count += 1;
+      amount += u.amount;
+    }
+  return { count, amount };
 }
 
 export interface OverdueInvoice {
+  /** El id de la extracción (documento) o de `accounting_invoices` (programa contable). */
   id: string;
+  /**
+   * De dónde salió: un documento confirmado (lo de siempre; también cuando
+   * falta) o un programa contable conectado (0165).
+   */
+  source?: 'document' | 'accounting';
+  /** El programa contable ('siigo'), cuando `source` es 'accounting'. */
+  system?: string | null;
   docNumber: string | null;
   clientId: string | null;
   counterparty: string | null;
@@ -895,10 +1009,35 @@ export async function overdueReceivableInvoices(
     currency: string | null;
     due_on: string | null;
   }>;
-  if (!invoices.length) return [];
+  const out: OverdueInvoice[] = [];
+
+  // Las de un programa contable: su saldo, tal cual, sin restar pagos.
+  const accounting = await openAccountingInvoices(db, { dueBefore: today });
+  if (accounting.length) {
+    const confirmed = await confirmedReceivableNumbers(db);
+    for (const inv of accounting) {
+      if (confirmed.has(docNumberKey(inv.doc_number))) continue;
+      const balance = num(inv.balance);
+      const days = inv.due_on ? daysBetween(inv.due_on, today) : null;
+      if (balance == null || balance <= 0.005 || days == null || days <= 0 || !inv.due_on) continue;
+      out.push({
+        id: inv.id,
+        source: 'accounting',
+        system: inv.source_system,
+        docNumber: inv.doc_number,
+        clientId: inv.client_id,
+        counterparty: inv.counterparty_name,
+        currency: inv.currency,
+        balance,
+        dueOn: inv.due_on,
+        daysOverdue: days,
+      });
+    }
+  }
+
+  if (!invoices.length) return out.sort((a, b) => b.balance - a.balance);
   const payments = await listPayments(db, { state: [...COUNTED_STATES], limit: SCAN_LIMIT });
   const { appliedTo } = applyPayments(payments);
-  const out: OverdueInvoice[] = [];
   for (const invoice of invoices) {
     const total = num(invoice.total_amount);
     if (total == null || !invoice.currency || !invoice.due_on) continue;
@@ -909,6 +1048,8 @@ export async function overdueReceivableInvoices(
     if (balance <= 0.005 || days == null || days <= 0) continue;
     out.push({
       id: invoice.id,
+      source: 'document',
+      system: null,
       docNumber: invoice.doc_number,
       clientId: invoice.client_id,
       counterparty: invoice.counterparty_name,
@@ -956,6 +1097,7 @@ export async function receivables(
   if (invoicesRead.error) throw invoicesRead.error;
   const invoices = (invoicesRead.data ?? []) as Array<{
     id: string;
+    doc_number: string | null;
     client_id: string | null;
     total_amount: number | string | null;
     currency: string | null;
@@ -977,11 +1119,15 @@ export async function receivables(
   const {
     appliedTo,
     linkedPayments,
+    unlinked,
     unappliedPayments: unlinkedCount,
     unappliedAmount: unlinkedAmount,
   } = applyPayments(payments);
-  let unappliedPayments = unlinkedCount;
-  let unappliedAmount = unlinkedAmount;
+  // Un pago traído de Siigo que nombra una factura de Siigo ya está descontado
+  // en el saldo que dice Siigo: no es un pago «sin atribuir».
+  const settled = await paymentsSettledInAccounting(db, unlinked);
+  let unappliedPayments = unlinkedCount - settled.count;
+  let unappliedAmount = unlinkedAmount - settled.amount;
 
   interface Bucket extends ReceivablesCurrency {
     ages: Array<{ balance: number; since: string | null }>;
@@ -1028,6 +1174,46 @@ export async function receivables(
     buckets.set(key, bucket);
   }
 
+  // Las facturas de un programa contable conectado (0165), con SU saldo: el
+  // programa ya descontó sus recibos, así que aquí no se les resta nada. Las
+  // que también están como documento confirmado cuentan una vez, la del
+  // documento. Sólo las abiertas: la cartera es lo que falta por cobrar.
+  const accounting = await openAccountingInvoices(db, { clientId: opts.clientId });
+  const confirmedNumbers = new Set(invoices.map((i) => docNumberKey(i.doc_number)).filter(Boolean));
+  let accountingInvoices = 0;
+  const accountingSystems = new Set<string>();
+  for (const inv of accounting) {
+    if (confirmedNumbers.has(docNumberKey(inv.doc_number))) continue;
+    const total = num(inv.total);
+    const balance = num(inv.balance);
+    if (total == null || balance == null || balance <= 0.005) continue;
+    const key = currencyBucket('cartera', inv.currency);
+    const bucket = buckets.get(key) ?? {
+      currency: inv.currency,
+      openInvoices: 0,
+      invoiced: 0,
+      paid: 0,
+      outstanding: 0,
+      ageDays: null,
+      overdue: 0,
+      overdueInvoices: 0,
+      ages: [],
+    };
+    bucket.invoiced += total;
+    bucket.paid += Math.max(total - balance, 0);
+    bucket.openInvoices += 1;
+    bucket.outstanding += balance;
+    bucket.ages.push({ balance, since: inv.issued_on });
+    const days = inv.due_on ? daysBetween(inv.due_on, today) : null;
+    if (days != null && days > 0) {
+      bucket.overdue += balance;
+      bucket.overdueInvoices += 1;
+    }
+    buckets.set(key, bucket);
+    accountingInvoices += 1;
+    accountingSystems.add(inv.source_system);
+  }
+
   // A link to a missing invoice, or to the right invoice in the wrong
   // currency, is evidence we cannot apply. Keep it in the explicit exclusion
   // count instead of silently losing it or crossing currencies.
@@ -1055,16 +1241,23 @@ export async function receivables(
     today,
     byCurrency,
     confirmedInvoices: invoices.length,
+    accountingInvoices,
+    accountingSystems: [...accountingSystems].sort(),
     pendingExcluded,
     withoutCurrency,
     disputedPayments: disputed.length,
     disputedAmount,
     unappliedPayments,
     unappliedAmount,
-    truncated: invoices.length >= SCAN_LIMIT || payments.length >= SCAN_LIMIT,
+    truncated:
+      invoices.length >= SCAN_LIMIT ||
+      payments.length >= SCAN_LIMIT ||
+      accounting.length >= SCAN_LIMIT,
     sentence: describeReceivables({
       byCurrency,
       confirmedInvoices: invoices.length,
+      accountingInvoices,
+      accountingSystems: [...accountingSystems].sort(),
       pendingExcluded,
       withoutCurrency,
       disputedPayments: disputed.length,
@@ -1083,6 +1276,8 @@ export async function receivables(
 export function describeReceivables(input: {
   byCurrency: ReceivablesCurrency[];
   confirmedInvoices: number;
+  accountingInvoices?: number;
+  accountingSystems?: string[];
   pendingExcluded: number;
   withoutCurrency: number;
   disputedPayments: number;
@@ -1099,9 +1294,16 @@ export function describeReceivables(input: {
     return `${formatAmount(c.outstanding)} ${c.currency} ${age} en ${c.openInvoices} factura(s)`;
   });
 
-  const lines = [
-    `Cartera ${parts.join('; ')}, sobre ${input.confirmedInvoices} factura(s) confirmada(s).`,
-  ];
+  const fromSystems = input.accountingInvoices ?? 0;
+  const systems =
+    (input.accountingSystems ?? []).map(systemLabel).join(' y ') || 'el programa contable';
+  const base =
+    fromSystems > 0
+      ? input.confirmedInvoices > 0
+        ? `sobre ${input.confirmedInvoices} factura(s) confirmada(s) y ${fromSystems} abierta(s) traída(s) de ${systems} con el saldo que dice ${systems}`
+        : `sobre ${fromSystems} factura(s) abierta(s) traída(s) de ${systems}, con el saldo que dice ${systems}`
+      : `sobre ${input.confirmedInvoices} factura(s) confirmada(s)`;
+  const lines = [`Cartera ${parts.join('; ')}, ${base}.`];
   const caveats: string[] = [];
   if (input.pendingExcluded > 0) {
     caveats.push(`hay ${input.pendingExcluded} factura(s) sin revisar que no entran en la cifra`);
@@ -1121,6 +1323,12 @@ export function describeReceivables(input: {
   }
   if (caveats.length > 0) lines.push(`Ojo: ${caveats.join('; ')}.`);
   return lines.join(' ');
+}
+
+/** 'siigo' → 'Siigo', para la frase. */
+function systemLabel(system: string): string {
+  if (system === 'quickbooks') return 'QuickBooks';
+  return system.charAt(0).toUpperCase() + system.slice(1);
 }
 
 function formatAmount(value: number): string {

@@ -160,14 +160,31 @@ export function stageLabel(stage: OverdueStage): string {
  */
 export async function claimReceivableNotice(
   db: SupabaseClient,
-  input: { invoiceId: string; stage: OverdueStage; sentOn: string },
+  input: {
+    invoiceId: string;
+    stage: OverdueStage;
+    sentOn: string;
+    /** 0165: una factura de un programa contable se reclama por su propia columna. */
+    source?: OverdueInvoice['source'];
+  },
 ): Promise<boolean> {
   const { error } = await db.from('receivable_notices').insert({
-    extraction_id: input.invoiceId,
+    [noticeColumn(input.source)]: input.invoiceId,
     stage: input.stage,
     sent_on: input.sentOn,
   });
   if (!error) return true;
   if ((error as { code?: string }).code === '23505') return false;
   throw error;
+}
+
+/**
+ * La columna de `receivable_notices` que nombra la factura: la extracción de un
+ * documento (0159) o la factura de un programa contable (0165). Exactamente
+ * una va llena; la base lo exige.
+ */
+export function noticeColumn(
+  source: OverdueInvoice['source'] | undefined,
+): 'extraction_id' | 'accounting_invoice_id' {
+  return source === 'accounting' ? 'accounting_invoice_id' : 'extraction_id';
 }

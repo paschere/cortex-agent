@@ -281,6 +281,9 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     label: 'Ver las carpetas de Drive que llenan tablas',
     icon: 'FolderInput',
   },
+  // Programas contables conectados directo (Siigo…), 0165.
+  accounting_status: { label: 'Ver cómo va el programa contable', icon: 'Calculator' },
+  accounting_sync_now: { label: 'Traer ya los datos del programa contable', icon: 'RefreshCw' },
   trackers_define: { label: 'Crear o cambiar una tabla', icon: 'Table2' },
   trackers_list: { label: 'Ver las tablas inventadas', icon: 'Table2' },
   trackers_query: { label: 'Consultar la tabla', icon: 'Table2' },

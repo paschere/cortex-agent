@@ -80,6 +80,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'emerald',
     icon: 'Coins',
   },
+  accounting: {
+    name: 'Programas contables',
+    blurb:
+      'Siigo conectado directo (Alegra y QuickBooks, próximamente): clientes, productos, facturas y pagos llegan solos a tablas de la empresa, y las facturas con saldo entran a la cartera con el saldo que dice el programa. La llave la conecta un administrador en Integraciones y nunca pasa por el chat.',
+    tone: 'emerald',
+    icon: 'Coins',
+  },
   documents: {
     name: 'Documentos leídos',
     blurb:
@@ -512,6 +519,7 @@ const FAMILY_GROUP: Record<string, string> = {
   sales: 'clients',
   presentations: 'clients',
   payments: 'billing',
+  accounting: 'billing',
   // Con los pagos y no con «Documentos y memoria»: lo que lee este módulo no es
   // documentación, son cifras con un papel detrás. La cartera se calcula
   // restándole los pagos a las facturas que salieron de aquí, así que separar

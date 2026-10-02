@@ -26,6 +26,7 @@ import {
  * @cortex/agent-tools, nada de lo cual puede acercarse a un bundle de cliente.
  */
 
+import { accountingDispatchJob, accountingRunJob } from '@/inngest/functions/accounting-sync';
 import {
   actionsSweepDispatchJob,
   actionsSweepWorkspaceJob,
@@ -94,6 +95,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'receivables/watch.dispatch': receivablesWatchDispatchJob,
   'table-sync/dispatch': tableSyncDispatchJob,
   'drive-table/dispatch': driveTableDispatchJob,
+  'accounting/dispatch': accountingDispatchJob,
   'actions/sweep.dispatch': actionsSweepDispatchJob,
   'management/workflow.dispatch': managementWorkflowDispatchJob,
   'management/workflow.advance': managementWorkflowAdvanceJob,
@@ -120,6 +122,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'table-sync/run': tableSyncRunJob,
   'table-sync/setup': tableSyncSetupJob,
   'drive-table/run': driveTableRunJob,
+  'accounting/run': accountingRunJob,
   'goals/watch.workspace': goalsWatchWorkspaceJob,
   'memory/derive.user': memoryDeriveUserJob,
   'gmail/backfill.user': gmailBackfillUserJob,

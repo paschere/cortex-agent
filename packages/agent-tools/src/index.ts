@@ -136,6 +136,9 @@ export * from './trackers';
 export * from './views';
 export * from './table-sync';
 export * from './drive-table';
+// Programas contables conectados directo (migración 0165): Siigo llena tablas
+// de la empresa como las dos de arriba, y además la cartera y los pagos.
+export * from './accounting';
 // Encargos (migration 0089): a job handed over and worked unattended for
 // minutes or hours. The EXECUTION engine lives in apps/web/lib/errands, which
 // needs Inngest and the orchestrator; what is here is the vocabulary every

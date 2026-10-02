@@ -70,6 +70,7 @@ export {
   OVERDUE_STAGES,
   claimReceivableNotice,
   moneyAtRisk,
+  noticeColumn,
   overdueStage,
   stageLabel,
 } from './risk';

@@ -35,6 +35,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import Link from 'next/link';
+import { AccountingSection } from './_components/AccountingSection';
 import { AddMcpServerForm } from './_components/AddMcpServerForm';
 import { type McpServer, McpServerList } from './_components/McpServerList';
 import { SourceIntake } from './_components/SourceIntake';
@@ -500,6 +501,9 @@ export default async function IntegrationsPage({
           No se pudo conectar: {sp.error}. Inténtalo otra vez desde la tarjeta.
         </div>
       )}
+
+      {/* Programas contables (0165): Siigo hoy. Sólo para administradores. */}
+      <AccountingSection organizationId={user.organization.id} role={user.organization.role} />
 
       {/* Hairlines come from the gap showing the border colour through, so the
           rules stay correct at every breakpoint the grid reflows to. */}
