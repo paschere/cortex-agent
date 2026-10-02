@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { bogotaToday } from '../commitments/shape';
+import { draftsFromForecastAlerts } from '../follow-through/recommendations/sources';
+import { recordRecommendations } from '../follow-through/recommendations/store';
 import { registerTool } from '../index';
 import type { ToolContext } from '../types';
 import { forecast } from './forecast';
@@ -281,6 +283,15 @@ export const ledgerForecast = registerTool({
   handler: async (input, ctx) => {
     const r = await run(ctx, input);
     const { base } = r;
+    // Las alertas de la caja son recomendaciones: quedan anotadas (una por
+    // clase y semana) para medir después si se resolvieron (follow-through,
+    // 0177). Sólo las de la base, nunca las de un escenario inventado; un
+    // fallo al anotar no cambia la respuesta.
+    if (!r.scenario)
+      await recordRecommendations(
+        ctx.db,
+        draftsFromForecastAlerts(base.alerts, { createdFor: ctx.userId }),
+      ).catch(() => undefined);
     const cur = base.currency;
     const lowestWhy = explainWeek(base, base.lowest.week).summary;
     const explanation = [

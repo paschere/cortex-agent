@@ -1,3 +1,5 @@
+import type { RecommendationCandidate } from '../follow-through/recommendations/shape';
+import { subjectKeyOf } from '../follow-through/recommendations/shape';
 import { formatValue } from './compute';
 import { PULSE_DEFAULT_TIMEZONE, type PulseFact, cronWeekdays, longDay, lowerFirst } from './pulse';
 
@@ -317,7 +319,12 @@ export interface WeeklyActivity {
    * —caja en rojo o bajo el mínimo, pagos grandes en semanas apretadas—, ya en
    * palabras. Vacío: no hay libro de plata, o la caja no preocupa.
    */
-  cashAlerts: Array<{ severity: 'warn' | 'critical'; message: string }>;
+  cashAlerts: Array<{
+    severity: 'warn' | 'critical';
+    message: string;
+    /** La clase de alerta (negative_cash, low_cash…): con ella se mide si se resolvió. */
+    kind?: string | null;
+  }>;
   gaps: string[];
 }
 
@@ -472,34 +479,100 @@ function debtorOf(f: PulseFact | undefined): { name: string; owes: string } | nu
  * Qué hacer esta semana, en orden de urgencia, sacado sólo de las cifras: cada
  * número que aparece es el `display` de una cifra. Tres como máximo; si no hay
  * tres cosas que decir, las que haya (relleno no es consejo).
+ *
+ * Es `weeklyRecommendationItems` recortado: la misma lista, en el mismo orden,
+ * sólo el texto. La revisión de verdad (pulse-weekly.ts) usa los ítems, que
+ * además dicen de qué tipo es cada consejo y sobre quién, para ordenarlos con
+ * lo que ya funcionó en esta empresa y para medir después si se siguieron.
  */
 export function weeklyRecommendations(
   facts: PulseFact[],
   comp: Pick<WeeklyComposition, 'worsened' | 'hasBaseline'>,
   opts: { hasPulse: boolean },
 ): string[] {
-  const out: string[] = [];
+  return weeklyRecommendationItems(facts, comp, opts)
+    .map((r) => r.text)
+    .slice(0, 3);
+}
+
+/**
+ * Todas las recomendaciones posibles de la semana, en orden de urgencia y sin
+ * recortar, cada una con su tipo, su sujeto y las cifras del momento (follow-
+ * through, 0177). Sin repetidas.
+ */
+export function weeklyRecommendationItems(
+  facts: PulseFact[],
+  comp: Pick<WeeklyComposition, 'worsened' | 'hasBaseline'>,
+  opts: { hasPulse: boolean; cashKinds?: ReadonlyArray<string | null | undefined> },
+): RecommendationCandidate[] {
+  const out: RecommendationCandidate[] = [];
+  const push = (
+    text: string,
+    kind: RecommendationCandidate['kind'],
+    headline: string,
+    extra: Partial<RecommendationCandidate> = {},
+  ) => {
+    if (out.some((r) => r.text === text)) return;
+    out.push({
+      kind,
+      text,
+      headline,
+      subjectKind: 'company',
+      subjectKey: kind,
+      subjectLabel: null,
+      suggestedAction: null,
+      severity: 'info',
+      baseline: {},
+      ...extra,
+    });
+  };
   const worse = new Set(comp.worsened.map((d) => d.key.replace(/\.semana$/, '')));
   const cash = fact(facts, 'caja.alerta.0');
+  const cashKind = opts.cashKinds?.[0] ?? null;
   const cashLine = cash
     ? `Mira la caja de las próximas semanas: ${cash.display} Pídeme «¿cómo va a estar la caja?» para ver por qué y qué hacer.`
     : null;
+  const pushCash = () => {
+    if (!cashLine || !cash) return;
+    push(cashLine, 'cash_alert', 'mirar la caja de las próximas semanas', {
+      subjectKey: cashKind ?? 'caja',
+      severity: cash.value === 2 ? 'critical' : 'warn',
+      suggestedAction: { toolId: 'ledger.forecast', input: {} },
+      baseline: { alertKind: cashKind ?? null },
+    });
+  };
   // La caja en rojo va primero: lo demás puede esperar una semana, eso no.
-  if (cashLine && cash?.value === 2) out.push(cashLine);
+  if (cashLine && cash?.value === 2) pushCash();
 
   const overdue = fact(facts, 'cartera_vencida');
   const debtor = debtorOf(fact(facts, 'top_deudores.0'));
   if (positive(overdue) && debtor)
-    out.push(
+    push(
       `Cobra primero a ${debtor.name}: es quien más debe (${debtor.owes}) de una cartera vencida de ${overdue.display}.`,
+      'collect_counterparty',
+      `cobrarle primero a ${debtor.name}`,
+      {
+        subjectKind: 'counterparty',
+        subjectKey: subjectKeyOf(debtor.name),
+        subjectLabel: debtor.name,
+        severity: 'warn',
+        baseline: { owes: debtor.owes, overdue: overdue.value },
+      },
     );
   else if (positive(overdue))
-    out.push(`Ponle fecha de cobro a la cartera vencida: suma ${overdue.display}.`);
-  if (cashLine && cash?.value !== 2) out.push(cashLine);
+    push(
+      `Ponle fecha de cobro a la cartera vencida: suma ${overdue.display}.`,
+      'collect_overdue',
+      'ponerle fecha de cobro a la cartera vencida',
+      { severity: 'warn', baseline: { overdue: overdue.value } },
+    );
+  if (cashLine && cash?.value !== 2) pushCash();
   const notices = fact(facts, 'cortex.avisos_cartera');
   if (positive(overdue) && notices && notices.value === 0)
-    out.push(
+    push(
       'Activa en /procesos la cartera que avisa sola, para que Cortex le escriba a cada cliente cuando se le vence una factura.',
+      'automate_collections',
+      'activar la cartera que avisa sola',
     );
 
   const approvals = fact(facts, 'cortex.aprobaciones');
@@ -513,48 +586,86 @@ export function weeklyRecommendations(
         ? `${drafts.display} ${drafts.value === 1 ? 'borrador' : 'borradores'}`
         : null,
     ].filter(Boolean);
-    out.push(
+    push(
       `Revisa lo que espera tu aprobación (${parts.join(' y ')}) en /approvals y /actions: sin tu sí, Cortex no lo hace.`,
+      'review_approvals',
+      'decidir lo que esperaba tu aprobación',
+      { baseline: { pending: (approvals?.value ?? 0) + (drafts?.value ?? 0) } },
     );
   }
 
   const failing = fact(facts, 'cortex.rutina_fallando.0');
   if (failing) {
     const name = /«(.+)»/.exec(failing.label)?.[1] ?? 'la rutina';
-    out.push(
+    push(
       `Arregla «${name}», que falló ${failing.display} ${failing.value === 1 ? 'vez' : 'veces'} esta semana: ábrela en /schedules y mira el error.`,
+      'fix_routine',
+      `arreglar la rutina «${name}»`,
+      {
+        subjectKind: 'routine',
+        subjectKey: subjectKeyOf(name),
+        subjectLabel: name,
+        severity: 'warn',
+        baseline: { errors: failing.value },
+      },
     );
   }
 
   const late = fact(facts, 'compromisos_vencidos');
   if (positive(late))
-    out.push(
+    push(
       `Cierra o ponle nueva fecha a los ${late.display} compromisos vencidos en /commitments.`,
+      'close_commitments',
+      'cerrar o reprogramar los compromisos vencidos',
+      { severity: 'warn', baseline: { count: late.value } },
     );
   const due = fact(facts, 'vencen_semana');
   if (positive(due))
-    out.push(`Prepara los ${due.display} vencimientos de los próximos siete días (/commitments).`);
+    push(
+      `Prepara los ${due.display} vencimientos de los próximos siete días (/commitments).`,
+      'prepare_due',
+      'preparar los vencimientos de la semana',
+    );
   const open = fact(facts, 'pendientes');
   if (positive(open) && (worse.has('pendientes') || out.length < 3))
-    out.push(`Decide los ${open.display} asuntos abiertos de Gerencia (/management).`);
+    push(
+      `Decide los ${open.display} asuntos abiertos de Gerencia (/management).`,
+      'decide_cases',
+      'decidir los asuntos abiertos de Gerencia',
+      { baseline: { count: open.value } },
+    );
   if (worse.has('ventas_mes'))
-    out.push(
+    push(
       'Las ventas del mes van por debajo de hace una semana: revisa con el equipo comercial a los clientes que más compraban.',
+      'review_sales',
+      'revisar con el equipo comercial a los clientes que más compraban',
     );
   if (worse.has('pagos_mes') && !positive(overdue))
-    out.push('Entró menos plata que la semana anterior: confirma los pagos que te prometieron.');
+    push(
+      'Entró menos plata que la semana anterior: confirma los pagos que te prometieron.',
+      'confirm_payments',
+      'confirmar los pagos prometidos',
+    );
 
   if (!opts.hasPulse)
-    out.push(
+    push(
       'Arma el pulso de la empresa (pídeme «dime cómo va la empresa») para que la próxima revisión compare tus cifras semana contra semana.',
+      'setup_pulse',
+      'armar el pulso de la empresa',
     );
   else if (!comp.hasBaseline)
-    out.push(
+    push(
       'Deja corriendo el resumen diario del pulso: con las cifras de cada día guardadas, el próximo lunes te digo qué mejoró y qué empeoró.',
+      'keep_pulse',
+      'dejar corriendo el resumen diario del pulso',
     );
   if (opts.hasPulse && !fact(facts, 'metas_cumplidas'))
-    out.push('Define las metas del mes en /goals para medir cada semana si se van cumpliendo.');
-  return [...new Set(out)].slice(0, 3);
+    push(
+      'Define las metas del mes en /goals para medir cada semana si se van cumpliendo.',
+      'setup_goals',
+      'definir las metas del mes',
+    );
+  return out;
 }
 
 /** Lo que Cortex hizo, en una lista corta y sólo con cifras. */
@@ -626,7 +737,14 @@ export const NO_PULSE_LINE =
 export function renderWeekly(
   comp: Pick<WeeklyComposition, 'span' | 'hasBaseline'>,
   draft: WeeklyDraft,
-  opts: { today: string; hasPulse: boolean; fallback?: boolean; gaps?: string[] },
+  opts: {
+    today: string;
+    hasPulse: boolean;
+    fallback?: boolean;
+    gaps?: string[];
+    /** «Lo que recomendé y qué pasó» (follow-through, 0177): frases ya armadas con reglas. */
+    followUp?: { heading: string; lines: string[] } | null;
+  },
 ): string {
   const clean = (t: string) =>
     t
@@ -651,6 +769,9 @@ export function renderWeekly(
   parts.push(
     `**Lo que Cortex hizo por ti**\n${list(draft.cortex, 'Esta semana Cortex no registró actividad.')}`,
   );
+  const followUp = opts.followUp?.lines.map(clean).filter(Boolean) ?? [];
+  if (opts.followUp && followUp.length)
+    parts.push(`**${opts.followUp.heading}**\n${followUp.map((t) => `- ${t}`).join('\n')}`);
   const next = draft.next.map(clean).filter(Boolean).slice(0, 3);
   if (next.length)
     parts.push(`**Para esta semana**\n${next.map((t, i) => `${i + 1}. ${t}`).join('\n')}`);

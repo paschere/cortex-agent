@@ -115,6 +115,14 @@ const ALLOWED = new Map<string, string>([
     'Cron discovers due workflow IDs across companies; each execution uses a handle pinned to the organization on the event.',
   ],
   [
+    'inngest/functions/autopilot.ts',
+    'Cron. "Which workspaces have the autopilot on at this Bogotá hour" spans the install; the raw handle selects organization_id off autopilot_settings and nothing else. Each id rides on its own event and the run builds every handle (settings, snapshot, items, runTool context, notify) pinned to it.',
+  ],
+  [
+    'inngest/functions/follow-through.ts',
+    'Cron. "Which workspaces have open work, proposed drafts or recent recommendations" spans the install; the raw handle selects organization_id and nothing else. Each id rides on its own event and every read, claim, notice and recommendation in the per-workspace job uses a handle pinned to it.',
+  ],
+  [
     'inngest/functions/work-sync.ts',
     'Cron. "Which workspaces have work to read" (management cases, commitments, proposed actions, recent approvals, a work_settings row) spans the install; the raw handle selects organization_id and nothing else. Each id rides on its own event and syncWork runs with a handle pinned to it; the reassignment notice is built from a scoped handle too.',
   ],

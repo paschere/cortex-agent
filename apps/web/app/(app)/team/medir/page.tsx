@@ -1,4 +1,5 @@
 import { MeasureSettings } from '@/components/team/MeasureSettings';
+import { OverdueDigestToggle } from '@/components/team/OverdueDigestToggle';
 import { pillLink } from '@/components/team/pieces';
 import type { TrackerOption } from '@/components/team/types';
 import { PageHeader } from '@/components/ui/page-header';
@@ -7,10 +8,16 @@ import { getOrgScopedClient } from '@/lib/supabase/service';
 import { isFounder, managesTeam, teamHrefs } from '@/lib/team/read';
 import { CONNECT_WORK_PROMPT, chatPath } from '@/lib/team/shape';
 import { workspaceHref } from '@/lib/workspace-context';
-import { listTrackers, listWorkItems, readWorkSettings } from '@cortex/agent-tools';
+import {
+  listTrackers,
+  listWorkItems,
+  readOverdueDigestEnabled,
+  readWorkSettings,
+} from '@cortex/agent-tools';
 import { ArrowLeft, MessageSquareText, Ruler } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { setOverdueDigest } from '../actions';
 import { TEAM_ACTIONS } from '../team-actions';
 
 export const dynamic = 'force-dynamic';
@@ -25,10 +32,13 @@ export default async function TeamMeasurePage() {
   const hrefs = teamHrefs(user.organization.id, { founder: isFounder(user) });
   if (!managesTeam(user)) redirect(hrefs.team({ periodo: 'semana', tipo: null }));
   const db = getOrgScopedClient(user.organization.id);
-  const [settings, trackers, { items }] = await Promise.all([
+  const [settings, trackers, { items }, digestOn] = await Promise.all([
     readWorkSettings(db),
     listTrackers(db, 60),
     listWorkItems(db, { limit: 2000 }),
+    // El interruptor de los recordatorios (0177). Si no se puede leer, se pinta
+    // encendido, que es el valor por defecto de la columna.
+    readOverdueDigestEnabled(db).catch(() => true),
   ]);
   const mappedAs = new Map(settings.trackerMappings.map((m) => [m.tracker, m.workType]));
   const options: TrackerOption[] = trackers.map((t) => ({
@@ -80,6 +90,7 @@ export default async function TeamMeasurePage() {
         visibility={settings.teamVisibility}
         actions={TEAM_ACTIONS}
       />
+      <OverdueDigestToggle initial={digestOn} save={setOverdueDigest} />
     </>
   );
 }

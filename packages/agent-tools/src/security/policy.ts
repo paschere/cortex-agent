@@ -224,6 +224,17 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     deliversContent: true,
     recipientsExplicit: true,
   },
+  // Sending directly (without a draft first) is the same act as sending a
+  // draft, so it gets the same row. Without it the verb heuristic read it as an
+  // internal write, and a mandate applied unattended could let a schedule — or
+  // the autopilot — mail a client with nobody in front, against the promise of
+  // 0099 that no client email leaves unattended.
+  'gmail.send_message': {
+    sensitivity: 'client',
+    blastRadius: 'external_send',
+    deliversContent: true,
+    recipientsExplicit: true,
+  },
   // Creating a draft delivers nothing: it sits in the author's mailbox until a
   // human sends it. Gating it would be friction with no exposure.
   'gmail.draft': { blastRadius: 'internal_write' },

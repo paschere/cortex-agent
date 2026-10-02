@@ -70,6 +70,13 @@ export const NOTIFICATION_KINDS = [
   'table_sync',
   /** A alguien le pasaron trabajo del registro de trabajo (work.assign). Ver la 0174. */
   'work_assigned',
+  /**
+   * Lo redactado lleva tiempo esperando tu visto bueno —o ya tanto que conviene
+   * descartarlo—. Uno por persona y día, nunca uno por borrador. Ver la 0177.
+   */
+  'approval_waiting',
+  /** Tu resumen diario de lo vencido en el registro de trabajo. Ver la 0177. */
+  'work_overdue',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -115,6 +122,8 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   view_activity: 'info',
   table_sync: 'info',
   work_assigned: 'info',
+  approval_waiting: 'warning',
+  work_overdue: 'warning',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -135,6 +144,8 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   view_activity: 'Vistas',
   table_sync: 'Tablas',
   work_assigned: 'Trabajo',
+  approval_waiting: 'Aprobaciones',
+  work_overdue: 'Trabajo',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */

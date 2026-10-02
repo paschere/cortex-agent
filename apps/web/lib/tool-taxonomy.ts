@@ -159,6 +159,20 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'primary',
     icon: 'Target',
   },
+  recommendations: {
+    name: 'Lo que Cortex recomendó',
+    blurb:
+      'Cada recomendación que hizo Cortex —en la revisión semanal, las señales del equipo, las alertas de la caja, el pulso y Gerencia— con si se siguió y qué pasó después, medido sin atribuirse lo que habría pasado igual.',
+    tone: 'sky',
+    icon: 'Target',
+  },
+  autopilot: {
+    name: 'Piloto automático',
+    blurb:
+      'Lo que Cortex hace solo cada mañana: arma el plan del día de la empresa, hace lo rutinario que tiene permitido (atar pagos que casan sin duda, categorizar el libro, reintentar sincronizaciones, recordar vencimientos) y deja la lista corta de lo que necesita tu decisión. Nunca mueve plata.',
+    tone: 'primary',
+    icon: 'Workflow',
+  },
   work: {
     name: 'Registro de trabajo',
     blurb:
@@ -568,6 +582,11 @@ const FAMILY_GROUP: Record<string, string> = {
   // Con Gerencia: el registro de trabajo es la otra mitad de «¿cómo va la
   // empresa?» — quién está cargado, qué se venció, qué se cerró a tiempo.
   work: 'goals',
+  // Con Gerencia: el piloto es Cortex haciendo de gerente cada mañana.
+  autopilot: 'goals',
+  // Con metas y Gerencia: es la otra mitad de «¿cómo va la empresa?» — qué se
+  // aconsejó y si sirvió.
+  recommendations: 'goals',
   vehicles: 'vehicles',
   // Sits with the fleet rather than with automation: a SOAT that lapses is a
   // truck off the road, and the person who cares about one cares about the

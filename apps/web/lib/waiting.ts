@@ -7,6 +7,8 @@ import {
   hydrateOwners,
   listActions,
   listCommitments,
+  resolveHref,
+  resolveStepFor,
   whenPhrase,
 } from '@cortex/agent-tools';
 import { listErrands } from './errands/repository';
@@ -15,14 +17,15 @@ import type { StatusTone } from './status-chip';
 import { getOrgScopedClient } from './supabase/service';
 import { confirmationSummary, toolLabel } from './tool-labels';
 import {
+  LINGERING_DAYS,
   QUEUE_HREF,
   QUEUE_LABEL,
+  STALE_DAYS,
   WAITING_QUEUES,
   type WaitingCounts,
   type WaitingNoticeData,
   type WaitingQueue,
   agoPhrase,
-  LINGERING_DAYS,
   briefingAskAgain,
   lingeringSentence,
   noticeFromCounts,
@@ -75,6 +78,16 @@ export interface WaitingItem {
   /** «redactada hace nueve días», «se venció hace doce días», «expira en 12 min». */
   when: string;
   tone: StatusTone;
+  /**
+   * Lleva tanto esperando que ya es noticia (STALE_DAYS). El índice lo marca
+   * con su edad en vez de dejarlo igual que lo de ayer.
+   */
+  stale?: boolean;
+  /**
+   * «Que Cortex lo resuelva»: el chat con la petición del siguiente paso seguro
+   * ya escrita (follow-through/resolve.ts). Nulo si no hay paso seguro.
+   */
+  resolve?: { label: string; href: string } | null;
 }
 
 export interface WaitingQueueView {
@@ -244,9 +257,7 @@ export async function readWaitingNotice(
   });
   if (!lead) return notice;
 
-  const lingeringWon = Boolean(
-    lingering && lead.ask === briefingAskAgain(lingering.title),
-  );
+  const lingeringWon = Boolean(lingering && lead.ask === briefingAskAgain(lingering.title));
 
   return {
     ...notice,
@@ -371,6 +382,17 @@ async function readApprovals(db: Db, userId: string, now: number): Promise<Previ
   }
 }
 
+/** El botón «Que Cortex lo resuelva» de un pendiente, o nada si no hay paso seguro. */
+function resolveFor(
+  kind: Parameters<typeof resolveStepFor>[0]['kind'],
+  title: string,
+  detail: string | null,
+): WaitingItem['resolve'] {
+  const step = resolveStepFor({ kind, title, detail });
+  const href = resolveHref(step);
+  return step && href ? { label: step.label, href } : null;
+}
+
 function describeToolCall(toolId: string, input: unknown): string {
   const record =
     input && typeof input === 'object' && !Array.isArray(input)
@@ -418,6 +440,8 @@ async function readCommitments(db: Db, now: number): Promise<Preview> {
             ? `se venció ${whenPhrase(v.daysLeft)}`
             : `vence ${whenPhrase(v.daysLeft)}`,
         tone: (v.state === 'overdue' ? 'rose' : 'amber') as StatusTone,
+        stale: v.daysLeft <= -STALE_DAYS,
+        resolve: resolveFor('commitment', v.title, v.counterparty ?? null),
       })),
       error: null,
       // Para un vencimiento, «cuánto lleva esperando» son los días que lleva
@@ -457,13 +481,18 @@ async function readActions(db: Db, userId: string, now: number): Promise<Preview
     return {
       items: oldestFirst.slice(0, PREVIEW).map((row) => {
         const action = adaptAction(row);
+        const title = action.subject || ACTION_KIND_LABEL[action.kind] || 'Correo redactado';
+        const stale = (daysSince(row.created_at, now) ?? 0) >= STALE_DAYS;
         return {
           id: action.id,
           // El asunto del correo, que es como lo llamaría quien lo escribió.
-          title: action.subject || ACTION_KIND_LABEL[action.kind] || 'Correo redactado',
+          title,
           detail: [ACTION_KIND_LABEL[action.kind], row.recipient].filter(Boolean).join(' · '),
           when: `redactada ${agoPhrase(now - Date.parse(row.created_at))}`,
-          tone: 'primary' as StatusTone,
+          // Lo que lleva días parado deja de verse como lo de hoy (0177).
+          tone: (stale ? 'amber' : 'primary') as StatusTone,
+          stale,
+          resolve: stale ? resolveFor('action', title, row.recipient ?? null) : null,
         };
       }),
       error: null,
@@ -499,6 +528,8 @@ async function readErrands(db: Db, organizationId: string, now: number): Promise
         detail: e.openQuestions > 0 ? 'Te preguntó algo y está esperando' : 'Se atascó',
         when: `encargado ${agoPhrase(now - Date.parse(e.createdAt))}`,
         tone: 'amber' as StatusTone,
+        stale: (daysSince(e.createdAt, now) ?? 0) >= STALE_DAYS,
+        resolve: e.openQuestions > 0 ? resolveFor('errand', e.request, null) : null,
       })),
       error: null,
       oldestDays: blocked.length > 0 ? daysSince(blocked[0]?.createdAt ?? '', now) : null,

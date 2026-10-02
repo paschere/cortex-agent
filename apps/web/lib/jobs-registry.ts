@@ -32,6 +32,11 @@ import {
   actionsSweepWorkspaceJob,
 } from '@/inngest/functions/actions-sweep';
 import {
+  autopilotDispatchJob,
+  autopilotRemindJob,
+  autopilotWorkspaceJob,
+} from '@/inngest/functions/autopilot';
+import {
   commitmentsWatchDispatchJob,
   commitmentsWatchWorkspaceJob,
 } from '@/inngest/functions/commitments-watch';
@@ -42,6 +47,10 @@ import { driveSyncJob } from '@/inngest/functions/drive-sync';
 import { driveTableDispatchJob, driveTableRunJob } from '@/inngest/functions/drive-table';
 import { errandRunJob } from '@/inngest/functions/errand-run';
 import { errandSweepJob } from '@/inngest/functions/errand-sweep';
+import {
+  followThroughDispatchJob,
+  followThroughWorkspaceJob,
+} from '@/inngest/functions/follow-through';
 import {
   gmailBackfillUserJob,
   gmailSweepDispatchJob,
@@ -110,6 +119,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'goals/watch.dispatch': goalsWatchDispatchJob,
   'reports/weekly.dispatch': weeklyReportDispatchJob,
   'work/sync.dispatch': workSyncDispatchJob,
+  'follow-through/dispatch': followThroughDispatchJob,
+  'autopilot/dispatch': autopilotDispatchJob,
 
   // --- Por evento: el nombre de siempre, intacto --------------------------
   'errand/advance': errandRunJob,
@@ -136,6 +147,9 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'reports/weekly.workspace': weeklyReportWorkspaceJob,
   'work/sync.workspace': workSyncWorkspaceJob,
   'work/assigned': workAssignedJob,
+  'follow-through/workspace': followThroughWorkspaceJob,
+  'autopilot/workspace': autopilotWorkspaceJob,
+  'autopilot/remind': autopilotRemindJob,
   'dev/task.intake': devTaskIntakeJob,
   'dev/task.queued': devTaskRunJob,
   'dev/task.status': devTaskStatusJob,

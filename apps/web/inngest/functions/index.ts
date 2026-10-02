@@ -1,6 +1,7 @@
 import { accountingDispatch, accountingRun } from './accounting-sync';
 import { actionsSweepDispatch, actionsSweepWorkspace } from './actions-sweep';
 import { activationDispatch, activationRun } from './activation-followup';
+import { autopilotDispatch, autopilotRemind, autopilotWorkspace } from './autopilot';
 import { commitmentsWatchDispatch, commitmentsWatchWorkspace } from './commitments-watch';
 import { devTaskIntake } from './dev-task-intake';
 import { devTaskRun } from './dev-task-run';
@@ -9,6 +10,7 @@ import { driveSync } from './drive-sync';
 import { driveTableDispatch, driveTableRun } from './drive-table';
 import { errandRun } from './errand-run';
 import { errandSweep } from './errand-sweep';
+import { followThroughDispatch, followThroughWorkspace } from './follow-through';
 import { gmailBackfillUser, gmailSweepDispatch, gmailSweepUser } from './gmail-learn';
 import { goalsWatchDispatch, goalsWatchWorkspace } from './goals-watch';
 import { ingestDocument } from './ingest-document';
@@ -33,6 +35,11 @@ import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
 import { workAssigned, workSyncDispatch, workSyncWorkspace } from './work-sync';
 
 export {
+  followThroughDispatch,
+  followThroughWorkspace,
+  autopilotDispatch,
+  autopilotWorkspace,
+  autopilotRemind,
   managementFollowUpDispatch,
   managementFollowUpWorkspace,
   managementWorkflowDispatch,
@@ -81,6 +88,11 @@ export {
   workAssigned,
 };
 export const functions = [
+  followThroughDispatch,
+  followThroughWorkspace,
+  autopilotDispatch,
+  autopilotWorkspace,
+  autopilotRemind,
   workSyncDispatch,
   workSyncWorkspace,
   workAssigned,

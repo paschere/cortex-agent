@@ -1,9 +1,11 @@
 // La tarjeta se fue a `components/approvals/` cuando el chat empezó a montarla
 // también: es la misma decisión en dos sitios y no puede haber dos copias de
 // ella. Ver la cabecera del componente.
+import { ApprovalGroup } from '@/components/approvals/ApprovalGroup';
 import { PendingActionCard } from '@/components/approvals/PendingActionCard';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { approvalGroups } from '@/lib/follow-through/pending-groups';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
@@ -135,6 +137,24 @@ export default async function ApprovalsPage() {
       if (prior) repeatOf.set(p.id, prior.at);
     }),
   );
+  // Las parecidas (misma herramienta, mismo tipo, mismos campos) se ofrecen
+  // juntas: «Aprobar las 6» o «Revisar una por una». Lo que repite algo ya
+  // hecho queda fuera del lote (follow-through/group.ts).
+  const grouped = approvalGroups(pending, repeatOf);
+  const byId = new Map(pending.map((p) => [p.id, p]));
+  const card = (p: PendingActionRow) => (
+    <PendingActionCard
+      key={p.id}
+      id={p.id}
+      toolId={p.tool_id}
+      input={p.input}
+      expiresAt={p.expires_at}
+      decision={p.decision}
+      decidedAt={p.decided_at}
+      decidedVia={p.decided_via}
+      repeatOfAt={repeatOf.get(p.id) ?? null}
+    />
+  );
   const signals = (signalsRes.data ?? []) as unknown as SignalRow[];
   const failing = ((jobsRes.data ?? []) as unknown as JobRow[])
     .map((j) => ({ id: j.id, name: j.name, lastRun: j.scheduled_job_runs?.[0] }))
@@ -217,19 +237,26 @@ export default async function ApprovalsPage() {
                 Esperan tu permiso
               </SectionLabel>
               <div className="space-y-3">
-                {[...pending, ...decided].map((p) => (
-                  <PendingActionCard
-                    key={p.id}
-                    id={p.id}
-                    toolId={p.tool_id}
-                    input={p.input}
-                    expiresAt={p.expires_at}
-                    decision={p.decision}
-                    decidedAt={p.decided_at}
-                    decidedVia={p.decided_via}
-                    repeatOfAt={repeatOf.get(p.id) ?? null}
-                  />
+                {grouped.groups.map((g) => (
+                  <ApprovalGroup
+                    key={g.key}
+                    queue="approvals"
+                    title={g.title}
+                    subtitle={g.subtitle}
+                    actionLabel={g.actionLabel}
+                    items={g.items}
+                  >
+                    {g.ids.map((id) => {
+                      const row = byId.get(id);
+                      return row ? card(row) : null;
+                    })}
+                  </ApprovalGroup>
                 ))}
+                {grouped.singleIds.map((id) => {
+                  const row = byId.get(id);
+                  return row ? card(row) : null;
+                })}
+                {decided.map(card)}
               </div>
             </section>
           )}

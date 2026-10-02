@@ -628,6 +628,35 @@ export const CASES: readonly EvalCase[] = [
     needsFamily: 'ledger',
     why: 'ledger.explain_week, the follow-up to a projection. "Semana del 17" pulls gcal; nothing in the words says money.',
   },
+
+  /* ------------------------- selection-only: el piloto automático (2026-10)
+   * Lo que Cortex hace solo cada mañana. Nadie dice «piloto»: dicen «qué
+   * hiciste», «qué vas a hacer», «hazte cargo». Los vecinos que compiten son
+   * management (el parte diario), schedule (rutinas) y payments (cobranza). */
+  {
+    id: 'sel-piloto-que-hiciste',
+    group: 'unrelated',
+    query: '¿qué hiciste hoy por tu cuenta?',
+    gold: [],
+    needsFamily: 'autopilot',
+    why: 'autopilot.status. "Hoy" pulls management.daily_brief and the routines; only "por tu cuenta" says it is what Cortex did alone.',
+  },
+  {
+    id: 'sel-piloto-que-haras',
+    group: 'unrelated',
+    query: 'que vas a hacer hoy en la empresa',
+    gold: [],
+    needsFamily: 'autopilot',
+    why: 'autopilot.plan, the dry run. No accents; the daily brief and views.company_pulse are the near misses.',
+  },
+  {
+    id: 'sel-piloto-hazte-cargo',
+    group: 'unrelated',
+    query: 'hazte cargo de la cobranza',
+    gold: [],
+    needsFamily: 'autopilot',
+    why: 'autopilot.configure (cobro → hacer). "Cobranza" pulls payments and management.start_collection hard.',
+  },
 ] as const;
 
 /**

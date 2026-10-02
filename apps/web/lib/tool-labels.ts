@@ -273,6 +273,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   payments_bank_unmatched: { label: 'Ver lo que entró al banco sin factura', icon: 'SearchCheck' },
   payments_apply_to_invoice: { label: 'Atar el pago a su factura', icon: 'Link' },
   payments_recovered: { label: 'Ver la plata recuperada con Cortex', icon: 'TrendingUp' },
+  // Lo que Cortex recomendó y qué pasó después (0177).
+  recommendations_list: { label: 'Ver lo que te recomendé y qué pasó', icon: 'Lightbulb' },
 
   // El libro de plata (0172): toda la plata de la empresa en un solo libro.
   ledger_record: { label: 'Anotar un movimiento en el libro de plata', icon: 'NotebookPen' },
@@ -293,6 +295,13 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     icon: 'CalendarCheck',
   },
   ledger_set_minimum_cash: { label: 'Fijar la caja mínima de la empresa', icon: 'ShieldAlert' },
+  ledger_categorize_pending: { label: 'Ponerle categoría a lo que no tiene', icon: 'Tags' },
+
+  // El piloto automático (0176): lo que Cortex hace solo cada mañana.
+  autopilot_plan: { label: 'Ver lo que haría el piloto hoy', icon: 'Plane' },
+  autopilot_status: { label: 'Ver lo que hizo el piloto', icon: 'History' },
+  autopilot_configure: { label: 'Configurar el piloto automático', icon: 'Settings' },
+  autopilot_remind: { label: 'Recordarle algo a un compañero', icon: 'BellRing' },
 
   // Metas. `goals_set` está arriba porque se para a pedir permiso.
   goals_offer_metrics: { label: 'Ver qué se puede medir aquí', icon: 'Ruler' },
@@ -318,6 +327,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     label: 'Ver las carpetas de Drive que llenan tablas',
     icon: 'FolderInput',
   },
+  trackers_retry_sync: { label: 'Volver a correr una sincronización', icon: 'RotateCw' },
   // Programas contables conectados directo (Siigo, Alegra, QuickBooks), 0165.
   accounting_status: { label: 'Ver cómo va el programa contable', icon: 'Calculator' },
   accounting_sync_now: { label: 'Traer ya los datos del programa contable', icon: 'RefreshCw' },

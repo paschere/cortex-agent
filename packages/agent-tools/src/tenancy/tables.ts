@@ -497,6 +497,22 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   work_people_meta: tenant(),
   work_settings: tenant(),
 
+  // --- Perseguir lo pendiente y aprender de lo recomendado (migración 0177) --
+  // Los recordatorios ya reclamados (resumen diario de vencidos, aprobaciones
+  // paradas) y cada recomendación de Cortex con lo que pasó después. Tenant
+  // las dos: hablan de personas y clientes de UNA empresa, y la tasa de acierto
+  // que sale de `recommendations` ordena los consejos de esa misma empresa.
+  follow_through_notices: tenant(),
+  recommendations: tenant(),
+
+  // --- Piloto automático (migración 0176) ------------------------------------
+  // La configuración, cada corrida diaria y cada cosa que vio, decidió e hizo.
+  // Tenant las tres: hablan de la cartera, el banco y la gente de UNA empresa,
+  // y una fila ajena aquí sería «hice esto en tu nombre» dicho a otra empresa.
+  autopilot_settings: tenant(),
+  autopilot_runs: tenant(),
+  autopilot_items: tenant(),
+
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first
   // ten minutes. `usage_events` and `usage_counters` are tenant in the strongest

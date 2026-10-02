@@ -237,6 +237,12 @@ export interface ForecastAlert {
   week?: string | null;
   severity: 'info' | 'warn' | 'critical';
   message: string;
+  /**
+   * El cliente del que habla, cuando habla de uno (concentración, paga tarde).
+   * Lo usa el registro de recomendaciones (follow-through, 0177) para saber
+   * después si se le cobró y si pagó; el mensaje no cambia.
+   */
+  counterpartyName?: string | null;
 }
 
 export interface ForecastResult {

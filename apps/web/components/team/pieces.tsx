@@ -2,7 +2,7 @@ import { Panel } from '@/components/ui/panel';
 import type { Choice, ItemRowModel, MetricCell, OutputCell, WeekPoint } from '@/lib/team/screen';
 import type { Trend } from '@/lib/team/shape';
 import { clsx } from 'clsx';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, ExternalLink, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { MarkDoneButton } from './MarkDoneButton';
@@ -283,6 +283,15 @@ export function ItemList({
               </Link>
             ) : (
               <Pill>{i.sourceLabel}</Pill>
+            )}
+            {i.resolve && (
+              <Link
+                href={i.resolve.href}
+                className="inline-flex items-center gap-1 rounded-pill border border-primary/30 px-2.5 py-0.5 text-micro font-semibold text-primary hover:bg-primary/5"
+              >
+                <Sparkles className="h-3 w-3" aria-hidden />
+                {i.resolve.label}
+              </Link>
             )}
             {actions && i.canMarkDone && (
               <MarkDoneButton

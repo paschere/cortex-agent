@@ -2,6 +2,12 @@ import { ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateObject } from 'ai';
 import { z } from 'zod';
+import { kindStats, rankRecommendations } from '../follow-through/recommendations/rank';
+import { FOLLOW_UP_HEADING, followUpSection } from '../follow-through/recommendations/report';
+import {
+  type WeeklyLearning,
+  supabaseWeeklyLearning,
+} from '../follow-through/recommendations/weekly';
 import { registerTool } from '../index';
 import { hasLedgerCash } from '../ledger/forecast-explain';
 import { runForecast } from '../ledger/plans';
@@ -38,7 +44,7 @@ import {
   renderWeekly,
   shiftDay,
   weeklyFacts,
-  weeklyRecommendations,
+  weeklyRecommendationItems,
   weeklyRoutineRow,
   weeklyVersionPrompt,
 } from './pulse-history';
@@ -268,7 +274,7 @@ export async function readWeeklyActivity(
             a.severity === 'critical' || (a.severity === 'warn' && a.kind !== 'concentration'),
         )
         .slice(0, 3)
-        .map((a) => ({ severity: a.severity, message: a.message }));
+        .map((a) => ({ severity: a.severity, message: a.message, kind: a.kind }));
     }),
     step('los cierres de Gerencia', async () => {
       const m = await readWeeklyManagement(db, startIso, endIso);
@@ -371,6 +377,13 @@ export interface WeeklyOptions {
   write?: WeeklyWriter;
   load?: (view: CustomViewRow) => Promise<Map<string, ViewSource>>;
   readActivity?: (db: SupabaseClient, w: ActivityWindow) => Promise<WeeklyActivity>;
+  /**
+   * Lo que la revisión aprende y recuerda (follow-through, 0177): el orden por
+   * tasa de acierto, «Lo que recomendé y qué pasó» y el registro de lo que
+   * recomienda hoy. Por defecto, contra `recommendations`; un fallo aquí nunca
+   * tumba la revisión.
+   */
+  learning?: WeeklyLearning;
 }
 
 /** ¿Ya se escribió la revisión de esta semana en esta vista? Lo dice el historial. */
@@ -462,7 +475,29 @@ export async function runWeeklyReview(
   });
   const comp = weeklyFacts({ today, from, to, current, base, activity });
   const hasPulse = current !== null;
-  const recommendations = weeklyRecommendations(comp.facts, comp, { hasPulse });
+  // Las recomendaciones, ordenadas con lo que ya funcionó en esta empresa (la
+  // caja en rojo y la cartera vencida entran siempre: rank.ts).
+  const learning =
+    opts.learning ??
+    supabaseWeeklyLearning(db, {
+      userId: opts.userId,
+      sharedView: view?.visibility === 'workspace',
+    });
+  const candidates = weeklyRecommendationItems(comp.facts, comp, {
+    hasPulse,
+    cashKinds: activity.cashAlerts.map((a) => a.kind ?? null),
+  });
+  const history = await learning.history().catch(() => []);
+  const chosen = rankRecommendations(candidates, kindStats(history), 3);
+  const recommendations = chosen.map((c) => c.text);
+  // Lo que se recomendó antes, juzgado con los hechos de hoy. Sin lectura de
+  // la caja, la alerta no se da por resuelta: `null` es «no se sabe».
+  const cashRead = !activity.gaps.includes('la proyección de caja');
+  const past = await learning
+    .past({ now, cashAlertKinds: cashRead ? activity.cashAlerts.map((a) => a.kind ?? '') : null })
+    .catch(() => []);
+  const followUp = followUpSection(past, { today, max: 4 });
+  comp.facts.push(...followUp.facts);
   // Lo que la guarda acepta: las cifras, más las frases que se le pasan armadas.
   const grounded: PulseFact[] = [
     ...comp.facts,
@@ -512,7 +547,11 @@ export async function runWeeklyReview(
     hasPulse,
     fallback,
     gaps: activity.gaps,
+    followUp: followUp.lines.length ? { heading: FOLLOW_UP_HEADING, lines: followUp.lines } : null,
   });
+  // Lo recomendado hoy queda guardado con sus cifras, para contarlo la semana
+  // que viene. Una por tipo, sujeto y semana: reescribir no duplica.
+  await learning.record(chosen, now).catch(() => undefined);
 
   let inView = false;
   if (view && view.visibility === 'workspace') {

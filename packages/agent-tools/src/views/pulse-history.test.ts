@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { accountingTableSpec } from '../accounting/tables';
+import type { RecommendationRecord } from '../follow-through/recommendations/shape';
+import type { WeeklyLearning } from '../follow-through/recommendations/weekly';
 import { SAFE_ACTION_CATALOG } from '../safe-actions/catalog';
 import { computeNextRun } from '../schedule/recurrence';
 import type { ToolContext } from '../types';
@@ -918,5 +920,128 @@ describe('la rutina de la revisión semanal', () => {
     expect(store.scheduled_jobs).toHaveLength(1);
     expect(store.scheduled_jobs[0]).toMatchObject({ cron: '0 17 * * 5', notify_email: true });
     expect(second.markdown).toContain('los viernes a las 5:00 p. m.');
+  });
+});
+
+describe('la revisión semanal aprende de lo que recomendó (0177)', () => {
+  const past: RecommendationRecord[] = [
+    {
+      id: 'r-nexa',
+      source: 'weekly_review',
+      kind: 'collect_counterparty',
+      subjectKind: 'counterparty',
+      subjectKey: 'nexa',
+      subjectLabel: 'Nexa',
+      text: 'Cobra primero a Nexa…',
+      headline: 'cobrarle primero a Nexa',
+      suggestedAction: null,
+      expectedEffect: 'collect',
+      severity: 'warn',
+      baseline: {},
+      createdFor: 'u-1',
+      createdAt: '2026-09-21T12:30:00Z',
+      status: 'followed',
+      followedAt: '2026-09-29T15:00:00Z',
+      followEvidence: { what: 'collection_sent', at: '2026-09-29T15:00:00Z', count: 1 },
+      outcome: 'good',
+      outcomeEvidence: { what: 'payment', at: '2026-10-01', amount: 12_000_000, currency: 'COP' },
+      evaluatedAt: null,
+    },
+    {
+      id: 'r-laura',
+      source: 'work_signals',
+      kind: 'rebalance_person',
+      subjectKind: 'person',
+      subjectKey: 'u-laura',
+      subjectLabel: 'Laura',
+      text: 'Reasignar 6 despachos…',
+      headline: 'repartir los despachos de Laura',
+      suggestedAction: null,
+      expectedEffect: 'reduce_load',
+      severity: 'warn',
+      baseline: { workType: 'despacho', open: 15 },
+      createdFor: null,
+      createdAt: '2026-09-22T12:45:00Z',
+      status: 'not_followed',
+      followedAt: null,
+      followEvidence: { what: 'nothing' },
+      outcome: 'none',
+      outcomeEvidence: { what: 'count', from: 15, to: 15 },
+      evaluatedAt: null,
+    },
+  ];
+
+  it('cuenta lo que recomendó y qué pasó, con cifras citables, y guarda lo de esta semana', async () => {
+    const recorded: unknown[] = [];
+    const learning: WeeklyLearning = {
+      // Aquí se ignora siempre «revisa lo que espera tu aprobación»: baja, pero
+      // la cartera vencida sigue primero.
+      history: async () =>
+        Array.from({ length: 6 }, () => ({
+          kind: 'review_approvals' as const,
+          status: 'not_followed' as const,
+          outcome: null,
+        })),
+      past: async () => past,
+      record: async (candidates) => {
+        recorded.push(...candidates);
+        return candidates.length;
+      },
+    };
+    const write = vi.fn<WeeklyWriter>(async ({ recommendations }) => ({
+      improved: [],
+      worsened: [],
+      cortex: ['Envió 4 correos y cobros que aprobaste.'],
+      next: recommendations,
+    }));
+    const out = await runWeeklyReview(fakeDb(pulseStore()), {
+      userId: 'u-1',
+      now: FRI,
+      write,
+      load: async () => sourcesOn('fri'),
+      readActivity: async () => ACTIVITY,
+      learning,
+    });
+    expect(out.status).toBe('written');
+    const md = plain(out.markdown);
+    expect(md).toContain('**Lo que recomendé y qué pasó**');
+    expect(md).toContain(
+      '- Recomendé cobrarle primero a Nexa: se envió el cobro el martes y pagó $ 12.000.000 ayer.',
+    );
+    expect(md).toContain(
+      '- Recomendé repartir los despachos de Laura: no se hizo; sigue con 15 abiertos.',
+    );
+    // La sección va antes de «Para esta semana».
+    expect(md.indexOf('Lo que recomendé')).toBeLessThan(md.indexOf('Para esta semana'));
+    // Lo ignorado aquí bajó: la cartera vencida sigue primero, y «revisa lo que
+    // espera tu aprobación» (sin historia, el tercero) le cede su puesto a
+    // arreglar la rutina que falla.
+    const next = write.mock.calls[0]?.[0].recommendations ?? [];
+    expect(plain(next[0] ?? '')).toMatch(/^Cobra primero a/);
+    expect(next.some((r) => r.includes('/approvals'))).toBe(false);
+    expect(next[2]).toContain('/schedules');
+    // Lo dicho hoy quedó guardado, con tipo y sujeto.
+    expect(recorded.map((r) => (r as { kind: string }).kind)).toEqual(
+      expect.arrayContaining(['collect_counterparty']),
+    );
+    expect(recorded).toHaveLength(next.length);
+  });
+
+  it('si aprender falla, la revisión sale igual', async () => {
+    const boom = async () => {
+      throw new Error('sin tabla');
+    };
+    const out = await runWeeklyReview(fakeDb(pulseStore()), {
+      userId: 'u-1',
+      now: FRI,
+      write: async () => {
+        throw new Error('timeout');
+      },
+      load: async () => sourcesOn('fri'),
+      readActivity: async () => ACTIVITY,
+      learning: { history: boom, past: boom, record: boom },
+    });
+    expect(out.status).toBe('written');
+    expect(out.markdown).not.toContain('Lo que recomendé');
   });
 });

@@ -42,10 +42,23 @@ import { getOptionalSession } from '@/lib/session';
  * component.
  */
 
+const TITLE = 'Cortex — el gerente de IA para tu empresa';
+const DESCRIPTION =
+  'Cortex recuerda tu empresa, cuida la cartera y la caja con proyección a 13 semanas, y hace lo rutinario dentro de tus permisos. Se conecta con Siigo, Alegra, QuickBooks, Gmail, Outlook y WhatsApp.';
+
+// `absolute`: the root layout's '%s · Cortex' template would otherwise say the
+// name twice.
 export const metadata: Metadata = {
-  title: 'Cortex — inteligencia para dirigir tu empresa',
-  description:
-    'Conecta la información, los procesos y las decisiones de tu empresa. Consulta documentos, enseña trámites y revisa las propuestas de Cortex con sus fuentes.',
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    locale: 'es_CO',
+    siteName: 'Cortex',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: { card: 'summary', title: TITLE, description: DESCRIPTION },
 };
 
 // better-auth names the session cookie `better-auth.session_token`, prefixed

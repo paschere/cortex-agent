@@ -1,12 +1,20 @@
 import { CortexSignature } from '@/components/ui/cortex-signature';
-import { ArrowDown, ArrowUpRight, AudioLines, Globe2, Paperclip, ShieldCheck } from 'lucide-react';
+import { ArrowDown, ArrowUpRight, AudioLines, Globe2, Paperclip } from 'lucide-react';
 import Link from 'next/link';
+import { Close, Faq, Industries, Pains, Plans, PrimaryActions, Steps, Trust } from './Commercial';
 import { ConnectionStory } from './ConnectionStory';
 import { MissionPreview } from './MissionPreview';
 import { ScrollExperience } from './ScrollExperience';
 import { SpaceHero } from './SpaceHero';
 
-/** Public content stays server-rendered. Only the spatial canvas and examples hydrate. */
+/**
+ * Public content stays server-rendered. Only the spatial canvas and examples hydrate.
+ *
+ * The journey: the promise (hero), the connection story, what it solves by pain,
+ * a live example, how to start, how it learns your way of working, examples by
+ * industry, trust, plans, questions and the close. The commercial chapters live
+ * in Commercial.tsx and their words in commercial-content.ts.
+ */
 export function Landing() {
   return (
     <ScrollExperience>
@@ -19,8 +27,11 @@ export function Landing() {
           <span>Cortex</span>
         </Link>
         <nav aria-label="Navegación principal" className="cosmos-nav">
+          <a href="#resuelve">Lo que resuelve</a>
           <a href="#como-funciona">Cómo funciona</a>
-          <a href="#control">Tu control</a>
+          <a href="#control">Seguridad</a>
+          <a href="#planes">Planes</a>
+          <a href="#preguntas">Preguntas</a>
         </nav>
         <Link className="cosmos-login" href="/login">
           Iniciar sesión <ArrowUpRight size={15} aria-hidden="true" />
@@ -30,7 +41,7 @@ export function Landing() {
         <section className="cosmos-hero cosmos-wrap" aria-labelledby="cosmos-title">
           <div className="cosmos-hero__copy">
             <p className="cosmos-intro">
-              <span /> Inteligencia para dirigir tu empresa
+              <span /> El gerente de IA para empresas en Colombia
             </p>
             <h1 id="cosmos-title">
               Todo un mundo.
@@ -38,27 +49,27 @@ export function Landing() {
               Un solo Cortex.
             </h1>
             <p className="cosmos-lead">
-              Tu información, tus procesos y tus decisiones, conectados. Un gerente de IA que te
-              ayuda a entender qué pasa y a dar el siguiente paso.
+              Cortex recuerda todo lo que pasa en tu empresa, cuida la cartera y la caja, y hace lo
+              rutinario dentro de los permisos que le das. Tú decides lo importante.
             </p>
-            <div className="cosmos-actions">
-              <Link href="/signup" className="cosmos-button">
-                Crear mi espacio <ArrowUpRight size={18} aria-hidden="true" />
-              </Link>
-              <a href="#experiencia" className="cosmos-text-link">
-                Explorar Cortex <ArrowDown size={16} aria-hidden="true" />
-              </a>
-            </div>
+            <PrimaryActions
+              secondary={
+                <a href="#experiencia" className="cosmos-text-link">
+                  Mira cómo funciona <ArrowDown size={16} aria-hidden="true" />
+                </a>
+              }
+            />
           </div>
           <SpaceHero />
           <div className="cosmos-hero__foot">
-            <span>Hecho para la forma en que trabaja tu empresa.</span>
-            <a href="#como-funciona">
+            <span>Se conecta con Siigo, Alegra, QuickBooks, Gmail, Outlook y WhatsApp.</span>
+            <a href="#resuelve">
               Descubre cómo <ArrowDown size={14} aria-hidden="true" />
             </a>
           </div>
         </section>
         <ConnectionStory />
+        <Pains />
         <section
           className="cosmos-product cosmos-wrap"
           id="experiencia"
@@ -76,7 +87,8 @@ export function Landing() {
           </div>
           <MissionPreview />
         </section>
-        <section className="cosmos-work cosmos-wrap" id="como-funciona" aria-labelledby="how-title">
+        <Steps />
+        <section className="cosmos-work cosmos-wrap" id="aprende" aria-labelledby="how-title">
           <div className="cosmos-work__intro">
             <span className="cosmos-orbit-mark" aria-hidden="true">
               <CortexSignature />
@@ -127,99 +139,27 @@ export function Landing() {
             </article>
           </div>
         </section>
-        <section className="cosmos-control" id="control" aria-labelledby="control-title">
-          <div className="cosmos-wrap cosmos-control__grid">
-            <div>
-              <ShieldCheck size={28} aria-hidden="true" />
-              <h2 id="control-title">
-                Más capacidad.
-                <br />
-                La decisión sigue
-                <br />
-                siendo tuya.
-              </h2>
-              <p>
-                La confianza se construye viendo qué sabe Cortex, qué propone y qué necesita de ti.
-              </p>
-            </div>
-            <div className="cosmos-rules">
-              <article>
-                <h3>Fuentes que puedes revisar</h3>
-                <p>
-                  Consulta el documento o la evidencia detrás de una respuesta. Si falta contexto,
-                  completa la información antes de decidir.
-                </p>
-              </article>
-              <article>
-                <h3>Acciones con aprobación</h3>
-                <p>
-                  Revisa las propuestas que requieren tu autorización antes de que se ejecuten. Un
-                  borrador preparado no equivale a un envío.
-                </p>
-              </article>
-              <article>
-                <h3>Lo personal y lo compartido, claros</h3>
-                <p>
-                  Decide qué información y perfiles de navegador compartes con tu compañía. Una
-                  consulta no tiene por qué convertirse en memoria.
-                </p>
-              </article>
-            </div>
-          </div>
-        </section>
-        <section className="cosmos-faq cosmos-wrap" aria-labelledby="faq-title">
-          <h2 id="faq-title">Antes de despegar.</h2>
-          <div>
-            <details>
-              <summary>¿Tengo que cambiar las herramientas de mi empresa?</summary>
-              <p>
-                Puedes empezar con documentos y consultas, y conectar las integraciones disponibles
-                que use tu equipo. Los portales externos se trabajan desde el navegador de Cortex.
-              </p>
-            </details>
-            <details>
-              <summary>¿Todo lo que comparto se guarda en el cerebro?</summary>
-              <p>
-                No. El Feed permite trabajar con información para consulta. Guardar conocimiento
-                duradero es una decisión aparte.
-              </p>
-            </details>
-            <details>
-              <summary>¿Cortex reemplaza mis decisiones?</summary>
-              <p>
-                Cortex ayuda a reunir contexto, preparar propuestas y seguir procesos. Tu equipo
-                define las responsabilidades y conserva las decisiones y aprobaciones que le
-                corresponden.
-              </p>
-            </details>
-            <details>
-              <summary>¿Cómo empezamos?</summary>
-              <p>
-                Crea tu espacio y completa la configuración de tu empresa. Empieza por un proceso
-                concreto, añade su información y revisa los resultados con tu equipo.
-              </p>
-            </details>
-          </div>
-        </section>
-        <section className="cosmos-close cosmos-wrap">
-          <CortexSignature className="cosmos-close__mark" />
-          <h2>
-            Dale un centro
-            <br />a todo lo que haces.
-          </h2>
-          <p>Empieza con tu empresa. Construye su contexto.</p>
-          <Link href="/signup" className="cosmos-button">
-            Crear mi espacio <ArrowUpRight size={18} aria-hidden="true" />
-          </Link>
-        </section>
+        <Industries />
+        <Trust />
+        <Plans />
+        <Faq />
+        <Close />
       </main>
       <footer className="cosmos-footer cosmos-wrap">
         <Link href="/" className="cosmos-brand">
           <CortexSignature />
           <span>Cortex</span>
         </Link>
+        <nav aria-label="Enlaces del pie de página" className="cosmos-footer__links">
+          <a href="#resuelve">Lo que resuelve</a>
+          <a href="#como-funciona">Cómo funciona</a>
+          <a href="#control">Seguridad</a>
+          <a href="#planes">Planes</a>
+          <a href="#preguntas">Preguntas</a>
+          <Link href="/signup">Crear mi espacio</Link>
+          <Link href="/login">Iniciar sesión</Link>
+        </nav>
         <p>Contexto para decidir. Capacidad para avanzar.</p>
-        <Link href="/login">Iniciar sesión</Link>
       </footer>
     </ScrollExperience>
   );

@@ -242,3 +242,14 @@ export * from './management';
 export * from './work';
 // `previousPeriod`: en la raíz manda el de metas (ver work/index.ts).
 export { previousPeriod } from './goals';
+
+// El piloto automático (migración 0176): el plan de cada mañana, lo que Cortex
+// hace solo y lo que deja para decidir. Va al final: lee de casi todo lo de
+// arriba (cartera, banco, libro, procesos, compromisos, trabajo, aprobaciones).
+export * from './autopilot';
+
+// Perseguir lo pendiente y aprender de lo recomendado (migración 0177): agrupar
+// aprobaciones parecidas, recordar lo que lleva días parado, el resumen diario
+// de vencidos y el libro de recomendaciones con lo que pasó después. Al final:
+// lee del trabajo, Gerencia, compromisos, acciones y el libro de plata.
+export * from './follow-through';

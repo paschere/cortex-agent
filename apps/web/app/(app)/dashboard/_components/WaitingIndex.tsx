@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Inbox,
   Send,
+  Sparkles,
   TriangleAlert,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -111,11 +112,27 @@ function QueueBlock({ queue }: { queue: WaitingQueueView }) {
                       {item.title}
                     </div>
                     <div className="tabular mt-0.5 truncate text-micro text-ink-faint">
+                      {/* Lo que lleva días parado se marca con su edad: no es
+                          lo mismo que lo que llegó ayer (0177). */}
+                      {item.stale && (
+                        <span className="mr-1 font-semibold text-amber">Parado ·</span>
+                      )}
                       {[item.detail, item.when].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                 </div>
               </Link>
+              {/* «Que Cortex lo resuelva»: abre el chat con el siguiente paso
+                  seguro ya pedido. Lo que tenga efecto pide su sí allá. */}
+              {item.resolve && (
+                <Link
+                  href={item.resolve.href}
+                  className="ml-5 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-micro font-semibold text-primary transition-colors hover:bg-surface-2 hover:text-primary-strong"
+                >
+                  <Sparkles className="h-3 w-3" aria-hidden />
+                  {item.resolve.label}
+                </Link>
+              )}
             </li>
           ))}
           {queue.count > queue.items.length && (

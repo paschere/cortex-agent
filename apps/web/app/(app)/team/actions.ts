@@ -15,6 +15,7 @@ import {
   markTrackerItemDone,
   personLabelOf,
   readWorkSettings,
+  saveOverdueDigestEnabled,
   syncWork,
   undoTrackerItemDone,
   updateWorkPerson,
@@ -457,6 +458,43 @@ export async function configureWork(input: {
         out.loaded !== null
           ? `Conectada. Cargué ${out.loaded} ${out.loaded === 1 ? 'ítem' : 'ítems'} de trabajo.`
           : 'Guardado.',
+    };
+  } catch (err) {
+    return { ok: false, error: message(err, 'No se pudo guardar.') };
+  }
+}
+
+/**
+ * El resumen diario de vencidos (0177): encenderlo o apagarlo para toda la
+ * empresa. Sólo quien administra, y queda en la auditoría como cualquier otro
+ * cambio de «Qué se mide».
+ */
+export async function setOverdueDigest(input: { enabled: boolean }): Promise<TeamActionResult> {
+  const started = performance.now();
+  try {
+    const user = await requireSession();
+    if (!managesTeam(user))
+      return { ok: false, error: 'Sólo quien administra decide si se mandan los recordatorios.' };
+    const enabled = input?.enabled === true;
+    const db = getOrgScopedClient(user.organization.id);
+    await saveOverdueDigestEnabled(db, enabled, user.id);
+    await writeAuditEvent({
+      db,
+      userId: user.id as UUID,
+      toolId: 'work.configure',
+      input: { overdueDigest: enabled },
+      status: 'ok',
+      latencyMs: Math.round(performance.now() - started),
+      surface: 'web',
+      decision: 'confirmed',
+      metadata: { from: 'team', setting: 'overdue_digest' },
+    });
+    revalidatePath(PATH, 'layout');
+    return {
+      ok: true,
+      note: enabled
+        ? 'Listo: cada mañana hábil, cada quien recibe un solo resumen de lo suyo vencido.'
+        : 'Listo: ya no se mandan los resúmenes de vencidos.',
     };
   } catch (err) {
     return { ok: false, error: message(err, 'No se pudo guardar.') };

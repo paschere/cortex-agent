@@ -2,6 +2,8 @@ import { ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateObject } from 'ai';
 import { z } from 'zod';
+import { draftsFromPulseFacts } from '../follow-through/recommendations/sources';
+import { recordRecommendations } from '../follow-through/recommendations/store';
 import { registerTool } from '../index';
 import { utilityModel } from '../model';
 import { computeNextRun } from '../schedule/recurrence';
@@ -306,6 +308,12 @@ export async function refreshViewSummary(
       view = await mustGetView(db, view.id);
     }
   }
+  // «Para hoy» nombra a quien más debe: queda anotado como recomendación para
+  // medir después si se le cobró y si pagó (follow-through, 0177). Una por
+  // cliente y semana; si falla, el resumen ya está escrito.
+  await recordRecommendations(db, draftsFromPulseFacts(today, { createdFor: opts.userId })).catch(
+    () => undefined,
+  );
   return {
     status: 'written',
     view,

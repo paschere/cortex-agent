@@ -95,6 +95,14 @@ export const JOBS: JobSpec[] = [
   // El registro de trabajo (0174): 06:45 de Bogotá todos los días, después de
   // que los compromisos refrescan su estado. Ver apps/web/inngest/functions/work-sync.ts.
   { name: 'work/sync.dispatch', cron: '45 11 * * *', retryLimit: 1, concurrency: 1 },
+  // Perseguir lo pendiente (0177): cada hora hábil de 07:45 a 16:45 de Bogotá
+  // (cada quien tiene su franja); recordatorios reclamados una vez por día.
+  // Ver apps/web/inngest/functions/follow-through.ts.
+  { name: 'follow-through/dispatch', cron: '45 12-21 * * 1-5', retryLimit: 1, concurrency: 1 },
+  // El piloto automático (0176): cada hora y cinco reparte las empresas cuya
+  // hora de corrida (Bogotá) es ésta. Días, festivos y días quietos se deciden
+  // en la app. Ver apps/web/inngest/functions/autopilot.ts.
+  { name: 'autopilot/dispatch', cron: '5 * * * *', retryLimit: 1, concurrency: 1 },
 
   // --- Los que llegan por evento --------------------------------------------
   // retryLimit 0 en los que llaman al modelo: reintentar un turno del agente
@@ -138,6 +146,14 @@ export const JOBS: JobSpec[] = [
   { name: 'work/sync.workspace', retryLimit: 1, concurrency: 5 },
   // El aviso de trabajo reasignado (work.assign): la campana de quien lo recibe.
   { name: 'work/assigned', retryLimit: 1, concurrency: 5 },
+  // Una empresa: recordatorios de aprobaciones, resumen de vencidos y la cuenta
+  // de lo recomendado. Reintentar no repite avisos (follow_through_notices).
+  { name: 'follow-through/workspace', retryLimit: 1, concurrency: 5 },
+  // Una empresa a la vez por corrida (la corrida es una por día: el índice lo
+  // garantiza). Reintentar retoma la misma corrida sin repetir lo hecho.
+  { name: 'autopilot/workspace', retryLimit: 1, concurrency: 3 },
+  // El recordatorio de autopilot.remind: la campana de un compañero.
+  { name: 'autopilot/remind', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.intake', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.queued', retryLimit: 0, concurrency: 2, singletonKeyFrom: 'taskId' },
   { name: 'dev/task.status', retryLimit: 1, concurrency: 5 },

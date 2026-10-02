@@ -4,7 +4,7 @@ import { getOrgScopedClient } from '@/lib/supabase/service';
 import { readPersonHistory, readTeamReport, teamHrefs, teamViewer } from '@/lib/team/read';
 import { buildPersonScreen } from '@/lib/team/screen';
 import { markableTrackers, periodFor, readPeriodKey } from '@/lib/team/shape';
-import { bogotaToday } from '@cortex/agent-tools';
+import { bogotaToday, resolveStepFor } from '@cortex/agent-tools';
 import { notFound } from 'next/navigation';
 import { TEAM_ACTIONS } from '../team-actions';
 
@@ -47,13 +47,30 @@ export default async function MyWeekPage({
     fallback: { id: user.id, name: user.name?.trim() || user.email },
   });
   if (!screen) notFound();
+  // «Que Cortex lo resuelva» en lo propio vencido: redactar el aviso de que se
+  // demora o proponer a quién pedirle ayuda (0177). Abre el chat; nada se hace
+  // sin el sí de la persona.
+  const withResolve = {
+    ...screen,
+    open: screen.open.map((item) => {
+      if (!item.overdue) return item;
+      const step = resolveStepFor({
+        kind: 'work_item_mine',
+        title: item.title,
+        detail: item.workType,
+      });
+      return step
+        ? { ...item, resolve: { label: step.label, href: hrefs.chat(step.prompt) } }
+        : item;
+    }),
+  };
   const teamHref =
     viewer.seesAll || (viewer.visibleIds?.size ?? 0) > 1
       ? hrefs.team({ periodo: periodKey, tipo: null })
       : null;
   return (
     <MyWeek
-      screen={screen}
+      screen={withResolve}
       actions={TEAM_ACTIONS}
       askHref={hrefs.chat(ASK_PROMPT)}
       teamHref={teamHref}

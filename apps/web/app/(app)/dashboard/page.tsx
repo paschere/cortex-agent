@@ -29,6 +29,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { AskCortex } from './_components/AskCortex';
+import { AutopilotCard } from './_components/AutopilotCard';
 import { BrandHeader } from './_components/BrandHeader';
 import { DayJournal } from './_components/DayJournal';
 import { Insights } from './_components/Insights';
@@ -204,6 +205,11 @@ export default async function DashboardPage() {
         <WaitingIndex index={waiting} />
         <DayJournal journal={journal} />
       </div>
+
+      {/* El piloto automático: «hoy hice N, te espera M». Sólo si está encendido. */}
+      <Suspense fallback={null}>
+        <AutopilotCard organizationId={user.organization.id} />
+      </Suspense>
 
       {/* Cartera vencida, pagos de la semana y multas: sólo si hay algo. */}
       <Suspense fallback={null}>

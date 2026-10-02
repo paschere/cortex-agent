@@ -357,6 +357,21 @@ const chatPost: AnySafeActionPolicy = { windowMs: 6 * HOUR, noun: 'el mensaje' }
 const externalRecord: AnySafeActionPolicy = { windowMs: DAY, noun: 'el registro' };
 const sheetRow: AnySafeActionPolicy = { windowMs: 30 * 60_000, noun: 'la fila' };
 
+// --- El piloto automático (0176): lo rutinario, sin repetir en la ventana ----
+
+const autopilotRemind: SafeActionPolicy<
+  { person?: string; title?: string; key?: string },
+  unknown
+> = {
+  windowMs: 12 * HOUR,
+  noun: 'el recordatorio',
+  key: (input) => ({
+    person: (input.person ?? '').trim().toLowerCase(),
+    what: input.key ?? (input.title ?? '').trim(),
+  }),
+};
+const retrySync: AnySafeActionPolicy = { windowMs: 30 * 60_000, noun: 'el reintento' };
+
 export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> = {
   'gmail.send_message': gmailSendMessage as unknown as AnySafeActionPolicy,
   'gmail.send_draft': gmailSendDraft as unknown as AnySafeActionPolicy,
@@ -381,4 +396,6 @@ export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> 
   'views.refresh_summary': viewSummary as unknown as AnySafeActionPolicy,
   'views.weekly_review': weeklyReview as unknown as AnySafeActionPolicy,
   'work.assign': workAssign as unknown as AnySafeActionPolicy,
+  'autopilot.remind': autopilotRemind as unknown as AnySafeActionPolicy,
+  'trackers.retry_sync': retrySync,
 };

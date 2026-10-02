@@ -677,6 +677,7 @@ export function forecast(input: ForecastInput): ForecastResult {
         kind: 'concentration',
         week: null,
         severity: 'warn',
+        counterpartyName: c.name,
         message: `${shortName(c.name)} es el ${formatPct(share)} de lo que se espera cobrar en ${horizonWeeks} semanas (${fm(c.amount)} de ${fm(totalIn)}): si se atrasa, se siente.`,
       });
     }
@@ -715,6 +716,7 @@ export function forecast(input: ForecastInput): ForecastResult {
       kind: 'late_payer',
       week: null,
       severity: 'warn',
+      counterpartyName: b?.counterpartyName || info.name,
       message: `${parts.join('; ')}. La proyección ya lo cuenta así; cobrarle a tiempo mejora la caja.`,
     });
   }

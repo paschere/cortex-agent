@@ -114,6 +114,12 @@ export interface ItemRowModel {
   sourceLabel: string;
   sourceHref: string | null;
   canMarkDone: boolean;
+  /**
+   * «Que Cortex lo resuelva» (0177): el chat con el siguiente paso seguro ya
+   * pedido. Lo pone la pantalla que sabe de quién es el ítem (Mi semana, para
+   * lo propio vencido); ausente en el resto.
+   */
+  resolve?: { label: string; href: string } | null;
 }
 
 export interface MoveModel {

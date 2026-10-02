@@ -1,7 +1,9 @@
 import { ProposedActionCard } from '@/components/actions/ProposedActionCard';
+import { ApprovalGroup } from '@/components/approvals/ApprovalGroup';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import type { ActionView } from '@/lib/actions-shape';
+import { actionGroups } from '@/lib/follow-through/pending-groups';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
@@ -49,15 +51,19 @@ function SectionLabel({
   );
 }
 
-export default async function ActionsPage() {
+export default async function ActionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireSession();
+  // Desde el aviso «¿los descarto?» se llega con ?viejos=1: el grupo de los
+  // viejos abre desplegado, con sus tarjetas a la vista.
+  const fromStaleNotice = (await searchParams).viejos === '1';
   const db = getOrgScopedClient(user.organization.id);
   const now = new Date();
 
-  const rows = await hydrateOwners(
-    db,
-    await listActions(db, { userId: user.id, limit: 200 }),
-  );
+  const rows = await hydrateOwners(db, await listActions(db, { userId: user.id, limit: 200 }));
 
   // Stale proposals are filtered out rather than shown greyed: a card offering
   // figures that stopped being true is not information, and leaving it on
@@ -69,12 +75,19 @@ export default async function ActionsPage() {
   const closedSince = now.getTime() - CLOSED_WINDOW_MS;
   const closed = rows.filter(
     (r) =>
-      r.outcome !== 'awaiting' &&
-      r.state !== 'proposed' &&
-      Date.parse(r.updated_at) > closedSince,
+      r.outcome !== 'awaiting' && r.state !== 'proposed' && Date.parse(r.updated_at) > closedSince,
   );
 
   const nothing = waiting.length === 0 && awaiting.length === 0 && closed.length === 0;
+  // Los parecidos se aprueban de una vez; los que llevan más de cinco días se
+  // ofrecen para descartar (follow-through, 0177). Cada uno conserva su tarjeta.
+  const grouped = actionGroups(waiting, now);
+  const byId = new Map(waiting.map((r) => [r.id, r]));
+  const cards = (ids: readonly string[]) =>
+    ids.map((id) => {
+      const r = byId.get(id);
+      return r ? <ProposedActionCard key={r.id} action={adaptAction(r) as ActionView} /> : null;
+    });
 
   return (
     <>
@@ -106,9 +119,32 @@ export default async function ActionsPage() {
                 Esperando tu aprobación
               </SectionLabel>
               <div className="space-y-3">
-                {waiting.map((r) => (
-                  <ProposedActionCard key={r.id} action={adaptAction(r) as ActionView} />
+                {grouped.stale && (
+                  <ApprovalGroup
+                    queue="actions"
+                    mode="discard"
+                    title={grouped.stale.title}
+                    subtitle={grouped.stale.subtitle}
+                    actionLabel={grouped.stale.actionLabel}
+                    items={grouped.stale.items}
+                    defaultOpen={fromStaleNotice}
+                  >
+                    {cards(grouped.stale.ids)}
+                  </ApprovalGroup>
+                )}
+                {grouped.groups.map((g) => (
+                  <ApprovalGroup
+                    key={g.key}
+                    queue="actions"
+                    title={g.title}
+                    subtitle={g.subtitle}
+                    actionLabel={g.actionLabel}
+                    items={g.items}
+                  >
+                    {cards(g.ids)}
+                  </ApprovalGroup>
                 ))}
+                {cards(grouped.singleIds)}
               </div>
             </section>
           )}

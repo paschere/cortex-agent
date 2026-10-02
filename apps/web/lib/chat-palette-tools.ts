@@ -261,6 +261,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'payments.bank_unmatched': '¿Qué entró al banco que no sé de qué factura es?',
   'payments.apply_to_invoice': 'Ata el pago del banco a la factura ',
   'payments.recovered': '¿Cuánta plata me has ayudado a recuperar?',
+  'recommendations.list': '¿Qué me has recomendado y qué pasó?',
 
   'ledger.record': 'Anota en el libro de plata que ',
   'ledger.record_batch': 'Anota en el libro de plata los movimientos de ',
@@ -274,6 +275,11 @@ export const TOOL_PHRASE: Record<string, string> = {
   'ledger.declare_recurring': 'Todos los meses pagamos ',
   'ledger.decide_recurring': 'Confirma el movimiento que se repite de ',
   'ledger.set_minimum_cash': 'Avísame si la caja baja de ',
+  'ledger.categorize_pending': 'Ponle categoría a lo que falta en el libro de plata',
+  'autopilot.plan': '¿Qué vas a hacer hoy?',
+  'autopilot.status': '¿Qué hiciste hoy?',
+  'autopilot.configure': 'Hazte cargo de ',
+  'autopilot.remind': 'Recuérdale a ',
 
   'payroll.client_report': 'Dame el costo del equipo puesto en el cliente ',
   'payroll.cost_projection': 'Proyéctame lo que va a costar el equipo en ',
@@ -319,6 +325,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.syncs': 'Muéstrame las tablas que se llenan solas',
   'trackers.sync_from_drive_folder': 'Llena una tabla con los archivos de la carpeta de Drive ',
   'trackers.drive_syncs': 'Muéstrame las carpetas de Drive que llenan tablas',
+  'trackers.retry_sync': 'Vuelve a correr la sincronización de ',
   'accounting.status': '¿Cómo va la conexión con el programa contable?',
   'accounting.sync_now': 'Trae ya lo nuevo del programa contable',
   'views.archive': 'Archiva la vista ',
