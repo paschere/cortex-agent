@@ -233,6 +233,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   views_company_pulse: 'Armar el pulso de la empresa',
   views_refresh_summary: 'Actualizar el resumen del día',
   views_schedule_pulse: 'Programar el resumen diario',
+  views_weekly_review: 'Escribir la revisión semanal',
+  views_schedule_weekly_review: 'Programar la revisión semanal',
   reports_generate: 'Armar el informe',
   reports_list: 'Ver los informes guardados',
   reports_open: 'Abrir un informe guardado',
@@ -324,6 +326,13 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       const minute = typeof input.minute === 'number' ? input.minute : 0;
       const days = Array.isArray(input.weekdays) ? input.weekdays.join(',') : '1-5';
       return `Programar el resumen diario de la vista «${input.view ?? 'pulso_empresa'}» — a las ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (${input.timezone ?? 'America/Bogota'}), días ${days}${input.notifyEmail ? ' · también por correo' : ''}`;
+    }
+    case 'views_schedule_weekly_review': {
+      const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+      const day = typeof input.weekday === 'number' ? (days[input.weekday] ?? 'lunes') : 'lunes';
+      const hour = typeof input.hour === 'number' ? input.hour : 7;
+      const minute = typeof input.minute === 'number' ? input.minute : 30;
+      return `Programar la revisión semanal de la vista «${input.view ?? 'pulso_empresa'}» — los ${day} a las ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (${input.timezone ?? 'America/Bogota'})${input.notifyEmail ? ' · también por correo' : ''}`;
     }
     case 'vehicles_register':
       return `Registrar el vehículo de placa ${input.plate}`;

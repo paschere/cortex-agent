@@ -28,7 +28,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { embedDocuments, embeddingModelId } from '../kb/embedder';
+import { embedDocuments, embedInBatches, embeddingModelId } from '../kb/embedder';
 import { type SelectableTool, toolEmbedText, toolFamily } from './rank';
 
 export const TOOL_EMBEDDINGS_TABLE = 'tool_embeddings';
@@ -277,4 +277,131 @@ export async function backfillToolVectors(
   } finally {
     for (const s of batch) IN_FLIGHT.delete(s.tool.id);
   }
+}
+
+/**
+ * Re-index the catalogue AHEAD of the first turn that needs it.
+ *
+ * WHY THE TURN-TIME BACKFILL ABOVE IS NOT ENOUGH ON ITS OWN. It is correct — a
+ * tool with a stale or missing row is sent unconditionally, then embedded in the
+ * background — but it has three soft spots that all bite right after a deploy
+ * that rewrote descriptions:
+ *
+ *   · Until some turn happens to carry the changed tool, its family is unranked
+ *     and travels on EVERY turn. One family is harmless; a release that touches
+ *     five (views, payments, accounting, trackers…) is five families riding
+ *     along on "hola", which is the >40-declaration regime selection exists to
+ *     avoid.
+ *   · The background embed is fire-and-forget inside a serverless request. The
+ *     platform is free to freeze the instance once the response is done, and a
+ *     frozen promise does not write its row. Nothing says so.
+ *   · It is capped at 64 tools per call and per instance, and a model change
+ *     makes the whole catalogue (200+) stale at once.
+ *
+ * This is the same comparison, done from a job instead of from a turn: read the
+ * stored hash of every registry tool, embed only the ones whose text changed or
+ * that have no row, persist each paid request as it lands. With nothing changed
+ * it is one SELECT of two short columns and zero provider calls. It never
+ * throws — the result says what happened, including why it stopped.
+ *
+ * WHAT IT DOES NOT COVER, ON PURPOSE. Tools proxied from a user's own MCP server
+ * and a workspace's custom tools are not in the registry; they are per-account
+ * and keep being indexed by the turn that first meets them, as before.
+ */
+export interface ToolVectorSyncResult {
+  /** Tools whose stored hash was compared. */
+  checked: number;
+  /** Of those, how many had no row or a row for different text. */
+  stale: number;
+  /** Rows written this run. */
+  embedded: number;
+  /** Ids still stale after this run (capped, for the log). Empty on success. */
+  remaining: string[];
+  /** Why the run stopped short, or null. */
+  failure: string | null;
+}
+
+/** PostgREST puts `in.(…)` in the URL; this keeps one request well under any proxy's limit. */
+const SYNC_READ_CHUNK = 100;
+
+export async function syncToolVectors(
+  db: SupabaseClient,
+  tools: readonly SelectableTool[],
+): Promise<ToolVectorSyncResult> {
+  const result: ToolVectorSyncResult = {
+    checked: tools.length,
+    stale: 0,
+    embedded: 0,
+    remaining: [],
+    failure: null,
+  };
+  if (tools.length === 0) return result;
+
+  const entries = await Promise.all(
+    tools.map(async (tool) => {
+      const text = toolEmbedText(tool);
+      return { tool, text, hash: await toolVectorHash(text) };
+    }),
+  );
+
+  const stored = new Map<string, string>();
+  try {
+    for (let i = 0; i < entries.length; i += SYNC_READ_CHUNK) {
+      const keys = entries.slice(i, i + SYNC_READ_CHUNK).map((e) => e.tool.id);
+      const { data, error } = await db
+        .from(TOOL_EMBEDDINGS_TABLE)
+        .select('tool_key, text_hash')
+        .in('tool_key', keys);
+      if (error) {
+        result.failure = `No se pudo leer ${TOOL_EMBEDDINGS_TABLE}: ${error.message}`;
+        return result;
+      }
+      for (const row of (data ?? []) as Array<{ tool_key: string; text_hash: string }>) {
+        stored.set(row.tool_key, row.text_hash);
+      }
+    }
+  } catch (err) {
+    result.failure = `No se pudo leer ${TOOL_EMBEDDINGS_TABLE}: ${(err as Error).message}`;
+    return result;
+  }
+
+  const stale = entries.filter((e) => stored.get(e.tool.id) !== e.hash);
+  result.stale = stale.length;
+  if (stale.length === 0) return result;
+
+  try {
+    const run = await embedInBatches(
+      stale.map((s) => s.text),
+      async ({ start, vectors }) => {
+        const slice = stale.slice(start, start + vectors.length);
+        const rows = slice.map((s, i) => ({
+          tool_key: s.tool.id,
+          family: toolFamily(s.tool),
+          text_hash: s.hash,
+          embedding: vectors[i] as number[],
+          updated_at: new Date().toISOString(),
+        }));
+        // Awaited before the next paid request, like the KB reindex: a write
+        // that fails stops the run instead of buying vectors it cannot keep.
+        const { error } = await db.from(TOOL_EMBEDDINGS_TABLE).upsert(rows, {
+          onConflict: 'tool_key',
+        });
+        if (error)
+          throw new Error(`No se pudo guardar en ${TOOL_EMBEDDINGS_TABLE}: ${error.message}`);
+        for (const row of rows) {
+          CACHE.set(row.tool_key, { hash: row.text_hash, vector: row.embedding });
+        }
+        result.embedded += rows.length;
+      },
+    );
+    if (run.failure) result.failure = run.failure.reason;
+  } catch (err) {
+    result.failure = (err as Error).message;
+  }
+
+  result.remaining = stale
+    .slice(result.embedded)
+    .map((s) => s.tool.id)
+    .slice(0, 20);
+  return result;
 }

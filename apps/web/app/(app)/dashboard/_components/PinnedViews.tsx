@@ -1,13 +1,7 @@
-import { ViewCanvas } from '@/components/views/ViewCanvas';
+import type { ViewBrand } from '@/lib/branding/shape';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import {
-  type ComputedView,
-  computeView,
-  listPinnedViews,
-  loadViewSources,
-} from '@cortex/agent-tools';
-import { ArrowUpRight, LayoutPanelTop } from 'lucide-react';
-import Link from 'next/link';
+import { computeView, listPinnedViews, loadViewSources } from '@cortex/agent-tools';
+import { type PinnedEntry, PinnedViewsList } from './PinnedViewsList';
 
 /**
  * LAS VISTAS FIJADAS, EN INICIO.
@@ -23,6 +17,10 @@ import Link from 'next/link';
  *
  * Va en su propio Suspense en la página: leer las filas de tres vistas no
  * puede demorar lo que ya estaba listo arriba.
+ *
+ * Con la marca de la empresa (la lee la página una vez y la pasa): las
+ * fijadas se ven en sus colores, como al abrirlas. El dibujo vive en
+ * PinnedViewsList.tsx.
  */
 
 const MAX_BLOCKS_ON_HOME = 6;
@@ -30,23 +28,26 @@ const MAX_BLOCKS_ON_HOME = 6;
 export async function PinnedViews({
   organizationId,
   viewerId,
+  brand,
 }: {
   organizationId: string;
   /** Quién mira: las fuentes personales y las del Feed leen SUS filas. */
   viewerId: string;
+  /** La marca de la empresa, o null para el índigo de Cortex. */
+  brand: ViewBrand | null;
 }) {
   const db = getOrgScopedClient(organizationId);
   const pinned = await listPinnedViews(db, 3).catch(() => []);
   if (!pinned.length) return null;
 
   const computed = await Promise.all(
-    pinned.map(async (view) => {
+    pinned.map(async (view): Promise<PinnedEntry | null> => {
       try {
         const full = computeView(view.spec, await loadViewSources(db, view.spec, { viewerId }));
         const blocks = full.blocks.filter((b) => b.type !== 'form').slice(0, MAX_BLOCKS_ON_HOME);
         return {
-          view,
-          computed: { ...full, blocks } satisfies ComputedView,
+          view: { id: view.id, slug: view.slug, name: view.name },
+          computed: { ...full, blocks },
           hidden: full.blocks.length - blocks.length,
         };
       } catch {
@@ -56,30 +57,6 @@ export async function PinnedViews({
   );
 
   return (
-    <div className="mb-4 space-y-4">
-      {computed.map((entry) =>
-        entry ? (
-          <section key={entry.view.id} aria-labelledby={`pinned-${entry.view.id}`}>
-            <div className="mb-2.5 flex items-center justify-between gap-3">
-              <h2
-                id={`pinned-${entry.view.id}`}
-                className="flex items-center gap-2 text-sm font-semibold text-ink"
-              >
-                <LayoutPanelTop className="h-4 w-4 text-primary" />
-                {entry.view.name}
-              </h2>
-              <Link
-                href={`/views/${entry.view.slug}`}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
-              >
-                {entry.hidden > 0 ? `Ver completa (+${entry.hidden})` : 'Abrir'}
-                <ArrowUpRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-            <ViewCanvas view={entry.computed} target={{ kind: 'preview' }} />
-          </section>
-        ) : null,
-      )}
-    </div>
+    <PinnedViewsList entries={computed.filter((e): e is PinnedEntry => e !== null)} brand={brand} />
   );
 }

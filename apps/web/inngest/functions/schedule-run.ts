@@ -139,9 +139,12 @@ async function executeToolJob(job: JobRow, idempotencyScope: string): Promise<Ex
       { confirmed: authority.confirmed },
     );
     // Las rutinas cuyo resultado es un texto para leer (el informe de la
-    // mañana, el resumen del pulso) se entregan como texto, no como JSON.
+    // mañana, el resumen del pulso, la revisión semanal) se entregan como
+    // texto, no como JSON.
     const output =
-      (job.tool_id === 'management.daily_brief' || job.tool_id === 'views.refresh_summary') &&
+      (job.tool_id === 'management.daily_brief' ||
+        job.tool_id === 'views.refresh_summary' ||
+        job.tool_id === 'views.weekly_review') &&
       typeof (result as { report?: unknown })?.report === 'string'
         ? (result as { report: string }).report
         : JSON.stringify(result, null, 2);

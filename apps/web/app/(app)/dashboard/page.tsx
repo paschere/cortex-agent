@@ -1,5 +1,6 @@
 import { CopyButton } from '@/components/connect/ConnectCortex';
 import { Panel } from '@/components/ui/panel';
+import { readBranding, toViewBrand } from '@/lib/branding/store';
 import { readInsights } from '@/lib/insights';
 import { readJournal } from '@/lib/journal';
 import { getMcpUrl } from '@/lib/mcp-url';
@@ -28,6 +29,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { AskCortex } from './_components/AskCortex';
+import { BrandHeader } from './_components/BrandHeader';
 import { DayJournal } from './_components/DayJournal';
 import { Insights } from './_components/Insights';
 import { ManagementOverview } from './_components/ManagementOverview';
@@ -98,7 +100,7 @@ export default async function DashboardPage() {
     redirect('/onboarding/fuentes');
   }
 
-  const [waiting, journal, signalsRes, runsRes, convsRes] = await Promise.all([
+  const [waiting, journal, signalsRes, runsRes, convsRes, brandRow] = await Promise.all([
     // El índice de las cuatro colas. Los conteos salen de `countNavSignals`,
     // el mismo que dibuja los badges del menú, así que la barra lateral y
     // esta pantalla no pueden discrepar sobre cuánto trabajo hay parado.
@@ -121,7 +123,18 @@ export default async function DashboardPage() {
       .neq('surface', 'mcp')
       .order('updated_at', { ascending: false })
       .limit(5),
+    // La marca de la empresa (0170), UNA vez para toda la página: el logo y el
+    // nombre arriba, las fijadas y el recorrido de ejemplo en sus colores.
+    // `readBranding` mira su error y devuelve null: sin marca, índigo.
+    readBranding(sb),
   ]);
+
+  // «Hay marca» = alguien puso nombre, logo o color en /company. Una fila
+  // vacía no cuenta: el Inicio no estrena una cabecera con el nombre del espacio.
+  const brand =
+    brandRow && (brandRow.display_name?.trim() || brandRow.logo_path || brandRow.primary_color)
+      ? toViewBrand(brandRow, user.organization.name, (v) => `/api/branding/logo?v=${v}`)
+      : null;
 
   const newSignals = signalsRes.count ?? 0;
 
@@ -148,6 +161,7 @@ export default async function DashboardPage() {
           no es lo único que la pantalla ofrece hacer. */}
       <section className="animate-rise mb-5 flex flex-col gap-4 pt-1">
         <div>
+          {brand && <BrandHeader brand={brand} />}
           <p className="tabular text-sm font-semibold capitalize text-ink-faint">{todayLabel}</p>
           <h1 className="mt-1 text-balance text-2xl font-extrabold leading-tight tracking-tight text-ink sm:text-3xl lg:text-[2.5rem] lg:leading-[1.1]">
             Hola, {firstName}. ¿Qué resolvemos hoy?
@@ -166,7 +180,12 @@ export default async function DashboardPage() {
 
       {/* Los cinco pasos del autoservicio; se va sola cuando están hechos. */}
       <Suspense fallback={null}>
-        <SetupStrip organizationId={user.organization.id} userId={user.id} isAdmin={isAdmin} />
+        <SetupStrip
+          organizationId={user.organization.id}
+          userId={user.id}
+          isAdmin={isAdmin}
+          brand={brand}
+        />
       </Suspense>
 
       {/* LAS DOS MITADES, UNA AL LADO DE OTRA.
@@ -198,7 +217,7 @@ export default async function DashboardPage() {
 
       {/* Lo que el equipo fijó a propósito desde /views. Sin fijadas, nada. */}
       <Suspense fallback={null}>
-        <PinnedViews organizationId={user.organization.id} viewerId={user.id} />
+        <PinnedViews organizationId={user.organization.id} viewerId={user.id} brand={brand} />
       </Suspense>
 
       <ManagementOverview />

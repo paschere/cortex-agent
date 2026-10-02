@@ -40,6 +40,8 @@ export interface ScheduledJob {
 export interface RoutinePatch {
   name?: string;
   cron?: string;
+  /** ISO instant. Turns the routine into (or retimes) a one-off. */
+  runAt?: string;
   timezone?: string;
   notifyEmail?: boolean;
   recipients?: string[];

@@ -253,6 +253,29 @@ const viewSummary: SafeActionPolicy<{ view: string; blockId?: string; force?: bo
           },
   };
 
+/**
+ * La revisión semanal (views.weekly_review): una vez por vista y por SEMANA ISO
+ * de Bogotá (la clave es el lunes de la semana). Dos corridas de la rutina del
+ * lunes a la vez no escriben dos versiones; `force` va sin guardia. Igual que
+ * el resumen del día, la herramienta además mira el historial de la vista.
+ */
+const weeklyReview: SafeActionPolicy<{ view?: string; force?: boolean }, unknown> = {
+  windowMs: 7 * DAY,
+  noun: 'la revisión semanal',
+  key: (input) => {
+    if (input.force) return null;
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Bogota',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    const noon = new Date(`${today}T12:00:00Z`);
+    noon.setUTCDate(noon.getUTCDate() - ((noon.getUTCDay() + 6) % 7));
+    return { view: input.view ?? 'pulso_empresa', week: noon.toISOString().slice(0, 10) };
+  },
+};
+
 // --- Sin verificación (todavía): sólo la guardia de repetición -------------
 
 const chatPost: AnySafeActionPolicy = { windowMs: 6 * HOUR, noun: 'el mensaje' };
@@ -276,4 +299,5 @@ export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> 
   'github.create_issue_comment': chatPost,
   'gsheets.append_row': sheetRow,
   'views.refresh_summary': viewSummary as unknown as AnySafeActionPolicy,
+  'views.weekly_review': weeklyReview as unknown as AnySafeActionPolicy,
 };

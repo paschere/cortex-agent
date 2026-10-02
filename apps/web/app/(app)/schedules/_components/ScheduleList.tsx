@@ -70,7 +70,12 @@ export function ScheduleList({
         return {
           ...job,
           ...(patch?.name !== undefined ? { name: patch.name } : null),
-          ...(patch?.cron !== undefined ? { cron: patch.cron } : null),
+          ...(patch?.cron !== undefined
+            ? { cron: patch.cron, scheduleKind: 'cron' as const, runAt: null }
+            : null),
+          ...(patch?.runAt !== undefined
+            ? { runAt: patch.runAt, scheduleKind: 'once' as const, cron: null }
+            : null),
           ...(patch?.timezone !== undefined ? { timezone: patch.timezone } : null),
           ...(patch?.notifyEmail !== undefined ? { notifyEmail: patch.notifyEmail } : null),
           ...(patch?.recipients !== undefined ? { recipients: patch.recipients } : null),

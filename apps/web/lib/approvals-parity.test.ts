@@ -90,6 +90,11 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
     toolId: 'views.schedule_pulse',
     input: { view: 'cartera', hour: 6, minute: 30, weekdays: [1, 3, 5], notifyEmail: true },
   },
+  { toolId: 'views.schedule_weekly_review', input: { view: 'pulso_empresa' } },
+  {
+    toolId: 'views.schedule_weekly_review',
+    input: { view: 'cartera', weekday: 5, hour: 17, minute: 0, notifyEmail: true },
+  },
   { toolId: 'vehicles.register', input: { plate: 'ABC123' } },
   {
     toolId: 'goals.set',

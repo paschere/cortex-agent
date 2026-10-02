@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
   const db = getOrgScopedClient(user.organization.id);
   try {
     const body = parsed.data;
-    if (body.action === 'freshness' || body.action === 'webhook') {
+    if (body.action === 'freshness' || body.action === 'webhook' || body.action === 'rename') {
       const owned = await db
         .from('feed_sources')
         .select('id,kind')
@@ -99,10 +99,12 @@ export async function POST(req: NextRequest) {
       const patch =
         body.action === 'freshness'
           ? { freshness_minutes: body.minutes }
-          : {
-              webhook_enabled: body.enabled,
-              webhook_token_hash: token ? createHash('sha256').update(token).digest('hex') : null,
-            };
+          : body.action === 'rename'
+            ? { name: body.name }
+            : {
+                webhook_enabled: body.enabled,
+                webhook_token_hash: token ? createHash('sha256').update(token).digest('hex') : null,
+              };
       const saved = await db
         .from('feed_sources')
         .update({ ...patch, updated_at: new Date().toISOString() })

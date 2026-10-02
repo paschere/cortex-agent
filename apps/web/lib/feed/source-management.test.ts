@@ -11,6 +11,12 @@ describe('persistent Feed source boundary', () => {
         .success,
     ).toBe(true);
     expect(feedSourceActionSchema.safeParse({ action: 'delete', id }).success).toBe(false);
+    expect(
+      feedSourceActionSchema.safeParse({ action: 'rename', id, name: ' Pedidos ' }),
+    ).toMatchObject({ success: true, data: { name: 'Pedidos' } });
+    expect(feedSourceActionSchema.safeParse({ action: 'rename', id, name: '  ' }).success).toBe(
+      false,
+    );
   });
 
   it('projects status without exposing connector config or credentials', () => {

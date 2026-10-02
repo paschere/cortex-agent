@@ -63,7 +63,9 @@
  * counts and the two failing cases below: one gold chunk still lost under the
  * weak floor at 0.298, and `people` still unreachable for "cual es el correo de
  * daniela rios" because `people.search` scores 0.177 against `clients.register`
- * at 0.233 — a tool-description defect, not a threshold one.
+ * at 0.233 — a tool-description defect, not a threshold one. (Fixed 2026-10-02
+ * the way this paragraph said it had to be: the description now says, in the
+ * words people use, that it finds someone's email by name — 0.263, reached.)
  *
  * THE TWO ERROR COUNTS ARE PINNED SEPARATELY FROM THE RATIOS, because a change
  * can hold `grounding` steady while turning near-misses into overclaims, and
@@ -102,12 +104,22 @@ const tools = listTools() as unknown as SelectableTool[];
  * selection floor is calibrated per embedding model instead of hard-coded
  * (`SELECTION_CALIBRATIONS` in tool-selection/rank.ts). Leaving the old floors
  * in place would have left a fix nothing was holding on to.
+ *
+ * RE-MEASURED 2026-10-02 (same model, retrieval readings unchanged) with
+ * thirteen selection cases for the families shipped since — views (company
+ * pulse, daily summary), payments (bank statements, unmatched deposits, money
+ * recovered), accounting (Siigo/Alegra) and trackers (tables filled from a
+ * Drive folder or a Feed source) — plus the `people` fix above. Selection reads
+ * 18 of 18. The floor goes to the reading: any description edit that pushes one
+ * of those families out of the band now fails here, and an edit to a tool in
+ * one of them without re-measuring fails `is grading tool descriptions that
+ * still exist` — which is the point, not a nuisance.
  */
 const FLOOR = {
   grounding: 0.74,
   restraint: 1,
   top1: 0.91,
-  selectionReach: 0.79,
+  selectionReach: 0.99,
 } as const;
 
 /** Open defects, pinned at their current size so they cannot quietly grow. */

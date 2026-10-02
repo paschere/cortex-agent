@@ -306,6 +306,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   views_company_pulse: { label: 'Armar el pulso de la empresa', icon: 'LayoutPanelTop' },
   views_refresh_summary: { label: 'Actualizar el resumen del día', icon: 'LayoutPanelTop' },
   views_schedule_pulse: { label: 'Programar el resumen diario', icon: 'CalendarClock' },
+  views_weekly_review: { label: 'Escribir la revisión semanal', icon: 'LayoutPanelTop' },
+  views_schedule_weekly_review: { label: 'Programar la revisión semanal', icon: 'CalendarClock' },
 
   // Informes.
   reports_generate: { label: 'Armar el informe', icon: 'FileBarChart' },
@@ -445,6 +447,14 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       const minute = typeof input.minute === 'number' ? input.minute : 0;
       const days = Array.isArray(input.weekdays) ? input.weekdays.join(',') : '1-5';
       return `Programar el resumen diario de la vista «${input.view ?? 'pulso_empresa'}» — a las ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (${input.timezone ?? 'America/Bogota'}), días ${days}${input.notifyEmail ? ' · también por correo' : ''}`;
+    }
+    case 'views_schedule_weekly_review': {
+      // El día y la hora a la vista: es lo que la persona aprueba.
+      const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+      const day = typeof input.weekday === 'number' ? (days[input.weekday] ?? 'lunes') : 'lunes';
+      const hour = typeof input.hour === 'number' ? input.hour : 7;
+      const minute = typeof input.minute === 'number' ? input.minute : 30;
+      return `Programar la revisión semanal de la vista «${input.view ?? 'pulso_empresa'}» — los ${day} a las ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} (${input.timezone ?? 'America/Bogota'})${input.notifyEmail ? ' · también por correo' : ''}`;
     }
     case 'vehicles_register':
       return `Registrar el vehículo de placa ${input.plate}`;

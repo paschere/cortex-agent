@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { EMBEDDING_DIMENSIONS } from '../../kb/embedder';
 import { BASE_FAMILIES, type SelectableTool, selectToolsForTurn } from '../index';
 import { toolEmbedText } from '../rank';
-import { resetToolVectorCache, toolVectorHash } from '../store';
+import { resetToolVectorCache, syncToolVectors, toolVectorHash } from '../store';
 
 const VOYAGE = 'https://api.voyageai.com/v1/embeddings';
 
@@ -479,5 +479,62 @@ describe('the day the embedding model changes', () => {
     expect(embedCalls).toHaveLength(1);
     // And selection is back to actually narrowing.
     expect(cold.selectedFamilies[0]).toBe('vehicles');
+  });
+});
+
+describe('the job that indexes ahead of the turn', () => {
+  // What runs every 15 minutes inside `kb/embeddings.reindex`, so a deploy that
+  // rewrote descriptions is ranked again before anybody asks — not left riding
+  // along on every turn until some request happens to carry it.
+
+  it('embeds only what changed or is new, and writes it where turns read it', async () => {
+    const tools = [...catalogue(), ...VEHICLES];
+    const store = fakeDb(await seed(catalogue())); // vehicles shipped, never indexed
+    const edited = tools.map((t) =>
+      t.id === 'gmail.action_0' ? { ...t, description: 'Rewritten in this release.' } : t,
+    );
+
+    const result = await syncToolVectors(store.db, edited);
+
+    expect(result.failure).toBeNull();
+    expect(result.checked).toBe(edited.length);
+    expect(result.stale).toBe(VEHICLES.length + 1);
+    expect(result.embedded).toBe(VEHICLES.length + 1);
+    expect(result.remaining).toEqual([]);
+    expect(embedCalls.every((c) => c.input_type === 'document')).toBe(true);
+    expect(embedCalls.flatMap((c) => c.input)).toHaveLength(VEHICLES.length + 1);
+
+    // A cold instance afterwards ranks vehicles straight away and pays only for
+    // the query: the job did the backfill the turn used to do.
+    resetToolVectorCache();
+    embedCalls = [];
+    const turn = await selectToolsForTurn({ db: store.db, tools: edited, query: PLATE_QUERY });
+    await turn.indexing;
+    expect(turn.unrankedFamilies).toEqual([]);
+    expect(turn.selectedFamilies[0]).toBe('vehicles');
+    expect(embedCalls).toHaveLength(1);
+  });
+
+  it('costs nothing when nothing changed', async () => {
+    const tools = [...catalogue(), ...VEHICLES];
+    const store = fakeDb(await seed(tools));
+
+    const result = await syncToolVectors(store.db, tools);
+
+    expect(result).toMatchObject({ stale: 0, embedded: 0, failure: null });
+    expect(embedCalls).toHaveLength(0);
+  });
+
+  it('reports instead of throwing when the provider refuses', async () => {
+    server.use(http.post(VOYAGE, () => HttpResponse.json({ detail: 'bad key' }, { status: 401 })));
+    const tools = [...catalogue(), ...VEHICLES];
+    const store = fakeDb(await seed(catalogue()));
+
+    const result = await syncToolVectors(store.db, tools);
+
+    expect(result.embedded).toBe(0);
+    expect(result.failure).toBeTruthy();
+    expect(result.remaining).toContain('vehicles.action_0');
+    for (const tool of VEHICLES) expect(store.rows.has(tool.id)).toBe(false);
   });
 });

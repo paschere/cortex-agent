@@ -1,4 +1,5 @@
 import { type ViewSummary, ViewsLibrary } from '@/components/views/gallery/ViewsLibrary';
+import { readBranding, toViewBrand } from '@/lib/branding/store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { relativeTime } from '@/lib/views/studio';
@@ -32,7 +33,16 @@ export const dynamic = 'force-dynamic';
 export default async function ViewsPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
-  const [views, trackers] = await Promise.all([listViews(db, 60), listTrackers(db, 6)]);
+  const [views, trackers, brandRow] = await Promise.all([
+    listViews(db, 60),
+    listTrackers(db, 6),
+    // La marca (0170), una vez: las miniaturas se tiñen con ella. Sin marca, índigo.
+    readBranding(db),
+  ]);
+  const brand =
+    brandRow && (brandRow.display_name?.trim() || brandRow.logo_path || brandRow.primary_color)
+      ? toViewBrand(brandRow, user.organization.name, (v) => `/api/branding/logo?v=${v}`)
+      : null;
 
   // Quién editó cada una. Si el directorio no contesta, las tarjetas dicen
   // sólo cuándo: no vale la pena tumbar la lista por un nombre.
@@ -106,5 +116,5 @@ export default async function ViewsPage() {
         'Control de facturas de proveedores con las que vencen esta semana',
       ];
 
-  return <ViewsLibrary views={summaries} suggestions={suggestions} />;
+  return <ViewsLibrary views={summaries} suggestions={suggestions} brand={brand} />;
 }

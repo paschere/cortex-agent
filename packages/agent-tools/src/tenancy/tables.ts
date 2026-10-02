@@ -466,6 +466,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   custom_view_submissions: tenant(),
   // 0160: cada edición, tarjeta movida o botón usado en una vista, con quién.
   custom_view_events: tenant(),
+  // 0171: las cifras que el pulso calculó cada día, para comparar sin
+  // inventar. Tenant: son ventas, cartera y pagos de la empresa.
+  pulse_snapshots: tenant(),
 
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first

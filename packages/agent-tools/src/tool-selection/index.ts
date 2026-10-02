@@ -57,7 +57,12 @@ export {
   rankTools,
   cosine,
 } from './rank';
-export { resetToolVectorCache, TOOL_EMBEDDINGS_TABLE } from './store';
+export {
+  type ToolVectorSyncResult,
+  resetToolVectorCache,
+  syncToolVectors,
+  TOOL_EMBEDDINGS_TABLE,
+} from './store';
 export {
   type StickyCombineInput,
   type StickyCombineResult,

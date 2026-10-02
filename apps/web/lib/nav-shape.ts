@@ -477,3 +477,79 @@ export function primaryActive(path: string, item: PrimaryItem): boolean {
   if (item.href === '/chat' && path.startsWith('/chat/global')) return false;
   return item.match.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
+
+// ===========================================================================
+// «MÁS», CORTO
+// ===========================================================================
+// «Más» llegó a tener unas treinta filas en siete grupos: todo el producto
+// colgado de un desplegable, que para alguien que empieza es lo mismo que no
+// tener menú. Ahora lleva sólo lo que se usa en la semana, en tres grupos
+// cortos, y una salida a la paleta (⌘K), que sigue alcanzando TODAS las
+// pantallas (`everyDestination` y el test de cobertura no cambian: la paleta
+// se arma con `SECTIONS`, no con esto).
+//
+// Fuera de «Más» (paleta, y la puerta en su propia pantalla): resumen
+// financiero, navegador, rutinas (viven en Procesos), activaciones, flujos,
+// informes, prospectos, chat multiempresa, notificaciones (campana arriba).
+
+export interface MoreGroup {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+const ALL_ITEMS: NavItem[] = [
+  ...PINNED,
+  ...SECTIONS.flatMap((s) => s.items),
+  ...COMPANY.items,
+  ...FOOTER,
+];
+
+function pick(hrefs: string[]): NavItem[] {
+  return hrefs.flatMap((href) => ALL_ITEMS.find((item) => item.href === href) ?? []);
+}
+
+export function moreGroups({
+  admin,
+  founder,
+}: {
+  admin: boolean;
+  /** Dueño de al menos una empresa: ve el centro de mando de todas. */
+  founder: boolean;
+}): MoreGroup[] {
+  const groups: MoreGroup[] = [
+    {
+      id: 'work',
+      label: 'Mi trabajo',
+      items: pick(['/management', '/clients', '/payments', '/goals', '/calls']),
+    },
+    {
+      id: 'data',
+      label: 'Mis datos',
+      items: pick(['/trackers', '/kb', '/feed', '/integrations/whatsapp']),
+    },
+    {
+      id: 'company',
+      label: 'La empresa',
+      items: [
+        ...pick(['/onboarding', '/company']),
+        ...(founder ? [{ href: '/overview', label: 'Todas mis empresas', icon: Landmark }] : []),
+        ...pick(['/plan']),
+      ],
+    },
+  ];
+  if (admin) {
+    groups.push({
+      id: 'admin',
+      label: 'Administración',
+      items: pick([
+        '/admin/security',
+        '/admin/mandates',
+        '/admin/usage',
+        '/admin/audit',
+        '/admin/teams',
+      ]),
+    });
+  }
+  return groups.filter((g) => g.items.length > 0);
+}

@@ -304,6 +304,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'views.company_pulse': 'Dime cómo va la empresa en una vista',
   'views.refresh_summary': 'Actualiza el resumen de hoy de la vista ',
   'views.schedule_pulse': 'Actualiza cada mañana el resumen del pulso de la empresa',
+  'views.weekly_review': '¿Cómo nos fue esta semana?',
+  'views.schedule_weekly_review': 'Hazme un resumen cada lunes de cómo nos fue',
   'views.create': 'Hazme una vista con ',
   'views.get': 'Muéstrame la vista ',
   'views.list': 'Muéstrame las vistas que tenemos',

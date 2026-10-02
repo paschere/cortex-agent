@@ -1,5 +1,6 @@
 import {
   type ComputedView,
+  type ValueFormat,
   type ViewRow,
   type ViewSource,
   aggregate,
@@ -548,6 +549,43 @@ export interface PulseFact {
   value: number | null;
   /** Exactamente como se pinta en la vista. Es lo que el modelo debe copiar. */
   display: string;
+  /** Cómo se pinta un número de esta cifra (para pintar su diferencia igual). */
+  format?: ValueFormat;
+  /**
+   * El período que acumula una cifra «de este mes / esta semana / hoy»
+   * («month:2026-10»). Dos días con período distinto no se restan: la cifra
+   * volvió a cero al empezar el mes, no «bajó».
+   */
+  period?: string;
+  /** Si subir es bueno o malo. Sin él, un cambio no es ni mejora ni empeora. */
+  goodWhen?: 'up' | 'down';
+}
+
+/**
+ * Si subir es bueno, para los bloques del pulso que no lo dicen en el spec
+ * (la cartera vencida que sube es mala noticia aunque el bloque no compare).
+ */
+export const PULSE_GOOD_WHEN: Readonly<Record<string, 'up' | 'down'>> = {
+  ventas_mes: 'up',
+  pagos_mes: 'up',
+  recuperado: 'up',
+  metas_cumplidas: 'up',
+  cartera_vencida: 'down',
+  pendientes: 'down',
+  compromisos_vencidos: 'down',
+  vencen_semana: 'down',
+  procesos_fallando: 'down',
+  'top_deudores.total': 'down',
+  'decisiones.total': 'down',
+};
+
+/** «month:2026-10», «week:2026-09-28», «day:2026-10-02»: qué acumula hoy una cifra del período. */
+export function periodKey(period: 'day' | 'week' | 'month', today: string): string {
+  if (period === 'month') return `month:${today.slice(0, 7)}`;
+  if (period === 'day') return `day:${today}`;
+  const t = new Date(`${today}T12:00:00Z`);
+  const back = (t.getUTCDay() + 6) % 7;
+  return `week:${addDays(today, -back)}`;
 }
 
 function addDays(day: string, days: number): string {
@@ -583,13 +621,28 @@ export function pulseFacts(
   const specById = new Map(spec.blocks.map((b) => [b.id, b]));
   for (const block of computed.blocks) {
     if (block.type === 'metric') {
-      facts.push({ key: block.id, label: block.title, value: block.value, display: block.display });
+      const metricDef = specById.get(block.id);
+      const format = metricDef?.type === 'metric' ? metricDef.format : undefined;
+      const goodWhen =
+        (metricDef?.type === 'metric' ? metricDef.goodWhen : undefined) ??
+        PULSE_GOOD_WHEN[block.id];
+      const period = block.compare ? periodKey(block.compare.period, today) : undefined;
+      facts.push({
+        key: block.id,
+        label: block.title,
+        value: block.value,
+        display: block.display,
+        ...(format ? { format } : {}),
+        ...(period ? { period } : {}),
+        ...(goodWhen ? { goodWhen } : {}),
+      });
       if (block.compare) {
         facts.push({
           key: `${block.id}.anterior`,
           label: `${block.title} (${block.compare.previousLabel})`,
           value: block.compare.previous,
           display: block.compare.previousDisplay,
+          ...(format ? { format } : {}),
         });
         if (block.compare.delta !== null) {
           const p = pct(block.compare.delta);
@@ -618,12 +671,14 @@ export function pulseFacts(
             label: `${block.title}: lo de ayer (${rows.length} ${rows.length === 1 ? 'registro' : 'registros'})`,
             value: value ?? 0,
             display: formatValue(value ?? 0, def.format),
+            format: def.format,
           });
           facts.push({
             key: `${block.id}.ayer_registros`,
             label: `${block.title}: registros de ayer`,
             value: rows.length,
             display: formatValue(rows.length, 'number'),
+            format: 'number',
           });
         }
       }
@@ -635,12 +690,15 @@ export function pulseFacts(
           display: block.goal.display,
         });
     } else if (block.type === 'chart') {
+      const chartDef = specById.get(block.id);
+      const format = chartDef?.type === 'chart' ? chartDef.format : undefined;
       block.points.slice(0, 6).forEach((p, i) => {
         facts.push({
           key: `${block.id}.${i}`,
           label: `${block.title}: ${p.label}`,
           value: p.value,
           display: p.display,
+          ...(format ? { format } : {}),
         });
       });
     } else if (block.type === 'table') {
@@ -653,11 +711,14 @@ export function pulseFacts(
           display: r.cells.join(' · '),
         });
       });
+      const goodWhen = PULSE_GOOD_WHEN[`${block.id}.total`];
       facts.push({
         key: `${block.id}.total`,
         label: `${block.title}: filas`,
         value: block.total,
         display: formatValue(block.total, 'number'),
+        format: 'number',
+        ...(goodWhen ? { goodWhen } : {}),
       });
     }
   }
@@ -675,12 +736,14 @@ export function pulseFacts(
       label: 'Facturas que se vencieron ayer',
       value: fresh.length,
       display: formatValue(fresh.length, 'number'),
+      format: 'number',
     });
     facts.push({
       key: 'cartera.vencio_ayer_saldo',
       label: 'Saldo de las facturas que se vencieron ayer',
       value: sum,
       display: formatValue(sum, 'money'),
+      format: 'money',
     });
   }
   return facts;
@@ -790,6 +853,11 @@ export function checkGrounding(
 
 const factBy = (facts: PulseFact[], key: string) => facts.find((f) => f.key === key);
 
+/** «Cartera vencida subió…» → «cartera vencida subió…», para el medio de una frase. */
+export function lowerFirst(text: string): string {
+  return text.charAt(0).toLocaleLowerCase('es-CO') + text.slice(1);
+}
+
 /**
  * Tres frases armadas SÓLO con las cifras: lo que se escribe cuando el modelo
  * no contesta o inventa dos veces. Menos elegante, nunca falso.
@@ -801,8 +869,13 @@ export function fallbackSummary(facts: PulseFact[]): string[] {
     (f) => f.key.endsWith('.ayer') && f.value !== null && f.value !== 0,
   );
   const fresh = factBy(facts, 'cartera.vencio_ayer');
-  const changes = yesterday.map(
-    (f) => `${f.label.replace(/: lo de ayer.*$/, '')} ayer: ${f.display}`,
+  // Primero lo que cambió contra el último día guardado (pulse_snapshots): su
+  // etiqueta ya es la frase entera, con las dos cifras y la diferencia.
+  const changes = facts
+    .filter((f) => f.key.endsWith('.delta') && f.value !== null && f.value !== 0)
+    .map((f) => lowerFirst(f.label));
+  changes.push(
+    ...yesterday.map((f) => `${f.label.replace(/: lo de ayer.*$/, '')} ayer: ${f.display}`),
   );
   if (fresh && (fresh.value ?? 0) > 0)
     changes.push(
@@ -890,11 +963,30 @@ export function renderSummary(
 
 /** El spec con el texto del resumen puesto; si el bloque no existe, va primero. */
 export function withSummary(spec: ViewSpec, blockId: string, markdown: string): ViewSpec {
+  return withTextBlock(spec, blockId, markdown);
+}
+
+/**
+ * El spec con un bloque de texto puesto. Si no existe, va justo después de
+ * `after` (la revisión semanal debajo del resumen de hoy) o, sin él, primero.
+ */
+export function withTextBlock(
+  spec: ViewSpec,
+  blockId: string,
+  markdown: string,
+  opts: { after?: string } = {},
+): ViewSpec {
   const exists = spec.blocks.some((b) => b.id === blockId && b.type === 'text');
+  if (exists)
+    return {
+      ...spec,
+      blocks: spec.blocks.map((b) =>
+        b.id === blockId && b.type === 'text' ? { ...b, markdown } : b,
+      ),
+    };
   const block: ViewBlock = { id: blockId, type: 'text', width: 'full', markdown };
-  const blocks = exists
-    ? spec.blocks.map((b) => (b.id === blockId && b.type === 'text' ? { ...b, markdown } : b))
-    : [block, ...spec.blocks].slice(0, 24);
+  const at = opts.after ? spec.blocks.findIndex((b) => b.id === opts.after) + 1 : 0;
+  const blocks = [...spec.blocks.slice(0, at), block, ...spec.blocks.slice(at)].slice(0, 24);
   return { ...spec, blocks };
 }
 

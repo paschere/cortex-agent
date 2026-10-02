@@ -1,5 +1,6 @@
 'use client';
 
+import type { ViewBrand } from '@/lib/branding/shape';
 import { archiveViewAction, duplicateViewAction, setViewPinnedAction } from '@/lib/views/actions';
 import { STARTER_TEMPLATES } from '@/lib/views/starter-templates';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -28,6 +29,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { type StudioLaunch, ViewStudio } from '../ViewStudio';
 import { ViewThumbnail } from '../ViewThumbnail';
+import { BrandScope, ViewBrandProvider } from '../blocks/brand';
+import '../views.css';
 import { ShareDialog, type ToolbarView } from '../ViewToolbar';
 import { NewViewDialog, TemplateCard, launchFor } from './NewViewDialog';
 
@@ -105,9 +108,16 @@ const MENU_ITEM =
 export function ViewsLibrary({
   views,
   suggestions,
+  brand = null,
 }: {
   views: ViewSummary[];
   suggestions: string[];
+  /**
+   * La marca de la empresa (0170): las miniaturas con el acento de siempre
+   * («primary») se tiñen con su color, y el estudio que se abre desde aquí la
+   * hereda. Sin marca, el índigo de Cortex.
+   */
+  brand?: ViewBrand | null;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -173,7 +183,7 @@ export function ViewsLibrary({
   }
 
   return (
-    <>
+    <ViewBrandProvider brand={brand}>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="flex min-w-0 items-start gap-3">
           <span className="page-identity mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-surface text-primary">
@@ -360,7 +370,7 @@ export function ViewsLibrary({
           </button>
         </output>
       )}
-    </>
+    </ViewBrandProvider>
   );
 }
 
@@ -386,9 +396,9 @@ function ViewCard({
         href={`/views/${v.slug}`}
         className="flex h-full flex-col overflow-hidden rounded-card border border-border bg-surface shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-pop motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
-        <div className="border-b border-border bg-canvas/50 p-2.5">
+        <BrandScope className="border-b border-border bg-canvas/50 p-2.5">
           <ViewThumbnail blocks={v.blocks} accent={v.accent} size="lg" />
-        </div>
+        </BrandScope>
         <div className="flex flex-1 flex-col p-4">
           <div className="flex items-start gap-2 pr-6">
             <span className="min-w-0 flex-1 text-base font-semibold text-ink group-hover:text-primary">

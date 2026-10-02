@@ -41,6 +41,8 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
     'Crea una rutina DESATENDIDA que se ejecuta sola según su programación, sin que nadie la supervise. Sigue corriendo hasta que la pauses.',
   'views.schedule_pulse':
     'Crea una rutina DESATENDIDA que cada mañana reescribe el «Resumen de hoy» de la vista con sus propias cifras y te lo deja en la conversación de la rutina. Sólo escribe en esa vista; se pausa o se borra en /schedules.',
+  'views.schedule_weekly_review':
+    'Crea una rutina DESATENDIDA que cada semana escribe la «Revisión semanal» (qué mejoró, qué empeoró, lo que hizo Cortex y tres acciones) y te la deja en la conversación de la rutina. Sólo escribe en el bloque «Semana» del pulso; se pausa o se borra en /schedules.',
   'pipeline.create':
     'Guarda un procedimiento reutilizable que cualquiera del equipo puede ejecutar desde cualquier lado — un error en su diseño se repite en cada ejecución.',
   'pipeline.update':

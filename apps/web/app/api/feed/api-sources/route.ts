@@ -1,5 +1,5 @@
 import { isSameOrigin } from '@/lib/activations/request';
-import { captureApiFeed } from '@/lib/feed/api-source';
+import { apiShapeSchema, captureApiFeed } from '@/lib/feed/api-source';
 import { feedPaginationSchema } from '@/lib/feed/pagination';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -13,6 +13,8 @@ export const maxDuration = 90;
 const Body = z.object({
   toolId: z.string().uuid(),
   pagination: feedPaginationSchema.optional(),
+  /** Where the list of records lives, or `asText` to keep the answer as text. */
+  shape: apiShapeSchema.optional(),
   input: z.record(z.unknown()).default({}),
   name: z.string().trim().min(1).max(240).optional(),
 });

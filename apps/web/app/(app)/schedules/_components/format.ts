@@ -4,6 +4,7 @@
  * import them too.
  */
 
+import { DEFAULT_TIMEZONE, describeCron, formatRun, tzLabel } from '@/lib/schedule-picker';
 import type { JobStatus } from './types';
 
 /** What each routine state is called on screen. */
@@ -14,25 +15,24 @@ export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   cancelled: 'cancelada',
 };
 
-export const DOW = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'] as const;
-
-/** Humanize the common cron shapes; fall back to the raw expression. */
+/**
+ * The schedule in words — «De lunes a viernes a las 8:00 a. m.» — via the same
+ * helpers the editor uses. The zone is added only when it is not Colombia's,
+ * which is where nearly every routine runs.
+ */
 export function humanizeCron(cron: string | null, tz: string): string {
   if (!cron) return '—';
-  const m = cron.trim().split(/\s+/);
-  if (m.length !== 5) return `${cron} (${tz})`;
-  const [min, hour, dom, , dow] = m as [string, string, string, string, string];
-  const time =
-    /^\d+$/.test(hour) && /^\d+$/.test(min)
-      ? `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
-      : null;
+  const sentence = describeCron(cron);
+  return tz === DEFAULT_TIMEZONE ? sentence : `${sentence} · ${tzLabel(tz)}`;
+}
 
-  if (min.startsWith('*/') && hour === '*') return `Cada ${min.slice(2)} min`;
-  if (time && dom === '*' && dow === '*') return `Todos los días a las ${time}`;
-  if (time && dom === '*' && dow === '1-5') return `De lunes a viernes a las ${time}`;
-  if (time && dom === '*' && /^\d$/.test(dow)) return `Cada ${DOW[Number(dow)]} a las ${time}`;
-  if (time && /^\d+$/.test(dom) && dow === '*') return `El día ${dom} de cada mes a las ${time}`;
-  return `${cron} (${tz})`;
+/** A one-off, read in the routine's own zone: «Una sola vez, el vie 3 oct, 9:00 a. m.». */
+export function humanizeOnce(runAt: string | null, tz: string): string {
+  if (!runAt) return 'Una sola vez';
+  const at = new Date(runAt);
+  if (!Number.isFinite(at.getTime())) return 'Una sola vez';
+  const when = `Una sola vez, el ${formatRun(at, tz)}`;
+  return tz === DEFAULT_TIMEZONE ? when : `${when} · ${tzLabel(tz)}`;
 }
 
 /** Compact absolute stamp, e.g. "04 mar, 09:30". */

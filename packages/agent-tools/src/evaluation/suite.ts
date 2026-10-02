@@ -468,6 +468,120 @@ export const CASES: readonly EvalCase[] = [
     needsFamily: 'people',
     why: 'Resolving a name to an address is what `people.search` exists for, and it is the step almost every mail or invite request needs first. This slot previously asked who was on holiday next week, which no tool in this product can answer — an assertion about a capability that does not exist measures the suite, not the system, so it was replaced rather than argued with.',
   },
+
+  /* ------------------------- selection-only: the families shipped 2026-09/10
+   * Phrased the way an owner or a contador in Colombia actually writes, and
+   * each one names the family that has to WIN its way in — never `kb` or
+   * `cortex`, which travel on every turn and would pass by construction (so
+   * «recuerda que con Nexa quedamos en 45 días» → kb.propose_memory is not
+   * here: it is always offered, and which of kb/cortex the model picks is a
+   * description question, not a ranking one). Added because these families
+   * shipped with no selection case at all: a description edit could hide any of
+   * them and nothing would have failed. */
+  {
+    id: 'sel-pulso-empresa',
+    group: 'unrelated',
+    query: 'dime cómo va la empresa',
+    gold: [],
+    needsFamily: 'views',
+    why: 'The front door of views.company_pulse. `company` (the profile sheet) and `goals` outscore it on "empresa", so views has to stay inside the band, not merely exist.',
+  },
+  {
+    id: 'sel-tablero-solo',
+    group: 'unrelated',
+    query: 'hazme un tablero que se actualice solo',
+    gold: [],
+    needsFamily: 'views',
+    why: '"Tablero" is a dashboard (views), but "que se actualice solo" pulls toward trackers (tables that fill themselves). Both may travel; views must.',
+  },
+  {
+    id: 'sel-resumen-diario-vista',
+    group: 'unrelated',
+    query: 'quiero un resumen diario en una vista',
+    gold: [],
+    needsFamily: 'views',
+    why: 'views.schedule_pulse / views.refresh_summary. Competes with management.daily_brief and inbox digests on "resumen diario".',
+  },
+  {
+    id: 'sel-plata-recuperada',
+    group: 'unrelated',
+    query: '¿cuánto me has ayudado a recuperar?',
+    gold: [],
+    needsFamily: 'payments',
+    why: 'payments.recovered. No word in common with "pagos" or "cartera" — the question is about Cortex itself, and only the description can carry it.',
+  },
+  {
+    id: 'sel-extracto-banco',
+    group: 'unrelated',
+    query: 'te paso el extracto de Bancolombia',
+    gold: [],
+    needsFamily: 'payments',
+    why: 'payments.preview_bank_statement. A bank name and "extracto" — documents and gdrive are the plausible wrong answers.',
+  },
+  {
+    id: 'sel-pagos-sin-factura',
+    group: 'unrelated',
+    query: '¿qué pagos no tienen factura?',
+    gold: [],
+    needsFamily: 'payments',
+    why: 'payments.bank_unmatched. Shares "factura" with accounting and documents.',
+  },
+  {
+    id: 'sel-abono-factura',
+    group: 'unrelated',
+    query: 'ese abono de 3.200.000 es la factura FE-1043',
+    gold: [],
+    needsFamily: 'payments',
+    why: 'payments.apply_to_invoice, phrased as a statement rather than a request — the way people actually confirm a match.',
+  },
+  {
+    id: 'sel-sincronizar-siigo',
+    group: 'unrelated',
+    query: 'sincroniza Siigo ahora',
+    gold: [],
+    needsFamily: 'accounting',
+    why: 'accounting.sync_now. A product name and a verb; trackers ("sync from source") is the near miss.',
+  },
+  {
+    id: 'sel-alegra-conectado',
+    group: 'unrelated',
+    query: '¿está conectado Alegra?',
+    gold: [],
+    needsFamily: 'accounting',
+    why: 'accounting.status. "Conectado" also pulls meetings (join live) and integrations-ish families; on 2026-10-02 accounting led meetings by 0.003.',
+  },
+  {
+    id: 'sel-tabla-carpeta-drive',
+    group: 'unrelated',
+    query: 'llena una tabla con lo que llegue a esta carpeta de Drive',
+    gold: [],
+    needsFamily: 'trackers',
+    why: 'trackers.sync_from_drive_folder. "Drive" pulls gdrive, which can read a folder but cannot fill a table from it.',
+  },
+  {
+    id: 'sel-tablas-desde-drive',
+    group: 'unrelated',
+    query: '¿qué tablas se están llenando solas desde Drive?',
+    gold: [],
+    needsFamily: 'trackers',
+    why: 'trackers.drive_syncs — the read side of the same feature.',
+  },
+  {
+    id: 'sel-tabla-api',
+    group: 'unrelated',
+    query: 'que la tabla de vuelos se llene sola con la API de vuelos',
+    gold: [],
+    needsFamily: 'trackers',
+    why: 'trackers.sync_from_source (table-sync from a Feed source). The web/browser families are the wrong answer for "API".',
+  },
+  {
+    id: 'sel-extracto-davivienda',
+    group: 'unrelated',
+    query: 'sube los abonos de este extracto de Davivienda',
+    gold: [],
+    needsFamily: 'payments',
+    why: 'payments.import_bank_statement, with a second bank so the case is not about one brand name.',
+  },
 ] as const;
 
 /**

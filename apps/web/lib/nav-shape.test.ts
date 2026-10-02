@@ -8,6 +8,7 @@ import {
   WAITING_ITEMS,
   buildRail,
   everyDestination,
+  moreGroups,
   primaryActive,
   primaryNav,
   waitingHref,
@@ -167,5 +168,34 @@ describe('la navegación principal del autoservicio', () => {
     expect(primaryActive('/chat/123', chat)).toBe(true);
     expect(primaryActive('/chat/global', chat)).toBe(false);
     expect(primaryActive('/chats', chat)).toBe(false);
+  });
+});
+
+describe('«Más», corto', () => {
+  it('no pasa de quince filas para nadie y no repite lo de la navegación principal', () => {
+    for (const admin of [false, true]) {
+      for (const founder of [false, true]) {
+        const groups = moreGroups({ admin, founder });
+        const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+        expect(hrefs.length).toBeLessThanOrEqual(admin ? 20 : 15);
+        expect(new Set(hrefs).size).toBe(hrefs.length);
+        const primary = primaryNav({ admin, founder }).map((i) => i.href);
+        expect(hrefs.filter((h) => primary.includes(h))).toEqual([]);
+      }
+    }
+  });
+
+  it('la administración sólo aparece para quien administra', () => {
+    expect(moreGroups({ admin: false, founder: true }).some((g) => g.id === 'admin')).toBe(false);
+    expect(moreGroups({ admin: true, founder: false }).some((g) => g.id === 'admin')).toBe(true);
+  });
+
+  it('todo lo que ofrece es un destino real del rail', () => {
+    const known = new Set(everyDestination());
+    for (const g of moreGroups({ admin: true, founder: true })) {
+      for (const item of g.items) {
+        if (item.href !== '/overview') expect(known.has(item.href)).toBe(true);
+      }
+    }
   });
 });

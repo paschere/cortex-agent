@@ -83,7 +83,9 @@ export function RunDetailDialog({
                 className="mt-2"
                 source="Ejecución"
                 readAt={fmtLong(run.started_at)}
-                detail={took ? `${RUN_STATUS_LABEL[run.status]} en ${took}` : RUN_STATUS_LABEL[run.status]}
+                detail={
+                  took ? `${RUN_STATUS_LABEL[run.status]} en ${took}` : RUN_STATUS_LABEL[run.status]
+                }
                 tone={run.status === 'error' ? 'seal' : 'stamp'}
               />
             </div>

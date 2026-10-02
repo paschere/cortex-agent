@@ -1,77 +1,14 @@
 'use client';
 
+import { SchedulePickerField } from '@/components/forms/SchedulePickerField';
+import { type ScheduleDraft, draftFromSchedule, resolveDraft } from '@/lib/schedule-picker';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { AlarmClock, Loader2, Mail, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { Loader2, Mail, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { DOW, humanizeCron } from './format';
 import type { RoutinePatch, ScheduledJob } from './types';
 
-type Frequency = 'daily' | 'weekly' | 'monthly';
-
-const FREQUENCY_LABEL: Record<Frequency, string> = {
-  daily: 'Diaria',
-  weekly: 'Semanal',
-  monthly: 'Mensual',
-};
-
-/** Short, deliberately opinionated list — the timezones this team actually uses. */
-const TIMEZONES = [
-  'America/Bogota',
-  'America/Mexico_City',
-  'America/New_York',
-  'America/Los_Angeles',
-  'America/Argentina/Buenos_Aires',
-  'Europe/Madrid',
-  'UTC',
-];
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-interface CronDraft {
-  frequency: Frequency;
-  time: string;
-  weekday: string;
-  monthDay: string;
-}
-
-const DEFAULT_DRAFT: CronDraft = {
-  frequency: 'daily',
-  time: '09:00',
-  weekday: '1',
-  monthDay: '1',
-};
-
-/** Read a 5-field cron back into the friendly picker. Null when it's too exotic. */
-function parseCron(cron: string | null): CronDraft | null {
-  if (!cron) return null;
-  const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) return null;
-  const [min, hour, dom, month, dow] = parts as [string, string, string, string, string];
-  if (!/^\d{1,2}$/.test(min) || !/^\d{1,2}$/.test(hour) || month !== '*') return null;
-  const time = `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
-  if (dom === '*' && dow === '*') return { ...DEFAULT_DRAFT, frequency: 'daily', time };
-  if (dom === '*' && /^[0-6]$/.test(dow))
-    return { ...DEFAULT_DRAFT, frequency: 'weekly', time, weekday: dow };
-  if (/^\d{1,2}$/.test(dom) && dow === '*')
-    return {
-      ...DEFAULT_DRAFT,
-      frequency: 'monthly',
-      time,
-      monthDay: String(Number(dom)),
-    };
-  return null;
-}
-
-/** Compose the 5-field expression the picker can express. */
-function buildCron(draft: CronDraft): string {
-  const [hh = '9', mm = '0'] = draft.time.split(':');
-  const hour = String(Number(hh));
-  const min = String(Number(mm));
-  if (draft.frequency === 'weekly') return `${min} ${hour} * * ${draft.weekday}`;
-  if (draft.frequency === 'monthly') return `${min} ${hour} ${draft.monthDay} * *`;
-  return `${min} ${hour} * * *`;
-}
 
 /**
  * Rename a routine, retime it, and fix who gets the email — without going back
@@ -87,10 +24,7 @@ export function EditRoutineDialog({
   onSaved: (patch: RoutinePatch) => void;
 }) {
   const [name, setName] = useState('');
-  const [draft, setDraft] = useState<CronDraft>(DEFAULT_DRAFT);
-  const [advanced, setAdvanced] = useState(false);
-  const [rawCron, setRawCron] = useState('');
-  const [timezone, setTimezone] = useState('UTC');
+  const [schedule, setSchedule] = useState<ScheduleDraft>(() => draftFromSchedule({}));
   const [notifyEmail, setNotifyEmail] = useState(false);
   const [recipients, setRecipients] = useState<string[]>([]);
   const [recipientDraft, setRecipientDraft] = useState('');
@@ -102,12 +36,8 @@ export function EditRoutineDialog({
   // Re-seed the form whenever a different routine is opened.
   useEffect(() => {
     if (!job) return;
-    const parsed = parseCron(job.cron);
     setName(job.name);
-    setDraft(parsed ?? DEFAULT_DRAFT);
-    setAdvanced(job.scheduleKind === 'cron' && !parsed);
-    setRawCron(job.cron ?? '');
-    setTimezone(job.timezone);
+    setSchedule(draftFromSchedule(job));
     setNotifyEmail(job.notifyEmail);
     setRecipients(job.recipients);
     setRecipientDraft('');
@@ -117,9 +47,10 @@ export function EditRoutineDialog({
 
   if (!job || !jobId) return null;
 
-  const isCron = job.scheduleKind === 'cron';
-  const composedCron = advanced ? rawCron.trim() : buildCron(draft);
-  const tzOptions = TIMEZONES.includes(timezone) ? TIMEZONES : [timezone, ...TIMEZONES];
+  // A finished one-off has nothing left to reschedule: the API refuses to
+  // switch kinds on a routine that is not active or paused.
+  const live = job.status === 'active' || job.status === 'paused';
+  const canRetime = live || job.scheduleKind === 'cron';
 
   function addRecipient(raw?: string) {
     const value = (raw ?? recipientDraft).trim().toLowerCase().replace(/,$/, '');
@@ -134,14 +65,26 @@ export function EditRoutineDialog({
   }
 
   async function save() {
+    if (!job) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError('Ponle un nombre a la rutina.');
       return;
     }
-    if (isCron && composedCron.trim().split(/\s+/).length !== 5) {
-      setError('La expresión cron necesita exactamente 5 campos, por ejemplo “0 9 * * 1-5”.');
-      return;
+    const resolved = canRetime ? resolveDraft(schedule) : null;
+    if (resolved && !resolved.ok) {
+      // A one-off whose moment already passed and was not touched is not an
+      // error: only the other fields are being edited.
+      const untouchedOnce =
+        job.scheduleKind === 'once' &&
+        schedule.picker.mode === 'once' &&
+        !schedule.custom &&
+        draftFromSchedule(job).picker.date === schedule.picker.date &&
+        draftFromSchedule(job).picker.time === schedule.picker.time;
+      if (!untouchedOnce) {
+        setError(resolved.error);
+        return;
+      }
     }
     // A half-typed recipient in the box is almost always meant to be included.
     let finalRecipients = recipients;
@@ -156,11 +99,18 @@ export function EditRoutineDialog({
 
     const patch: RoutinePatch = {
       name: trimmed,
-      timezone,
+      timezone: schedule.timezone,
       notifyEmail,
       recipients: finalRecipients,
     };
-    if (isCron) patch.cron = composedCron;
+    // Send the schedule only when it changed: re-sending an old one-off time
+    // would be refused as "in the past".
+    if (resolved?.ok && resolved.kind === 'cron') {
+      if (job.scheduleKind !== 'cron' || resolved.cron !== job.cron) patch.cron = resolved.cron;
+    } else if (resolved?.ok && resolved.kind === 'once') {
+      const saved = job.runAt ? new Date(job.runAt).toISOString() : null;
+      if (job.scheduleKind !== 'once' || resolved.runAt !== saved) patch.runAt = resolved.runAt;
+    }
 
     setSaving(true);
     setError(null);
@@ -221,122 +171,19 @@ export function EditRoutineDialog({
               />
             </Field>
 
-            {isCron ? (
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="field-label">Programación</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!advanced) setRawCron(composedCron);
-                      else setDraft(parseCron(rawCron) ?? draft);
-                      setAdvanced(!advanced);
-                    }}
-                    className="rounded-pill px-2 py-0.5 text-micro font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    {advanced ? 'Usar el selector' : 'Avanzado'}
-                  </button>
-                </div>
-
-                {advanced ? (
-                  <input
-                    value={rawCron}
-                    onChange={(e) => setRawCron(e.target.value)}
-                    spellCheck={false}
-                    placeholder="0 9 * * 1-5"
-                    className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-3 gap-1 rounded-card border border-border bg-surface-2 p-1">
-                      {(['daily', 'weekly', 'monthly'] as const).map((f) => (
-                        <button
-                          key={f}
-                          type="button"
-                          onClick={() => setDraft({ ...draft, frequency: f })}
-                          className={clsx(
-                            'rounded-pill px-2 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                            draft.frequency === f
-                              ? 'bg-primary-soft text-primary-ink'
-                              : 'text-ink-muted hover:text-ink',
-                          )}
-                        >
-                          {FREQUENCY_LABEL[f]}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <label className="flex min-w-[120px] flex-1 flex-col gap-1">
-                        <span className="field-label">Hora</span>
-                        <input
-                          type="time"
-                          value={draft.time}
-                          onChange={(e) => setDraft({ ...draft, time: e.target.value })}
-                          className="tabular rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
-                        />
-                      </label>
-                      {draft.frequency === 'weekly' && (
-                        <label className="flex min-w-[140px] flex-1 flex-col gap-1">
-                          <span className="field-label">Día de la semana</span>
-                          <select
-                            value={draft.weekday}
-                            onChange={(e) => setDraft({ ...draft, weekday: e.target.value })}
-                            className="rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
-                          >
-                            {DOW.map((d, i) => (
-                              <option key={d} value={String(i)}>
-                                {d}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )}
-                      {draft.frequency === 'monthly' && (
-                        <label className="flex min-w-[140px] flex-1 flex-col gap-1">
-                          <span className="field-label">Día del mes</span>
-                          <select
-                            value={draft.monthDay}
-                            onChange={(e) => setDraft({ ...draft, monthDay: e.target.value })}
-                            className="tabular rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
-                          >
-                            {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((d) => (
-                              <option key={d} value={d}>
-                                {d}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <p className="tabular mt-2 inline-flex items-center gap-1.5 text-micro text-ink-faint">
-                  <AlarmClock className="h-3.5 w-3.5 text-primary" />
-                  {humanizeCron(composedCron || null, timezone)} · {timezone}
-                </p>
-              </div>
+            {canRetime ? (
+              <SchedulePickerField
+                idPrefix="routine-schedule"
+                value={schedule}
+                onChange={setSchedule}
+                allowOnce={live}
+              />
             ) : (
               <div className="rounded-card border border-border bg-surface-2 px-3 py-2.5 text-xs text-ink-muted">
-                Esta rutina corre una sola vez, así que no se le puede cambiar la hora aquí. Pídele
-                a Cortex en el chat una nueva a la hora que quieras.
+                Esta rutina ya corrió su única vez, así que no se le puede cambiar la hora aquí.
+                Pídele a Cortex en el chat una nueva a la hora que quieras.
               </div>
             )}
-
-            <Field label="Zona horaria" htmlFor="routine-timezone">
-              <select
-                id="routine-timezone"
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
-              >
-                {tzOptions.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
-            </Field>
 
             <div>
               <div className="field-label mb-2">Entrega</div>

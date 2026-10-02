@@ -32,7 +32,12 @@ const PERCENT = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 export function MetricBlock({ block }: { block: Metric }) {
   const pct = block.goal ? Math.max(0, Math.min(block.goal.ratio, 1)) : 0;
   const compare = block.compare;
-  const long = block.display.length > 13;
+  // El tamaño sigue el ANCHO DE LA TARJETA, no la longitud del texto sola: una
+  // cifra como «$ 168.200.000» cabe en media fila pero no en un tercio de un
+  // teléfono. La tarjeta es contenedor (`container-type`) y la cifra toma lo
+  // que quepa: la mono mide ~0,6 em por carácter, así que 150/largo en `cqi`
+  // la deja dentro con margen, entre 1 rem y el tamaño de titular.
+  const fit = `clamp(1rem, ${Math.max(4, Math.floor(150 / Math.max(block.display.length, 1)))}cqi, 2.25rem)`;
   return (
     <Card className="flex flex-col">
       <div className="flex items-center justify-between gap-2">
@@ -49,14 +54,14 @@ export function MetricBlock({ block }: { block: Metric }) {
           </span>
         )}
       </div>
-      <p
-        className={clsx(
-          'tabular mt-3 font-mono font-semibold leading-none tracking-tight text-ink',
-          long ? 'text-xl' : 'text-display',
-        )}
-      >
-        {block.display}
-      </p>
+      <div className="mt-3" style={{ containerType: 'inline-size' }}>
+        <p
+          className="tabular whitespace-nowrap font-mono font-semibold leading-none tracking-tight text-ink"
+          style={{ fontSize: fit }}
+        >
+          {block.display}
+        </p>
+      </div>
       {compare && <Trend compare={compare} />}
       {compare && compare.series.length >= 2 && (
         <div className="mt-auto pt-4">

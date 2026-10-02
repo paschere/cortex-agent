@@ -1,6 +1,7 @@
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { type SelectableTool, listTools, syncToolVectors } from '@cortex/agent-tools';
 import { embedInBatches, embeddingModelId } from '@cortex/agent-tools/src/kb/embedder';
 import { recordEmbeddingUsage } from '@cortex/agent-tools/src/kb/embedding-usage';
 import { logger } from '@cortex/core';
@@ -125,6 +126,30 @@ export const reindexEmbeddingsJob: JobHandler = async ({ step }) => {
   const sb = getSupabaseServiceClient();
   const modelId = embeddingModelId();
 
+  // LOS VECTORES DE LAS HERRAMIENTAS, ANTES QUE LOS DEL CEREBRO.
+  //
+  // La selección de herramientas (packages/agent-tools/src/tool-selection)
+  // compara cada pregunta con lo que cada herramienta dice que hace, y ese
+  // «dice» vive en `tool_embeddings` con la huella del texto. Un deploy que
+  // reescribe descripciones o trae herramientas nuevas deja esas filas viejas:
+  // la familia viaja en TODOS los turnos (falla abierta) hasta que algún turno
+  // la re-embeba en segundo plano — y en serverless ese segundo plano puede
+  // congelarse sin escribir nada. Aquí se cierra el hueco: cada 15 minutos se
+  // compara la huella de todo el registro y se embebe sólo lo que cambió. Sin
+  // cambios es un SELECT de dos columnas y cero llamadas al proveedor; tras un
+  // deploy son unas pocas herramientas. Nunca lanza: un fallo aquí cuesta
+  // relevancia, no el barrido del cerebro que viene después.
+  const tools = await step.run('sync-tool-vectors', async () => {
+    const catalogue: SelectableTool[] = listTools().map((t) => ({
+      id: t.id,
+      description: t.description,
+    }));
+    return syncToolVectors(sb, catalogue);
+  });
+  if (tools.stale > 0 || tools.failure) {
+    logger.info({ ...tools, model: modelId }, 'tool-vectors: sync');
+  }
+
   // "No vector, or a vector from a model we no longer use." Both are work, and
   // both are invisible to search until this job clears them.
   const staleFilter = `embedding.is.null,embedding_model.is.null,embedding_model.neq.${modelId}`;
@@ -138,7 +163,7 @@ export const reindexEmbeddingsJob: JobHandler = async ({ step }) => {
     return count ?? 0;
   });
 
-  if (pending === 0) return { pending: 0, embedded: 0, model: modelId };
+  if (pending === 0) return { pending: 0, embedded: 0, model: modelId, tools };
 
   logger.info({ pending, model: modelId }, 'kb-reindex: starting');
 
@@ -268,7 +293,7 @@ export const reindexEmbeddingsJob: JobHandler = async ({ step }) => {
   }
 
   logger.info({ embedded, readied, remaining, halted, model: modelId }, 'kb-reindex: finished');
-  return { pending, embedded, documentsReady: readied, remaining, halted, model: modelId };
+  return { pending, embedded, documentsReady: readied, remaining, halted, model: modelId, tools };
 };
 
 export const reindexEmbeddings = inngest.createFunction(

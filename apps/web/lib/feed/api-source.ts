@@ -62,6 +62,8 @@ export const apiShapeSchema = z.object({
     .refine((v) => !v.split('.').some((k) => ['__proto__', 'constructor', 'prototype'].includes(k)))
     .optional(),
   columns: z.array(z.string().trim().min(1).max(80)).max(MAX_COLUMNS).optional(),
+  /** «No convertir en tabla»: guarda la respuesta como texto aunque traiga una lista. */
+  asText: z.boolean().optional(),
 });
 export type ApiShape = z.infer<typeof apiShapeSchema>;
 
@@ -116,7 +118,7 @@ export function normalizeApiFeed(
   tables?: SheetData[];
   truncated: boolean;
 } {
-  const found = findRecords(data, shape);
+  const found = shape?.asText ? null : findRecords(data, shape);
   if (found) {
     const records: Array<Record<string, unknown>> = isRowList(found)
       ? found.map((row) =>
@@ -335,7 +337,7 @@ export async function captureApiFeed(options: {
     toolId: tool.id,
     input: options.input,
     ...(pagination ? { pagination } : {}),
-    ...(shape && (shape.recordsPath || shape.columns?.length) ? { shape } : {}),
+    ...(shape && (shape.recordsPath || shape.columns?.length || shape.asText) ? { shape } : {}),
   };
   const configHash = hashConfig(safeConfig);
   const sourceName = (options.name?.trim() || tool.name).slice(0, 240);

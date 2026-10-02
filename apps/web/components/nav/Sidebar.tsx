@@ -8,6 +8,7 @@ import {
   WAITING_ICON,
   WAITING_LABEL,
   buildRail,
+  moreGroups,
   primaryActive,
   primaryNav,
 } from '@/lib/nav-shape';
@@ -95,40 +96,16 @@ function Navigation({
   const rail = buildRail([], admin);
   const primary = primaryNav({ admin, founder });
   const primaryHrefs = new Set(primary.map((item) => item.href));
+  // «Más» corto (ver `moreGroups` en lib/nav-shape.ts): lo de la semana en tres
+  // grupos, la administración aparte para quien administra, y el resto en la
+  // paleta. «Todas mis empresas» lleva al centro de mando, que es global.
   const globalItems: NavItem[] = [
-    { href: '/overview', label: 'Inicio global', icon: LayoutDashboard },
-    { href: '/chat/global', label: 'Chat multiempresa', icon: MessagesSquare },
-    { href: '/notifications', label: 'Notificaciones', icon: Bell },
+    { href: '/overview', label: 'Todas mis empresas', icon: LayoutDashboard },
   ];
-  const notPrimary = (item: NavItem) => !primaryHrefs.has(item.href);
-  const section = (id: string) =>
-    rail.rest.filter((s) => s.id === id).flatMap((s) => s.items.filter(notPrimary));
-  const groups: Group[] = [
-    {
-      id: 'daily',
-      label: 'Todos los días',
-      items: rail.pinned.filter(notPrimary),
-    },
-    { id: 'work', label: 'Clientes y tablas', items: section('work') },
-    { id: 'finance', label: 'Finanzas', items: section('finance') },
-    {
-      id: 'automation',
-      label: 'Lo que hago solo',
-      items: [...section('automation'), ...section('review')],
-    },
-    { id: 'sources', label: 'De dónde saco todo', items: section('sources') },
-    {
-      id: 'company',
-      label: 'La empresa',
-      items: [
-        ...rail.company.items,
-        ...(founder
-          ? [{ href: '/team/activity', label: 'Actividad del equipo', icon: Users }]
-          : []),
-        ...rail.footer.filter((item) => item.href !== '/settings'),
-      ].filter(notPrimary),
-    },
-  ].filter((group) => group.items.length > 0);
+  const groups: Group[] = moreGroups({ admin, founder }).map((g) => ({
+    ...g,
+    items: g.items.filter((item) => !primaryHrefs.has(item.href)),
+  }));
   const waitingCount = rail.waiting.reduce(
     (sum, item) => sum + (item.signal ? counts[item.signal] : 0),
     0,
@@ -361,15 +338,6 @@ function Navigation({
             onToggle: () => toggle('more'),
           })}
           <div id={`sidebar-${scope}-more`} hidden={!moreOpen} className="mt-1 space-y-3">
-            <div>
-              <p className="px-3 pb-1 pt-2 text-micro font-bold uppercase tracking-field text-rail-ink-faint">
-                Todas tus empresas
-              </p>
-              <div className="space-y-0.5">
-                {globalItems.map(row)}
-                <CreateCompanyButton />
-              </div>
-            </div>
             {groups.map((group) => (
               <div key={group.id}>
                 <p className="px-3 pb-1 pt-2 text-micro font-bold uppercase tracking-field text-rail-ink-faint">
@@ -378,6 +346,21 @@ function Navigation({
                 <div className="space-y-0.5">{group.items.map(row)}</div>
               </div>
             ))}
+            <div className="space-y-0.5 pb-1">
+              <CreateCompanyButton />
+              <button
+                type="button"
+                onClick={() => {
+                  commands.setOpen(true);
+                  onNavigate?.();
+                }}
+                className="workspace-nav-link flex min-h-9 w-full items-center gap-3 rounded-pill px-3 text-left text-sm font-semibold text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink"
+              >
+                <Search className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">Buscar cualquier pantalla</span>
+                <kbd className="text-micro font-semibold text-rail-ink-faint">⌘K</kbd>
+              </button>
+            </div>
           </div>
         </div>
       </nav>

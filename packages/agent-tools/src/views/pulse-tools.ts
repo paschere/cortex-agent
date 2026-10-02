@@ -31,7 +31,17 @@ import {
   summaryVersionPrompt,
   weekdaysPhrase,
   withSummary,
+  withTextBlock,
 } from './pulse';
+import {
+  DAILY_BASELINE,
+  type PulseSnapshot,
+  WEEK_BLOCK_ID,
+  dailyDeltas,
+  pickBaseline,
+  shiftDay,
+} from './pulse-history';
+import { readPulseSnapshots, savePulseSnapshot } from './pulse-snapshots';
 import { readPlatformSource } from './sources';
 import { BLOCK_ID_RE, trackersOf } from './spec';
 import {
@@ -127,7 +137,7 @@ export type SummaryWriter = (input: {
 const SUMMARY_SYSTEM = `Escribes el «Resumen de hoy» de un tablero de una empresa colombiana. Lo lee el dueño o el gerente a primera hora.
 
 Devuelve EXACTAMENTE 3 frases cortas (máximo 220 caracteres cada una), en español de Colombia, sin emojis, sin tecnicismos:
-1. Qué cambió frente a ayer (usa las cifras cuya clave termina en ".ayer" o "vencio_ayer"; si todas son cero, dilo).
+1. Qué cambió frente a ayer: primero las cifras cuya clave termina en ".delta" (lo que cambió contra el último día guardado; su "label" ya dice si subió o bajó y desde cuándo, y su "display" es la diferencia), después ".ayer", ".ayer_registros" o "vencio_ayer". Si todas son cero o no hay, dilo.
 2. Qué necesita atención hoy (cartera vencida, quién debe más, pendientes, vencimientos, procesos con error).
 3. Cómo va el mes (ventas, pagos, recuperado contra el período anterior, metas).
 Empieza cada frase con una etiqueta en negrita: **Frente a ayer:**, **Para hoy:**, **El mes:**.
@@ -168,6 +178,10 @@ export type RefreshOutcome =
       /** Si la guarda tumbó al modelo y se escribió el resumen sin modelo. */
       fallback: boolean;
       rejected: string[];
+      /** El día guardado contra el que se comparó («frente a ayer»), si lo hubo. */
+      comparedWith: string | null;
+      /** Si las cifras de hoy quedaron guardadas en pulse_snapshots. */
+      snapshotSaved: boolean;
     }
   | { status: 'already'; view: CustomViewRow; day: string; markdown: string }
   | { status: 'no_data'; view: CustomViewRow; day: string; markdown: string };
@@ -227,8 +241,8 @@ export async function refreshViewSummary(
     ? opts.load(view)
     : loadViewSources(db, view.spec, { viewerId: opts.userId }));
   const computed = computeView(view.spec, sources, now);
-  const facts = pulseFacts(view.spec, computed, sources, now);
-  if (!facts.some((f) => f.value !== null))
+  const today = pulseFacts(view.spec, computed, sources, now);
+  if (!today.some((f) => f.value !== null))
     return {
       status: 'no_data',
       view,
@@ -236,6 +250,28 @@ export async function refreshViewSummary(
       markdown:
         'Esta vista todavía no tiene cifras para resumir. Cuando sus fuentes tengan datos, el resumen se escribe solo.',
     };
+
+  // La memoria (0171): el último día guardado, para decir cuánto cambió cada
+  // cifra; y hoy, guardado para mañana. Una base sin la tabla (migración sin
+  // aplicar) o caída no tumba el resumen: se escribe como antes, sin restas.
+  let base: PulseSnapshot | null = null;
+  try {
+    base = pickBaseline(
+      await readPulseSnapshots(db, view.id, shiftDay(day, -DAILY_BASELINE.max), shiftDay(day, -1)),
+      day,
+      DAILY_BASELINE,
+    );
+  } catch {
+    base = null;
+  }
+  const facts = [...today, ...dailyDeltas(today, base, day)];
+  let snapshotSaved = false;
+  try {
+    await savePulseSnapshot(db, { viewId: view.id, day, facts: today });
+    snapshotSaved = true;
+  } catch {
+    snapshotSaved = false;
+  }
 
   const write = opts.write ?? modelSummaryWriter;
   let bullets: string[] | null = null;
@@ -270,7 +306,16 @@ export async function refreshViewSummary(
       view = await mustGetView(db, view.id);
     }
   }
-  return { status: 'written', view, day, markdown, fallback, rejected };
+  return {
+    status: 'written',
+    view,
+    day,
+    markdown,
+    fallback,
+    rejected,
+    comparedWith: base?.day ?? null,
+    snapshotSaved,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +333,7 @@ const pulseSummarySchema = z.object({
 
 export const viewsCompanyPulse = registerTool({
   id: 'views.company_pulse',
-  description: `Build (or rebuild) the company's executive dashboard view «Pulso de la empresa» automatically from the data THIS company actually has — the person does not have to design anything. Use it whenever someone asks how the company is doing in a view or dashboard: «dime cómo va la empresa», «cómo vamos», «quiero un tablero de la empresa», «un tablero que se actualice solo», «hazme un resumen diario en una vista», «pulso de la empresa», «resumen ejecutivo». It inspects which sources have rows (sales invoices or Siigo/Alegra/QuickBooks invoices, payments, overdue receivables / money at risk, money recovered by Cortex, goals, management cases and decisions, commitments, deadlines, failing routines) and composes headline KPIs (this month vs last month), trend charts, top clients and debtors, and a «Resumen de hoy» text block that it fills with today's grounded summary. Blocks whose source has no data are left out and returned in "missing" with how to connect them — relay those in plain words. If the company has no data at all, nothing is created and you get what to connect first. Rebuilding keeps the same view and its current summary. Afterwards OFFER to refresh the summary every morning with views.schedule_pulse (needs the person's approval). Prefer this over views.create for any whole-company overview.`,
+  description: `Answers «¿cómo va la empresa?» with a live executive dashboard. Build (or rebuild) the company's executive dashboard view «Pulso de la empresa» automatically from the data THIS company actually has — the person does not have to design anything. Use it whenever someone asks how the company is doing in a view or dashboard: «dime cómo va la empresa», «cómo vamos», «quiero un tablero de la empresa», «un tablero que se actualice solo», «hazme un resumen diario en una vista», «pulso de la empresa», «resumen ejecutivo». It inspects which sources have rows (sales invoices or Siigo/Alegra/QuickBooks invoices, payments, overdue receivables / money at risk, money recovered by Cortex, goals, management cases and decisions, commitments, deadlines, failing routines) and composes headline KPIs (this month vs last month), trend charts, top clients and debtors, and a «Resumen de hoy» text block that it fills with today's grounded summary. Blocks whose source has no data are left out and returned in "missing" with how to connect them — relay those in plain words. If the company has no data at all, nothing is created and you get what to connect first. Rebuilding keeps the same view and its current summary. Afterwards OFFER to refresh the summary every morning with views.schedule_pulse (needs the person's approval). Prefer this over views.create for any whole-company overview.`,
   inputSchema: z.object({
     name: z
       .string()
@@ -341,10 +386,14 @@ export const viewsCompanyPulse = registerTool({
     const keepText = existing?.spec.blocks.find(
       (b) => b.id === SUMMARY_BLOCK_ID && b.type === 'text',
     );
-    const draft =
+    // Ni la revisión semanal, que vive justo debajo.
+    const keepWeek = existing?.spec.blocks.find((b) => b.id === WEEK_BLOCK_ID && b.type === 'text');
+    let draft =
       keepText?.type === 'text'
         ? withSummary(composed.spec, SUMMARY_BLOCK_ID, keepText.markdown)
         : composed.spec;
+    if (keepWeek?.type === 'text')
+      draft = withTextBlock(draft, WEEK_BLOCK_ID, keepWeek.markdown, { after: SUMMARY_BLOCK_ID });
     const spec = await validateSpec(ctx.db, draft, {
       viewerId: ctx.userId,
       keep: existing ? trackersOf(existing.spec) : [],
@@ -402,7 +451,7 @@ export const viewsCompanyPulse = registerTool({
 export const viewsRefreshSummary = registerTool({
   id: 'views.refresh_summary',
   description:
-    'Rewrite the «Resumen de hoy» text block of a view (the company pulse or any view) with a short grounded summary of today: what changed vs yesterday, what needs attention today, how the month is going — 3 plain-Spanish bullets built ONLY from the numbers the view computes (a checker rejects any figure not present in the view data). Runs once per view per day: a second call the same day returns the summary already written unless force is true (only when the person explicitly asks to rewrite it). The daily routine created by views.schedule_pulse calls this. The previous summary stays in the view history.',
+    'Rewrite the «Resumen de hoy» text block of a view (the company pulse or any view) with a short grounded summary of today: what changed vs yesterday (real differences against the figures stored for the previous day, e.g. «la cartera vencida subió $ 1.200.000 desde ayer»), what needs attention today, how the month is going — 3 plain-Spanish bullets built ONLY from the numbers the view computes (a checker rejects any figure not present in the view data). Runs once per view per day: a second call the same day returns the summary already written unless force is true (only when the person explicitly asks to rewrite it). The daily routine created by views.schedule_pulse calls this. Each run also stores the figures of the day (pulse_snapshots) so the next daily summary and the Monday weekly review (views.weekly_review) can compare. The previous summary stays in the view history.',
   inputSchema: z.object({
     view: viewRef,
     blockId: z

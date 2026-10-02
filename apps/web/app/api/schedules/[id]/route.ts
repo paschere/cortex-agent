@@ -15,12 +15,17 @@ const PatchBody = z.object({
     .object({
       name: z.string().trim().min(1).max(120).optional(),
       cron: z.string().trim().min(1).max(120).optional(),
+      /** Switch to (or retime) a one-off run. Mutually exclusive with `cron`. */
+      runAt: z.string().datetime({ offset: true }).optional(),
       timezone: z.string().trim().min(1).max(64).optional(),
       notifyEmail: z.boolean().optional(),
       recipients: z.array(z.string().trim().toLowerCase().email()).max(25).optional(),
     })
     .refine((p) => Object.values(p).some((v) => v !== undefined), {
       message: 'patch must change at least one field',
+    })
+    .refine((p) => p.cron === undefined || p.runAt === undefined, {
+      message: 'a routine is either recurring (cron) or one-off (runAt), not both',
     }),
 });
 
@@ -122,21 +127,53 @@ export async function PATCH(
       patch.timezone = p.timezone;
     }
 
+    const live = status === 'active' || status === 'paused';
+    // Switching between recurring and one-off is allowed only while the
+    // routine is still live: a finished one has nothing left to reschedule.
+    const switching =
+      (p.cron !== undefined && scheduleKind === 'once') ||
+      (p.runAt !== undefined && scheduleKind === 'cron');
+    if (switching && !live) {
+      return NextResponse.json(
+        { error: `This routine is ${status}; create a new one instead` },
+        { status: 409 },
+      );
+    }
+
+    let nextKind = scheduleKind;
     if (p.cron !== undefined) {
-      if (scheduleKind !== 'cron') {
+      patch.cron = p.cron;
+      if (scheduleKind === 'once') {
+        patch.schedule_kind = 'cron';
+        patch.run_at = null;
+        nextKind = 'cron';
+      }
+    }
+
+    if (p.runAt !== undefined) {
+      const runAt = new Date(p.runAt);
+      if (runAt.getTime() <= Date.now()) {
         return NextResponse.json(
-          { error: 'This routine runs once; it has no cron expression to change' },
-          { status: 409 },
+          { error: 'The one-off run time must be in the future' },
+          {
+            status: 400,
+          },
         );
       }
-      patch.cron = p.cron;
+      patch.run_at = runAt.toISOString();
+      if (scheduleKind === 'cron') {
+        patch.schedule_kind = 'once';
+        patch.cron = null;
+        nextKind = 'once';
+      }
+      if (live) patch.next_run_at = runAt.toISOString();
     }
 
     // Retiming invalidates the stored next_run_at: recompute it with the same
     // helper the dispatcher and schedule.create use (cron-parser, tz-aware).
     // Cancelled/completed jobs keep next_run_at null — resuming recomputes.
     const retimed = p.cron !== undefined || p.timezone !== undefined;
-    if (retimed && scheduleKind === 'cron' && (status === 'active' || status === 'paused')) {
+    if (retimed && nextKind === 'cron' && live) {
       const cron = p.cron ?? (job.cron as string);
       const timezone = p.timezone ?? (job.timezone as string);
       try {
@@ -151,7 +188,9 @@ export async function PATCH(
     .from('scheduled_jobs')
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .select('id, name, status, cron, timezone, notify_email, recipients, next_run_at')
+    .select(
+      'id, name, status, schedule_kind, cron, run_at, timezone, notify_email, recipients, next_run_at',
+    )
     .single();
   if (error || !updated) {
     return NextResponse.json({ error: error?.message ?? 'Update failed' }, { status: 500 });

@@ -706,6 +706,11 @@ export async function POST(req: NextRequest) {
   // Taken from the resolved value rather than left to the closure's assignment,
   // so the block is provably finished before anything downstream reads it.
   ragBlock = ragBlockResolved;
+  // The background embed of any tool this turn found unindexed (a new MCP
+  // server, a description edited this deploy). Handed to `after()` so the
+  // platform keeps the instance alive until the row is written, instead of
+  // freezing a fire-and-forget promise once the stream ends. It never rejects.
+  after(() => selection.indexing);
   const attachmentBlock = renderTurnAttachmentBlock(turnAttachments);
 
   // A conversation may withhold a whole family. Applied AFTER ranking rather

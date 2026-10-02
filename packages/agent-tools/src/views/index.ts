@@ -9,6 +9,7 @@
 
 import './tools';
 import './pulse-tools';
+import './pulse-weekly';
 
 export {
   viewsArchive,
@@ -32,6 +33,21 @@ export {
   type SummaryWriter,
 } from './pulse-tools';
 export * from './pulse';
+export * from './pulse-history';
+export { readPulseSnapshots, savePulseSnapshot } from './pulse-snapshots';
+export {
+  viewsWeeklyReview,
+  viewsScheduleWeeklyReview,
+  weeklyRoutineInput,
+  runWeeklyReview,
+  readWeeklyActivity,
+  weeklyWrittenOn,
+  modelWeeklyWriter,
+  type WeeklyOutcome,
+  type WeeklyOptions,
+  type WeeklyWriter,
+  type ActivityWindow,
+} from './pulse-weekly';
 
 export * from './spec';
 export * from './compute';

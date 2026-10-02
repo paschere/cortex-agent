@@ -28,9 +28,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { CustomTools } from '../tools/_components/CustomTools';
+import { ConnectApiWizard, httpApiWizardClient } from './ConnectApiWizard';
 import { SourceIntelligence } from './SourceIntelligence';
 import { SourceReliability } from './SourceReliability';
 
@@ -57,6 +57,15 @@ export function Feed({
   initialMode?: 'file' | 'url' | 'text' | 'api';
 }) {
   const href = (path: string) => workspaceHref(workspaceId, path);
+  const apiClient = useMemo(
+    () =>
+      httpApiWizardClient({
+        apiSources: workspaceHref(workspaceId, '/api/feed/api-sources'),
+        sources: workspaceHref(workspaceId, '/api/feed/sources'),
+        entry: (id) => workspaceHref(workspaceId, `/api/feed/${id}`),
+      }),
+    [workspaceId],
+  );
   const router = useRouter();
   const [entries, setEntries] = useState(initialEntries);
   const [selected, setSelected] = useState<string | null>(null);
@@ -300,8 +309,8 @@ export function Feed({
           </div>
         ) : null}
         {mode === 'api' ? (
-          <ApiSourcePanel
-            apiHref={href('/api/feed/api-sources')}
+          <ConnectApiWizard
+            client={apiClient}
             onAdded={(entry) => {
               setEntries((prev) => [entry, ...prev.filter((item) => item.id !== entry.id)]);
               setSelected(entry.id);
@@ -949,236 +958,5 @@ function FeedSourceRegistry({
         </ul>
       </div>
     </details>
-  );
-}
-
-type ApiTool = {
-  id: string;
-  name: string;
-  description: string;
-  fields: Array<{ name: string; required: boolean; description: string; enum?: string[] }>;
-};
-function ApiSourcePanel({
-  apiHref,
-  onAdded,
-}: { apiHref: string; onAdded: (entry: FeedEntry) => void }) {
-  const [tools, setTools] = useState<ApiTool[] | null>(null);
-  const [canConfigure, setCanConfigure] = useState(false);
-  const [toolId, setToolId] = useState('');
-  const [input, setInput] = useState<Record<string, string>>({});
-  const [name, setName] = useState('');
-  const [paginated, setPaginated] = useState(false);
-  const [recordsPath, setRecordsPath] = useState('data');
-  const [nextCursorPath, setNextCursorPath] = useState('next_cursor');
-  const [cursorInput, setCursorInput] = useState('');
-  const [working, setWorking] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetch(apiHref, { signal: controller.signal })
-      .then(async (response) => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error);
-        setTools(body.tools);
-        setCanConfigure(body.canConfigure);
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted)
-          setApiError(error.message ?? 'No se pudieron cargar las APIs.');
-      });
-    return () => controller.abort();
-  }, [apiHref]);
-  const tool = tools?.find((item) => item.id === toolId);
-  async function capture(event: React.FormEvent) {
-    event.preventDefault();
-    if (!tool) return;
-    setWorking(true);
-    setApiError(null);
-    try {
-      const response = await fetch(apiHref, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          toolId,
-          input,
-          ...(name.trim() ? { name: name.trim() } : {}),
-          ...(paginated
-            ? { pagination: { recordsPath, nextCursorPath, cursorInput, maxPages: 5 } }
-            : {}),
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? 'No se pudo consultar la API.');
-      onAdded(body.entry);
-    } catch (error) {
-      setApiError(error instanceof Error ? error.message : 'No se pudo consultar la API.');
-    } finally {
-      setWorking(false);
-    }
-  }
-  if (tools === null) return <p className="text-sm text-ink-muted">Cargando APIs disponibles…</p>;
-  if (!tools.length)
-    return (
-      <div>
-        <p className="mb-4 text-sm text-ink-muted">
-          No hay una API de consulta configurada. Añádela aquí una sola vez; no volveremos a pedir
-          credenciales al capturar datos.
-        </p>
-        {canConfigure ? (
-          <CustomTools />
-        ) : (
-          <p className="text-sm text-amber">Un administrador debe configurar la primera API.</p>
-        )}
-      </div>
-    );
-  return (
-    <div className="space-y-5">
-      <form onSubmit={capture} className="space-y-4">
-        <label className="block text-sm font-medium text-ink">
-          API de consulta
-          <select
-            required
-            value={toolId}
-            onChange={(event) => {
-              setToolId(event.target.value);
-              setInput({});
-              setPaginated(false);
-              setCursorInput('');
-            }}
-            className={`${inputClass} mt-1`}
-          >
-            <option value="">Selecciona una API</option>
-            {tools.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {tool ? <p className="text-xs text-ink-muted">{tool.description}</p> : null}
-        {tool?.fields.map((field) => (
-          <label
-            key={field.name}
-            htmlFor={`api-field-${field.name}`}
-            className="block text-sm font-medium text-ink"
-          >
-            {field.name}
-            {field.enum?.length ? (
-              <select
-                id={`api-field-${field.name}`}
-                required={field.required}
-                value={input[field.name] ?? ''}
-                onChange={(event) => setInput({ ...input, [field.name]: event.target.value })}
-                className={`${inputClass} mt-1`}
-              >
-                <option value="">Seleccionar</option>
-                {field.enum.map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id={`api-field-${field.name}`}
-                required={field.required}
-                value={input[field.name] ?? ''}
-                onChange={(event) => setInput({ ...input, [field.name]: event.target.value })}
-                className={`${inputClass} mt-1`}
-              />
-            )}
-            <span className="mt-1 block text-xs font-normal text-ink-muted">
-              {field.description}
-            </span>
-          </label>
-        ))}
-        <label className="block text-sm font-medium text-ink">
-          Nombre de la captura (opcional)
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            className={`${inputClass} mt-1`}
-          />
-        </label>
-        <details className="rounded-sm border border-border p-3">
-          <summary className="cursor-pointer text-xs font-semibold text-ink-muted">
-            Lectura por páginas (opcional)
-          </summary>
-          <label className="mt-3 flex items-center gap-2 text-xs text-ink">
-            <input
-              type="checkbox"
-              checked={paginated}
-              onChange={(e) => setPaginated(e.target.checked)}
-            />
-            La API devuelve un cursor para obtener la siguiente página
-          </label>
-          {paginated && (
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="text-xs text-ink-muted">
-                Ruta de la lista en la respuesta
-                <input
-                  className={`${inputClass} mt-1`}
-                  value={recordsPath}
-                  onChange={(e) => setRecordsPath(e.target.value)}
-                  placeholder="data.items"
-                />
-              </label>
-              <label className="text-xs text-ink-muted">
-                Ruta del siguiente cursor
-                <input
-                  required
-                  className={`${inputClass} mt-1`}
-                  value={nextCursorPath}
-                  onChange={(e) => setNextCursorPath(e.target.value)}
-                  placeholder="pagination.next_cursor"
-                />
-              </label>
-              <label className="text-xs text-ink-muted">
-                Parámetro que recibe el cursor
-                <select
-                  required
-                  className={`${inputClass} mt-1`}
-                  value={cursorInput}
-                  onChange={(e) => setCursorInput(e.target.value)}
-                >
-                  <option value="">Seleccionar parámetro</option>
-                  {tool?.fields.map((f) => (
-                    <option key={f.name} value={f.name}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="text-xs leading-relaxed text-ink-muted">
-                Usa los nombres que aparecen en la documentación de tu API. Cortex consulta hasta 5
-                páginas y 1.000 filas; si queda contenido pendiente, lo marca incompleto y bloquea
-                su uso automático.
-              </p>
-            </div>
-          )}
-        </details>
-        {apiError ? (
-          <p role="alert" className="text-sm text-rose">
-            {apiError}
-          </p>
-        ) : null}
-        <button
-          type="submit"
-          disabled={working || !tool}
-          className={`${buttonClass} bg-primary text-white`}
-        >
-          {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}{' '}
-          Consultar y añadir a la bandeja
-        </button>
-      </form>
-      {canConfigure ? (
-        <details className="rounded-sm border border-border bg-surface-2">
-          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">
-            Administrar conexiones API
-          </summary>
-          <div className="border-t border-border p-3">
-            <CustomTools />
-          </div>
-        </details>
-      ) : null}
-    </div>
   );
 }

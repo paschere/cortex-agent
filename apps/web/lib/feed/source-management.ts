@@ -12,6 +12,11 @@ export const feedSourceActionSchema = z.discriminatedUnion('action', [
   }),
   z.object({ action: z.literal('webhook'), id: z.string().uuid(), enabled: z.boolean() }),
   z.object({
+    action: z.literal('rename'),
+    id: z.string().uuid(),
+    name: z.string().trim().min(1).max(240),
+  }),
+  z.object({
     action: z.literal('version'),
     id: z.string().uuid(),
     attachmentId: z.string().uuid(),

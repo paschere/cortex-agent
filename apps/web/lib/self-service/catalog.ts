@@ -162,6 +162,15 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
       'Dime cómo va la empresa en una vista y actualízala cada día: arma el pulso de la empresa con los datos que ya tengas (ventas contra el mes anterior, cartera vencida, lo que entró, lo recuperado, metas y pendientes), dime qué falta conectar, y programa que el resumen de hoy se escriba cada día hábil a las 7 a. m.',
   },
   {
+    id: 'weekly_review',
+    area: 'Plata',
+    title: 'Revisión semanal',
+    body: 'Cada lunes: qué mejoró y qué empeoró frente a la semana pasada, lo que hizo Cortex por ti y tres acciones para la semana.',
+    needs: 'El pulso de la empresa (si no está, se arma solo)',
+    prompt:
+      'Hazme un resumen cada lunes de cómo nos fue: qué mejoró, qué empeoró frente a la semana anterior, lo que hiciste por la empresa y tres acciones para la semana. Si todavía no hay pulso de la empresa, ármalo primero y programa también su resumen diario, que es lo que guarda las cifras para comparar.',
+  },
+  {
     id: 'morning',
     area: 'Equipo',
     title: 'Resumen de la mañana',

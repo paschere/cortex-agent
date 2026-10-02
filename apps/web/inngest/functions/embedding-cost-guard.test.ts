@@ -35,6 +35,9 @@ const PAID_CALLS = [
   'embedDocuments(',
   'embedInBatches(',
   'embedQuery(',
+  // Re-embeds every registry tool whose description changed (tool-selection
+  // store). Usually free, but after a model switch it is the whole catalogue.
+  'syncToolVectors(',
   'transcribeAudio(',
   // Two model calls over a whole document (migration 0076): classify it, then
   // read its fields. Same failure shape as the embeddings — outside a step, a

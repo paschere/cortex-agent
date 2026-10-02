@@ -1,5 +1,6 @@
 import { Panel } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
+import { describeCron, formatRun, tzLabel } from '@/lib/schedule-picker';
 import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -26,13 +27,7 @@ import { LiveRelative } from '../_components/LiveRelative';
 import { RoutineActions } from '../_components/RoutineActions';
 import { RunHistory } from '../_components/RunHistory';
 import { RunMarkdown } from '../_components/RunMarkdown';
-import {
-  JOB_STATUS_LABEL,
-  fmtLong,
-  humanizeCron,
-  runDuration,
-  stripMarkdown,
-} from '../_components/format';
+import { JOB_STATUS_LABEL, fmtLong, runDuration, stripMarkdown } from '../_components/format';
 import type { JobRun, JobStatus, ScheduledJob } from '../_components/types';
 
 export const dynamic = 'force-dynamic';
@@ -135,10 +130,14 @@ export default async function RoutineDetailPage({
   const toolInput = row.tool_input as unknown;
   const ownerLabel =
     (owner?.name as string | null) ?? (owner?.email as string | null) ?? 'Dueño desconocido';
-  const schedule =
+  // Always name the zone here: this is the page people check "when exactly?" on.
+  const schedule = `${
     job.scheduleKind === 'once'
-      ? `Una vez, el ${fmtLong(job.runAt)}`
-      : humanizeCron(job.cron, job.timezone);
+      ? job.runAt
+        ? `Una sola vez, el ${formatRun(new Date(job.runAt), job.timezone)}`
+        : 'Una sola vez'
+      : describeCron(job.cron)
+  } · ${tzLabel(job.timezone)}`;
 
   const lastSuccess = runs.find((r) => r.status === 'ok' && r.output);
   const summary = lastSuccess?.output ? stripMarkdown(lastSuccess.output).slice(0, 420) : null;
@@ -189,7 +188,7 @@ export default async function RoutineDetailPage({
           <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-faint">
             <span className="inline-flex items-center gap-1.5 font-semibold text-ink-muted">
               <AlarmClock className="h-3.5 w-3.5 text-primary" />
-              {schedule} · {job.timezone}
+              {schedule}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />

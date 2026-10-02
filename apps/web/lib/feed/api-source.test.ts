@@ -37,6 +37,14 @@ describe('API sources for Feed', () => {
     expect(normalizeApiFeed([{ description: 'a'.repeat(4001) }]).truncated).toBe(true);
   });
 
+  it('keeps a list as text when the source asks not to make a table', () => {
+    const data = { data: [{ id: 1 }, { id: 2 }] };
+    expect(normalizeApiFeed(data).tables).toHaveLength(1);
+    const asText = normalizeApiFeed(data, { asText: true });
+    expect(asText.tables).toBeUndefined();
+    expect(asText.text).toContain('"id": 1');
+  });
+
   it('caps rows and reports truncation', () => {
     const result = normalizeApiFeed(Array.from({ length: 1001 }, (_, id) => ({ id })));
     expect(result.tables?.[0]?.rows).toHaveLength(1001); // header + 1000 records

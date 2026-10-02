@@ -24,6 +24,7 @@ import {
   JOB_STATUS_LABEL,
   fmt,
   humanizeCron,
+  humanizeOnce,
   relative,
   runDuration,
   stripMarkdown,
@@ -165,7 +166,7 @@ export function RoutineCard({
             <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
               <AlarmClock className="h-3.5 w-3.5 text-primary" />
               {job.scheduleKind === 'once'
-                ? `Una vez, el ${fmt(job.runAt)}`
+                ? humanizeOnce(job.runAt, job.timezone)
                 : humanizeCron(job.cron, job.timezone)}
             </span>
             {next && job.status === 'active' && (
