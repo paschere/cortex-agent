@@ -20,7 +20,16 @@ export const metadata = { title: 'Sin acceso · Cortex' };
  * Sólo nombres y correos de quienes ya administran la misma empresa: es lo que
  * cualquier compañero ve en la lista del equipo. Nada del contenido protegido.
  */
-export default async function NoAccessPage() {
+/** Qué parte se quiso abrir, para que el aviso no hable de «personas y equipos» a quien abrió otra cosa. */
+const AREAS: Record<string, string> = {
+  admin: 'Personas, equipos, uso, auditoría y seguridad',
+  avanzado: 'El orquestador, el trabajo de desarrollo y las evaluaciones',
+};
+
+export default async function NoAccessPage({
+  searchParams,
+}: { searchParams: Promise<{ area?: string }> }) {
+  const { area } = await searchParams;
   const user = await requireSession();
   const sb = getOrgScopedClient(user.organization.id);
   const admins = mustReadList(
@@ -37,7 +46,7 @@ export default async function NoAccessPage() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Esta parte es de quien administra"
-        subtitle={`Personas, equipos, uso, auditoría y seguridad de ${user.organization.name} los maneja quien administra la empresa en Cortex. Tu cuenta no tiene ese permiso, y no pasa nada: todo lo demás sigue disponible.`}
+        subtitle={`${AREAS[area ?? ''] ?? AREAS.admin} de ${user.organization.name} los maneja quien administra la empresa en Cortex. Tu cuenta no tiene ese permiso, y no pasa nada: todo lo demás sigue disponible.`}
         icon={<Lock className="h-5 w-5" aria-hidden />}
       />
       <Panel className="p-6">

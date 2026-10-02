@@ -34,6 +34,13 @@ const Body = z.object({
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const user = await requireSession();
+  // Sólo quien administra (igual que las pantallas, ver su layout.tsx).
+  if (user.role !== 'org_admin') {
+    return NextResponse.json(
+      { error: 'Esto lo maneja quien administra la empresa.' },
+      { status: 403 },
+    );
+  }
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -102,6 +109,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 /** Run history for the active workspace. */
 export async function GET(): Promise<NextResponse> {
   const user = await requireSession();
+  // Sólo quien administra (igual que las pantallas, ver su layout.tsx).
+  if (user.role !== 'org_admin') {
+    return NextResponse.json(
+      { error: 'Esto lo maneja quien administra la empresa.' },
+      { status: 403 },
+    );
+  }
   const runs = await listRuns(getOrgScopedClient(user.organization.id), user.organization.id);
   return NextResponse.json({ runs });
 }

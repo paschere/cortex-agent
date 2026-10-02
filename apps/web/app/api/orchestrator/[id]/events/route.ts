@@ -44,6 +44,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const user = await requireSession();
+  // Sólo quien administra (igual que las pantallas, ver su layout.tsx).
+  if (user.role !== 'org_admin') {
+    return NextResponse.json(
+      { error: 'Esto lo maneja quien administra la empresa.' },
+      { status: 403 },
+    );
+  }
   const { id } = await params;
   const db = getOrgScopedClient(user.organization.id);
 
