@@ -155,6 +155,17 @@ export const managementActivationEvidenceSchema = z.object({
     .max(10_000),
 });
 export type ManagementActivationEvidence = z.infer<typeof managementActivationEvidenceSchema>;
+export const managementRecoveredSchema = z.object({
+  amountCop: z
+    .number()
+    .int('Usa pesos enteros, sin centavos.')
+    .min(1, 'El valor tiene que ser mayor que cero.')
+    .max(10_000_000_000_000),
+  note: text(300),
+});
+export type ManagementRecovered = z.infer<typeof managementRecoveredSchema>;
+/** En qué estados se puede proponer o confirmar lo recuperado. */
+export const managementRecoveredStates: readonly ManagementState[] = ['review', 'verified'];
 export const managementCaseSchema = z.object({
   title: text(180),
   objective: text(2000),
@@ -171,6 +182,14 @@ export const managementCaseSchema = z.object({
   dependsOn: z.string().uuid().nullable().default(null),
   evidence: managementEvidenceSchema.nullable().default(null),
   reviewNote: z.string().trim().max(2000).default(''),
+  /**
+   * PLATA RECUPERADA O AHORRADA (0166), en pesos enteros y con una nota corta:
+   * una multa evitada, un descuento negociado, un cobro que volvió. Se propone
+   * al pasar a «Por verificar» o al cerrar, y sólo cuenta en «plata recuperada
+   * con Cortex» (payments/recovered.ts) cuando un administrador verifica el
+   * cierre. Opcional: un asunto guardado antes de que existiera no lo trae.
+   */
+  recovered: managementRecoveredSchema.nullable().optional(),
 });
 /**
  * activationEvidence is server-owned provenance attached by Activations. It is

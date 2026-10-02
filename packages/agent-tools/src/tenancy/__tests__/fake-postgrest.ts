@@ -33,7 +33,8 @@ type Op =
   | 'not-in'
   | 'is'
   | 'not-is'
-  | 'contains';
+  | 'contains'
+  | 'like';
 
 interface Filter {
   column: string;
@@ -69,6 +70,16 @@ function matches(row: Row, f: Filter): boolean {
       return actual == null || !(f.value as unknown[]).includes(actual);
     case 'contains':
       return (f.value as unknown[]).every((v) => (actual as unknown[] | null)?.includes(v));
+    case 'like': {
+      if (typeof actual !== 'string') return false;
+      const pattern = String(f.value)
+        .split('')
+        .map((ch) =>
+          ch === '%' ? '.*' : ch === '_' ? '.' : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        )
+        .join('');
+      return new RegExp(`^${pattern}$`, 's').test(actual);
+    }
     default:
       throw new Error(`fake-postgrest: unsupported operator ${f.op}`);
   }
@@ -220,6 +231,10 @@ class Query implements PromiseLike<Result<unknown>> {
   }
   contains(column: string, values: unknown[]) {
     this.filters.push({ column, op: 'contains', value: values });
+    return this;
+  }
+  like(column: string, pattern: string) {
+    this.filters.push({ column, op: 'like', value: pattern });
     return this;
   }
   not(column: string, op: string, value: unknown) {

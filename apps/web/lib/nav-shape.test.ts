@@ -8,6 +8,8 @@ import {
   WAITING_ITEMS,
   buildRail,
   everyDestination,
+  primaryActive,
+  primaryNav,
   waitingHref,
 } from './nav-shape';
 import { QUEUE_HREF, WAITING_QUEUES, waitingTotal } from './waiting-shape';
@@ -137,5 +139,33 @@ describe('la fila «Te espera»', () => {
   it('despliega exactamente las cuatro colas que el producto ya unifica', () => {
     expect(WAITING_ITEMS.map((i) => i.href)).toEqual(WAITING_QUEUES.map((q) => QUEUE_HREF[q]));
     expect(WAITING_ITEMS.map((i) => i.signal)).toEqual([...WAITING_QUEUES]);
+  });
+});
+
+describe('la navegación principal del autoservicio', () => {
+  it('cada puerta lleva a un destino que el rail también alcanza', () => {
+    const every = new Set(everyDestination());
+    for (const item of primaryNav({ admin: true, founder: true })) {
+      expect(every.has(item.href), item.href).toBe(true);
+    }
+  });
+
+  it('Equipo depende del rol y nunca lleva a una pantalla que la persona no puede abrir', () => {
+    const team = (admin: boolean, founder: boolean) =>
+      primaryNav({ admin, founder }).find((item) => item.label === 'Equipo')?.href;
+    expect(team(true, false)).toBe('/admin/users');
+    expect(team(false, true)).toBe('/team/activity');
+    expect(team(false, false)).toBeUndefined();
+  });
+
+  it('Datos se enciende en tablas, feed, Brain Knowledge e integraciones; el chat no en la consola multiempresa', () => {
+    const [, chat, , , data] = primaryNav({ admin: false, founder: false });
+    if (!chat || !data) throw new Error('faltan puertas');
+    for (const path of ['/trackers/abc', '/feed', '/kb', '/integrations/whatsapp']) {
+      expect(primaryActive(path, data), path).toBe(true);
+    }
+    expect(primaryActive('/chat/123', chat)).toBe(true);
+    expect(primaryActive('/chat/global', chat)).toBe(false);
+    expect(primaryActive('/chats', chat)).toBe(false);
   });
 });

@@ -94,6 +94,11 @@ const PUBLIC_PATHS = [
   // lib/views/public.ts. El resto de /api/views sigue detrás de la sesión.
   '/v',
   '/api/views/public',
+  // La hoja de estilos de informes y gráficas (app/report.css/route.ts): la
+  // carga el layout raíz en TODAS las páginas, también las públicas — una
+  // vista compartida o la landing la pedían sin cookie y rebotaban a /login.
+  // Es CSS, sin datos.
+  '/report.css',
 ];
 
 interface SessionPayload {

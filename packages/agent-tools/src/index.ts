@@ -155,6 +155,8 @@ export * from './whatsapp';
 export * from './cortex';
 export * from './memory';
 export * from './security';
+// Acciones seguras de repetir (0168): idempotencia + verificación. Sin tools.
+export * from './safe-actions';
 export * from './chat';
 export * from './inbox';
 export {

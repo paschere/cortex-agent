@@ -116,7 +116,7 @@ async function chatDmUserIds(job: JobRow): Promise<string[]> {
 }
 
 /** Run the job's fixed tool call. Never throws — errors become the result. */
-async function executeToolJob(job: JobRow): Promise<ExecResult> {
+async function executeToolJob(job: JobRow, idempotencyScope: string): Promise<ExecResult> {
   const toolDef = getTool(job.tool_id ?? '');
   if (!toolDef) return { ok: false, output: '', error: `Unknown tool: ${job.tool_id}` };
   const ctx = buildToolContext({
@@ -127,6 +127,9 @@ async function executeToolJob(job: JobRow): Promise<ExecResult> {
   });
   ctx.routineId = job.id;
   ctx.scopedMandatesOnly = job.mandate_only === true;
+  // Acciones seguras de repetir (0168): un reintento de ESTA ejecución no
+  // repite el envío; la ejecución de mañana es otra y sí corre.
+  ctx.idempotencyScope = idempotencyScope;
   try {
     const authority = await readRoutineAuthority(ctx.db, job.id, job.user_id);
     const result = await runTool(
@@ -156,7 +159,7 @@ async function executeToolJob(job: JobRow): Promise<ExecResult> {
  * no human available — confirmation-gated tools are skipped unless the job
  * opted into unattended writes.
  */
-async function executeAgentJob(job: JobRow): Promise<ExecResult> {
+async function executeAgentJob(job: JobRow, idempotencyScope: string): Promise<ExecResult> {
   const db = getOrgScopedClient(job.organization_id);
   const { data: agent, error } = await db
     .from('agents')
@@ -173,6 +176,9 @@ async function executeAgentJob(job: JobRow): Promise<ExecResult> {
   });
   ctx.routineId = job.id;
   ctx.scopedMandatesOnly = job.mandate_only === true;
+  // Acciones seguras de repetir (0168): un reintento de ESTA ejecución no
+  // repite el envío; la ejecución de mañana es otra y sí corre.
+  ctx.idempotencyScope = idempotencyScope;
   const allowed = filterTools(agent.allowed_tool_ids as string[]);
 
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
@@ -319,7 +325,11 @@ export const scheduleRunJob: JobHandler = async ({ event, step }) => {
   // does not retry (and possibly double-execute) side-effectful work.
   const result = await step.run('execute', async (): Promise<ExecResult> => {
     const startedAt = Date.now();
-    const exec = job.kind === 'tool' ? await executeToolJob(job) : await executeAgentJob(job);
+    // La hora programada viene en el evento y no cambia entre reintentos; el
+    // id de la ejecución sólo cubre el caso de un evento sin ella.
+    const scope = `routine:${job.id}:${scheduledFor ?? runId}`;
+    const exec =
+      job.kind === 'tool' ? await executeToolJob(job, scope) : await executeAgentJob(job, scope);
     return { ...exec, durationMs: Date.now() - startedAt };
   });
 

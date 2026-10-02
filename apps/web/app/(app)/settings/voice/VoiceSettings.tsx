@@ -606,7 +606,7 @@ function VoiceRow({
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-semibold text-ink">{name}</p>
           {active && (
-            <span className="rounded-pill bg-emerald-soft px-2 py-0.5 text-[11px] font-semibold text-emerald">
+            <span className="rounded-pill bg-emerald-soft px-2 py-0.5 text-micro font-semibold text-emerald">
               Activa
             </span>
           )}

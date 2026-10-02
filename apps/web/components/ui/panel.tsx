@@ -34,8 +34,8 @@ export function PanelHead({
   right?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-5 pt-4">
-      <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+    <div className="flex items-center justify-between gap-3 px-6 pt-5">
+      <div className="flex items-center gap-2.5 text-base font-bold text-ink">
         {icon && <span className="text-ink-faint">{icon}</span>}
         {title}
       </div>
@@ -58,7 +58,7 @@ const TONE: Record<Tone, { chip: string; icon: string }> = {
 export function IconChip({ tone = 'primary', children }: { tone?: Tone; children: ReactNode }) {
   const t = TONE[tone];
   return (
-    <span className={clsx('grid h-8 w-8 place-items-center rounded-sm', t.chip, t.icon)}>
+    <span className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-sm', t.chip, t.icon)}>
       {children}
     </span>
   );
@@ -82,15 +82,15 @@ export function StatCard({
 }) {
   return (
     <div
-      className="rounded-card border border-border bg-surface p-5"
+      className="rounded-card border border-border bg-surface p-6 shadow-card"
       data-appearance-order={delay}
     >
-      <div className="flex items-start justify-between">
-        <span className="text-sm font-medium text-ink-muted">{label}</span>
+      <div className="flex items-center gap-2.5">
         <IconChip tone={tone}>{icon}</IconChip>
+        <span className="text-base font-bold text-ink-muted">{label}</span>
       </div>
-      <div className="stat-num mt-3 text-display leading-none text-ink">{value}</div>
-      {sub && <div className="mt-2 text-xs text-ink-faint">{sub}</div>}
+      <div className="stat-num mt-4 text-xl leading-none text-ink xl:text-display">{value}</div>
+      {sub && <div className="mt-2.5 text-sm text-ink-muted">{sub}</div>}
     </div>
   );
 }
@@ -121,7 +121,7 @@ export function ProgressRow({
         <span className="text-ink-muted">{label}</span>
         <span className="stat-num text-ink">{value.toLocaleString()}</span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+      <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-2">
         <div
           className={clsx('h-full rounded-full transition-[width] duration-700', bar[tone])}
           style={{ width: `${Math.max(pct, value > 0 ? 4 : 0)}%` }}

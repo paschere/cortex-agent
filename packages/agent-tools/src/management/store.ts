@@ -9,6 +9,7 @@ import {
   defaultManagementProfile,
   managementCaseSchema,
   managementProfileSchema,
+  managementRecoveredStates,
   validateManagementTransition,
 } from './shape';
 
@@ -197,6 +198,13 @@ export async function saveManagementCase(
   if (previous?.data.activationEvidence) {
     data.activationEvidence = previous.data.activationEvidence;
   }
+  // Lo recuperado es parte del cierre (0166). Una edición que no lo trae (el
+  // modelo actualizando un asunto en revisión) no lo borra; uno explícito en
+  // null sí. Fuera de «por verificar» o «cerrado» no existe: reabrir lo quita.
+  if (data.recovered === undefined && previous?.data.recovered) {
+    data.recovered = previous.data.recovered;
+  }
+  if (!managementRecoveredStates.includes(data.state)) data.recovered = undefined;
   const actor = await db.from('users').select('role').eq('id', actorId).maybeSingle();
   if (actor.error || !actor.data) throw new ManagementError('No se pudo comprobar tu acceso.');
   validateManagementTransition(

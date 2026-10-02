@@ -6,8 +6,10 @@ import {
   Briefcase,
   Building2,
   CalendarClock,
+  Database,
   FileBarChart,
   Globe,
+  Home,
   Hourglass,
   IdCard,
   Inbox,
@@ -25,6 +27,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Sparkles,
   Table2,
   Target,
   Users,
@@ -183,6 +186,8 @@ export const SETUP: NavItem = { href: '/onboarding', label: 'Puesta en marcha', 
  * junto a Chat y Gerencia: enterrada en «Herramientas» nadie la encontraba. */
 export const VIEWS: NavItem = { href: '/views', label: 'Vistas', icon: LayoutPanelTop };
 export const PINNED: NavItem[] = [SETUP, MANAGEMENT, CHAT, VIEWS, FEED, CALLS, BRAIN];
+/** Procesos listos para activar: la puerta del autoservicio. */
+export const PROCESSES: NavItem = { href: '/procesos', label: 'Procesos', icon: Sparkles };
 
 const QUEUE_ICON: Record<WaitingQueue, NavIcon> = {
   approvals: Inbox,
@@ -262,6 +267,10 @@ export const SECTIONS: NavSection[] = [
       // La etiqueta viene de `browser-shape` para que la pantalla, la paleta y
       // el catálogo de herramientas no puedan separarse mientras el nombre se
       // asienta.
+      // Los procesos listos para activar (autoservicio). Es la puerta de la
+      // navegación principal; aquí sólo garantiza que «Más» y la paleta la
+      // alcancen también.
+      PROCESSES,
       { href: '/browser', label: MODULE.label, icon: Globe },
       { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
       { href: '/activations', label: 'Activaciones', icon: BadgeCheck },
@@ -420,4 +429,51 @@ export function everyDestination(): string[] {
     ...rail.company.items,
     ...rail.footer,
   ].map((item) => item.href);
+}
+
+// ===========================================================================
+// LA NAVEGACIÓN PRINCIPAL DEL AUTOSERVICIO
+// ===========================================================================
+// El diseño de autoservicio ordena el producto por lo que alguien hace, no por
+// cómo está construido: Inicio, Chat, Procesos, Vistas, Datos y Equipo. Seis
+// puertas grandes arriba del rail (y cuatro en la barra del teléfono). Todo lo
+// demás — las colas de «Te espera», finanzas, fuentes, herramientas, la
+// administración — sigue entero en «Más» y en la paleta: esta lista NO
+// sustituye a `buildRail`, se pinta encima.
+//
+// `match` dice qué direcciones encienden la puerta. «Datos» no es una pantalla
+// sino un grupo — tablas, feed, Brain Knowledge e integraciones — y aterriza en
+// Integraciones, que es donde se conecta lo que luego aparece en las otras tres.
+
+export interface PrimaryItem extends NavItem {
+  /** Prefijos (en frontera de segmento) que marcan esta puerta como activa. */
+  match: string[];
+}
+
+export const DATA: NavItem = { href: '/integrations', label: 'Datos', icon: Database };
+
+export function primaryNav({
+  admin,
+  founder,
+}: {
+  /** Admin de la organización: Equipo abre Personas. */
+  admin: boolean;
+  /** Fundador de una empresa sin ser admin: Equipo abre la actividad del equipo. */
+  founder: boolean;
+}): PrimaryItem[] {
+  const team = admin ? '/admin/users' : founder ? '/team/activity' : null;
+  return [
+    { ...HOME, icon: Home, match: ['/dashboard'] },
+    { ...CHAT, match: ['/chat'] },
+    { ...PROCESSES, match: ['/procesos'] },
+    { ...VIEWS, match: ['/views'] },
+    { ...DATA, match: ['/integrations', '/trackers', '/feed', '/kb'] },
+    ...(team ? [{ href: team, label: 'Equipo', icon: Users, match: ['/admin', '/team'] }] : []),
+  ];
+}
+
+/** ¿Esta dirección enciende esta puerta? `/chat/global` es la consola multiempresa, no el chat. */
+export function primaryActive(path: string, item: PrimaryItem): boolean {
+  if (item.href === '/chat' && path.startsWith('/chat/global')) return false;
+  return item.match.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }

@@ -43,6 +43,13 @@ export interface SystemPaymentRow {
   /** En cualquier formato: se compara dígito a dígito contra la lista de clientes. */
   clientNit?: string | null;
   invoiceNumber?: string | null;
+  /**
+   * La factura leída (0076) y el cliente, cuando la fuente ya los sabe — el
+   * extracto bancario los trae de su emparejador (`bank/match.ts`) sólo cuando
+   * la coincidencia fue inequívoca. Opcionales: Siigo no los manda.
+   */
+  extractionId?: string | null;
+  clientId?: string | null;
   /** Lo que el sistema escribió al lado del apunte, para que alguien lo reconozca. */
   reference?: string | null;
   note?: string | null;
@@ -65,6 +72,12 @@ export interface ImportSystemPaymentsResult {
   disputed: number;
   duplicates: number;
   rejected: Array<{ sourceRef: string | null; reason: string }>;
+  /**
+   * Qué pasó con cada fila que se pudo registrar (o ya estaba), en orden.
+   * Opcional en el tipo sólo para que los dobles de prueba anteriores sigan
+   * compilando; `importSystemPayments` lo devuelve siempre.
+   */
+  outcomes?: Array<{ sourceRef: string; outcome: RecordOutcome; paymentId: string | null }>;
   /** Lo que pasó, en español, listo para decirse tal cual. */
   sentence: string;
 }
@@ -82,6 +95,7 @@ export async function importSystemPayments(
     duplicate: 0,
   };
   const rejected: Array<{ sourceRef: string | null; reason: string }> = [];
+  const outcomes: NonNullable<ImportSystemPaymentsResult['outcomes']> = [];
 
   for (const row of input.rows) {
     const ref = row.sourceRef?.trim() || null;
@@ -103,6 +117,8 @@ export async function importSystemPayments(
         currency: row.currency,
         paidOn: row.paidOn,
         clientNit: row.clientNit ?? null,
+        clientId: row.clientId ?? null,
+        extractionId: row.extractionId ?? null,
         invoiceNumber: row.invoiceNumber ?? null,
         reference: row.reference ?? null,
         note: row.note ?? null,
@@ -110,6 +126,11 @@ export async function importSystemPayments(
         createdBy: input.createdBy ?? null,
       });
       counts[result.outcome] += 1;
+      outcomes.push({
+        sourceRef: ref,
+        outcome: result.outcome,
+        paymentId: result.payment?.id ?? null,
+      });
     } catch (err) {
       rejected.push({
         sourceRef: ref,
@@ -126,6 +147,7 @@ export async function importSystemPayments(
     disputed: counts.disputed,
     duplicates: counts.duplicate,
     rejected,
+    outcomes,
     sentence: describeImport(system, counts, rejected.length),
   };
 }

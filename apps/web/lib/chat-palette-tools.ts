@@ -248,6 +248,11 @@ export const TOOL_PHRASE: Record<string, string> = {
   'payments.receivables': '¿Cuánto nos deben?',
   'payments.record': 'Anota un pago de ',
   'payments.resolve_dispute': 'Resuelve la disputa del pago ',
+  'payments.preview_bank_statement': 'Mira este extracto del banco: ',
+  'payments.import_bank_statement': 'Importa el extracto del banco ',
+  'payments.bank_unmatched': '¿Qué entró al banco que no sé de qué factura es?',
+  'payments.apply_to_invoice': 'Ata el pago del banco a la factura ',
+  'payments.recovered': '¿Cuánta plata me has ayudado a recuperar?',
 
   'payroll.client_report': 'Dame el costo del equipo puesto en el cliente ',
   'payroll.cost_projection': 'Proyéctame lo que va a costar el equipo en ',

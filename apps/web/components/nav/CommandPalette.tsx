@@ -75,6 +75,12 @@ const SECTIONS: Section[] = [
         keywords: 'cortex preguntar nueva conversacion ask consultar',
       },
       {
+        href: '/procesos',
+        label: 'Procesos',
+        note: 'Procesos listos para activar: cobros, guías, resúmenes',
+        keywords: 'procesos plantillas automatizar activar autoservicio flujos templates',
+      },
+      {
         href: '/calls',
         label: 'Llamadas',
         note: 'Las reuniones en las que Cortex está ahora, en vivo',
@@ -356,9 +362,9 @@ export function CommandPalette({ open, onClose, role }: CommandPaletteProps) {
       key={e.href}
       value={`${e.label} ${e.note} ${e.keywords}`}
       onSelect={() => go(e.href)}
-      className="cursor-pointer rounded-sm px-3 py-2 transition-colors duration-150 aria-selected:bg-primary-soft aria-selected:text-primary-ink hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
+      className="cursor-pointer rounded-sm px-3 py-2.5 transition-colors duration-150 aria-selected:bg-primary-soft aria-selected:text-primary-ink hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
     >
-      <div className="text-sm font-medium text-ink">{e.label}</div>
+      <div className="text-sm font-semibold text-ink">{e.label}</div>
       {/* The same sentence the rail shows for this destination. Two names and
           two descriptions for one screen is what this change is undoing. */}
       <div className="mt-0.5 text-micro leading-snug text-ink-faint">{e.note}</div>
@@ -387,7 +393,7 @@ export function CommandPalette({ open, onClose, role }: CommandPaletteProps) {
           <Command.Input
             aria-label="Buscar un comando"
             placeholder="Escribe a dónde quieres ir…"
-            className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:bg-primary-soft/40 motion-reduce:transition-none"
+            className="w-full border-b border-border bg-transparent px-5 py-4 text-base text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint motion-reduce:transition-none"
           />
           <Command.List className="max-h-[22rem] overflow-y-auto p-2">
             <Command.Empty className="py-4 text-center text-sm text-ink-faint">

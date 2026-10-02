@@ -97,7 +97,7 @@ function clock(at: number): string {
 function PartialCaption({ at, who, text }: { at: number; who: string; text: string }) {
   return (
     <p className="text-sm leading-snug text-ink-faint">
-      <span className="mr-2 font-mono text-[11px]">{clock(at)}</span>
+      <span className="mr-2 font-mono text-micro">{clock(at)}</span>
       <span className={`font-semibold ${who !== 'Alguien' ? speakerTone(who).text : ''}`}>
         {who}:{' '}
       </span>
@@ -438,7 +438,7 @@ export function LiveRoom({
                   <button
                     type="button"
                     onClick={() => seek(l.at)}
-                    className="mr-2 font-mono text-[11px] text-ink-faint hover:text-ink"
+                    className="mr-2 font-mono text-micro text-ink-faint hover:text-ink"
                   >
                     {clock(l.at)}
                   </button>

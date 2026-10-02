@@ -70,7 +70,7 @@ function ScopeButton({
       </span>
       <span className="min-w-0">
         <span className="block truncate font-semibold">{workspace.name}</span>
-        <span className="block text-[10px] text-zinc-500">
+        <span className="block text-micro text-zinc-500">
           {workspace.kind === 'personal' ? 'Personal' : 'Empresa'}
         </span>
       </span>
@@ -425,7 +425,7 @@ export function GlobalChat() {
             <div className="flex min-w-0 items-center gap-3">
               <CortexSignature className="h-8 w-8 shrink-0 text-violet-200" />
               <div className="min-w-0">
-                <p className="text-[11px] font-medium text-zinc-500">Cortex</p>
+                <p className="text-micro font-medium text-zinc-500">Cortex</p>
                 <h1 className="truncate text-sm font-semibold tracking-tight text-white">
                   Chat global
                 </h1>
@@ -519,7 +519,7 @@ export function GlobalChat() {
                   className={
                     message.role === 'user'
                       ? 'ml-auto max-w-[88%] rounded-2xl rounded-br-md border border-violet-200/10 bg-violet-200/[0.08] px-4 py-3 text-sm leading-6 text-zinc-200'
-                      : 'max-w-[44rem] whitespace-pre-wrap text-[15px] leading-7 text-zinc-100'
+                      : 'max-w-[44rem] whitespace-pre-wrap text-base leading-7 text-zinc-100'
                   }
                 >
                   {(message.content ? (
@@ -541,7 +541,7 @@ export function GlobalChat() {
                   <button
                     type="button"
                     onClick={() => void copyAnswer(message)}
-                    className="mt-1 inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] text-zinc-600 transition-colors hover:bg-white/5 hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+                    className="mt-1 inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-micro text-zinc-600 transition-colors hover:bg-white/5 hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
                     aria-label="Copiar respuesta de Cortex"
                   >
                     {copiedId === message.id ? (
@@ -601,7 +601,7 @@ export function GlobalChat() {
                     <FileText className="h-3.5 w-3.5 shrink-0 text-violet-300" />
                     <span className="max-w-48 truncate">{attachment.filename}</span>
                     {attachment.truncated && (
-                      <span className="shrink-0 text-[10px] text-amber-300">parcial</span>
+                      <span className="shrink-0 text-micro text-amber-300">parcial</span>
                     )}
                     <button
                       type="button"
@@ -644,7 +644,7 @@ export function GlobalChat() {
                     ? 'Consulta los espacios seleccionados…'
                     : 'Conversación general, sin datos de espacios…'
                 }
-                className="max-h-36 min-h-[68px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-2 pt-4 text-[15px] leading-6 text-white outline-none placeholder:text-zinc-600"
+                className="max-h-36 min-h-[68px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-2 pt-4 text-base leading-6 text-white outline-none placeholder:text-zinc-600"
               />
               <input
                 ref={fileRef}
@@ -716,7 +716,7 @@ export function GlobalChat() {
                 </button>
               </div>
             </form>
-            <details className="group mx-auto mt-2 w-fit max-w-full text-center text-[10px] text-zinc-600">
+            <details className="group mx-auto mt-2 w-fit max-w-full text-center text-micro text-zinc-600">
               <summary className="cursor-pointer list-none px-3 py-1 hover:text-zinc-400">
                 Privacidad y adjuntos
               </summary>

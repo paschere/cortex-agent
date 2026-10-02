@@ -202,6 +202,11 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   payments_receivables: 'Ver la cartera',
   payments_disputes: 'Ver los pagos que no cuadran',
   payments_resolve_dispute: 'Resolver el pago que no cuadra',
+  payments_preview_bank_statement: 'Mirar el extracto del banco',
+  payments_import_bank_statement: 'Importar el extracto del banco',
+  payments_bank_unmatched: 'Ver lo que entró al banco sin factura',
+  payments_apply_to_invoice: 'Atar el pago a su factura',
+  payments_recovered: 'Ver la plata recuperada con Cortex',
   goals_offer_metrics: 'Ver qué se puede medir aquí',
   goals_list: 'Ver las metas y cómo van',
   goals_measure: 'Medir cómo vamos este período',
@@ -277,6 +282,14 @@ export function pendingToolLabel(toolId: string): string {
  * la cabecera de este archivo para por qué son dos y qué las mantiene iguales.
  */
 export function pendingSummary(toolId: string, input: Record<string, unknown>): string {
+  // Acciones seguras de repetir (0168): una repetición pedida a sabiendas lo
+  // dice en la propia frase que se aprueba. Gemela de `confirmationSummary` en
+  // apps/web/lib/tool-labels.ts.
+  const repeat = input.repeatConfirmedByUser === true ? ' · REPETICIÓN: ya se había hecho' : '';
+  return `${pendingSummaryBase(toolId, input)}${repeat}`;
+}
+
+function pendingSummaryBase(toolId: string, input: Record<string, unknown>): string {
   const key = toolId.replace(/\./g, '_');
   switch (key) {
     case 'hubspot_update_deal':

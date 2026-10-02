@@ -22,12 +22,12 @@ export function ParticipantStrip({ people }: { people: MeetingParticipant[] }) {
                   : p.name
             }
           >
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-surface/70 text-[10px] font-bold">
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-surface/70 text-micro font-bold">
               {speakerInitials(p.name)}
             </span>
             <span className="max-w-[9rem] truncate">{p.self ? `${p.name} · bot` : p.name}</span>
             {p.presenting ? (
-              <span className="text-[10px] font-semibold uppercase tracking-wide">comparte</span>
+              <span className="text-micro font-semibold uppercase tracking-wide">comparte</span>
             ) : p.speaking ? (
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
             ) : null}

@@ -15,6 +15,7 @@ export {
   paymentsReceivables,
   paymentsDisputes,
   paymentsResolveDispute,
+  paymentsRecovered,
 } from './tools';
 
 // El vocabulario, para la pantalla y para cualquiera que tenga que nombrar un
@@ -64,6 +65,7 @@ export {
   recordPaymentReport,
   reportsFor,
   resolvePaymentDispute,
+  applyPaymentToInvoice,
 } from './store';
 export {
   DUE_SOON_DAYS,
@@ -75,6 +77,23 @@ export {
   stageLabel,
 } from './risk';
 export type { MoneyAtRisk, OverdueStage } from './risk';
+
+// Plata recuperada con Cortex (0166): las reglas puras y la lectura.
+export {
+  RECOVERY_TRIGGER_LABEL,
+  RECOVERY_WINDOW_DAYS,
+  attributeRecovered,
+  recoveryRulesSentence,
+} from './recovered';
+export type {
+  ManualRecovered,
+  MoneyRecovered,
+  RecoveredInvoice,
+  RecoveredMovement,
+  RecoveryTriggerKind,
+  RecoveryTriggerRef,
+} from './recovered';
+export { moneyRecovered, recordBalanceDrops } from './recovered-store';
 export type {
   OverdueInvoice,
   PaymentFilters,
@@ -86,6 +105,7 @@ export type {
   RecordPaymentReportInput,
   RecordPaymentReportResult,
   ResolveDisputeInput,
+  ApplyPaymentToInvoiceInput,
 } from './store';
 
 // El importador de sistema contable: listo, y sin ningún conector concreto
@@ -100,3 +120,7 @@ export type {
 // El puente desde un comprobante confirmado, llamado por documents/store.ts.
 export { recordReceiptPayment, RECEIPT_DOC_TYPE } from './receipt';
 export type { ReceiptExtraction, ReceiptField, ReceiptOutcome } from './receipt';
+
+// Extractos bancarios: importar abonos y conciliarlos con sus facturas. Los
+// tools se registran al importarse este barril.
+export * from './bank';

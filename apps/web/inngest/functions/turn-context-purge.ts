@@ -74,7 +74,7 @@ export const turnContextPurge = inngest.createFunction(
  * stripped on schedule. That is the one of the two with a promise attached.
  */
 export const turnLatencyPurgeJob: JobHandler = async ({ step }) => {
-  return await step.run('sweep', async () => {
+  const latency = await step.run('sweep', async () => {
     const db = getSupabaseServiceClient();
     const { data, error } = await db.rpc('turn_latency_purge');
     if (error) throw new Error(`turn_latency_purge failed: ${error.message}`);
@@ -82,6 +82,20 @@ export const turnLatencyPurgeJob: JobHandler = async ({ step }) => {
     logger.info('turn latency retention sweep', { deleted });
     return { deleted };
   });
+  // Acciones seguras de repetir (migración 0168): las huellas cuya ventana
+  // venció hace más de dos días. Un paso propio y DESPUÉS del de latencias: si
+  // este falla, aquel ya quedó hecho y memorizado, y el reintento sólo repite
+  // éste. Va en este barrido y no en uno nuevo porque es lo mismo — una tabla
+  // de enteros y fechas que se poda por edad — y no merece otro cron.
+  const actions = await step.run('sweep-action-idempotency', async () => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db.rpc('action_idempotency_purge');
+    if (error) throw new Error(`action_idempotency_purge failed: ${error.message}`);
+    const deleted = Number((Array.isArray(data) ? data[0] : data) ?? 0);
+    logger.info('action idempotency retention sweep', { deleted });
+    return { deleted };
+  });
+  return { ...latency, actionIdempotencyDeleted: actions.deleted };
 };
 
 export const turnLatencyPurge = inngest.createFunction(

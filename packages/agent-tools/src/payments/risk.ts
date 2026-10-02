@@ -166,12 +166,25 @@ export async function claimReceivableNotice(
     sentOn: string;
     /** 0165: una factura de un programa contable se reclama por su propia columna. */
     source?: OverdueInvoice['source'];
+    /**
+     * 0166: lo que se debía el día del aviso. Es el punto de partida de «plata
+     * recuperada» (recovered.ts): sin él, cuánto se debía cuando Cortex actuó
+     * sería una suposición.
+     */
+    balance?: number;
+    currency?: string;
   },
 ): Promise<boolean> {
   const { error } = await db.from('receivable_notices').insert({
     [noticeColumn(input.source)]: input.invoiceId,
     stage: input.stage,
     sent_on: input.sentOn,
+    ...(input.balance != null && Number.isFinite(input.balance) && input.balance >= 0
+      ? { balance: Math.round(input.balance * 100) / 100 }
+      : {}),
+    ...(input.currency && /^[A-Z]{3}$/.test(input.currency.trim().toUpperCase())
+      ? { currency: input.currency.trim().toUpperCase() }
+      : {}),
   });
   if (!error) return true;
   if ((error as { code?: string }).code === '23505') return false;

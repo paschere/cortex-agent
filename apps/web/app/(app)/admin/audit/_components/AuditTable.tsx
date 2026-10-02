@@ -1,14 +1,15 @@
 'use client';
 
+import type { AuditEventRow } from '@/app/api/admin/_lib/audit-filters';
+import { SafeActionChips } from '@/components/approvals/SafeActionChips';
+import { relativeTime } from '@/lib/relative-time';
+import { toolLabel } from '@/lib/tool-labels';
 import { clsx } from 'clsx';
 import Link from 'next/link';
 import { useState } from 'react';
-import { toolLabel } from '@/lib/tool-labels';
-import { relativeTime } from '@/lib/relative-time';
-import type { AuditEventRow } from '@/app/api/admin/_lib/audit-filters';
-import { DECISION_LABEL, DecisionTag, RiskTag, StatusTag, SurfaceTag } from './tags';
-import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
 import { AuditDetailDrawer } from './AuditDetailDrawer';
+import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
+import { DECISION_LABEL, DecisionTag, RiskTag, StatusTag, SurfaceTag } from './tags';
 
 const HEADERS = [
   'Cuándo',
@@ -95,9 +96,7 @@ export function AuditTable({
                       {isAgentTurn(e.tool_id) ? 'Turno de chat' : toolLabel(e.tool_id).label}
                     </div>
                     {!isAgentTurn(e.tool_id) && (
-                      <div className="tabular truncate text-micro text-ink-faint">
-                        {e.tool_id}
-                      </div>
+                      <div className="tabular truncate text-micro text-ink-faint">{e.tool_id}</div>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
@@ -105,6 +104,7 @@ export function AuditTable({
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <StatusTag status={e.status} />
+                    <SafeActionChips source={e.metadata} className="mt-1" />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     {e.risk_level ? (

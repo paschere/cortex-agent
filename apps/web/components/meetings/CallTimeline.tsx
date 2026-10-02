@@ -41,7 +41,7 @@ export function CallTimeline({
         <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
           Línea de tiempo
         </h3>
-        <span className="text-[11px] text-ink-faint">
+        <span className="text-micro text-ink-faint">
           {frames.length} {frames.length === 1 ? 'captura' : 'capturas'}
           {events.some((e) => e.kind === 'presenting') ? ' · hubo pantalla compartida' : ''}
         </span>
@@ -62,7 +62,7 @@ export function CallTimeline({
                 alt={e.label}
                 className="h-20 w-full object-cover"
               />
-              <span className="block truncate px-2 py-1.5 font-mono text-[11px] text-ink-muted">
+              <span className="block truncate px-2 py-1.5 font-mono text-micro text-ink-muted">
                 {clockAt(e.at)}
                 {e.speaker ? ` · ${e.speaker}` : ''}
               </span>
@@ -79,7 +79,7 @@ export function CallTimeline({
               onClick={() => onSeek?.(e.at)}
               className="flex w-full items-start gap-2 rounded-lg px-1 py-0.5 text-left text-sm hover:bg-surface-2"
             >
-              <span className="mt-0.5 font-mono text-[11px] text-ink-faint">{clockAt(e.at)}</span>
+              <span className="mt-0.5 font-mono text-micro text-ink-faint">{clockAt(e.at)}</span>
               <KindIcon kind={e.kind} />
               <span className="min-w-0 flex-1 text-ink">
                 {e.label}

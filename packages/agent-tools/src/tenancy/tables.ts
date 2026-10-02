@@ -215,6 +215,8 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   learning_proposals: tenant(),
   audit_events: tenant(),
   security_events: tenant(),
+  // Migración 0168: acciones seguras de repetir (una fila por acción con efectos).
+  action_idempotency: tenant(),
   security_policies: tenant(),
 
   // --- Mandatos (migración 0099) --------------------------------------------
@@ -446,6 +448,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // empresa en ese programa; la segunda, su cartera.
   accounting_connections: tenant(),
   accounting_invoices: tenant(),
+  // Migración 0166: cuándo bajó el saldo de una factura de programa contable
+  // avisada. Tenant: la escribe el vigilante de cartera de ese espacio.
+  receivable_balance_drops: tenant(),
 
   // --- Vistas (migración 0156) ------------------------------------------------
   // Pantallas armadas sobre las tablas de arriba. Tenant las tres. La vista es
@@ -620,6 +625,9 @@ export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   // Migration 0084. Same shape and the same cron as the sweep above: deletes
   // expired latency rows and returns a count. No workspace, nothing visible.
   turn_latency_purge: 'maintenance',
+  // Migración 0168. Borra las filas de action_idempotency cuya ventana venció
+  // hace más de dos días; devuelve un número. Sin empresa, nada visible.
+  action_idempotency_purge: 'maintenance',
   // Migration 0088. The same shape again, for the chat's own scratch: expired
   // charts nobody kept and expired attachments. Skips a chart that became an
   // informe, and never touches a document that entered Brain Knowledge.

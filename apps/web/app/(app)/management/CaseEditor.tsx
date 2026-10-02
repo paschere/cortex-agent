@@ -34,6 +34,13 @@ export function CaseEditor({
   onSaved: (item?: ManagementCase) => void;
 }) {
   const [data, setData] = useState(initial);
+  // Plata recuperada o ahorrada (0166): texto libre mientras se escribe; se
+  // arma como { amountCop, note } sólo al guardar.
+  const [recoveredAmount, setRecoveredAmount] = useState(
+    initial.recovered ? String(initial.recovered.amountCop) : '',
+  );
+  const [recoveredNote, setRecoveredNote] = useState(initial.recovered?.note ?? '');
+  const canRecord = data.state === 'review' || data.state === 'verified';
   const [dictating, setDictating] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -94,10 +101,23 @@ export function CaseEditor({
           e.preventDefault();
           if (dictating) return;
           setError('');
+          // Pesos enteros: lo que va después de una coma (centavos en es-CO) no cuenta.
+          const digits = (recoveredAmount.split(',')[0] ?? '').replace(/\D/g, '');
+          if (canRecord && digits && !recoveredNote.trim()) {
+            setError('Explica en una frase qué plata se recuperó o se evitó.');
+            return;
+          }
+          const payload: ManagementCaseData = {
+            ...data,
+            recovered:
+              canRecord && digits && Number(digits) > 0
+                ? { amountCop: Number(digits), note: recoveredNote.trim() }
+                : null,
+          };
           start(async () => {
             try {
               const result = await saveCase(
-                data,
+                payload,
                 item ? { id: item.id, revision: item.revision } : {},
               );
               if (result.ok) onSaved(result.item);
@@ -281,6 +301,29 @@ export function CaseEditor({
                   required={['verified', 'cancelled'].includes(data.state)}
                   multiline
                 />
+                {canRecord && (
+                  <div className="space-y-3 rounded-card border border-border bg-surface-2/40 p-3">
+                    <p className="text-xs text-ink-muted">
+                      Opcional: si este asunto recuperó o ahorró plata —un cobro que volvió, una
+                      multa evitada, un descuento negociado—, anótala en pesos. Cuenta en
+                      «Recuperado con Cortex» sólo cuando un administrador verifica el cierre, y no
+                      repite lo que ya contaron los pagos de una factura.
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-[minmax(0,12rem)_1fr]">
+                      <Field
+                        label="Plata recuperada o ahorrada (COP)"
+                        value={recoveredAmount}
+                        onChange={(v) => setRecoveredAmount(v.replace(/[^\d.,\s$]/g, ''))}
+                      />
+                      <Field
+                        label="Qué se recuperó o se evitó"
+                        value={recoveredNote}
+                        onChange={(v) => setRecoveredNote(v.slice(0, 300))}
+                        required={recoveredAmount.replace(/\D/g, '').length > 0}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -419,6 +462,7 @@ export function CaseEditor({
                             dependsOn: 'Dependencia',
                             evidence: 'Evidencia',
                             reviewNote: 'Veredicto',
+                            recovered: 'Plata recuperada o ahorrada',
                           } as Record<string, string>
                         )[key]
                       }

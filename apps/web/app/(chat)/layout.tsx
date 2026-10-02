@@ -1,4 +1,5 @@
 import { AppShell } from '@/components/nav/AppShell';
+import { MobileTabBar } from '@/components/nav/MobileTabBar';
 import { requireSession } from '@/lib/session';
 import type { ReactNode } from 'react';
 
@@ -20,7 +21,12 @@ export default async function ChatLayout({ children }: { children: ReactNode }) 
   const user = await requireSession();
   return (
     <AppShell user={user}>
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* El chat mide `h-full`: sin esta caja mediría la columna entera y
+            empujaría la barra del teléfono fuera de la pantalla. */}
+        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        <MobileTabBar organizationId={user.organization.id} />
+      </div>
     </AppShell>
   );
 }

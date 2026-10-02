@@ -32,8 +32,10 @@ import {
  *   `recordPaymentReport`   es lo único que inserta public.payment_reports, y
  *                           es además el emparejador entero.
  *
- * `writePayment` tiene exactamente dos llamantes: `recordPaymentReport`, que
- * crea o enlaza, y `resolvePaymentDispute`, que exige una persona. Eso es lo que
+ * `writePayment` tiene exactamente tres llamantes: `recordPaymentReport`, que
+ * crea o enlaza, `resolvePaymentDispute`, que exige una persona, y
+ * `applyPaymentToInvoice`, que también la exige y sólo rellena la factura que
+ * le faltaba a un pago (la conciliación del extracto). Eso es lo que
  * hace que las cinco reglas de la reconciliación no puedan tener cuatro
  * implementaciones distintas:
  *
@@ -1336,4 +1338,147 @@ function formatAmount(value: number): string {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+// ---------------------------------------------------------------------------
+// Atar un pago a su factura, que sólo hace una persona
+// ---------------------------------------------------------------------------
+
+export interface ApplyPaymentToInvoiceInput {
+  paymentId: string;
+  /** Quién decide. Obligatorio: es la conciliación de un extracto hecha a mano. */
+  userId: string;
+  /** Una factura leída y confirmada (0076) o una traída del programa contable (0165). */
+  invoice: { kind: 'document' | 'accounting'; id: string };
+}
+
+/**
+ * «Este abono del banco paga la FV-1043.» El tercer llamante de `writePayment`.
+ *
+ * EXISTE PORQUE EL EMPAREJADOR DEL EXTRACTO (`bank/match.ts`) SÓLO CONFIRMA
+ * SOLO LO INEQUÍVOCO, y todo lo demás queda como pago sin factura con
+ * sugerencias. Cuando una persona escoge la sugerencia, esto la escribe.
+ *
+ * SÓLO RELLENA HUECOS, igual que la regla 1 de `recordPaymentReport`: un pago
+ * que ya nombra una factura no se re-atribuye aquí (eso es corregir un dato, y
+ * se hace descartando y registrando de nuevo), el importe, la moneda y la fecha
+ * no aparecen en este update, y las monedas no se cruzan: una factura en USD no
+ * se paga con un abono en COP.
+ *
+ * EL CLIENTE se toma de la factura sólo si el pago no tenía ninguno: el de la
+ * factura ya es el resultado de un NIT que emparejó exacto (0076/0165), así que
+ * `payments_client_needs_match` se sigue cumpliendo. Si el pago YA tenía otro
+ * cliente, no se ata: o la factura es de otro, o el NIT del abono estaba mal, y
+ * las dos cosas las resuelve alguien mirando, no esta función.
+ *
+ * Quién lo hizo queda en `audit_events`, que escribe quien llama (la acción de
+ * la pantalla o el runtime de tools).
+ */
+export async function applyPaymentToInvoice(
+  db: SupabaseClient,
+  input: ApplyPaymentToInvoiceInput,
+): Promise<PaymentRow> {
+  if (!input.userId) {
+    throw new ValidationError(
+      'Atar un pago a una factura tiene que llevar el nombre de quien lo hizo.',
+    );
+  }
+  const payment = await getPayment(db, input.paymentId);
+  if (!payment) throw new NotFoundError('Ese pago ya no existe.');
+  if (payment.state === 'disputed' || payment.state === 'discarded') {
+    throw new ValidationError(
+      payment.state === 'disputed'
+        ? 'Ese pago está en disputa entre dos fuentes. Resuélvela primero; después se ata a su factura.'
+        : 'Ese pago está descartado.',
+    );
+  }
+  if (payment.extraction_id || payment.invoice_number) {
+    throw new ValidationError(
+      `Ese pago ya está atribuido a la factura ${payment.invoice_number ?? 'que se leyó'}. No se re-atribuye en silencio.`,
+    );
+  }
+
+  let invoice: {
+    extractionId: string | null;
+    docNumber: string | null;
+    clientId: string | null;
+    clientNit: string | null;
+    currency: string | null;
+  };
+  if (input.invoice.kind === 'document') {
+    const { data, error } = await db
+      .from('document_extractions')
+      .select(`${INVOICE_COLUMNS}, financial_role`)
+      .eq('id', input.invoice.id)
+      .maybeSingle();
+    if (error) throw error;
+    const row = data as {
+      id: string;
+      doc_type: string | null;
+      review_state: string;
+      doc_number: string | null;
+      client_id: string | null;
+      counterparty_nit: string | null;
+      currency: string | null;
+      financial_role?: string | null;
+    } | null;
+    if (!row || row.doc_type !== 'invoice' || row.review_state !== 'confirmed') {
+      throw new NotFoundError('Esa factura no existe o todavía no está confirmada.');
+    }
+    if (row.financial_role !== 'receivable') {
+      throw new ValidationError('Esa factura es por pagar, no por cobrar: un abono no la paga.');
+    }
+    invoice = {
+      extractionId: row.id,
+      docNumber: row.doc_number,
+      clientId: row.client_id,
+      clientNit: row.counterparty_nit ? normalizeNit(row.counterparty_nit) : null,
+      currency: row.currency,
+    };
+  } else {
+    const { data, error } = await db
+      .from('accounting_invoices')
+      .select('id, doc_number, client_id, client_nit, currency, annulled')
+      .eq('id', input.invoice.id)
+      .maybeSingle();
+    if (error) throw error;
+    const row = data as {
+      id: string;
+      doc_number: string;
+      client_id: string | null;
+      client_nit: string | null;
+      currency: string;
+      annulled: boolean;
+    } | null;
+    if (!row || row.annulled) throw new NotFoundError('Esa factura no existe o está anulada.');
+    invoice = {
+      extractionId: null,
+      docNumber: row.doc_number,
+      clientId: row.client_id,
+      clientNit: row.client_nit ? normalizeNit(row.client_nit) : null,
+      currency: row.currency,
+    };
+  }
+
+  if (!invoice.currency || invoice.currency !== payment.currency) {
+    throw new ValidationError(
+      `La factura está en ${invoice.currency ?? 'una moneda sin escribir'} y el pago en ${payment.currency}. Las monedas no se cruzan.`,
+    );
+  }
+  if (payment.client_id && invoice.clientId && payment.client_id !== invoice.clientId) {
+    throw new ValidationError(
+      'Esa factura es de otro cliente distinto al que se identificó en el pago. Revísalo antes de atarlo.',
+    );
+  }
+
+  const values: Record<string, unknown> = {
+    invoice_number: invoice.docNumber?.slice(0, 120) ?? null,
+  };
+  if (invoice.extractionId) values.extraction_id = invoice.extractionId;
+  if (!payment.client_id && invoice.clientId) {
+    values.client_id = invoice.clientId;
+    values.client_match_state = 'matched';
+    if (invoice.clientNit) values.client_nit = invoice.clientNit;
+  }
+  return writePayment(db, { id: payment.id, values });
 }

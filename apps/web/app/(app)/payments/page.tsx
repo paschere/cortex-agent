@@ -18,7 +18,9 @@ import {
 } from '@cortex/agent-tools';
 import { AlertTriangle, Banknote, FileWarning, Scale } from 'lucide-react';
 import Link from 'next/link';
+import { BankSection } from './_components/BankSection';
 import { PaymentsBoard } from './_components/PaymentsBoard';
+import { RecoveredSection } from './_components/RecoveredSection';
 import { money, shortDate } from './_components/format';
 import type {
   ClientOption,
@@ -204,6 +206,9 @@ export default async function PaymentsPage() {
         />
       </div>
 
+      {/* 0166: la plata que volvió después de que Cortex actuó, con sus pruebas. */}
+      <RecoveredSection organizationId={user.organization.id} />
+
       <PaymentsBoard
         receivables={view}
         disputes={disputes}
@@ -211,6 +216,9 @@ export default async function PaymentsPage() {
         clients={clientOptions}
         today={today}
       />
+
+      {/* El extracto del banco: importar abonos y atar cada uno a su factura. */}
+      <BankSection organizationId={user.organization.id} />
     </div>
   );
 }

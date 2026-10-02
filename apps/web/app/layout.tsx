@@ -69,9 +69,24 @@ export const metadata: Metadata = {
  * deja una franja en blanco donde debería estar el contenido.
  */
 export const viewport: Viewport = {
-  themeColor: '#0a0c13',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F6F5F1' },
+    { media: '(prefers-color-scheme: dark)', color: '#141311' },
+  ],
   viewportFit: 'cover',
 };
+
+/**
+ * EL TEMA, ANTES DEL PRIMER PINTADO.
+ *
+ * Lee lo que la persona eligió en el rail (`components/nav/ThemeToggle.tsx`) y
+ * lo pone como `data-theme` en <html> antes de que el navegador pinte nada. Sin
+ * elección guardada, claro: es el diseño aprobado. «Sistema» deja el atributo
+ * vacío y manda `prefers-color-scheme`. Es un script en línea y no un efecto
+ * porque un efecto corre DESPUÉS del pintado, y quien eligió oscuro vería un
+ * fogonazo blanco en cada carga.
+ */
+const THEME_SCRIPT = `try{var t=localStorage.getItem('cortex-theme');if(t!=='system')document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){}`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -79,7 +94,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     // documento declarado en inglés un lector de pantalla lo lee entero con voz
     // inglesa: «vencimientos» pronunciado como si fuera una palabra inglesa no
     // se entiende. Era un fallo de accesibilidad, no un detalle.
-    <html lang="es-CO" className={`${manrope.variable} ${jetbrainsMono.variable}`}>
+    // `suppressHydrationWarning`: el script de abajo escribe `data-theme` en
+    // <html> antes de que React hidrate, y ese atributo no viene del servidor.
+    <html
+      lang="es-CO"
+      className={`${manrope.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: constante propia, sin datos de nadie */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
         {/*
           La hoja de los gráficos y los informes, enlazada una vez para toda la

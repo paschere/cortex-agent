@@ -9,6 +9,7 @@ describe('non-delegable company actions', () => {
       'kb.share_space',
       'security.set_action_policy',
       'reports.share',
+      'payments.import_bank_statement',
     ])
       expect(mandatoryHumanConfirmation(id)).toBe(true);
   });
@@ -16,6 +17,8 @@ describe('non-delegable company actions', () => {
     for (const id of [
       'payments.list',
       'payments.record',
+      'payments.preview_bank_statement',
+      'payments.bank_unmatched',
       'payroll.team_overview',
       'gmail.send_draft',
     ])

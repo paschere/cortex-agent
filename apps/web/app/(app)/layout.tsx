@@ -1,4 +1,5 @@
 import { AppShell } from '@/components/nav/AppShell';
+import { MobileTabBar } from '@/components/nav/MobileTabBar';
 import { Topbar } from '@/components/nav/Topbar';
 import { requireSession } from '@/lib/session';
 import type { ReactNode } from 'react';
@@ -20,8 +21,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar email={user.email} />
         <main className="scroll-slim flex-1 overflow-y-auto print:overflow-visible">
-          <div className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-7">{children}</div>
+          <div className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8">{children}</div>
         </main>
+        <MobileTabBar organizationId={user.organization.id} />
       </div>
     </AppShell>
   );

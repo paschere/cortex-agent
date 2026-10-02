@@ -59,7 +59,7 @@ export function CallUpload({
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
         {busy ? 'Transcribiendo…' : compact ? 'Subir' : 'Subir grabación'}
       </button>
-      {error ? <p className="max-w-xs text-right text-[11px] text-rose">{error}</p> : null}
+      {error ? <p className="max-w-xs text-right text-micro text-rose">{error}</p> : null}
     </div>
   );
 }

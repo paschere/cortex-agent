@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { Check, ChevronDown, Clock, Loader2, ShieldAlert, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { SafeActionChips } from './SafeActionChips';
 
 /**
  * LA TARJETA CON LA QUE SE APRUEBA. UNA SOLA, EN DOS SITIOS.
@@ -72,6 +73,36 @@ interface PendingActionCardProps {
   decidedVia?: string | null;
   /** Refrescar lo que la tarjeta cambió, cuando quien la monta sabe cómo. */
   onSettled?: () => void;
+  /**
+   * Cuándo se hizo ya esta misma acción, si se hizo (migración 0168). La
+   * tarjeta lo dice antes del botón, y aprobar es repetirla a sabiendas.
+   */
+  repeatOfAt?: string | null;
+}
+
+/**
+ * El campo con el que el modelo pide repetir a sabiendas. Copia literal de
+ * `REPEAT_FLAG` en packages/agent-tools/src/safe-actions/runtime.ts: este es un
+ * componente de cliente y no puede importar valores de ese paquete.
+ */
+const REPEAT_FLAG = 'repeatConfirmedByUser';
+
+/** El resultado volvió como «ya estaba hecho» en vez de ejecutarse otra vez. */
+function wasReplayed(result: unknown): boolean {
+  const idem =
+    result && typeof result === 'object'
+      ? (result as { _idempotency?: { outcome?: unknown } })._idempotency
+      : undefined;
+  return idem?.outcome === 'replayed';
+}
+
+function repeatSentence(at: string | null | undefined): string {
+  if (!at) return 'Esto repite algo que ya se hizo.';
+  const when = new Date(at);
+  const time = when.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = when.toDateString() === new Date().toDateString();
+  const date = when.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+  return `Esto repite algo que ya se hizo ${sameDay ? '' : `el ${date} `}a las ${time}.`;
 }
 
 const CHANNEL_LABEL: Record<string, string> = {
@@ -111,11 +142,20 @@ export function PendingActionCard({
   decidedAt,
   decidedVia,
   onSettled,
+  repeatOfAt,
 }: PendingActionCardProps) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>('pending');
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState('');
+  const [resultRaw, setResultRaw] = useState<unknown>(null);
+  // Repetición: o la vio el servidor (ya se hizo), o la pidió el modelo con el
+  // campo de repetir. En ambos casos la tarjeta lo dice y aprobar la ejecuta.
+  const repeatRequested =
+    !!input &&
+    typeof input === 'object' &&
+    (input as Record<string, unknown>)[REPEAT_FLAG] === true;
+  const isRepeat = Boolean(repeatOfAt) || repeatRequested;
   const [showDetails, setShowDetails] = useState(false);
   const [payload, setPayload] = useState<Payload>(
     input === undefined
@@ -129,7 +169,9 @@ export function PendingActionCard({
       const res = await fetch(`/api/approvals/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(
+          action === 'approve' && repeatOfAt ? { action, allowRepeat: true } : { action },
+        ),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -139,6 +181,7 @@ export function PendingActionCard({
       }
       if (action === 'approve') {
         const data = (await res.json().catch(() => ({}))) as { result?: unknown };
+        setResultRaw(data.result ?? null);
         let compact = '';
         try {
           compact = JSON.stringify(data.result) ?? '';
@@ -230,7 +273,10 @@ export function PendingActionCard({
       <div className="rounded-card border border-emerald/40 bg-emerald-soft px-4 py-3 shadow-card">
         <div className="flex items-center gap-2 text-sm font-semibold text-emerald">
           <Check className="h-4 w-4 shrink-0" />
-          Aprobada y ejecutada — {title}
+          {wasReplayed(resultRaw) ? 'Aprobada; ya estaba hecha' : 'Aprobada y ejecutada'} — {title}
+        </div>
+        <div className="mt-1.5">
+          <SafeActionChips source={resultRaw} />
         </div>
         {result && (
           <pre className="scroll-slim mt-2 max-h-32 overflow-auto rounded-sm border border-emerald/30 bg-surface p-2 font-mono text-micro leading-relaxed text-ink-muted">
@@ -269,6 +315,12 @@ export function PendingActionCard({
           </div>
           <p className="mt-0.5 text-sm font-semibold text-ink">{title}</p>
           <p className="mt-1 text-xs leading-snug text-ink-muted">{confirmationReason(toolId)}</p>
+          {isRepeat && (
+            <p className="mt-1 text-xs font-semibold leading-snug text-amber">
+              {repeatOfAt ? repeatSentence(repeatOfAt) : 'Se pidió repetir algo que ya se hizo.'}{' '}
+              Aprobar lo hace otra vez.
+            </p>
+          )}
           {originLabel && (
             <p className="mt-1 text-micro text-ink-faint">Quedó pendiente en {originLabel}.</p>
           )}

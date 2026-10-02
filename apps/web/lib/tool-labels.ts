@@ -256,6 +256,14 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   payments_receivables: { label: 'Ver la cartera', icon: 'CircleDollarSign' },
   payments_disputes: { label: 'Ver los pagos que no cuadran', icon: 'TriangleAlert' },
   payments_resolve_dispute: { label: 'Resolver el pago que no cuadra', icon: 'Gavel' },
+  payments_preview_bank_statement: {
+    label: 'Mirar el extracto del banco',
+    icon: 'FileSpreadsheet',
+  },
+  payments_import_bank_statement: { label: 'Importar el extracto del banco', icon: 'Landmark' },
+  payments_bank_unmatched: { label: 'Ver lo que entró al banco sin factura', icon: 'SearchCheck' },
+  payments_apply_to_invoice: { label: 'Atar el pago a su factura', icon: 'Link' },
+  payments_recovered: { label: 'Ver la plata recuperada con Cortex', icon: 'TrendingUp' },
 
   // Metas. `goals_set` está arriba porque se para a pedir permiso.
   goals_offer_metrics: { label: 'Ver qué se puede medir aquí', icon: 'Ruler' },
@@ -392,6 +400,14 @@ export function toolDisplayName(toolId: string): string {
  * these strings are read by the person deciding, not by the model.
  */
 export function confirmationSummary(toolId: string, input: Record<string, unknown>): string {
+  // Acciones seguras de repetir (0168): una repetición pedida a sabiendas lo
+  // dice en la propia frase que se aprueba. Gemela de `pendingSummary` en
+  // packages/agent-tools/src/approvals/summary.ts.
+  const repeat = input.repeatConfirmedByUser === true ? ' · REPETICIÓN: ya se había hecho' : '';
+  return `${confirmationSummaryBase(toolId, input)}${repeat}`;
+}
+
+function confirmationSummaryBase(toolId: string, input: Record<string, unknown>): string {
   const key = toolId.replace(/\./g, '_');
   switch (key) {
     case 'hubspot_update_deal':

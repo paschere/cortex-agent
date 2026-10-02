@@ -11,6 +11,8 @@ export function mandatoryHumanConfirmation(toolId: string): boolean {
       'reports.share',
       'views.share',
       'security.set_action_policy',
+      // Mete en la cartera, de una vez, todo lo que dice un extracto.
+      'payments.import_bank_statement',
     ].includes(toolId)
   );
 }

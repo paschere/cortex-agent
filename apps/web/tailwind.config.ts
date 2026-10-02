@@ -44,7 +44,12 @@ const config: Config = {
         // says small radius is 10px, so `rounded-sm` is bound to the token that
         // actually carries that value.
         sm: 'var(--radius-sm)',
-        pill: '8px',
+        // Lo que se pulsa y lo que etiqueta: botones, chips, insignias. El
+        // diseño de autoservicio los quiere redondos del todo — antes este
+        // token valía 8px y «pill» era un rectángulo con las esquinas suaves.
+        pill: '999px',
+        // Lo usaban cuatro componentes sin que existiera (no pintaba nada).
+        control: 'var(--radius-sm)',
       },
       boxShadow: {
         card: 'var(--shadow-card)',
@@ -218,20 +223,23 @@ const config: Config = {
        * setting from one class rather than remembering to pair `leading-`.
        */
       fontSize: {
+        // El diseño de autoservicio subió la escala un escalón: el cuerpo pasa
+        // de 14 a 15px y los títulos crecen. Mismos siete nombres, así que todo
+        // lo que ya usaba la escala se agranda sin tocar un solo componente.
         /** Labels, timestamps, evidence. Uppercase ones pair with tracking-field. */
-        micro: ['11px', { lineHeight: '1.45' }],
+        micro: ['12px', { lineHeight: '1.45' }],
         /** The workhorse: secondary text, table cells, most of the chrome. */
-        xs: ['12.5px', { lineHeight: '1.5' }],
+        xs: ['13px', { lineHeight: '1.5' }],
         /** Body text and anything somebody reads a paragraph of. */
-        sm: ['14px', { lineHeight: '1.6' }],
+        sm: ['15px', { lineHeight: '1.55' }],
         /** Emphasis inside a card; the name of the thing you are looking at. */
-        base: ['15px', { lineHeight: '1.5' }],
+        base: ['16px', { lineHeight: '1.5' }],
         /** Section heading. */
-        lg: ['19px', { lineHeight: '1.35' }],
-        /** Page heading. */
-        xl: ['24px', { lineHeight: '1.25' }],
-        /** One per screen at most, and most screens have none. */
-        display: ['32px', { lineHeight: '1.15' }],
+        lg: ['20px', { lineHeight: '1.3' }],
+        /** Page heading on a phone; a big figure inside a card. */
+        xl: ['26px', { lineHeight: '1.2', letterSpacing: '-0.02em' }],
+        /** The page heading. One per screen. */
+        display: ['36px', { lineHeight: '1.1', letterSpacing: '-0.025em' }],
       },
     },
   },

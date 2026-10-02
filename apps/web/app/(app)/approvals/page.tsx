@@ -8,6 +8,7 @@ import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { findPriorAction } from '@cortex/agent-tools';
 import { AlarmClockOff, ArrowRight, Inbox, Radar, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { SignalCard } from './_components/SignalCard';
@@ -117,6 +118,22 @@ export default async function ApprovalsPage() {
   // Answered ones stay visible but are never actionable — see RECENTLY_DECIDED_MS.
   const pending = approvalRows.filter((r) => !r.decision);
   const decided = approvalRows.filter((r) => r.decision);
+  // Acciones seguras de repetir (0168): si una pendiente repite algo que esta
+  // misma persona ya hizo dentro de la ventana, la tarjeta lo dice ANTES del
+  // botón, y aprobarla es repetir a sabiendas. Sólo lectura; en la duda, nada.
+  const repeatOf = new Map<string, string>();
+  await Promise.all(
+    pending.map(async (p) => {
+      const prior = await findPriorAction({
+        db,
+        organizationId: user.organization.id,
+        userId: user.id,
+        toolId: p.tool_id,
+        input: p.input,
+      }).catch(() => null);
+      if (prior) repeatOf.set(p.id, prior.at);
+    }),
+  );
   const signals = (signalsRes.data ?? []) as unknown as SignalRow[];
   const failing = ((jobsRes.data ?? []) as unknown as JobRow[])
     .map((j) => ({ id: j.id, name: j.name, lastRun: j.scheduled_job_runs?.[0] }))
@@ -190,6 +207,7 @@ export default async function ApprovalsPage() {
                     decision={p.decision}
                     decidedAt={p.decided_at}
                     decidedVia={p.decided_via}
+                    repeatOfAt={repeatOf.get(p.id) ?? null}
                   />
                 ))}
               </div>

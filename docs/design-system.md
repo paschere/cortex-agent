@@ -2,6 +2,15 @@
 
 **Direction: soft instrument.**
 
+**2026-10 — self-service redesign.** Warm ground (`canvas` #F6F5F1), white
+surfaces, near-black ink (#17171F), indigo #4338CA as the product colour, Manrope
+extrabold headings, JetBrains Mono for every figure (`.tabular`, `.stat-num`),
+pill controls. A matching warm dark theme lives behind `data-theme` (rail toggle:
+Claro / Oscuro / Sistema; default Claro). All of it is token values in
+`apps/web/app/globals.css` — the names did not change. Main navigation: Inicio,
+Chat, Procesos, Vistas, Datos, Equipo (`primaryNav` in `lib/nav-shape.ts`);
+everything else under «Más» and ⌘K. Dev fixture: `/v/visual-fixture`.
+
 Cortex is a brain. It listens to calls, reads contracts, remembers what was
 promised, and can show you why it believes something. The interface should feel
 like a well-made modern instrument — light, rounded, with real depth — not like
@@ -15,8 +24,8 @@ hours.
 
 ## The four rules
 
-**1. Generous curvature.** `rounded-card` is 14px, `rounded-sm` is 10px, and
-controls are `rounded-pill`. Nothing is cut square. If you find a `rounded-[3px]`
+**1. Generous curvature.** `rounded-card` is 18px, `rounded-sm` is 12px, and
+controls are `rounded-pill` (fully round). Nothing is cut square. If you find a `rounded-[3px]`
 or a squared button, it is left over from an earlier direction.
 
 **2. Depth by light, not outline.** Surfaces lift with `shadow-card`; things
@@ -48,7 +57,7 @@ worth keeping — it is legibility, not styling.
   rounded terminals: it reads as a product, not an admin panel.
 - **JetBrains Mono** (`font-mono`) — every piece of evidence. See rule 3.
 
-`.field-label` names the value beneath it — 11px, semibold, gently spaced. It
+`.field-label` names the value beneath it — 12px, semibold, gently spaced. It
 should recede, not announce itself. Not small caps, and never used as a
 decorative eyebrow.
 
@@ -59,13 +68,13 @@ Seven steps, each carrying its own line-height. **Use the token, never
 
 | Token | Size | For |
 |---|---|---|
-| `text-micro` | 11px | Labels, timestamps, evidence. Uppercase ones pair with `tracking-field`. |
-| `text-xs` | 12.5px | The workhorse: secondary text, table cells, most chrome. |
-| `text-sm` | 13px | Body text, and anything somebody reads a paragraph of. |
-| `text-base` | 15px | Emphasis inside a card; the name of the thing you are looking at. |
-| `text-lg` | 19px | Section heading. |
-| `text-xl` | 22px | Page heading. |
-| `text-display` | 32px | One per screen at most, and most screens have none. |
+| `text-micro` | 12px | Labels, timestamps, evidence. Uppercase ones pair with `tracking-field`. |
+| `text-xs` | 13px | The workhorse: secondary text, table cells, most chrome. |
+| `text-sm` | 15px | Body text, and anything somebody reads a paragraph of. |
+| `text-base` | 16px | Emphasis inside a card; the name of the thing you are looking at. |
+| `text-lg` | 20px | Section heading. |
+| `text-xl` | 26px | Page heading. |
+| `text-display` | 36px | The page heading (`PageHeader`, extrabold). One per screen. |
 
 This block did not exist until `tailwind.config.ts` grew a `fontSize` key, and
 that single omission is the whole reason the app had **23 arbitrary sizes across

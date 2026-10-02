@@ -117,7 +117,10 @@ export type ExecutionResult =
  * team can revoke a tool in the fifteen minutes an approval is open, and a
  * revoked tool must not run just because the button was already on screen.
  */
-export async function runApprovedAction(action: ClaimedApproval): Promise<ExecutionResult> {
+export async function runApprovedAction(
+  action: ClaimedApproval,
+  opts: { allowRepeat?: boolean } = {},
+): Promise<ExecutionResult> {
   const tool = getTool(action.toolId);
   if (!tool) {
     return {
@@ -143,7 +146,12 @@ export async function runApprovedAction(action: ClaimedApproval): Promise<Execut
       userId: action.userId,
       agentId: action.agentId,
     });
-    const result = await runTool(tool, action.input, ctx, { confirmed: true });
+    // `allowRepeat` sólo cuando la tarjeta avisó de que era una repetición
+    // (0168); si no, una acción idéntica ya hecha vuelve como «ya estaba hecho».
+    const result = await runTool(tool, action.input, ctx, {
+      confirmed: true,
+      allowRepeat: opts.allowRepeat === true,
+    });
     return { ok: true, result };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Tool execution failed';

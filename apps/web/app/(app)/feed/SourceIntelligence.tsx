@@ -723,7 +723,7 @@ export function SourceIntelligence({
                         {suggestion.purpose}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-pill bg-primary-soft px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                    <span className="shrink-0 rounded-pill bg-primary-soft px-2 py-1 text-micro font-semibold uppercase tracking-wide text-primary">
                       Editable
                     </span>
                   </div>

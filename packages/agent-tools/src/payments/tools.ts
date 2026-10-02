@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { bogotaToday } from '../commitments/shape';
 import { registerTool } from '../index';
+import { moneyRecovered } from './recovered-store';
 import { KIND_LABEL, STATE_LABEL, signedAmount, sourceLabel, sourceRank } from './shape';
 import {
   hydratePayments,
@@ -382,6 +383,118 @@ export const paymentsResolveDispute = registerTool({
         payment.state === 'discarded'
           ? 'Descartado bajo tu nombre. No cuenta en ninguna cifra, y los reportes que lo dijeron siguen guardados tal cual llegaron.'
           : 'Resuelto bajo tu nombre. El pago vuelve a contar en la cartera y en los totales con el importe que confirmaste; lo que dijo cada fuente sigue guardado, sin tocar.',
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * PLATA RECUPERADA (0166). Sólo lectura: la cifra se calcula al leer con las
+ * reglas de ./recovered.ts, y cada factura dice qué pago y qué acción de Cortex
+ * la sostienen. El modelo la repite; no la estima.
+ */
+export const paymentsRecovered = registerTool({
+  id: 'payments.recovered',
+  description:
+    'Cuánta plata volvió porque Cortex actuó: pagos de facturas que llegaron después de un cobro enviado por Cortex, de un seguimiento de cobro en Gerencia o de un aviso de mora, dentro de 45 días, contados sólo hasta lo que se debía y una sola vez; más lo que un administrador anotó como recuperado o ahorrado al cerrar un asunto verificado. Responde "¿cuánto me has ayudado a recuperar?" y "¿qué cobros funcionaron este mes?". Es una cifra conservadora: dila con sus reglas, sin redondear hacia arriba ni sumar monedas distintas.',
+  inputSchema: z.object({
+    limit: z.number().int().min(1).max(50).default(10).describe('Cuántas facturas listar.'),
+  }),
+  outputSchema: z.object({
+    today: z.string(),
+    month: z.string(),
+    windowDays: z.number(),
+    cop: z.object({
+      month: z.number(),
+      total: z.number(),
+      automatic: z.number(),
+      manual: z.number(),
+      invoices: z.number(),
+      manualCases: z.number(),
+    }),
+    otherCurrencies: z.array(
+      z.object({
+        currency: z.string(),
+        month: z.number(),
+        total: z.number(),
+        invoices: z.number(),
+      }),
+    ),
+    invoices: z.array(
+      z.object({
+        docNumber: z.string().nullable(),
+        counterparty: z.string().nullable(),
+        currency: z.string(),
+        amount: z.number(),
+        firstOn: z.string(),
+        lastOn: z.string(),
+        trigger: z.string(),
+        triggerOn: z.string(),
+        payments: z.number(),
+        capped: z.boolean(),
+      }),
+    ),
+    manual: z.array(
+      z.object({
+        title: z.string(),
+        note: z.string(),
+        counted: z.number(),
+        overlap: z.number(),
+        on: z.string(),
+      }),
+    ),
+    guidance: z.string(),
+  }),
+  rateLimit: { perMinute: 20 },
+  handler: async (input, ctx) => {
+    const r = await moneyRecovered(ctx.db, { today: bogotaToday() });
+    const cop = (n: number) =>
+      n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+    const nothing = r.cop.total <= 0 && r.otherCurrencies.length === 0;
+    return {
+      today: r.today,
+      month: r.month,
+      windowDays: r.windowDays,
+      cop: {
+        month: r.cop.month,
+        total: r.cop.total,
+        automatic: r.cop.automatic,
+        manual: r.cop.manual,
+        invoices: r.cop.invoices,
+        manualCases: r.cop.manualCases,
+      },
+      otherCurrencies: r.otherCurrencies,
+      invoices: r.items.slice(0, input.limit ?? 10).map((it) => ({
+        docNumber: it.docNumber,
+        counterparty: it.counterparty,
+        currency: it.currency,
+        amount: it.amount,
+        firstOn: it.firstOn,
+        lastOn: it.lastOn,
+        trigger: it.trigger.label,
+        triggerOn: it.trigger.on,
+        payments: it.movements.filter((m) => m.kind !== 'reversal').length,
+        capped: it.capped,
+      })),
+      manual: r.manual.slice(0, 10).map((m) => ({
+        title: m.title,
+        note: m.note,
+        counted: m.counted,
+        overlap: m.overlap,
+        on: m.on,
+      })),
+      guidance: [
+        nothing
+          ? 'Todavía no hay plata atribuible a Cortex con estas reglas. No es que no haya servido: es que ningún pago llegó después de un cobro, un seguimiento o un aviso de Cortex, o los pagos aún no están registrados en Pagos.'
+          : `Recuperado con Cortex: ${cop(r.cop.month)} este mes, ${cop(r.cop.total)} en total (${cop(r.cop.automatic)} en ${r.cop.invoices} factura(s) por pagos atribuidos y ${cop(r.cop.manual)} anotado al cerrar asuntos).`,
+        r.otherCurrencies.length
+          ? `En otras monedas, aparte y sin sumar a los pesos: ${r.otherCurrencies.map((o) => `${o.total} ${o.currency}`).join(', ')}.`
+          : '',
+        r.rules,
+      ]
+        .filter(Boolean)
+        .join(' '),
     };
   },
 });

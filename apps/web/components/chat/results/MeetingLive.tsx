@@ -101,7 +101,7 @@ function Notice({ sessionId, meetUrl }: { sessionId: string; meetUrl?: string })
         </p>
       ) : null}
       {people.length > 0 ? (
-        <p className="truncate text-[11px] text-ink-faint">
+        <p className="truncate text-micro text-ink-faint">
           {people.map((p) => (p.speaking ? `${p.name} (habla)` : p.name)).join(' · ')}
         </p>
       ) : null}
@@ -113,7 +113,7 @@ function Notice({ sessionId, meetUrl }: { sessionId: string; meetUrl?: string })
           {dead ? 'Ver en Llamadas' : 'Abrir en Llamadas'} <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>
         {lines > 0 ? (
-          <span className="text-[11px] text-ink-faint">
+          <span className="text-micro text-ink-faint">
             {lines} {lines === 1 ? 'frase' : 'frases'} transcritas
           </span>
         ) : null}

@@ -1,16 +1,17 @@
 'use client';
 
+import { type AuditEventRow, riskSignals } from '@/app/api/admin/_lib/audit-filters';
+import { SafeActionChips } from '@/components/approvals/SafeActionChips';
+import { Provenance } from '@/components/ui/provenance';
+import { relativeTime } from '@/lib/relative-time';
+import { toolLabel } from '@/lib/tool-labels';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
+import { ExternalLink, ShieldAlert, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ExternalLink, ShieldAlert, X } from 'lucide-react';
-import { toolLabel } from '@/lib/tool-labels';
-import { relativeTime } from '@/lib/relative-time';
-import { type AuditEventRow, riskSignals } from '@/app/api/admin/_lib/audit-filters';
-import { Provenance } from '@/components/ui/provenance';
-import { DecisionTag, RiskTag, SignalChip, StatusTag, SurfaceTag } from './tags';
 import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
+import { DecisionTag, RiskTag, SignalChip, StatusTag, SurfaceTag } from './tags';
 
 /** Where the call came in from — the stamp's "system of record". */
 const SOURCE_LABEL: Record<string, string> = {
@@ -60,10 +61,7 @@ function SequenceRow({
         current ? 'bg-primary-soft' : 'hover:bg-surface-2',
       )}
     >
-      <span
-        className="tabular w-16 shrink-0 text-ink-faint"
-        title={absoluteTime(event.created_at)}
-      >
+      <span className="tabular w-16 shrink-0 text-ink-faint" title={absoluteTime(event.created_at)}>
         {new Date(event.created_at).toLocaleTimeString('en-US', {
           hour: '2-digit',
           minute: '2-digit',
@@ -169,6 +167,7 @@ export function AuditDetailDrawer({
               <SurfaceTag surface={event.surface} />
               <RiskTag level={event.risk_level} />
               <DecisionTag decision={event.decision} />
+              <SafeActionChips source={event.metadata} />
             </div>
 
             {(event.risk_reason || risky) && (

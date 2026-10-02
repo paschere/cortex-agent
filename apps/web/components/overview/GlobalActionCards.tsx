@@ -112,7 +112,7 @@ export function GlobalActionCards({
               <Building2 className="h-4 w-4 shrink-0 text-violet-300" />
               {proposal.workspaceName}
             </span>
-            <span className="text-[11px] text-violet-300">
+            <span className="text-micro text-violet-300">
               {status[proposal.state] ?? proposal.state}
             </span>
           </header>

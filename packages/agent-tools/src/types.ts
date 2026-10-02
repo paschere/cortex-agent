@@ -1,6 +1,7 @@
 import type { IntegrationProvider, Logger, UUID } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
+import type { SafeActionPolicy } from './safe-actions/types.js';
 import type { DeclaredAmount } from './security/mandate.js';
 
 export interface IntegrationsClient {
@@ -100,6 +101,15 @@ export interface ToolContext {
    * de chat.
    */
   enqueueJob?: (name: string, data: Record<string, unknown>) => Promise<boolean>;
+  /**
+   * El alcance de idempotencia de esta ejecución, cuando lo hay (migración
+   * 0168). Lo pone quien sabe que una ejecución es UNA: una rutina programada
+   * usa `routine:<id>:<hora programada>`, de modo que el reintento de ese paso
+   * cae en la misma clave y no repite el envío, mientras que la ejecución de
+   * mañana es otra. Sin él (un chat), la clave es sólo quién, qué y con qué
+   * datos. Ver packages/agent-tools/src/safe-actions.
+   */
+  idempotencyScope?: string;
   signal?: AbortSignal;
   withSpan?: <T>(
     name: string,
@@ -184,6 +194,13 @@ export interface ToolDef<I, O> {
   declaredAmount?: DeclaredAmount;
   requiredScopes?: { provider: IntegrationProvider; scopes: string[] }[];
   rateLimit?: { perMinute: number };
+  /**
+   * Acción segura de repetir (migración 0168): la misma llamada, ya hecha
+   * dentro de la ventana, se devuelve en vez de repetirse; dos a la vez, sólo
+   * una corre; y `verify` comprueba después que el efecto ocurrió. Si no se
+   * declara aquí, `registerTool` la toma de `safe-actions/catalog.ts`.
+   */
+  safeAction?: SafeActionPolicy<I, O>;
   handler: (input: I, ctx: ToolContext) => Promise<O>;
 }
 

@@ -193,7 +193,7 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
           >
             <span
               aria-hidden="true"
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-sm bg-primary-soft text-xs font-bold text-primary-ink"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-soft text-sm font-extrabold text-amber"
             >
               {workspaceInitial(menu.active.name)}
             </span>
@@ -236,7 +236,7 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
 
         <DropdownMenu.Portal>
           <DropdownMenu.Content
-            side="top"
+            side="bottom"
             align="start"
             sideOffset={8}
             className="scroll-slim z-50 max-h-[70vh] w-[17rem] overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
@@ -391,8 +391,8 @@ export function CreateCompanyButton({ collapsed = false }: { collapsed?: boolean
         title={collapsed ? 'Crear empresa' : undefined}
         onClick={() => setCreating(true)}
         className={clsx(
-          'mt-1 flex min-h-9 items-center rounded-lg border border-primary/20 bg-primary/10 text-sm font-semibold text-primary-ink transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-          collapsed ? 'w-full justify-center px-1' : 'gap-2 px-3',
+          'flex min-h-9 w-full items-center rounded-pill text-sm font-semibold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          collapsed ? 'justify-center px-1' : 'gap-2.5 px-3',
         )}
       >
         <Plus className="h-4 w-4 shrink-0" aria-hidden />

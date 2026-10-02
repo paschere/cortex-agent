@@ -9,6 +9,7 @@ import {
 } from '@/lib/receivables-notice-email';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
+  RECOVERY_WINDOW_DAYS,
   bogotaToday,
   claimReceivableNotice,
   emailsFor,
@@ -17,6 +18,7 @@ import {
   orgAdmins,
   overdueReceivableInvoices,
   overdueStage,
+  recordBalanceDrops,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
@@ -40,6 +42,12 @@ import { logger } from '@cortex/core';
 
 const WATCH_CRON = '0 12 * * *';
 
+function addDaysTo(day: string, days: number): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export const receivablesWatchDispatchJob: JobHandler = async ({ step }) => {
   // Sin alcance, y sólo aquí: «qué espacios tienen cartera» abarca la
   // instalación entera y un cron no tiene sesión. Cada id viaja en su propio
@@ -53,9 +61,32 @@ export const receivablesWatchDispatchJob: JobHandler = async ({ step }) => {
       .eq('financial_role', 'receivable')
       .limit(20_000);
     if (error) throw error;
+    // 0165/0166: también los espacios cuya cartera viene de un programa
+    // contable, y los que tuvieron avisos de esas facturas hace poco aunque ya
+    // estén pagadas: la caída de saldo a cero es justo la que hay que anotar.
+    const [accounting, noticed] = await Promise.all([
+      getSupabaseServiceClient()
+        .from('accounting_invoices')
+        .select('organization_id')
+        .gt('balance', 0)
+        .eq('annulled', false)
+        .limit(20_000),
+      getSupabaseServiceClient()
+        .from('receivable_notices')
+        .select('organization_id')
+        .not('accounting_invoice_id', 'is', null)
+        .gte('sent_on', addDaysTo(bogotaToday(), -(RECOVERY_WINDOW_DAYS + 1)))
+        .limit(20_000),
+    ]);
+    if (accounting.error) throw accounting.error;
+    if (noticed.error) throw noticed.error;
     return [
       ...new Set(
-        ((data ?? []) as Array<{ organization_id: string | null }>)
+        [
+          ...((data ?? []) as Array<{ organization_id: string | null }>),
+          ...((accounting.data ?? []) as Array<{ organization_id: string | null }>),
+          ...((noticed.data ?? []) as Array<{ organization_id: string | null }>),
+        ]
           .map((r) => r.organization_id)
           .filter((id): id is string => Boolean(id)),
       ),
@@ -84,6 +115,18 @@ export const receivablesWatchWorkspaceJob: JobHandler = async ({ event, step }) 
   if (!organizationId) return { skipped: 'no workspace on the event' };
   const today = bogotaToday();
 
+  // 0166: ANTES de reclamar avisos nuevos, anotar cuánto bajó el saldo de las
+  // facturas de programa contable ya avisadas (plata recuperada). Su propio
+  // paso: si falla, los avisos de hoy salen igual.
+  await step.run('record-balance-drops', async () => {
+    try {
+      return await recordBalanceDrops(getOrgScopedClient(organizationId), { today });
+    } catch (err) {
+      logger.warn({ err, organizationId }, 'receivable balance drops not recorded');
+      return { recorded: 0 };
+    }
+  });
+
   return step.run('notice-crossed-invoices', async () => {
     const db = getOrgScopedClient(organizationId);
     const overdue = await overdueReceivableInvoices(db, { today });
@@ -100,6 +143,8 @@ export const receivablesWatchWorkspaceJob: JobHandler = async ({ event, step }) 
           stage,
           sentOn: today,
           source: invoice.source,
+          balance: invoice.balance,
+          currency: invoice.currency,
         })
       )
         claimed.push({ invoice, stage });

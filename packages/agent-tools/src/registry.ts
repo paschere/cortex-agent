@@ -6,6 +6,29 @@ import {
 } from '@cortex/core';
 import { hashInput, writeAuditEvent } from './audit.js';
 import { consumeToken } from './rate-limit.js';
+import { SAFE_ACTION_CATALOG } from './safe-actions/catalog.js';
+import {
+  type ActionGuard,
+  ActionInFlightError,
+  ActionOutcomeUnknownError,
+  guardFor,
+  repeatNotice,
+  replayNotice,
+  runVerify,
+  splitRepeatFlag,
+  summarizeResult,
+  verificationNotice,
+  withRepeatFlag,
+} from './safe-actions/runtime.js';
+import {
+  type ClaimOutcome,
+  claimAction,
+  judge,
+  readAction,
+  settleFailure,
+  settleSuccess,
+} from './safe-actions/store.js';
+import type { ActionRow, AnySafeActionPolicy, VerifyOutcome } from './safe-actions/types.js';
 import { hasConversationGrace } from './security/conversation-grace.js';
 import {
   blockExplanation,
@@ -24,6 +47,15 @@ import type { AnyTool, ToolContext, ToolDef } from './types.js';
 const REGISTRY = new Map<string, AnyTool>();
 
 export function registerTool<I, O>(tool: ToolDef<I, O>): ToolDef<I, O> {
+  // Acción segura de repetir (0168): la política propia gana; si no hay, la del
+  // catálogo central. Con política, el esquema que ve el modelo gana el campo
+  // con el que se pide repetir a sabiendas (ver safe-actions/runtime.ts).
+  const policy =
+    tool.safeAction ?? (SAFE_ACTION_CATALOG[tool.id] as ToolDef<I, O>['safeAction'] | undefined);
+  if (policy) {
+    tool.safeAction = policy;
+    tool.inputSchema = withRepeatFlag(tool.inputSchema);
+  }
   REGISTRY.set(tool.id, tool as unknown as AnyTool);
   return tool;
 }
@@ -70,7 +102,15 @@ export async function runTool<I, O>(
   tool: ToolDef<I, O>,
   input: unknown,
   ctx: ToolContext,
-  opts: { confirmed?: boolean } = {},
+  opts: {
+    confirmed?: boolean;
+    /**
+     * Repetir a sabiendas una acción ya hecha (0168). Lo pasa la aprobación
+     * cuando la tarjeta le enseñó a la persona que era una repetición; el modelo
+     * lo pide con el campo `repeatConfirmedByUser` del input.
+     */
+    allowRepeat?: boolean;
+  } = {},
 ): Promise<O> {
   const t0 = performance.now();
   const parsed = tool.inputSchema.safeParse(input);
@@ -90,6 +130,29 @@ export async function runTool<I, O>(
   }
 
   // ---------------------------------------------------------------------------
+  // ACCIÓN SEGURA DE REPETIR (migración 0168). La huella de esta llamada —quién,
+  // qué herramienta, con qué datos canonizados, en qué ejecución— se calcula una
+  // vez aquí. El campo con el que se pide repetir sale del input antes de que lo
+  // vea nadie más: la herramienta recibe sus datos y nada más. `parsed.data`
+  // (con el campo) sólo viaja en la petición de confirmación, para que la
+  // tarjeta y la aprobación sepan que es una repetición pedida.
+  // ---------------------------------------------------------------------------
+  const policy = tool.safeAction as AnySafeActionPolicy | undefined;
+  const split = policy
+    ? splitRepeatFlag(parsed.data)
+    : { data: parsed.data, repeatRequested: false };
+  const data = split.data as I;
+  const allowRepeat = split.repeatRequested || opts.allowRepeat === true;
+  let guard: ActionGuard | null = null;
+  if (policy) {
+    try {
+      guard = guardFor(policy, tool.id, data, ctx);
+    } catch (err) {
+      ctx.logger.warn?.({ err, tool: tool.id }, 'safe-action key failed; running unguarded');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Security enforcement.
   //
   // runTool is the ONE choke point every tool call passes through — web chat,
@@ -102,7 +165,7 @@ export async function runTool<I, O>(
   // ---------------------------------------------------------------------------
   const evaluation = await evaluateSecurity({
     tool,
-    input: parsed.data,
+    input: data,
     db: ctx.db,
     userId: ctx.userId,
     organizationId: ctx.organizationId,
@@ -113,12 +176,72 @@ export async function runTool<I, O>(
     confirmed: opts.confirmed,
   });
   const risk = riskAuditFields(evaluation);
+
+  /** Devolver lo ya hecho, con el aviso, sin ejecutar nada. */
+  const replayed = async (row: ActionRow, riskFields: typeof risk): Promise<O> => {
+    const notice = replayNotice(row, policy as AnySafeActionPolicy);
+    await writeAuditEvent({
+      db: ctx.db,
+      userId: ctx.userId,
+      agentId: ctx.agentId,
+      conversationId: ctx.conversationId,
+      toolId: tool.id,
+      input,
+      status: 'ok',
+      latencyMs: Math.round(performance.now() - t0),
+      metadata: {
+        reason: 'idempotent_replay',
+        idempotency: {
+          key: guard?.key.slice(0, 16),
+          outcome: 'replayed',
+          firstDoneAt: notice.firstDoneAt,
+        },
+        ...(row.verification
+          ? { verification: { status: row.verification, detail: row.verification_detail } }
+          : {}),
+      },
+      ...riskFields,
+    });
+    const prior = row.result == null ? null : tool.outputSchema.safeParse(row.result);
+    const base =
+      prior?.success && prior.data && typeof prior.data === 'object'
+        ? prior.data
+        : ({} as Record<string, unknown>);
+    attach(base, '_idempotency', notice);
+    return base as O;
+  };
+
+  /** Negarse a ejecutar: otra igual está en vuelo, o una anterior quedó a medias. */
+  const refuse = async (
+    kind: 'in_flight' | 'unknown',
+    row: ActionRow,
+    riskFields: typeof risk,
+  ): Promise<never> => {
+    await writeAuditEvent({
+      db: ctx.db,
+      userId: ctx.userId,
+      agentId: ctx.agentId,
+      conversationId: ctx.conversationId,
+      toolId: tool.id,
+      input,
+      status: 'error',
+      latencyMs: Math.round(performance.now() - t0),
+      metadata: {
+        reason: kind === 'in_flight' ? 'idempotency_in_flight' : 'idempotency_unknown',
+        idempotency: { key: guard?.key.slice(0, 16), outcome: kind, startedAt: row.claimed_at },
+      },
+      ...riskFields,
+    });
+    throw kind === 'in_flight'
+      ? new ActionInFlightError(tool.id, row.claimed_at)
+      : new ActionOutcomeUnknownError(tool.id, row.claimed_at);
+  };
   const securityEventBase = {
     db: ctx.db,
     userId: ctx.userId,
     agentId: ctx.agentId,
     toolId: tool.id,
-    input: parsed.data,
+    input: data,
     evaluation,
   };
 
@@ -153,6 +276,23 @@ export async function runTool<I, O>(
       evaluation.classification.riskLevel,
       evaluation.classification.signals,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // ¿YA SE HIZO? — antes de pedir confirmación. No tiene sentido que alguien
+  // apruebe algo que ya salió: si la misma acción ya se hizo dentro de su
+  // ventana, se devuelve lo de entonces con el aviso, sin tarjeta y sin
+  // ejecutar. Va DESPUÉS del bloqueo de seguridad (una llamada bloqueada no
+  // recibe ni eso) y sólo lee: el reclamo de verdad llega justo antes del
+  // handler, cuando ya pasaron todas las puertas.
+  // ---------------------------------------------------------------------------
+  if (guard) {
+    const prior = await readAction(ctx.db, guard.key);
+    if (prior) {
+      const verdict = judge(prior, { allowRepeat, now: new Date() });
+      if (verdict === 'replay') return replayed(prior, risk);
+      if (verdict === 'in_flight' || verdict === 'unknown') await refuse(verdict, prior, risk);
+    }
   }
 
   // A high-risk call is gated even when the tool itself never declared
@@ -210,7 +350,7 @@ export async function runTool<I, O>(
   // que existieran los mandatos.
   // ---------------------------------------------------------------------------
   if (evaluation.mandate) {
-    const money = typedAmount(parsed.data, tool.declaredAmount);
+    const money = typedAmount(data, tool.declaredAmount);
     const recorded = await recordMandateUse({
       db: ctx.db,
       mandateId: evaluation.mandate.id,
@@ -221,7 +361,7 @@ export async function runTool<I, O>(
       riskLevel: evaluation.classification.riskLevel,
       amount: money?.amount ?? null,
       currency: money?.currency ?? null,
-      inputDigest: hashInput(parsed.data),
+      inputDigest: hashInput(data),
     });
     if (!recorded) {
       await writeAuditEvent({
@@ -316,6 +456,42 @@ export async function runTool<I, O>(
     }
   }
   // ---------------------------------------------------------------------------
+  // EL RECLAMO (0168). Todas las puertas pasaron; antes de la fila de intención
+  // y del handler, esta llamada tiene que ganarse el derecho a ejecutar. Dos
+  // llamadas iguales a la vez: una gana, la otra se entera de que está en vuelo.
+  // Una ya hecha (en la carrera entre la mirada previa y aquí): se devuelve.
+  // ---------------------------------------------------------------------------
+  let claim: ClaimOutcome | null = null;
+  if (guard) {
+    claim = await claimAction(ctx.db, {
+      key: guard.key,
+      toolId: tool.id,
+      userId: ctx.userId,
+      conversationId: ctx.conversationId ?? null,
+      scope: guard.scope,
+      windowMs: guard.windowMs,
+      allowRepeat,
+    });
+    if (claim.kind === 'replay') return replayed(claim.row, riskFinal);
+    if (claim.kind === 'in_flight' || claim.kind === 'unknown') {
+      await refuse(claim.kind, claim.row, riskFinal);
+    }
+  }
+  const claimedAttempt = claim?.kind === 'claimed' ? claim.attemptId : null;
+  const repeatOf: ActionRow | null = claim?.kind === 'claimed' ? claim.repeatOf : null;
+  const idempotencyMeta = guard
+    ? {
+        idempotency: {
+          key: guard.key.slice(0, 16),
+          outcome: claim?.kind === 'unguarded' ? 'unguarded' : repeatOf ? 'repeated' : 'executed',
+          ...(claim?.kind === 'unguarded' ? { reason: claim.reason } : {}),
+          ...(repeatOf ? { firstDoneAt: repeatOf.finished_at ?? repeatOf.claimed_at } : {}),
+        },
+      }
+    : {};
+  const graceMeta = viaConversationGrace ? { reason: 'conversation_grace' } : {};
+
+  // ---------------------------------------------------------------------------
   // AUDIT-BEFORE-ACT (portado de OpenBot). Para una llamada con efectos, la
   // intención queda escrita ANTES de ejecutar el handler: una acción permitida
   // que luego revienta a medias sigue constando en la secuencia, y un rastro
@@ -338,14 +514,15 @@ export async function runTool<I, O>(
       input,
       status: 'attempted',
       latencyMs: Math.round(performance.now() - t0),
-      ...(viaConversationGrace ? { metadata: { reason: 'conversation_grace' } } : {}),
+      ...(viaConversationGrace || guard ? { metadata: { ...graceMeta, ...idempotencyMeta } } : {}),
       ...riskFinal,
     });
   }
 
+  const startedAt = new Date();
   let result: O;
   try {
-    const exec = () => tool.handler(parsed.data, ctx) as Promise<O>;
+    const exec = () => tool.handler(data, ctx) as Promise<O>;
     result = ctx.withSpan
       ? await ctx.withSpan(`tool.${tool.id}`, { 'tool.id': tool.id, 'user.id': ctx.userId }, exec)
       : await exec();
@@ -362,9 +539,17 @@ export async function runTool<I, O>(
       // Not `(err as Error).message`: supabase-js hands back a plain object, so
       // the cast was a lie and the audit row recorded `undefined` for exactly
       // the failures worth auditing.
-      metadata: { error: toolErrorMessage(err) },
+      metadata: { error: toolErrorMessage(err), ...idempotencyMeta },
       ...riskFinal,
     });
+    // Un fallo libera la clave: el siguiente intento puede ejecutar.
+    if (guard && claimedAttempt) {
+      await settleFailure(ctx.db, {
+        key: guard.key,
+        attemptId: claimedAttempt,
+        error: toolErrorMessage(err),
+      });
+    }
     throw err;
   }
 
@@ -379,10 +564,47 @@ export async function runTool<I, O>(
       input,
       status: 'error',
       latencyMs: Math.round(performance.now() - t0),
-      metadata: { reason: 'output_validation' },
+      metadata: { reason: 'output_validation', ...idempotencyMeta },
       ...riskFinal,
     });
+    // El handler TERMINÓ: el efecto, casi seguro, ocurrió. Se da por hecha (sin
+    // resultado que devolver) para que un reintento no lo haga dos veces.
+    if (guard && claimedAttempt) {
+      await settleSuccess(ctx.db, {
+        key: guard.key,
+        attemptId: claimedAttempt,
+        windowMs: guard.windowMs,
+        result: null,
+        summary: 'salida inválida',
+        verification: null,
+      });
+    }
     throw new ValidationError(`Invalid output from ${tool.id}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // VERIFICAR (0168). Que la API dijera «ok» no es lo mismo que «está hecho»:
+  // la herramienta que sabe cómo mirarlo (el correo en Enviados, el evento en el
+  // calendario, la fila en la tabla) lo mira, con tope de tiempo y sin poder
+  // romper la llamada. El resultado queda en la fila de auditoría y viaja con la
+  // respuesta al modelo.
+  // ---------------------------------------------------------------------------
+  let verification: VerifyOutcome | null = null;
+  if (policy?.verify) {
+    verification = await runVerify(
+      policy.verify as unknown as Parameters<typeof runVerify<I, O>>[0],
+      { input: data, output: outParsed.data, ctx, startedAt },
+    );
+  }
+  if (guard && claimedAttempt) {
+    await settleSuccess(ctx.db, {
+      key: guard.key,
+      attemptId: claimedAttempt,
+      windowMs: guard.windowMs,
+      result: outParsed.data,
+      summary: summarizeResult(outParsed.data),
+      verification,
+    });
   }
 
   await writeAuditEvent({
@@ -396,9 +618,22 @@ export async function runTool<I, O>(
     latencyMs: Math.round(performance.now() - t0),
     // Que la auditoría diga cuando un sí heredado abrió la puerta: es la
     // diferencia entre «confirmó» y «se lo habías confirmado hace un rato».
-    ...(viaConversationGrace ? { metadata: { reason: 'conversation_grace' } } : {}),
+    ...(viaConversationGrace || guard || verification
+      ? {
+          metadata: {
+            ...graceMeta,
+            ...idempotencyMeta,
+            ...(verification ? { verification } : {}),
+          },
+        }
+      : {}),
     ...riskFinal,
   });
+
+  if (outParsed.data && typeof outParsed.data === 'object') {
+    if (verification) attach(outParsed.data, '_verification', verificationNotice(verification));
+    if (repeatOf) attach(outParsed.data, '_idempotency', repeatNotice(repeatOf));
+  }
 
   // A flag nobody sees is not a guardrail. High/medium-risk calls succeed, but
   // the reason travels back WITH the result so the model can tell the user
@@ -446,4 +681,12 @@ export async function runTool<I, O>(
   }
 
   return outParsed.data;
+}
+
+/**
+ * Una clave extra en el resultado, fuera del contrato de salida (como
+ * `_security`): enumerable, porque MCP y el chat serializan con JSON.stringify.
+ */
+function attach(target: object, key: string, value: unknown): void {
+  Object.defineProperty(target, key, { value, enumerable: true, writable: false });
 }

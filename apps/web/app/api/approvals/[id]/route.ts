@@ -18,6 +18,12 @@ import { z } from 'zod';
 
 const Body = z.object({
   action: z.enum(['approve', 'decline']),
+  /**
+   * La tarjeta le enseñó a la persona que esto repite algo ya hecho (0168), y
+   * aun así aprobó: se ejecuta a sabiendas. Sin él, una acción idéntica ya
+   * hecha se devuelve en vez de repetirse.
+   */
+  allowRepeat: z.boolean().optional(),
 });
 
 const Id = z.string().uuid();
@@ -146,7 +152,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: true, declined: true });
   }
 
-  const run = await runApprovedAction(outcome.action);
+  const run = await runApprovedAction(outcome.action, {
+    allowRepeat: parsed.data.allowRepeat === true,
+  });
   if (!run.ok) {
     // The approval stays spent on purpose — see the note in decide.ts. Retrying
     // a half-executed write is worse than asking Cortex to stage it again.

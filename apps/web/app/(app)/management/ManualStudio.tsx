@@ -194,7 +194,7 @@ export function ManualStudio({
           <div className="manual-intake grid gap-8 p-6 sm:p-10 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="min-w-0">
               <CortexSignature className="mb-5 h-16 w-16 text-primary-ink" />
-              <h1 className="text-3xl font-medium tracking-tight sm:text-[40px] sm:leading-tight">
+              <h1 className="text-3xl font-medium tracking-tight sm:text-display sm:leading-tight">
                 Tú conoces el proceso.
                 <br />
                 Cortex le da estructura.

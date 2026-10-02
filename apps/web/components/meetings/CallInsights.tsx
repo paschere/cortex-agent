@@ -50,7 +50,7 @@ export function BrainBadge({
   const { Icon } = look;
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-pill px-1.5 py-0.5 text-[11px] font-medium ${look.cls}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-pill px-1.5 py-0.5 text-micro font-medium ${look.cls}`}
       title={look.label}
     >
       <Icon className={`h-3 w-3 ${status === 'pending' ? 'animate-spin' : ''}`} />

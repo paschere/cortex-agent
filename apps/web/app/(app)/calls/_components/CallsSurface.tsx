@@ -156,7 +156,7 @@ function Avatars({ people, max = 4 }: { people: MeetingParticipant[]; max?: numb
           <span
             key={p.id}
             title={p.name}
-            className={`grid h-5 w-5 place-items-center rounded-full border border-surface text-[9px] font-bold ${tone.chip} ${
+            className={`grid h-5 w-5 place-items-center rounded-full border border-surface text-micro font-bold ${tone.chip} ${
               p.speaking ? 'ring-2 ring-emerald/50' : ''
             }`}
           >
@@ -164,7 +164,7 @@ function Avatars({ people, max = 4 }: { people: MeetingParticipant[]; max?: numb
           </span>
         );
       })}
-      {extra > 0 ? <span className="pl-2 text-[10px] text-ink-faint">+{extra}</span> : null}
+      {extra > 0 ? <span className="pl-2 text-micro text-ink-faint">+{extra}</span> : null}
     </div>
   );
 }
@@ -324,7 +324,7 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
               </span>
               <div className="flex items-center gap-2">
                 {pendingCount > 0 ? (
-                  <span className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-[11px] font-medium text-amber">
+                  <span className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-micro font-medium text-amber">
                     <Brain className="h-3 w-3" /> {pendingCount} por decidir
                   </span>
                 ) : null}
@@ -339,7 +339,7 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
             <div className="scroll-slim min-h-0 flex-1 overflow-y-auto p-2">
               {live.length > 0 ? (
                 <>
-                  <p className="px-1.5 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-emerald">
+                  <p className="px-1.5 pb-1 pt-1 text-micro font-semibold uppercase tracking-wide text-emerald">
                     En curso
                   </p>
                   <ul className="flex flex-col gap-1">
@@ -370,7 +370,7 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
                               {c.lastLine ??
                                 (c.status === 'live' ? 'Escuchando…' : (c.detail ?? ''))}
                             </p>
-                            <div className="flex items-center gap-2 text-[11px] text-ink-faint">
+                            <div className="flex items-center gap-2 text-micro text-ink-faint">
                               <Avatars people={c.participants ?? []} />
                               <span>
                                 {since(c.startedAt)} · {c.lines}{' '}
@@ -393,7 +393,7 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
 
               {groups.map((g) => (
                 <div key={g.label}>
-                  <p className="px-1.5 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+                  <p className="px-1.5 pb-1 pt-3 text-micro font-semibold uppercase tracking-wide text-ink-faint">
                     {g.label}
                   </p>
                   <ul className="flex flex-col gap-1">
@@ -425,7 +425,7 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
                                 <Loader2 className="h-3 w-3 animate-spin" /> Cortex la está leyendo…
                               </p>
                             )}
-                            <div className="flex items-center gap-2 text-[11px] text-ink-faint">
+                            <div className="flex items-center gap-2 text-micro text-ink-faint">
                               <Avatars people={c.participants} />
                               <span>
                                 {hour(c.startedAt)}
