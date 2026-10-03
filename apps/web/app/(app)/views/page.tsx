@@ -1,5 +1,6 @@
 import { type ViewSummary, ViewsLibrary } from '@/components/views/gallery/ViewsLibrary';
 import { readBranding, toViewBrand } from '@/lib/branding/store';
+import { modulesOffFor } from '@/lib/modules/server';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { relativeTime } from '@/lib/views/studio';
@@ -33,11 +34,13 @@ export const dynamic = 'force-dynamic';
 export default async function ViewsPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
-  const [views, trackers, brandRow] = await Promise.all([
+  const [views, trackers, brandRow, modulesOff] = await Promise.all([
     listViews(db, 60),
     listTrackers(db, 6),
     // La marca (0170), una vez: las miniaturas se tiñen con ella. Sin marca, índigo.
     readBranding(db),
+    // Las plantillas de un módulo apagado no se ofrecen.
+    modulesOffFor(user.organization.id),
   ]);
   const brand =
     brandRow && (brandRow.display_name?.trim() || brandRow.logo_path || brandRow.primary_color)
@@ -116,5 +119,12 @@ export default async function ViewsPage() {
         'Control de facturas de proveedores con las que vencen esta semana',
       ];
 
-  return <ViewsLibrary views={summaries} suggestions={suggestions} brand={brand} />;
+  return (
+    <ViewsLibrary
+      views={summaries}
+      suggestions={suggestions}
+      brand={brand}
+      modulesOff={modulesOff}
+    />
+  );
 }

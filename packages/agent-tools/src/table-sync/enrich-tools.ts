@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { registerTool } from '../index';
 import { trackerSlugSchema } from '../trackers/schema';
 import { createUpdateOnlySync } from './enrich';
-import { resolveSource } from './tools';
+import { resolveSource, setSourceQuery } from './tools';
 
 /**
  * «Que la API de vuelos marque en cada guía si su vuelo ya aterrizó»
@@ -15,7 +15,7 @@ import { resolveSource } from './tools';
 export const trackersUpdateFromSource = registerTool({
   id: 'trackers.update_from_source',
   description:
-    'Keep columns of an EXISTING company table updated from a connected Feed source, without adding rows: rows are matched by key columns (e.g. flight number + date) and only the chosen columns are written (e.g. flight status, actual arrival time). Use it when a table already has its rows (e.g. air waybills/guías from Drive) and another source (e.g. a flights API) must update their status. Flight numbers match ignoring case, spaces and leading zeros (AV009 = AV9), but IATA vs ICAO codes (AV9 vs AVA9) do not match: pick the right source column. Missing target columns are added to the table as text. Requires confirmation.',
+    'Keep columns of an EXISTING company table updated from a connected Feed source, without adding rows: rows are matched by key columns (e.g. flight number + date) and only the chosen columns are written (e.g. flight status, actual arrival time). Use it when a table already has its rows (e.g. air waybills/guías from Drive) and another source (e.g. a flights API) must update their status. Flight numbers match ignoring case, spaces and leading zeros (AV009 = AV9), but IATA vs ICAO codes (AV9 vs AVA9) do not match: pick the right source column. Missing target columns are added to the table as text. If the API needs fixed query parameters (airport, date) pass query (values may use {hoy:YYYY-MM-DD}). This reads ONE list per run; to call an API once PER ROW (a URL built from each row, e.g. the status of each flight number) use trackers.row_lookup_create instead. Requires confirmation.',
   inputSchema: z.object({
     source: z.string().trim().min(1).max(240).describe('Name or id of the connected Feed source.'),
     table: trackerSlugSchema.describe('Slug of the existing table to update, e.g. "guias".'),
@@ -47,13 +47,21 @@ export const trackersUpdateFromSource = registerTool({
     intervalMinutes: z.number().int().min(5).max(1440).default(10),
     notify: z.boolean().default(true),
     sheet: z.number().int().min(0).max(19).default(0),
+    query: z
+      .record(z.string().max(60), z.string().max(200))
+      .optional()
+      .describe(
+        'Fixed query parameters of an API source, e.g. {"airport":"BOG","date":"{hoy:YYYY-MM-DD}"}. {hoy} and {ahora} (optionally with a format) are resolved each time the API is read.',
+      ),
   }),
   outputSchema: z.object({ updated: z.number().int(), markdown: z.string() }),
   requiresConfirmation: true,
   rateLimit: { perMinute: 6 },
   handler: async (input, ctx) => {
     const source = await resolveSource(ctx.db, ctx.userId, input.source);
-    const { tracker, outcome, added } = await createUpdateOnlySync(ctx.db, {
+    const hasQuery = Boolean(input.query && Object.keys(input.query).length);
+    if (hasQuery) await setSourceQuery(ctx.db, ctx.userId, source, input.query ?? {});
+    const { sync, tracker, outcome, added } = await createUpdateOnlySync(ctx.db, {
       sourceId: source.id,
       sheetIndex: input.sheet ?? 0,
       actorId: ctx.userId,
@@ -63,9 +71,25 @@ export const trackersUpdateFromSource = registerTool({
       intervalMinutes: input.intervalMinutes ?? 10,
       notify: input.notify ?? true,
     });
+    // Con parámetros nuevos la captura vigente es de los viejos: que la primera
+    // lectura de verdad vaya ya, no al próximo intervalo.
+    const queued = hasQuery
+      ? await ctx.enqueueJob?.('table-sync/run', {
+          organizationId: ctx.organizationId,
+          syncId: sync.id,
+        })
+      : false;
     return {
       updated: outcome.updated,
-      markdown: `Listo: «${source.name}» actualiza **${tracker.name}** cada ${input.intervalMinutes ?? 10} minutos cruzando por ${input.match.map((m) => `${m.column}↔${m.field}`).join(' + ')}.${added.length ? ` Agregué las columnas ${added.map((a) => `«${a}»`).join(', ')}.` : ''} Primera pasada: ${outcome.updated} ${outcome.updated === 1 ? 'fila actualizada' : 'filas actualizadas'}${outcome.unchanged ? `, ${outcome.unchanged} ya estaban al día` : ''}. No agrega filas nuevas.`,
+      markdown: `Listo: «${source.name}» actualiza **${tracker.name}** cada ${input.intervalMinutes ?? 10} minutos cruzando por ${input.match.map((m) => `${m.column}↔${m.field}`).join(' + ')}.${added.length ? ` Agregué las columnas ${added.map((a) => `«${a}»`).join(', ')}.` : ''} Primera pasada: ${outcome.updated} ${outcome.updated === 1 ? 'fila actualizada' : 'filas actualizadas'}${outcome.unchanged ? `, ${outcome.unchanged} ya estaban al día` : ''}. No agrega filas nuevas.${
+        hasQuery
+          ? ` Con los parámetros ${Object.entries(input.query ?? {})
+              .map(([k, v]) => `${k}=${v}`)
+              .join(
+                ', ',
+              )}${queued ? ': la vuelvo a leer ya mismo con ellos' : ': se aplican desde la próxima lectura'}.`
+          : ''
+      }`,
     };
   },
 });

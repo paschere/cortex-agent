@@ -442,6 +442,15 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     icon: 'RefreshCw',
   },
   trackers_syncs: { label: 'Ver las tablas que se llenan solas', icon: 'RefreshCw' },
+  trackers_row_lookup_create: { label: 'Consultar una API fila por fila', icon: 'ScanSearch' },
+  trackers_row_lookup_status: {
+    label: 'Ver cómo van las consultas automáticas',
+    icon: 'ScanSearch',
+  },
+  trackers_row_lookup_update: {
+    label: 'Cambiar o pausar una consulta automática',
+    icon: 'ScanSearch',
+  },
   trackers_sync_from_drive_folder: {
     label: 'Llenar una tabla desde una carpeta de Drive',
     icon: 'FolderInput',

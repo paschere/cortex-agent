@@ -3,6 +3,8 @@ import { promisify } from 'node:util';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { bogotaToday } from '../commitments/shape';
+import { moduleByKey } from '../modules/catalog';
+import { enabledModules, moduleOffMessage } from '../modules/store';
 import { appBaseUrl } from '../reports/store';
 import { rowLabel } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, listTrackers, shapeValues } from '../trackers/store';
@@ -185,6 +187,12 @@ export interface ViewCatalogEntry extends CatalogTracker {
   sensitivity: SourceSensitivity;
   /** Sólo en las del Feed: hasta tres filas ya leídas (el diseñador no las relee). */
   sample?: ViewRow[];
+  /**
+   * Sólo en las fuentes de la plataforma de un módulo APAGADO: el aviso de por
+   * qué no se lee. Siguen en el catálogo (un spec guardado que las usa se
+   * valida igual); el diseñador y el lienzo no las ofrecen.
+   */
+  moduleOff?: string;
 }
 
 export interface ViewCatalogOptions {
@@ -218,6 +226,8 @@ export async function viewCatalog(
         () => [] as ViewCatalogEntry[],
       )
     : [];
+  // Un módulo apagado deja su fuente en el catálogo, marcada: ver `moduleOff`.
+  const modulesOn = await enabledModules(db);
   const seen = new Set(feed.map((f) => f.slug));
   const opaque = (options.keep ?? [])
     .filter((ref) => isFeedSourceId(ref) && !seen.has(ref))
@@ -258,6 +268,9 @@ export async function viewCatalog(
         rowCount: null,
         kind: 'platform',
         sensitivity: s.sensitivity,
+        ...(s.module && !modulesOn.has(s.module)
+          ? { moduleOff: moduleOffMessage(moduleByKey(s.module)) }
+          : {}),
       }),
     ),
     ...feed,
@@ -406,6 +419,12 @@ export async function loadViewSources(
       }
       try {
         const read = await def.read(db, VIEW_ROW_CAP, bogotaToday(), { viewerId });
+        // Un módulo apagado o una cifra sólo para quien administra: sin filas
+        // y con la razón, no con un «no se pudo leer».
+        if (read.blocked) {
+          sources.set(id, { tracker, rows: [], truncated: false, blocked: read.blocked });
+          return;
+        }
         sources.set(id, {
           tracker,
           rows: read.rows.slice(0, VIEW_ROW_CAP),

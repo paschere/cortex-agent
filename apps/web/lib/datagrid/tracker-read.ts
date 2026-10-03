@@ -208,3 +208,32 @@ export async function readPeopleNames(
     ]),
   );
 }
+
+// ---------------------------------------------------------------------------
+// Credenciales para las consultas por fila (0198)
+// ---------------------------------------------------------------------------
+
+/**
+ * Las herramientas propias de lectura (GET) que pueden servir de credencial: su
+ * nombre y el servidor al que van. Nunca la llave: ni siquiera se pide la
+ * columna cifrada.
+ */
+export async function readLookupCredentials(
+  db: SupabaseClient,
+): Promise<Array<{ slug: string; name: string; host: string }>> {
+  const { data, error } = await db
+    .from('custom_tools')
+    .select('slug, name, url_template, http_method, enabled')
+    .eq('enabled', true)
+    .eq('http_method', 'GET')
+    .order('name', { ascending: true })
+    .limit(40);
+  if (error) throw error;
+  return ((data ?? []) as Array<{ slug: string; name: string; url_template: string }>)
+    .map((t) => ({
+      slug: t.slug,
+      name: t.name,
+      host: /^https?:\/\/([^/?#]+)/i.exec(t.url_template)?.[1]?.toLowerCase() ?? '',
+    }))
+    .filter((t) => t.host && !t.host.includes('{'));
+}

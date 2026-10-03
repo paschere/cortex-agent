@@ -45,6 +45,7 @@ import {
   listMovements as listLedgerMovements,
 } from '../ledger/store';
 import { type ManagementState, managementStateLabels, managementStates } from '../management/shape';
+import type { ModuleKey } from '../modules/catalog';
 import { RECOVERY_TRIGGER_LABEL } from '../payments/recovered';
 import { moneyRecovered } from '../payments/recovered-store';
 import {
@@ -60,6 +61,21 @@ import { estadosSource, presupuestoSource } from '../statements/view-sources';
 import type { TrackerField } from '../trackers/schema';
 import { equipoSource, trabajoSource } from '../work/view-sources';
 import { type ViewRow, todayIn } from './compute';
+import {
+  comercialSource,
+  contratosSource,
+  cumplimientoSource,
+  documentosVencenSource,
+  flotaSource,
+  impuestosSource,
+  inventarioSource,
+  nominaSource,
+  ordenesCompraSource,
+  porPagarSource,
+  pqrsSource,
+  proyectosSource,
+  withModule,
+} from './module-sources';
 import { type ViewSpec, isFeedSourceId, trackersOf } from './spec';
 
 /**
@@ -123,6 +139,12 @@ export interface PlatformSourceRead {
   rows: ViewRow[];
   /** True cuando hay más filas que las leídas. */
   truncated: boolean;
+  /**
+   * La razón por la que esta fuente no se leyó PARA QUIEN MIRA (un módulo
+   * apagado, una cifra sólo para quien administra). Sin filas y con aviso: el
+   * bloque dice por qué en vez de «no se pudo leer».
+   */
+  blocked?: string;
 }
 
 export interface PlatformSource {
@@ -131,6 +153,12 @@ export interface PlatformSource {
   name: string;
   description: string;
   sensitivity: SourceSensitivity;
+  /**
+   * El módulo (interruptor por empresa, 0186) dueño de estos datos. Con el
+   * módulo apagado la fuente no se lee: `read` contesta `blocked` y el
+   * catálogo del diseñador y del lienzo no la ofrece.
+   */
+  module?: ModuleKey;
   fields: TrackerField[];
   /** Lee hasta `cap` filas con el handle del espacio. */
   read(
@@ -1753,8 +1781,22 @@ export const PLATFORM_SOURCES: ReadonlyMap<string, PlatformSource> = new Map(
     trabajoSource,
     equipoSource,
     // Estados financieros y presupuesto (0191): statements/view-sources.ts.
-    estadosSource,
-    presupuestoSource,
+    withModule('statements', estadosSource),
+    withModule('budget', presupuestoSource),
+    // Los módulos de operación (0181–0197): views/module-sources.ts, cada una
+    // con el interruptor de su módulo y la regla de quién ve qué de ese módulo.
+    withModule('payables', porPagarSource),
+    withModule('inventory', inventarioSource),
+    withModule('inventory', ordenesCompraSource),
+    withModule('taxes', impuestosSource),
+    withModule('payroll', nominaSource),
+    withModule('contracts', contratosSource),
+    withModule('compliance', pqrsSource),
+    withModule('compliance', cumplimientoSource),
+    withModule('crm', comercialSource),
+    withModule('service_orders', proyectosSource),
+    withModule('fleet', flotaSource),
+    withModule('doc_expirations', documentosVencenSource),
   ].map((s) => [s.id, s]),
 );
 

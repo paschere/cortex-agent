@@ -1,4 +1,10 @@
 import type { GridColumn, GridQueryResult, GridRow, GridView } from '@/components/datagrid/types';
+import type {
+  LookupCard,
+  LookupCredentialOption,
+  LookupDraft,
+  LookupPreviewView,
+} from '@/lib/datagrid/lookups';
 import type { TrackerFieldLike } from '@/lib/datagrid/trackers';
 
 /**
@@ -55,6 +61,11 @@ export interface TrackerScreenData {
   /** Hay filas que trae una sincronización (las puede sobrescribir la próxima corrida). */
   syncedRows: number;
   canChangeSchema: boolean;
+  /** Consultas automáticas por fila (0198). Opcional: no todas las pantallas las traen. */
+  lookups?: LookupCard[];
+  lookupCredentials?: LookupCredentialOption[];
+  /** Puede crear y cambiar consultas (su equipo no se lo prohíbe). */
+  canManageLookups?: boolean;
 }
 
 export interface HistoryEntry {
@@ -106,6 +117,22 @@ export interface TrackerActions {
   listViews: (scope: string) => Promise<GridView[]>;
   saveView: (scope: string, view: GridView) => Promise<GridView>;
   deleteView: (id: string) => Promise<void>;
+}
+
+/** Acciones del panel «Consultas automáticas» (0198), reales en /trackers/[slug]. */
+export interface LookupActions {
+  preview: (
+    trackerId: string,
+    draft: LookupDraft,
+  ) => Promise<ActionResult<{ preview: LookupPreviewView }>>;
+  create: (
+    trackerId: string,
+    draft: LookupDraft,
+  ) => Promise<ActionResult<{ message: string; enabled: boolean }>>;
+  update: (
+    lookupId: string,
+    patch: { enabled?: boolean; dailyCap?: number; perRunCap?: number; runNow?: boolean },
+  ) => Promise<ActionResult<{ message: string }>>;
 }
 
 export interface TrackersIndexActions {

@@ -1,4 +1,4 @@
-import type { ViewSpec } from '@cortex/agent-tools';
+import type { ModuleKey, ViewSpec } from '@cortex/agent-tools';
 
 /**
  * LAS PLANTILLAS DEL PRIMER CLIC EN /views.
@@ -44,6 +44,11 @@ interface StarterBase {
   body: string;
   icon: StarterIcon;
   category: StarterCategory;
+  /**
+   * El módulo (0186) del que lee. Con el módulo apagado la plantilla no se
+   * ofrece (`startersFor`): abriría una vista sin datos y con un aviso.
+   */
+  module?: ModuleKey;
 }
 
 /**
@@ -359,6 +364,383 @@ const comoVaElEquipo: ViewSpec = {
   ],
 };
 
+/**
+ * Las plantillas de los módulos de operación (0181–0197): vistas ya armadas
+ * sobre fuentes `cortex.*` de cada módulo. Cada una lleva su `module`: con el
+ * módulo apagado no se ofrece (`startersFor`). Son internas (no se comparten
+ * por enlace), como las fuentes.
+ */
+const ABIERTAS: ViewSpec['alerts'][number]['filters'] = [
+  { field: 'estado', op: 'neq', value: 'Pagada' },
+  { field: 'estado', op: 'neq', value: 'Rechazada' },
+];
+
+const programaDePagos: ViewSpec = {
+  version: 1,
+  ...LIVE(),
+  subtitle: 'Las facturas de proveedores que siguen abiertas, las más próximas a vencer primero.',
+  blocks: [
+    {
+      id: 'por_pagar',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.por_pagar',
+      filters: [...ABIERTAS],
+      title: 'Por pagar (neto)',
+      aggregate: 'sum',
+      field: 'neto',
+      format: 'money',
+      tone: 'primary',
+    },
+    {
+      id: 'programado',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.por_pagar',
+      filters: [{ field: 'estado', op: 'eq', value: 'Programada' }],
+      title: 'Ya programado',
+      aggregate: 'sum',
+      field: 'neto',
+      format: 'money',
+      tone: 'emerald',
+    },
+    {
+      id: 'vencidas',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.por_pagar',
+      filters: [...ABIERTAS, { field: 'dias', op: 'lt', value: 0 }],
+      title: 'Facturas vencidas',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'rose',
+    },
+    {
+      id: 'por_estado',
+      type: 'chart',
+      width: 'half',
+      tracker: 'cortex.por_pagar',
+      filters: [...ABIERTAS],
+      title: 'Por pagar según su estado',
+      chart: 'donut',
+      groupBy: 'estado',
+      bucket: 'month',
+      aggregate: 'sum',
+      field: 'neto',
+      format: 'money',
+      limit: 6,
+      tone: 'primary',
+    },
+    {
+      id: 'proveedores',
+      type: 'chart',
+      width: 'half',
+      tracker: 'cortex.por_pagar',
+      filters: [...ABIERTAS],
+      title: 'Proveedores a los que más se les debe',
+      chart: 'bar',
+      groupBy: 'proveedor',
+      bucket: 'month',
+      aggregate: 'sum',
+      field: 'neto',
+      format: 'money',
+      limit: 8,
+      tone: 'primary',
+    },
+    {
+      id: 'facturas',
+      type: 'table',
+      width: 'full',
+      tracker: 'cortex.por_pagar',
+      filters: [...ABIERTAS],
+      title: 'Facturas abiertas',
+      columns: ['proveedor', 'numero', 'vence', 'dias', 'neto', 'estado', 'pagar_el', 'alertas'],
+      sort: { field: 'vence', dir: 'asc' },
+      limit: 100,
+      searchable: true,
+      editable: [],
+      actions: [],
+    },
+  ],
+};
+
+const inventarioBajoMinimo: ViewSpec = {
+  version: 1,
+  ...LIVE(),
+  subtitle: 'Lo que hay que reponer: agotado, bajo el mínimo o a punto de agotarse.',
+  blocks: [
+    {
+      id: 'bajo_minimo',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.inventario',
+      filters: [{ field: 'alerta', op: 'eq', value: 'Bajo el mínimo' }],
+      title: 'Bajo el mínimo',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'amber',
+    },
+    {
+      id: 'agotados',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.inventario',
+      filters: [{ field: 'alerta', op: 'eq', value: 'Agotado' }],
+      title: 'Agotados',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'rose',
+    },
+    {
+      id: 'ordenes_atrasadas',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.ordenes_compra',
+      filters: [{ field: 'atrasada', op: 'eq', value: 'Sí' }],
+      title: 'Órdenes de compra atrasadas',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'primary',
+    },
+    {
+      id: 'faltante_categoria',
+      type: 'chart',
+      width: 'half',
+      tracker: 'cortex.inventario',
+      filters: [{ field: 'alerta', op: 'neq', value: 'Al día' }],
+      title: 'Productos con alerta por categoría',
+      chart: 'bar',
+      groupBy: 'categoria',
+      bucket: 'month',
+      aggregate: 'count',
+      format: 'number',
+      limit: 8,
+      tone: 'amber',
+    },
+    {
+      id: 'en_camino',
+      type: 'table',
+      width: 'half',
+      tracker: 'cortex.ordenes_compra',
+      filters: [
+        { field: 'estado', op: 'neq', value: 'Borrador' },
+        { field: 'dias_para_llegar', op: 'not_empty' },
+      ],
+      title: 'Pedidos en camino',
+      columns: ['proveedor', 'estado', 'esperada', 'dias_para_llegar', 'total'],
+      sort: { field: 'esperada', dir: 'asc' },
+      limit: 30,
+      searchable: false,
+      editable: [],
+      actions: [],
+    },
+    {
+      id: 'productos',
+      type: 'table',
+      width: 'full',
+      tracker: 'cortex.inventario',
+      filters: [{ field: 'alerta', op: 'neq', value: 'Al día' }],
+      title: 'Productos que piden atención',
+      columns: [
+        'sku',
+        'categoria',
+        'existencia',
+        'minimo',
+        'faltante',
+        'dias_cobertura',
+        'alerta',
+        'proveedor',
+      ],
+      sort: { field: 'faltante', dir: 'desc' },
+      limit: 100,
+      searchable: true,
+      editable: [],
+      actions: [],
+    },
+  ],
+};
+
+const embudoComercial: ViewSpec = {
+  version: 1,
+  ...LIVE(),
+  subtitle: 'Lo que hay en negociación, por etapa, con lo que se espera cerrar.',
+  blocks: [
+    {
+      id: 'en_embudo',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.comercial',
+      filters: [{ field: 'estado', op: 'eq', value: 'Abierta' }],
+      title: 'En el embudo',
+      aggregate: 'sum',
+      field: 'valor',
+      format: 'money',
+      tone: 'primary',
+    },
+    {
+      id: 'ponderado',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.comercial',
+      filters: [{ field: 'estado', op: 'eq', value: 'Abierta' }],
+      title: 'Valor ponderado por probabilidad',
+      aggregate: 'sum',
+      field: 'ponderado',
+      format: 'money',
+      tone: 'amber',
+    },
+    {
+      id: 'ganado_30',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.comercial',
+      filters: [
+        { field: 'estado', op: 'eq', value: 'Ganada' },
+        { field: 'ganada', op: 'last_days', value: 30 },
+      ],
+      title: 'Ganado en 30 días',
+      aggregate: 'sum',
+      field: 'valor',
+      format: 'money',
+      tone: 'emerald',
+    },
+    {
+      id: 'por_etapa',
+      type: 'board',
+      width: 'full',
+      tracker: 'cortex.comercial',
+      filters: [{ field: 'estado', op: 'eq', value: 'Abierta' }],
+      title: 'Oportunidades por etapa',
+      groupBy: 'etapa',
+      cardFields: ['cliente', 'valor'],
+      limit: 20,
+      draggable: false,
+      actions: [],
+    },
+    {
+      id: 'por_responsable',
+      type: 'chart',
+      width: 'half',
+      tracker: 'cortex.comercial',
+      filters: [{ field: 'estado', op: 'eq', value: 'Abierta' }],
+      title: 'Valor abierto por responsable',
+      chart: 'bar',
+      groupBy: 'responsable',
+      bucket: 'month',
+      aggregate: 'sum',
+      field: 'valor',
+      format: 'money',
+      limit: 8,
+      tone: 'primary',
+    },
+    {
+      id: 'cierres',
+      type: 'table',
+      width: 'half',
+      tracker: 'cortex.comercial',
+      filters: [{ field: 'estado', op: 'eq', value: 'Abierta' }],
+      title: 'Próximos cierres',
+      columns: [
+        'cliente',
+        'etapa',
+        'valor',
+        'probabilidad',
+        'cierre_esperado',
+        'dias_sin_actividad',
+      ],
+      sort: { field: 'cierre_esperado', dir: 'asc' },
+      limit: 30,
+      searchable: true,
+      editable: [],
+      actions: [],
+    },
+  ],
+};
+
+const vencimientosEmpresa: ViewSpec = {
+  version: 1,
+  ...LIVE(),
+  subtitle: 'SOAT, pólizas, licencias y permisos: lo vencido y lo que viene.',
+  blocks: [
+    {
+      id: 'vencidos',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.documentos_vencen',
+      filters: [{ field: 'estado', op: 'eq', value: 'Vencido' }],
+      title: 'Vencidos',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'rose',
+    },
+    {
+      id: 'por_vencer',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.documentos_vencen',
+      filters: [{ field: 'estado', op: 'eq', value: 'Por vencer' }],
+      title: 'Por vencer',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'amber',
+    },
+    {
+      id: 'vigentes',
+      type: 'metric',
+      width: 'third',
+      tracker: 'cortex.documentos_vencen',
+      filters: [{ field: 'estado', op: 'eq', value: 'Vigente' }],
+      title: 'Vigentes',
+      aggregate: 'count',
+      format: 'number',
+      tone: 'emerald',
+    },
+    {
+      id: 'por_tipo',
+      type: 'chart',
+      width: 'half',
+      tracker: 'cortex.documentos_vencen',
+      filters: [{ field: 'estado', op: 'neq', value: 'Vigente' }],
+      title: 'Lo que pide renovación, por tipo',
+      chart: 'donut',
+      groupBy: 'tipo',
+      bucket: 'month',
+      aggregate: 'count',
+      format: 'number',
+      limit: 8,
+      tone: 'amber',
+    },
+    {
+      id: 'agenda',
+      type: 'calendar',
+      width: 'half',
+      tracker: 'cortex.documentos_vencen',
+      title: 'Calendario de vencimientos',
+      dateField: 'vence',
+      labelField: 'label',
+      colorField: 'estado',
+      mode: 'agenda',
+      days: 60,
+      filters: [],
+      actions: [],
+    },
+    {
+      id: 'papeles',
+      type: 'table',
+      width: 'full',
+      tracker: 'cortex.documentos_vencen',
+      filters: [],
+      title: 'Todos los papeles que se vigilan',
+      columns: ['tipo', 'sujeto', 'vence', 'dias', 'estado', 'responsable'],
+      sort: { field: 'vence', dir: 'asc' },
+      limit: 100,
+      searchable: true,
+      editable: [],
+      actions: [],
+    },
+  ],
+};
+
 export const STARTER_TEMPLATES: StarterTemplate[] = [
   {
     // El pulso depende de qué datos tiene cada empresa (Siigo, facturas
@@ -515,4 +897,63 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     prompt:
       'Seguimiento de proyectos: cuántos hay en curso, cuántos están atrasados, un tablero por estado que se pueda arrastrar y la lista con responsable, fecha de entrega y avance.',
   },
+  {
+    id: 'programa_pagos',
+    kind: 'spec',
+    icon: 'wallet',
+    category: 'Ventas y cartera',
+    module: 'payables',
+    title: 'Programa de pagos',
+    body: 'Las facturas de proveedores abiertas por vencimiento, lo ya programado y a quién se le debe más.',
+    name: 'Programa de pagos',
+    description: 'Facturas de proveedores por pagar, por vencimiento.',
+    spec: programaDePagos,
+  },
+  {
+    id: 'inventario_bajo_minimo',
+    kind: 'spec',
+    icon: 'boxes',
+    category: 'Operación',
+    module: 'inventory',
+    title: 'Inventario bajo mínimo',
+    body: 'Lo agotado y lo que está bajo el mínimo, con los pedidos en camino y los atrasados.',
+    name: 'Inventario bajo mínimo',
+    description: 'Productos que piden reposición y órdenes de compra en camino.',
+    spec: inventarioBajoMinimo,
+  },
+  {
+    id: 'embudo_comercial',
+    kind: 'spec',
+    icon: 'kanban',
+    category: 'Ventas y cartera',
+    module: 'crm',
+    title: 'Embudo comercial',
+    body: 'Las oportunidades por etapa, lo ponderado por probabilidad y los próximos cierres.',
+    name: 'Embudo comercial',
+    description: 'Oportunidades abiertas por etapa, con lo que se espera cerrar.',
+    spec: embudoComercial,
+  },
+  {
+    id: 'vencimientos_empresa',
+    kind: 'spec',
+    icon: 'calendar',
+    category: 'Operación',
+    module: 'doc_expirations',
+    title: 'Vencimientos de la empresa',
+    body: 'SOAT, pólizas, licencias y permisos: lo vencido, lo que viene y a quién le toca renovarlo.',
+    name: 'Vencimientos de la empresa',
+    description: 'Papeles que vencen, por fecha y estado.',
+    spec: vencimientosEmpresa,
+  },
 ];
+
+/**
+ * Las plantillas que se pueden ofrecer con estos módulos APAGADOS: una de un
+ * módulo apagado abriría una vista sin datos. Las que no dependen de ninguno,
+ * siempre.
+ */
+export function startersFor(modulesOff: readonly ModuleKey[] = []): StarterTemplate[] {
+  if (!modulesOff.length) return STARTER_TEMPLATES;
+  const off = new Set<ModuleKey>(modulesOff);
+  return STARTER_TEMPLATES.filter((t) => !t.module || !off.has(t.module));
+}

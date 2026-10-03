@@ -15,6 +15,7 @@ import {
   MessageSquareText,
   RefreshCw,
   Ruler,
+  ScanSearch,
   Table2,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -23,10 +24,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   ActionResult,
   HistoryEntry,
+  LookupActions,
   SyncBadge,
   TrackerActions,
   TrackerScreenData,
 } from '../types';
+import { AddLookupDialog, LookupsSection } from './LookupsPanel';
 
 /**
  * UNA TABLA DE LA EMPRESA, ENTERA.
@@ -209,10 +212,13 @@ export function chatWith(base: string, prompt: string): string {
 export function TrackerScreen({
   data,
   actions,
+  lookupActions,
   links,
 }: {
   data: TrackerScreenData;
   actions: TrackerActions;
+  /** Consultas automáticas por fila (0198); sin ellas el panel no aparece. */
+  lookupActions?: LookupActions;
   links: TrackerLinks;
 }) {
   const { viewHref, teamHref, backHref } = links;
@@ -222,6 +228,9 @@ export function TrackerScreen({
   const scope = `tracker:${tracker.id}`;
   const [columns, setColumns] = useState<GridColumn[]>(data.columns);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  const [lookupOpen, setLookupOpen] = useState(false);
+  const lookups = data.lookups ?? [];
+  const canLookups = Boolean(lookupActions && data.canManageLookups);
   useEffect(() => setColumns(data.columns), [data.columns]);
 
   const onEdit = useCallback(
@@ -297,6 +306,12 @@ export function TrackerScreen({
         icon={<Table2 className="h-5 w-5" />}
         actions={
           <>
+            {canLookups && !lookups.length ? (
+              <button type="button" onClick={() => setLookupOpen(true)} className={pill}>
+                <ScanSearch className="h-4 w-4" aria-hidden />
+                Consultar una API por fila
+              </button>
+            ) : null}
             <Link href={viewHref} className={pill}>
               <LayoutPanelTop className="h-4 w-4" aria-hidden />
               Crear una vista con esta tabla
@@ -311,6 +326,30 @@ export function TrackerScreen({
           </>
         }
       />
+
+      {lookupActions && lookups.length ? (
+        <div className="-mt-3 mb-5 flex flex-col gap-3">
+          <LookupsSection
+            lookups={lookups}
+            canManage={canLookups}
+            actions={lookupActions}
+            onNotice={setNotice}
+            onAdd={() => setLookupOpen(true)}
+            onChanged={() => window.setTimeout(() => router.refresh(), 1500)}
+          />
+          {notice && !data.syncs.length && !data.workType && !data.syncedRows ? (
+            <p
+              role={notice.tone === 'error' ? 'alert' : 'status'}
+              className={clsx(
+                'w-fit rounded-pill px-3 py-1.5 text-micro font-semibold',
+                notice.tone === 'error' ? 'bg-rose-soft text-rose' : 'bg-emerald-soft text-emerald',
+              )}
+            >
+              {notice.text}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {data.syncs.length || data.workType || data.syncedRows ? (
         <div className="-mt-3 mb-5 flex flex-col gap-3">
@@ -349,6 +388,22 @@ export function TrackerScreen({
             </p>
           ) : null}
         </div>
+      ) : null}
+
+      {lookupActions && canLookups ? (
+        <AddLookupDialog
+          open={lookupOpen}
+          onOpenChange={setLookupOpen}
+          trackerId={tracker.id}
+          trackerName={tracker.name}
+          columns={columns}
+          credentials={data.lookupCredentials ?? []}
+          actions={lookupActions}
+          onDone={(text) => {
+            setNotice({ tone: 'ok', text });
+            router.refresh();
+          }}
+        />
       ) : null}
 
       <DataGrid

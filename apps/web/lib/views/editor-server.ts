@@ -53,21 +53,26 @@ export async function editorCatalog(
     viewerId,
     keep: saved ? trackersOf(saved.spec) : [],
   });
+  // Las fuentes de un módulo apagado no se ofrecen en la paleta, salvo las que
+  // la vista guardada ya usa (siguen ahí; sus bloques dicen que está apagado).
+  const kept = new Set(saved ? trackersOf(saved.spec) : []);
   return {
-    sources: entries.map((t) => ({
-      slug: t.slug,
-      name: t.name,
-      description: t.description.slice(0, 240),
-      kind: t.kind,
-      sensitivity: t.sensitivity,
-      readOnly: t.kind !== 'tracker',
-      ...(t.opaque ? { opaque: true } : {}),
-      fields: t.fields,
-      // Las filas que tiene (las tablas del espacio y del Feed). La columna
-      // «Datos» del estudio lo muestra; null en las fuentes de la plataforma,
-      // que no se cuentan. No es parte de `EditorSource`: viaja de más.
-      rowCount: t.rowCount,
-    })),
+    sources: entries
+      .filter((t) => !t.moduleOff || kept.has(t.slug))
+      .map((t) => ({
+        slug: t.slug,
+        name: t.name,
+        description: t.description.slice(0, 240),
+        kind: t.kind,
+        sensitivity: t.sensitivity,
+        readOnly: t.kind !== 'tracker',
+        ...(t.opaque ? { opaque: true } : {}),
+        fields: t.fields,
+        // Las filas que tiene (las tablas del espacio y del Feed). La columna
+        // «Datos» del estudio lo muestra; null en las fuentes de la plataforma,
+        // que no se cuentan. No es parte de `EditorSource`: viaja de más.
+        rowCount: t.rowCount,
+      })),
     blockTypes: blockSchema.options.map((o) => o.shape.type.value as string),
   };
 }

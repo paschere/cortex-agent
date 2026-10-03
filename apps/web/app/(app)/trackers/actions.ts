@@ -559,7 +559,7 @@ export async function trackerRowHistory(
       db
         .from('audit_events')
         .select('user_id, metadata, created_at')
-        .in('tool_id', ['trackers.upsert'])
+        .in('tool_id', ['trackers.upsert', 'trackers.row_lookup'])
         .eq('status', 'ok')
         .contains('metadata', { rowIds: [rowId] })
         .order('created_at', { ascending: false })
@@ -607,7 +607,10 @@ export async function trackerRowHistory(
     const entries: HistoryEntry[] = [
       ...auditRows.map((a) => ({
         at: a.created_at,
-        who: names.get(a.user_id) ?? 'Alguien',
+        who:
+          typeof a.metadata?.lookup === 'string'
+            ? `Consulta automática «${a.metadata.lookup}»`
+            : (names.get(a.user_id) ?? 'Alguien'),
         what: a.metadata?.created
           ? 'Creó la fila'
           : a.metadata?.bulk

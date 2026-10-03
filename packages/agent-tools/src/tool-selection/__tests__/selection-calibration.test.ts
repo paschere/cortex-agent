@@ -94,7 +94,10 @@ describe('selection cuts are tied to the model they were measured on', () => {
       ['meetings.prepare_briefing', [0.334]],
       ['gmail.send_draft', [0.291]],
       ['outlook.send_draft', [0.292]],
-      ['chat.send_dm', [0.269]],
+      // Midió 0.269 el 2026-08-07; con la banda en 0.08 (2026-10-03) esa
+      // familia ya cabe en ella, así que el ejemplo de «lo que no viene» es
+      // una por debajo del piso de 0.25, que sigue sin entrar.
+      ['chat.send_dm', [0.24]],
     ]);
 
     const ranked = rankTools({
@@ -105,8 +108,9 @@ describe('selection cuts are tied to the model they were measured on', () => {
     });
 
     expect(ranked.selectedFamilies).toContain('gmail');
-    // And the family below the band still does not come along for the ride: this
-    // is a floor that was lowered onto measured evidence, not removed.
+    // And a family under both the band and the floor still does not come along
+    // for the ride: this is a floor that was lowered onto measured evidence, not
+    // removed.
     expect(ranked.selectedFamilies).not.toContain('chat');
   });
 

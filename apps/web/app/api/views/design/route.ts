@@ -80,9 +80,11 @@ export async function POST(req: NextRequest) {
     // plataforma son tres filas leídas por su propio lector (las personales,
     // con las filas de quien diseña); si una no contesta, va sin muestra y el
     // diseño sigue. Las del Feed ya traen su muestra del listado.
+    // Una fuente de un módulo apagado no se ofrece, salvo que la vista ya la
+    // use: entonces entra marcada `unavailable` y se conserva tal cual.
     const entries = [
       ...full.filter((t) => t.kind === 'tracker').slice(0, 20),
-      ...full.filter((t) => t.kind === 'platform'),
+      ...full.filter((t) => t.kind === 'platform' && (!t.moduleOff || keep.includes(t.slug))),
       ...full.filter((t) => t.kind === 'feed'),
     ];
     const catalog: DesignCatalogEntry[] = await Promise.all(
@@ -108,7 +110,7 @@ export async function POST(req: NextRequest) {
           rowCount: t.rowCount,
           fields: t.fields,
           sample: sampleOf(rows.map((r) => ({ label: r.label, ...r.values }))),
-          ...(t.opaque ? { unavailable: true } : {}),
+          ...(t.opaque || t.moduleOff ? { unavailable: true } : {}),
         };
       }),
     );

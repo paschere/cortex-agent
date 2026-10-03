@@ -66,21 +66,36 @@ describe('el registro de fuentes', () => {
     // El libro de plata, la caja, su proyección y el PyG también: traen nómina,
     // arriendo y saldos. Y el registro de trabajo: nombra a gente del equipo.
     // Clientes (0179): lleva el responsable y cuánto debe cada cliente.
-    expect(internal).toEqual([
-      'cortex.caja',
-      'cortex.clientes',
-      'cortex.compromisos',
-      'cortex.equipo',
-      'cortex.estados',
-      'cortex.flujo_caja',
-      'cortex.gestion',
-      'cortex.libro',
-      'cortex.presupuesto',
-      'cortex.prospectos',
-      'cortex.pyg',
-      'cortex.recuperado',
-      'cortex.trabajo',
-    ]);
+    // Y las de los módulos de operación (module-sources.ts): todas internas.
+    expect(internal).toEqual(
+      [
+        'cortex.caja',
+        'cortex.clientes',
+        'cortex.comercial',
+        'cortex.compromisos',
+        'cortex.contratos',
+        'cortex.cumplimiento',
+        'cortex.documentos_vencen',
+        'cortex.equipo',
+        'cortex.estados',
+        'cortex.flota',
+        'cortex.flujo_caja',
+        'cortex.gestion',
+        'cortex.impuestos',
+        'cortex.inventario',
+        'cortex.libro',
+        'cortex.nomina',
+        'cortex.ordenes_compra',
+        'cortex.por_pagar',
+        'cortex.pqrs',
+        'cortex.presupuesto',
+        'cortex.prospectos',
+        'cortex.proyectos',
+        'cortex.pyg',
+        'cortex.recuperado',
+        'cortex.trabajo',
+      ].sort(),
+    );
   });
 });
 

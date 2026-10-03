@@ -122,9 +122,12 @@ function splitTop(expr: string): string[] {
 }
 
 function parseLeaf(part: string): Filter {
-  const [column, op, ...rest] = part.split('.');
-  const raw = rest.join('.');
-  if (!column || !op) throw new Error(`fake-postgrest: cannot parse "${part}"`);
+  const [column, first, ...tail] = part.split('.');
+  if (!column || !first) throw new Error(`fake-postgrest: cannot parse "${part}"`);
+  // `col.not.is.null`: la negación que PostgREST acepta dentro de `or=(…)`.
+  const negated = first === 'not' && tail[0] === 'is';
+  const op = negated ? 'not-is' : first;
+  const raw = (negated ? tail.slice(1) : tail).join('.');
   const value = raw === 'null' ? null : raw;
   return { column, op: op as Op, value };
 }

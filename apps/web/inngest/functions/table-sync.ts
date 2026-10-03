@@ -4,6 +4,8 @@ import type { JobContext, JobHandler } from '@/lib/jobs';
 import { notify } from '@/lib/notifications/notify';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
+  LOOKUP_COLUMNS,
+  type RowLookupRow,
   SYNC_COLUMNS,
   type SyncOutcome,
   type TrackerSyncRow,
@@ -11,6 +13,7 @@ import {
   createTrackerSync,
   latestSourceSheet,
   markSyncRun,
+  runRowLookup,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
@@ -23,6 +26,12 @@ import { logger } from '@cortex/core';
  * y, si entró o cambió algo, suena la campana de esa persona. Una fuente que
  * falla deja la sincronización en error con el motivo —visible en
  * `trackers.syncs`— y vuelve a intentar en el siguiente intervalo.
+ *
+ * LAS CONSULTAS POR FILA (0198) viajan por el MISMO reloj y el MISMO evento
+ * (`table-sync/run` con `lookupId` en vez de `syncId`): no hay un trabajo nuevo
+ * que registrar en el manifiesto. El despachador las toma cuando su
+ * `next_run_at` vence y les pone un arrendamiento de 10 minutos para que dos
+ * vueltas no se pisen; el ejecutor (`runRowLookup`) agenda la siguiente.
  *
  * `table-sync/setup` es la primera carga cuando hubo que cambiar cómo se lee
  * una API (la lista dentro de «data», columnas sin nombre): refresca con la
@@ -52,7 +61,41 @@ export const tableSyncDispatchJob: JobHandler = async ({ step }) => {
         data: { organizationId: s.organization_id, syncId: s.id },
       })),
     );
-  return { dispatched: due.length };
+
+  // Consultas por fila que ya tocan. El arrendamiento se escribe aquí, antes de
+  // mandar el evento: si el evento tarda, la siguiente vuelta del reloj no las
+  // vuelve a despachar.
+  const lookups = await step.run('find-due-lookups', async () => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db
+      .from('row_lookups')
+      .select('id, organization_id')
+      .eq('enabled', true)
+      .lte('next_run_at', new Date().toISOString())
+      .limit(200);
+    if (error) throw error;
+    const rows = (data ?? []) as Array<{ id: string; organization_id: string }>;
+    if (rows.length) {
+      const { error: leaseError } = await db
+        .from('row_lookups')
+        .update({ next_run_at: new Date(Date.now() + 10 * 60_000).toISOString() })
+        .in(
+          'id',
+          rows.map((r) => r.id),
+        );
+      if (leaseError) throw leaseError;
+    }
+    return rows;
+  });
+  if (lookups.length)
+    await step.sendEvent(
+      'lookup-each',
+      lookups.map((l) => ({
+        name: 'table-sync/run' as const,
+        data: { organizationId: l.organization_id, lookupId: l.id },
+      })),
+    );
+  return { dispatched: due.length, lookups: lookups.length };
 };
 
 export const tableSyncDispatch = inngest.createFunction(
@@ -88,9 +131,63 @@ function summary(outcome: SyncOutcome): string {
   return `${parts.join(', ')}${sample ? `: ${sample}` : ''}.`;
 }
 
+/** Una vuelta de una consulta por fila: llama la API de cada fila que toca. */
+async function runLookup(organizationId: string, lookupId: string) {
+  const db = getOrgScopedClient(organizationId);
+  const { data, error } = await db
+    .from('row_lookups')
+    .select(LOOKUP_COLUMNS)
+    .eq('id', lookupId)
+    .maybeSingle();
+  if (error) throw error;
+  const lookup = data as unknown as RowLookupRow | null;
+  if (!lookup?.enabled) return { skipped: 'desactivada' };
+  try {
+    const outcome = await runRowLookup(db, lookup);
+    const { data: t } = await db
+      .from('trackers')
+      .select('slug')
+      .eq('id', lookup.tracker_id)
+      .maybeSingle();
+    const slug = (t as { slug: string } | null)?.slug;
+    for (const notice of outcome.notices)
+      await ring(
+        organizationId,
+        lookup.created_by,
+        notice.title,
+        notice.body,
+        slug ? `/trackers/${slug}` : '/trackers',
+        notice.dedupeKey,
+      );
+    return {
+      calls: outcome.calls,
+      updated: outcome.updated,
+      errors: outcome.errors,
+      status: outcome.status,
+    };
+  } catch (err) {
+    // La tabla desapareció o la base falló: se anota y se reintenta en 15 minutos.
+    const message = err instanceof Error ? err.message : 'No se pudo consultar.';
+    logger.warn({ err, lookupId }, 'row lookup run failed');
+    await db
+      .from('row_lookups')
+      .update({
+        last_run_at: new Date().toISOString(),
+        last_status: 'error',
+        last_error: message.slice(0, 500),
+        next_run_at: new Date(Date.now() + 15 * 60_000).toISOString(),
+      })
+      .eq('id', lookupId);
+    return { error: message };
+  }
+}
+
 export const tableSyncRunJob: JobHandler = async ({ event, step }) => {
   const organizationId = event.data.organizationId as string | undefined;
   const syncId = event.data.syncId as string | undefined;
+  const lookupId = event.data.lookupId as string | undefined;
+  if (organizationId && lookupId && !syncId)
+    return step.run('lookup', () => runLookup(organizationId, lookupId));
   if (!organizationId || !syncId) return { skipped: 'faltan datos en el evento' };
 
   return step.run('sync', async () => {

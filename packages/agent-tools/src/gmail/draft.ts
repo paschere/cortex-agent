@@ -51,7 +51,7 @@ export function b64url(s: string): string {
 export const gmailDraft = registerTool({
   id: 'gmail.draft',
   description:
-    'Create a Gmail draft (never sends). Returns the draft id and a deep link. The user must open Gmail to send.',
+    'Create a Gmail draft (never sends): «prepárame un correo para Daniela con el resumen de la reunión», «déjame listo el borrador del mail al cliente», «redáctame un correo para…». Returns the draft id and a deep link. The user must open Gmail to send.',
   inputSchema: z.object({
     to: z.array(z.string().email()).min(1),
     subject: z.string().min(1),

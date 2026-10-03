@@ -143,7 +143,7 @@ export function boardEmail(r: BoardReport, link: string, note?: string | null) {
 export const boardSend = registerTool({
   id: 'board.send',
   description:
-    'Mandar por correo (desde el Gmail u Outlook de la persona) el informe para socios ya armado: el correo lleva el resumen y un enlace privado al informe con su PDF (con contraseña si así se configuró). Por defecto a los correos configurados en /informe-socios. Requiere confirmación siempre y nunca corre desde una rutina. Sólo quien administra.',
+    'Enviar a los SOCIOS o a la junta el «informe para socios» del mes, ya armado (el informe mensual de gerencia, no cualquier correo): sale desde el Gmail u Outlook de la persona con el resumen y un enlace privado al informe con su PDF (con contraseña si así se configuró). Por defecto a las direcciones de socios configuradas en /informe-socios. Requiere confirmación siempre y nunca corre desde una rutina. Sólo quien administra.',
   inputSchema: z.object({
     report: z
       .string()

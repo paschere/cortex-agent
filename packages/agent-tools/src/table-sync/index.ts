@@ -4,6 +4,7 @@
 
 import './tools';
 import './enrich-tools';
+import './lookups';
 
 export { trackersSyncFromSource, trackersSyncs } from './tools';
 export { trackersUpdateFromSource } from './enrich-tools';
@@ -20,3 +21,4 @@ export {
   planSync,
 } from './sync';
 export type { PlannedRow, SyncOutcome, TrackerSyncRow } from './sync';
+export * from './lookups';

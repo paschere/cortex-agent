@@ -21,7 +21,7 @@ interface SearchResponse {
 export const peopleSearch = registerTool({
   id: 'people.search',
   description:
-    "Find someone's email address by name: «¿cuál es el correo de Andrés Gómez?», «pásame el email de la contadora», «¿a qué dirección le escribo a Juan?». Resolves a person's name to their EMAIL ADDRESS. Searches the company's Google Workspace directory (internal colleagues) and the user's personal Google contacts — which includes people outside the company. Call this when the user mentions someone by name and you need an address to write to or invite — e.g. before gmail.draft or gcal.create_event. Returns up to `limit` matches; if more than one matches, ask the user which one. " +
+    "Find someone's email address by name: «¿cuál es el correo de Andrés Gómez?», «¿cuál es el correo de Daniela Ríos?», «dame el mail del gerente de Acme», «pásame el email de la contadora», «¿a qué dirección le escribo a Juan?», «¿cómo le escribo a Daniela?». Resolves a person's name to their EMAIL ADDRESS. Searches the company's Google Workspace directory (internal colleagues) and the user's personal Google contacts — which includes people outside the company. Call this when the user mentions someone by name and you need an address to write to or invite — e.g. before gmail.draft or gcal.create_event. Returns up to `limit` matches; if more than one matches, ask the user which one. " +
     'It returns a name, an email and whatever job title Google holds, and nothing else — no client placement, no manager, no hire date, no pay. For who is placed with which client and what that costs, payroll.team_assignments is the system that knows.',
   inputSchema: z.object({
     query: z.string().min(1).describe('Full or partial name (or email) to look up'),

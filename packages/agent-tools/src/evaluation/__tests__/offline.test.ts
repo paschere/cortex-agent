@@ -123,6 +123,19 @@ const tools = listTools() as unknown as SelectableTool[];
  * next to the payments family, and `ledger.forecast` leads with those
  * questions so the ledger family stays in the band.
  */
+/**
+ * RE-MEASURED 2026-10-03 (same model, retrieval readings unchanged) after the
+ * operations modules doubled the catalogue to 317 tools. Selection had fallen to
+ * 23 of 26: `board.send` («Mandar por correo…») scored 0.416 on «mandale un
+ * correo a daniela…» and dragged the cut over `gmail` (0.322) and, on «cual es
+ * el correo de daniela rios», over `people` (0.263); every `contracts` tool
+ * scores 0.32–0.36 on «contrato», which pushed `ledger` out of «y si contrato 2
+ * personas mas». The descriptions were fixed (gmail 0.322 → 0.407 and first,
+ * people 0.263 → 0.315) and the family band went from 0.06 to 0.08 for the
+ * ambiguous third (see `rank.ts`). Selection reads 26 of 26; the three retrieval
+ * notes («dias de la casa», «por que le subimos el precio», «cuanto dan para
+ * estudiar») are the same open items as before.
+ */
 const FLOOR = {
   grounding: 0.74,
   restraint: 1,

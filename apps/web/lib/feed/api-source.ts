@@ -8,6 +8,7 @@ import {
   type CustomToolResult,
   customToolDef,
   fetchCustomToolById,
+  renderInputTokens,
   runTool,
 } from '@cortex/agent-tools';
 import type { SheetData, SheetValue } from '@cortex/agent-tools/src/kb/spreadsheets';
@@ -325,9 +326,12 @@ export async function captureApiFeed(options: {
     !tool.input_schema?.fields?.some((field) => field.name === pagination.cursorInput)
   )
     throw new Error('El parámetro de cursor debe existir en la herramienta API.');
+  // Los parámetros de una fuente de lista pueden decir «{hoy:YYYY-MM-DD}»: se
+  // resuelven al leer; la configuración y su hash guardan la plantilla.
+  const liveInput = renderInputTokens(options.input, Date.now());
   const result = pagination
-    ? await collectFeedPages(pagination, options.input, read)
-    : await read(options.input);
+    ? await collectFeedPages(pagination, liveInput, read)
+    : await read(liveInput);
   const shape = options.shape ? apiShapeSchema.parse(options.shape) : undefined;
   const normalized = normalizeApiFeed(result.data, shape);
   if (!normalized.text.trim() && !normalized.tables?.length)

@@ -428,4 +428,6 @@ export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> 
   'work.assign': workAssign as unknown as AnySafeActionPolicy,
   'autopilot.remind': autopilotRemind as unknown as AnySafeActionPolicy,
   'trackers.retry_sync': retrySync,
+  // Una consulta por fila gasta cuota de una API: la misma en media hora es un doble clic (0198).
+  'trackers.row_lookup_create': { windowMs: 30 * 60_000, noun: 'la consulta automática' },
 };

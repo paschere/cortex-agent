@@ -228,7 +228,7 @@ const ALERT_ROW = z.object({
 export const ledgerForecast = registerTool({
   id: 'ledger.forecast',
   description:
-    '¿Y si un cliente nos paga tarde? ¿Y si perdemos un cliente o contratamos a alguien? ¿Me alcanza la plata para la nómina? Proyecta la caja semana a semana (13 semanas) con los cobros y pagos pendientes y lo que se repite, y simula escenarios de qué pasaría si: un cliente paga un mes tarde, se va un cliente, entra un gasto nuevo. Dice la semana más apretada y cuántas semanas alcanza la caja. Sólo lectura.',
+    '¿Y si un cliente nos paga tarde? ¿Y si contrato 2 personas más? ¿Puedo contratar a un vendedor sin quedarme sin caja? ¿Y si perdemos un cliente? ¿Me alcanza la plata para la nómina? Proyecta la caja semana a semana (13 semanas) con los cobros y pagos pendientes y lo que se repite, y simula escenarios de qué pasaría si: un cliente paga un mes tarde, se va un cliente, entra un gasto nuevo, o contrato gente (cada persona nueva suma su salario con prestaciones a la caja de cada mes). Dice la semana más apretada y cuántas semanas alcanza la caja. Sólo lectura.',
   inputSchema: z.object({
     ...SCENARIO_INPUT,
     includeEstimatedSales: z

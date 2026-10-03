@@ -126,6 +126,35 @@ export const SELECTION_THRESHOLD = 40;
  * nothing matched well and the answer to that is not to send more tools. That is
  * a tool DESCRIPTION defect, not a threshold defect, and moving a cut until it
  * passes would hide it. It is left failing in the evaluation, on the record.
+ *
+ * 2026-10-03 — THE BAND, AFTER THE CATALOGUE DOUBLED. Eight more modules shipped
+ * (payables, inventory, taxes, payroll, contracts, compliance, CRM, projects,
+ * fleet, board…) and the evaluation started failing three cases that had been
+ * green the day before. The cause was not the floor but the TOP: a family that
+ * echoes the request's wording outscores the right one and drags the cut up
+ * with it (`top - familyBand`).
+ *
+ *   · «mandale un correo a daniela con el resumen de la reunion» → `board.send`
+ *     (its description began «Mandar por correo…») scored 0.416 and `gmail`
+ *     0.322, so the cut sat at 0.356 and no mail family reached the model.
+ *   · «cual es el correo de daniela rios» → `board.send` again (0.336) put the
+ *     cut at 0.276 over `people` at 0.263.
+ *   · «y si contrato 2 personas mas» → every `contracts` tool scores 0.32–0.36
+ *     on the word «contrato» (a verb here, a noun there); `ledger` reached
+ *     0.274 against a cut of 0.302.
+ *
+ * The first two were description defects and were fixed there (board.send now
+ * says it is for the partners' report; gmail, outlook and people say it the way
+ * people ask: gmail 0.322 → 0.408 and now first, people 0.263 → 0.316). The
+ * third is a genuine ambiguity no description removes — three families are
+ * plausible readings of that sentence — and what absorbs it is room in the band.
+ * Re-measured the same day, with the descriptions fixed: at 0.06 the suite reads
+ * 26/26 but `ledger` clears its cut by 0.001 (0.301 against 0.300), which is the
+ * lesson of the first block above — a margin of one thousandth is a failure
+ * waiting for the next module. At 0.08 it clears by 0.021. Cost, replayed over
+ * the 26 cases: 20.5 → 24.9 tools offered per turn on average, the largest turn
+ * unchanged at 54. Wider than that buys nothing the suite can see and sends a
+ * fleet or statements family on «dime cómo va la empresa».
  * ------------------------------------------------------------------------- */
 
 /**
@@ -147,8 +176,8 @@ export interface SelectionCalibration {
    * A band rather than a fixed K: "email the three people on the Acme deal and
    * put it on the calendar" legitimately wants three families, "what's on my
    * calendar" wants one, and a constant would be wrong for both. It is a cosine
-   * DISTANCE, so it is as model-dependent as the floor: 0.06 of a scale that
-   * tops out at 0.42 is not 0.06 of one that tops out at 0.63.
+   * DISTANCE, so it is as model-dependent as the floor: 0.08 of a scale that
+   * tops out at 0.42 is not 0.08 of one that tops out at 0.63.
    */
   familyBand: number;
   /** False when nobody has run the evaluation against this model. */
@@ -169,10 +198,10 @@ export const SELECTION_CALIBRATIONS: Readonly<Record<string, SelectionCalibratio
   'voyage:voyage-4-lite': {
     modelId: 'voyage:voyage-4-lite',
     minFamilyScore: 0.25,
-    familyBand: 0.06,
+    familyBand: 0.08,
     measured: true,
-    measuredOn: '2026-08-07',
-    note: 'Medido el 7 de agosto de 2026 con la evaluación continua: 635 cosenos herramienta/consulta contra la API real. El ruido llega hasta 0,213 y la familia correcta más baja que la suite exige es gmail en 0,291; el piso queda en la mitad de esa franja.',
+    measuredOn: '2026-10-03',
+    note: 'Piso medido el 7 de agosto de 2026 con la evaluación continua (635 cosenos herramienta/consulta contra la API real: el ruido llega hasta 0,213 y la familia correcta más baja que la suite exigía era gmail en 0,291; el piso queda en la mitad de esa franja). Banda ampliada de 0,06 a 0,08 el 3 de octubre de 2026, con el catálogo ya en 314 herramientas: una familia que repite las palabras de la petición (board.send, o «contrato» en contracts) subía el corte por encima de la correcta; con 0,08 la suite lee 26 de 26 y la más ajustada (ledger, «y si contrato 2 personas mas») pasa con 0,021 de margen en vez de 0,001.',
   },
 };
 

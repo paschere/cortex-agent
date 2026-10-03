@@ -489,6 +489,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // 0161: una fuente conectada que llena una tabla sola. Tenant: corre con la
   // identidad de quien la creó y escribe sólo en la tabla de su espacio.
   tracker_syncs: tenant(),
+  // 0198: una consulta a una API por fila de una tabla, y su estado por fila.
+  // Tenant las dos: gastan la cuota de una API con la llave de la empresa y
+  // escriben en las filas de su espacio.
+  row_lookups: tenant(),
+  row_lookup_state: tenant(),
   // 0164: una carpeta de Drive que llena una tabla, y su libro de archivos.
   // Tenant las dos: el libro guarda lo que se leyó de documentos de la empresa.
   drive_folder_syncs: tenant(),

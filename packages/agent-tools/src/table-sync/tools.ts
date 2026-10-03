@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { fetchCustomToolById } from '../custom-tools/store';
 import { registerTool } from '../index';
 import { trackerSlugSchema } from '../trackers/schema';
 import { createTrackerSync, latestSourceSheet, listTrackerSyncs } from './sync';
@@ -63,10 +64,56 @@ function apiConfigHash(config: Record<string, unknown>): string {
   return createHash('sha256').update(JSON.stringify(ordered)).digest('hex');
 }
 
+const QUERY_CREDENTIAL = /(^|_)(token|secret|password|passwd|api_?key|authorization|cookie)($|_)/i;
+
+/**
+ * Los parámetros fijos de una fuente de API de LISTA («aeropuerto = BOG»,
+ * «fecha = {hoy:YYYY-MM-DD}»), que se leen una vez por corrida. Se mezclan en
+ * `config.input` de la fuente; `{hoy}` / `{ahora}` se resuelven al consultar
+ * (ver `renderInputTokens`), y el hash de la fuente queda sobre la plantilla,
+ * así que no nace una fuente nueva cada día. Los nombres tienen que ser
+ * parámetros de la herramienta propia de la fuente, y una llave no va aquí.
+ */
+export async function setSourceQuery(
+  db: SupabaseClient,
+  actorId: string,
+  source: { id: string; kind: string; config: Record<string, unknown> },
+  query: Record<string, string>,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  if (source.kind !== 'api')
+    throw new ValidationError('Los parámetros de consulta sólo aplican a fuentes de API.');
+  const toolId = typeof source.config.toolId === 'string' ? source.config.toolId : null;
+  const tool = toolId ? await fetchCustomToolById(db, toolId) : null;
+  if (!tool) throw new ValidationError('La herramienta de esa fuente ya no existe.');
+  const names = new Set((tool.input_schema?.fields ?? []).map((f) => f.name));
+  for (const key of Object.keys(query)) {
+    if (QUERY_CREDENTIAL.test(key))
+      throw new ValidationError(
+        `«${key}» parece una llave: va en la credencial, no en la consulta.`,
+      );
+    if (!names.has(key))
+      throw new ValidationError(
+        `«${key}» no es un parámetro de «${tool.name}». Parámetros: ${[...names].join(', ') || 'ninguno'}.`,
+      );
+  }
+  const config = {
+    ...source.config,
+    ...extra,
+    input: { ...((source.config.input as Record<string, unknown> | undefined) ?? {}), ...query },
+  };
+  const { error } = await db
+    .from('feed_sources')
+    .update({ config, config_hash: apiConfigHash(config), updated_at: new Date().toISOString() })
+    .eq('id', source.id)
+    .eq('actor_id', actorId);
+  if (error) throw error;
+}
+
 export const trackersSyncFromSource = registerTool({
   id: 'trackers.sync_from_source',
   description:
-    'Make a company table fill itself from a connected Feed source (a Google Sheet, a web page table or an API such as a flights API): every few minutes it re-reads the source, adds new rows and updates changed ones, identified by key columns (e.g. flight number + date). Creates the table from the source columns if it does not exist. Use it when the person wants a table/view to stay updated from a sheet or an API, or to be alerted when new rows arrive. If an API returns its list inside a field ("data", "arrivals", "flights") pass recordsPath; if it returns rows as arrays without names (OpenSky "states"), pass recordsPath and columns (names in order). Only the owner of the source can do this. Requires confirmation.',
+    'Make a company table fill itself from a connected Feed source (a Google Sheet, a web page table or an API such as a flights API): every few minutes it re-reads the source, adds new rows and updates changed ones, identified by key columns (e.g. flight number + date). Creates the table from the source columns if it does not exist. Use it when the person wants a table/view to stay updated from a sheet or an API, or to be alerted when new rows arrive. If the API needs fixed query parameters (airport, date) pass query (values may use {hoy:YYYY-MM-DD}). If an API returns its list inside a field ("data", "arrivals", "flights") pass recordsPath; if it returns rows as arrays without names (OpenSky "states"), pass recordsPath and columns (names in order). Only the owner of the source can do this. Requires confirmation.',
   inputSchema: z.object({
     source: z.string().trim().min(1).max(240).describe('Name or id of the connected Feed source.'),
     table: trackerSlugSchema.describe(
@@ -83,6 +130,12 @@ export const trackersSyncFromSource = registerTool({
     sheet: z.number().int().min(0).max(19).default(0),
     recordsPath: z.string().trim().max(160).optional(),
     columns: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
+    query: z
+      .record(z.string().max(60), z.string().max(200))
+      .optional()
+      .describe(
+        'Fixed query parameters of an API source that returns a list, e.g. {"airport":"BOG","date":"{hoy:YYYY-MM-DD}"}. {hoy} and {ahora} (optionally with a format) are resolved each time the API is read.',
+      ),
   }),
   outputSchema: z.object({
     status: z.enum(['ready', 'scheduled']),
@@ -106,27 +159,34 @@ export const trackersSyncFromSource = registerTool({
       notify: input.notify ?? true,
     };
 
-    const reshape = Boolean(input.recordsPath || input.columns?.length);
+    const hasQuery = Boolean(input.query && Object.keys(input.query).length);
+    const reshape = Boolean(input.recordsPath || input.columns?.length || hasQuery);
     if (reshape) {
       if (source.kind !== 'api')
-        throw new ValidationError('recordsPath y columns sólo aplican a fuentes de API.');
-      const config = {
-        ...source.config,
-        shape: {
-          ...(input.recordsPath ? { recordsPath: input.recordsPath } : {}),
-          ...(input.columns?.length ? { columns: input.columns } : {}),
-        },
-      };
-      const { error } = await ctx.db
-        .from('feed_sources')
-        .update({
-          config,
-          config_hash: apiConfigHash(config),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', source.id)
-        .eq('actor_id', ctx.userId);
-      if (error) throw error;
+        throw new ValidationError('recordsPath, columns y query sólo aplican a fuentes de API.');
+      const shape =
+        input.recordsPath || input.columns?.length
+          ? {
+              shape: {
+                ...(input.recordsPath ? { recordsPath: input.recordsPath } : {}),
+                ...(input.columns?.length ? { columns: input.columns } : {}),
+              },
+            }
+          : {};
+      if (hasQuery) await setSourceQuery(ctx.db, ctx.userId, source, input.query ?? {}, shape);
+      else {
+        const config = { ...source.config, ...shape };
+        const { error } = await ctx.db
+          .from('feed_sources')
+          .update({
+            config,
+            config_hash: apiConfigHash(config),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', source.id)
+          .eq('actor_id', ctx.userId);
+        if (error) throw error;
+      }
     }
 
     // Con una captura que ya trae la tabla, la primera carga va de una vez.

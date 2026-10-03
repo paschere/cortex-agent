@@ -11,7 +11,7 @@ import {
 export const outlookSendDraft = registerTool({
   id: 'outlook.send_draft',
   description:
-    'Send an existing Outlook / Microsoft 365 draft by its draftId (the id returned by outlook.draft). Requires user confirmation. Pre-fetches the draft to surface recipient and subject before sending. The Microsoft 365 twin of gmail.send_draft.',
+    'Send an existing Outlook / Microsoft 365 draft by its draftId (the id returned by outlook.draft): «mándalo», «envía ese correo de Outlook». Requires user confirmation. Pre-fetches the draft to surface recipient and subject before sending. The Microsoft 365 twin of gmail.send_draft.',
   inputSchema: z.object({
     draftId: z.string().min(1).describe('ID returned by outlook.draft'),
   }),

@@ -1,11 +1,12 @@
 'use client';
 
 import {
-  STARTER_TEMPLATES,
   type StarterCategory,
   type StarterTemplate,
+  startersFor,
   templateShape,
 } from '@/lib/views/starter-templates';
+import type { ModuleKey } from '@cortex/agent-tools';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import {
@@ -133,15 +134,18 @@ export function NewViewDialog({
   onOpenChange,
   suggestions,
   onLaunch,
+  modulesOff = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   suggestions: string[];
   onLaunch: (launch: StudioLaunch) => void;
+  /** Los módulos apagados de la empresa: sus plantillas no se ofrecen. */
+  modulesOff?: ModuleKey[];
 }) {
   const [category, setCategory] = useState<StarterCategory | 'Todas'>('Todas');
   const [text, setText] = useState('');
-  const templates = STARTER_TEMPLATES.filter(
+  const templates = startersFor(modulesOff).filter(
     (t) => category === 'Todas' || t.category === category,
   );
   const describe = (value: string) => {

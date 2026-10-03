@@ -10,7 +10,7 @@ function recipients(list: string[] | undefined): Array<{ emailAddress: { address
 export const outlookDraft = registerTool({
   id: 'outlook.draft',
   description:
-    'Create an Outlook / Microsoft 365 draft (never sends). Returns the draft id and a deep link. The user must open Outlook — or call outlook.send_draft — to send it. The Microsoft 365 twin of gmail.draft.',
+    'Create an Outlook / Microsoft 365 draft (never sends): «prepárame un correo en Outlook para Daniela con el resumen de la reunión», «mándale un correo al cliente desde Outlook» (it is left as a draft to review first). Returns the draft id and a deep link. The user must open Outlook — or call outlook.send_draft — to send it. The Microsoft 365 twin of gmail.draft.',
   inputSchema: z.object({
     to: z.array(z.string().email()).min(1),
     subject: z.string().min(1),

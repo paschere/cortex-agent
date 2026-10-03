@@ -2,7 +2,8 @@
 
 import type { ViewBrand } from '@/lib/branding/shape';
 import { archiveViewAction, duplicateViewAction, setViewPinnedAction } from '@/lib/views/actions';
-import { STARTER_TEMPLATES } from '@/lib/views/starter-templates';
+import { startersFor } from '@/lib/views/starter-templates';
+import type { ModuleKey } from '@cortex/agent-tools';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import {
@@ -109,9 +110,12 @@ export function ViewsLibrary({
   views,
   suggestions,
   brand = null,
+  modulesOff = [],
 }: {
   views: ViewSummary[];
   suggestions: string[];
+  /** Los módulos apagados de la empresa: sus plantillas no se ofrecen. */
+  modulesOff?: ModuleKey[];
   /**
    * La marca de la empresa (0170): las miniaturas con el acento de siempre
    * («primary») se tiñen con su color, y el estudio que se abre desde aquí la
@@ -208,7 +212,11 @@ export function ViewsLibrary({
       </header>
 
       {views.length === 0 ? (
-        <EmptyShelf onGallery={() => setGalleryOpen(true)} onLaunch={openLaunch} />
+        <EmptyShelf
+          onGallery={() => setGalleryOpen(true)}
+          onLaunch={openLaunch}
+          modulesOff={modulesOff}
+        />
       ) : (
         <>
           <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -280,7 +288,7 @@ export function ViewsLibrary({
                   Nueva vista
                 </span>
                 <span className="max-w-[18rem] text-xs leading-relaxed text-ink-muted">
-                  Descríbela a Cortex, parte de una de {STARTER_TEMPLATES.length} plantillas o
+                  Descríbela a Cortex, parte de una de {startersFor(modulesOff).length} plantillas o
                   ármala a mano en el estudio.
                 </span>
               </button>
@@ -339,6 +347,7 @@ export function ViewsLibrary({
         onOpenChange={setGalleryOpen}
         suggestions={suggestions}
         onLaunch={openLaunch}
+        modulesOff={modulesOff}
       />
       {sharing && (
         <ShareDialog
@@ -499,9 +508,11 @@ function ViewCard({
 function EmptyShelf({
   onGallery,
   onLaunch,
+  modulesOff,
 }: {
   onGallery: () => void;
   onLaunch: (launch: StudioLaunch) => void;
+  modulesOff: ModuleKey[];
 }) {
   return (
     <section className="rounded-card border border-border bg-surface/60 p-5 shadow-card sm:p-8">
@@ -518,11 +529,13 @@ function EmptyShelf({
         </p>
       </div>
       <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {STARTER_TEMPLATES.slice(0, 4).map((t) => (
-          <li key={t.id}>
-            <TemplateCard template={t} compact onPick={() => onLaunch(launchFor(t))} />
-          </li>
-        ))}
+        {startersFor(modulesOff)
+          .slice(0, 4)
+          .map((t) => (
+            <li key={t.id}>
+              <TemplateCard template={t} compact onPick={() => onLaunch(launchFor(t))} />
+            </li>
+          ))}
       </ul>
       <button
         type="button"
