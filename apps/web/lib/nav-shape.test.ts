@@ -68,14 +68,14 @@ describe('el rail', () => {
   });
 
   it('una sección que se queda vacía no deja su encabezado colgando', () => {
-    const rail = buildRail(['/clients', '/payments', '/trackers'], false);
+    const rail = buildRail(['/clients', '/ventas', '/payments', '/trackers'], false);
     expect(rail.rest.map((s) => s.id)).not.toContain('work');
   });
 
   it('Finanzas reúne el resumen y la cartera sin duplicar destinos', () => {
     expect(
       SECTIONS.find((section) => section.id === 'finance')?.items.map((item) => item.href),
-    ).toEqual(['/finance', '/payments']);
+    ).toEqual(['/finance', '/payments', '/pagar', '/inventario', '/impuestos']);
     expect(everyDestination().filter((href) => href === '/finance')).toHaveLength(1);
   });
 

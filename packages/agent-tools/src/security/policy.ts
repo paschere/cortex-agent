@@ -274,6 +274,9 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // A channel is opaque — Slack Connect channels include client guests — so a
   // post always counts as leaving the company.
   'slack.post_message': { blastRadius: 'external_send', deliversContent: true },
+  // 0185: contestarle a un cliente por WhatsApp sale de la empresa, con datos
+  // de ese cliente. Siempre con confirmación y nunca sin nadie delante.
+  'whatsapp.reply': { sensitivity: 'client', blastRadius: 'external_send', deliversContent: true },
   // Trámites web (migration 0087). A learned errand that only consults a portal
   // is an ordinary internal write: the verb heuristic would call it a read,
   // which understates it, because it acts as the company on somebody else's
@@ -297,6 +300,20 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   'gcal.create_event': { blastRadius: 'internal_write' },
   'presentations.create_pdf': { sensitivity: 'pii', blastRadius: 'internal_write' },
   'sales.draft_proposal': { sensitivity: 'client', blastRadius: 'internal_write' },
+  // Ventas (0182). Crear una cotización es escritura interna; mandarla sale de
+  // la empresa con destinatario explícito; emitir la factura electrónica es un
+  // documento legal en el programa contable y ante la DIAN: externo, con
+  // confirmación obligatoria (mandatory-confirmation.ts).
+  'sales.quote_create': { sensitivity: 'client', blastRadius: 'internal_write' },
+  // Sin `recipientsExplicit`: sin `to`, el correo va al del cliente que guarda
+  // la cotización, que no está en el payload — no puede relajarse a interno.
+  'sales.quote_send': {
+    sensitivity: 'client',
+    blastRadius: 'external_send',
+    deliversContent: true,
+  },
+  'sales.invoice_emit': { sensitivity: 'client', blastRadius: 'external_send' },
+  'sales.list': { sensitivity: 'client', blastRadius: 'read' },
 
   // --- payroll: aggregates are the SAFE way to look at compensation ---------
   // Rollups (headcount by division, totals, projections) carry no per-person
@@ -311,6 +328,19 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // classified as personal data. 'register' is also not in WRITE_VERBS, and it
   // plainly writes, so the blast radius is declared here too.
   'vehicles.register': { sensitivity: 'pii', blastRadius: 'internal_write' },
+
+  // --- Compras (migración 0183) ----------------------------------------------
+  // Enviar una orden de compra es un correo al proveedor con el PDF adjunto:
+  // la misma fila que gmail.send_message. Sin ella el verbo `send` la leería
+  // como escritura interna y un mandato desatendido podría mandarla sin nadie.
+  'purchasing.send_po': {
+    sensitivity: 'client',
+    blastRadius: 'external_send',
+    deliversContent: true,
+    recipientsExplicit: true,
+  },
+  // `receive` no está en WRITE_VERBS y escribe entradas al inventario.
+  'purchasing.receive': { blastRadius: 'internal_write' },
 
   // --- the security tools themselves are read-only introspection ------------
   'security.review_action': { sensitivity: 'internal', blastRadius: 'read' },

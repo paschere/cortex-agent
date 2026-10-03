@@ -43,6 +43,8 @@ const PAID_CALLS = [
   // read its fields. Same failure shape as the embeddings — outside a step, a
   // retry pays for both again — so it is guarded the same way.
   'extractDocumentData(',
+  // Una llamada al modelo por documento que pase el filtro (migración 0184).
+  'detectDocumentExpiration(',
 ];
 
 function functionFiles(): string[] {

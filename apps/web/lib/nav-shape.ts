@@ -10,6 +10,7 @@ import {
   Database,
   FileBarChart,
   Globe,
+  HandCoins,
   Home,
   Hourglass,
   IdCard,
@@ -20,6 +21,7 @@ import {
   MessageCircle,
   MessageSquare,
   MoreHorizontal,
+  Package,
   PhoneCall,
   Plug,
   Radar,
@@ -247,6 +249,9 @@ export const SECTIONS: NavSection[] = [
     label: 'Con quién trabajo',
     items: [
       { href: '/clients', label: 'Clientes', icon: Building2 },
+      // Cotizaciones → pedidos → facturas electrónicas (0182): lo que se le vende
+      // a cada cliente, al lado del cliente.
+      { href: '/ventas', label: 'Ventas', icon: Receipt },
       { href: '/trackers', label: 'Tablas', icon: Table2 },
     ],
   },
@@ -256,6 +261,11 @@ export const SECTIONS: NavSection[] = [
     items: [
       { href: '/finance', label: 'Resumen financiero', icon: Wallet },
       { href: '/payments', label: 'Cartera y pagos', icon: Wallet },
+      // Cuentas por pagar (0181): facturas de proveedor, aprobación y programa de pagos.
+      { href: '/pagar', label: 'Por pagar', icon: HandCoins },
+      { href: '/inventario', label: 'Inventario y compras', icon: Package },
+      // El calendario tributario (0180): las fechas con la DIAN, el ICA y la PILA.
+      { href: '/impuestos', label: 'Impuestos', icon: Landmark },
     ],
   },
   {
@@ -276,6 +286,9 @@ export const SECTIONS: NavSection[] = [
       { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
       { href: '/activations', label: 'Activaciones', icon: BadgeCheck },
       { href: '/pipelines', label: 'Flujos', icon: Workflow },
+      // Documentos que vencen (0184): Cortex les lee la fecha a los SOAT,
+      // pólizas, licencias y contratos, y avisa solo a quien los renueva.
+      { href: '/documentos-vencen', label: 'Documentos que vencen', icon: CalendarClock },
     ],
   },
   {
@@ -528,7 +541,15 @@ export function moreGroups({
     {
       id: 'work',
       label: 'Mi trabajo',
-      items: pick(['/management', '/clients', '/payments', '/goals', '/calls']),
+      items: pick([
+        '/management',
+        '/clients',
+        '/payments',
+        '/impuestos',
+        '/documentos-vencen',
+        '/goals',
+        '/calls',
+      ]),
     },
     {
       id: 'data',

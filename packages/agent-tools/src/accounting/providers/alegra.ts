@@ -14,6 +14,8 @@ import type {
 } from '../types';
 import { AlegraClient, alegraHasMore } from './alegra-client';
 import { amount, bogotaDay, clip, currencyCode, day, daysBefore, monthsAgo } from './common';
+import { alegraInvoicing } from './invoicing';
+import { alegraBillPage } from './purchases';
 
 /**
  * ALEGRA (Colombia y el resto de Latinoamérica), con la misma forma que Siigo.
@@ -92,7 +94,18 @@ export interface AlegraItem {
   category?: { id?: Id; name?: string } | null;
   itemCategory?: { id?: Id; name?: string } | null;
   price?: Array<{ idPriceList?: Id; name?: string; price?: number | string }>;
-  inventory?: { unit?: string; availableQuantity?: number | string; unitCost?: number } | null;
+  inventory?: {
+    unit?: string;
+    availableQuantity?: number | string;
+    unitCost?: number | string;
+    /** Existencias por bodega (0183). */
+    warehouses?: Array<{
+      id?: Id;
+      name?: string;
+      availableQuantity?: number | string;
+      minQuantity?: number | string | null;
+    }>;
+  } | null;
 }
 
 export interface AlegraInvoice {
@@ -194,6 +207,24 @@ export function normalizeAlegraItem(i: AlegraItem): NormalizedProduct {
     stock: amount(i.inventory?.availableQuantity),
     unit: clip(i.inventory?.unit, 60),
     active: i.status !== 'inactive',
+    cost: amount(i.inventory?.unitCost),
+    minStock: (() => {
+      // El mínimo de Alegra es por bodega: el de la empresa es la suma.
+      const mins = (i.inventory?.warehouses ?? [])
+        .map((w) => amount(w.minQuantity))
+        .filter((n): n is number => n !== undefined);
+      return mins.length ? mins.reduce((a, b) => a + b, 0) : undefined;
+    })(),
+    warehouses: (() => {
+      const list = (i.inventory?.warehouses ?? [])
+        .filter((w) => w.id !== undefined && amount(w.availableQuantity) !== undefined)
+        .map((w) => ({
+          externalId: String(w.id),
+          name: clip(w.name, 100) ?? 'Bodega',
+          quantity: amount(w.availableQuantity) as number,
+        }));
+      return list.length ? list : undefined;
+    })(),
   };
 }
 
@@ -396,6 +427,9 @@ export const alegraProvider: AccountingProvider = {
         await client.verify();
         return { token: null };
       },
+      invoicing: alegraInvoicing(client),
+      listPurchases: async (since, page) =>
+        alegraBillPage(client, since, page, await companyCurrency()),
       async listPage(entity, query, page) {
         const params: Record<string, string> = {};
         for (const [k, v] of Object.entries(query)) if (!k.startsWith('_')) params[k] = v;

@@ -4,7 +4,13 @@ import { type JobContext, type JobHandler, enqueueJob } from '@/lib/jobs';
 import { noteMailWorthSeeing, noteMailboxLearningStopped } from '@/lib/notifications/producers';
 import { mustRead, mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
-import { readMailPolicy } from '@cortex/agent-tools';
+import {
+  bogotaToday,
+  importConfirmedDocuments,
+  pollGmailSupplierInvoices,
+  readMailPolicy,
+  syncPaidFromLedger,
+} from '@cortex/agent-tools';
 import {
   type ArchivedThread,
   GMAIL_PERMALINK_PREFIX,
@@ -239,12 +245,33 @@ export const gmailSweepUserJob: JobHandler = async ({ event, step }) => {
     proposeForMailbox(organizationId, userId, swept.documents),
   );
 
+  // 4. Facturas de proveedor (0181, cuentas por pagar) ----------------------
+  // Una vez por hora (el barrido corre cada diez minutos): los ZIP/XML de
+  // factura electrónica de los últimos días que no se hayan mirado, al flujo
+  // de aprobación; y de paso lo confirmado en la Bandeja y lo que el banco ya
+  // pagó. Su propio paso: si falla, lo de arriba ya quedó.
+  const payables = await step.run('supplier-invoices', async () => {
+    if (new Date().getUTCMinutes() >= 10) return { skipped: 'no es la hora' as const };
+    const ctx = learnContext(organizationId, userId);
+    try {
+      const today = bogotaToday();
+      const mail = await pollGmailSupplierInvoices(ctx.db, ctx, { today, userId, days: 3 });
+      await importConfirmedDocuments(ctx.db, { today });
+      await syncPaidFromLedger(ctx.db);
+      return { created: mail.created, duplicates: mail.duplicates, errors: mail.errors.length };
+    } catch (err) {
+      logger.warn({ err, organizationId }, 'supplier invoice sweep failed');
+      return { failed: true as const };
+    }
+  });
+
   return {
     via: swept.via,
     threads: swept.threads,
     capped: swept.capped,
     alerted,
     proposed,
+    payables,
     ...swept.tally,
   };
 };

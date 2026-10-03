@@ -1,4 +1,9 @@
-import type { ProviderToken, ProviderTokenStore } from '../types';
+import {
+  type ProviderToken,
+  type ProviderTokenStore,
+  ProviderUncertainError,
+  ProviderValidationError,
+} from '../types';
 
 /**
  * EL CLIENTE DE SIIGO API (https://api.siigo.com).
@@ -313,6 +318,79 @@ export class SiigoClient {
   }
 
   /**
+   * POST autenticado (migración 0182: la factura de venta). A diferencia de
+   * `get`, NO reintenta ante una falla de red ni un 5xx: la factura pudo haber
+   * quedado creada y una segunda petición sería una segunda factura. Sólo un
+   * 429 (Siigo rechaza ANTES de procesar) espera y repite. La cabecera
+   * `Idempotency-Key` (alfanumérica, máximo 30) hace que Siigo devuelva la
+   * misma factura si la misma llave llega dos veces.
+   *
+   * Un 400/422 sale como `ProviderValidationError` con el porqué en español;
+   * una red cortada o un 5xx, como `ProviderUncertainError` («no sé si llegó»).
+   */
+  async post<T>(path: string, body: unknown, opts: { idempotencyKey?: string } = {}): Promise<T> {
+    const token = await this.authenticate();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'Partner-Id': this.partnerId,
+      'Content-Type': 'application/json',
+    };
+    const key = (opts.idempotencyKey ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 30);
+    if (key) headers['Idempotency-Key'] = key;
+    let attempt = 0;
+    let refreshed = false;
+    for (;;) {
+      await this.pace();
+      this.requests += 1;
+      let res: Response;
+      try {
+        res = await this.doFetch(`${this.baseUrl}${path}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(this.timeoutMs * 2),
+        });
+      } catch {
+        throw new ProviderUncertainError(
+          'La conexión con Siigo se cortó mientras se enviaba la factura: no se sabe si quedó creada. Revisa en Siigo antes de volver a intentarlo (si se reintenta desde Cortex, Siigo reconoce la misma factura y no la duplica).',
+        );
+      }
+      const text = await res.text();
+      let parsed: unknown = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (res.ok) return parsed as T;
+      // Un token guardado que Siigo ya no reconoce: no se procesó nada, así
+      // que pedir uno nuevo y repetir una vez es seguro.
+      if (res.status === 401 && !refreshed) {
+        refreshed = true;
+        headers.Authorization = `Bearer ${await this.authenticate(true)}`;
+        continue;
+      }
+      if (res.status === 429 && attempt < this.maxRetries) {
+        attempt += 1;
+        const retryAfter = Number(res.headers.get('retry-after'));
+        await this.sleep(
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.min(retryAfter * 1000, 120_000)
+            : Math.min(5_000 * 2 ** (attempt - 1), 60_000),
+        );
+        continue;
+      }
+      if (res.status === 400 || res.status === 422 || res.status === 409)
+        throw describeSiigoValidation(parsed, res.status);
+      if (res.status >= 500)
+        throw new ProviderUncertainError(
+          `Siigo respondió con un error interno (${res.status}) al recibir la factura: no se sabe si quedó creada. Revisa en Siigo antes de volver a intentarlo.`,
+        );
+      throw describeFailure(res.status, errorCode(parsed), path);
+    }
+  }
+
+  /**
    * «Probar y conectar»: pide un token y lee una sola fila de clientes. Si las
    * dos cosas funcionan, la llave sirve y el usuario puede leer datos.
    */
@@ -321,6 +399,53 @@ export class SiigoClient {
     await this.get('/v1/customers', { page: 1, page_size: 1 });
     return { token: this.token as SiigoToken };
   }
+}
+
+/**
+ * Lo que Siigo dijo de una factura que no aceptó, en español. La respuesta
+ * oficial es `{ Status, Errors: [{ Code, Message, Params, Detail }] }`; cada
+ * error se traduce por el campo que nombra (`Params`) y su código, y si no se
+ * reconoce se deja el mensaje de Siigo entre comillas: mejor un mensaje en
+ * inglés que uno inventado.
+ */
+export function describeSiigoValidation(body: unknown, status: number): ProviderValidationError {
+  const b = body as {
+    Errors?: Array<{ Code?: string; Message?: string; Params?: string[] }>;
+    errors?: Array<{ code?: string; message?: string; params?: string[] }>;
+  } | null;
+  const raw = (b?.Errors ?? []).map((e) => ({
+    code: e.Code ?? '',
+    message: e.Message ?? '',
+    params: e.Params ?? [],
+  }));
+  for (const e of b?.errors ?? [])
+    raw.push({ code: e.code ?? '', message: e.message ?? '', params: e.params ?? [] });
+  const reasons = raw.map(({ code, message, params }) => {
+    const where = `${params.join(' ')} ${message}`.toLowerCase();
+    if (/customer|identification|cliente/.test(where))
+      return 'el cliente no existe en Siigo con ese NIT (créalo en Siigo o corrige el NIT)';
+    if (/items?\.?code|product|producto/.test(where))
+      return 'uno de los productos no existe en Siigo (cada línea tiene que tener un producto de Siigo)';
+    if (/payment|pago/.test(where))
+      return 'la forma de pago no sirve o su valor no coincide con el total de la factura';
+    if (/seller|vendedor/.test(where)) return 'falta el vendedor o no existe en Siigo';
+    if (/document|consecutive|numbering|resolution/.test(where))
+      return 'el tipo de documento de factura no está bien configurado en Siigo (revisa la resolución de facturación)';
+    if (/tax|impuesto/.test(where))
+      return 'un impuesto de la factura no existe o no aplica en Siigo';
+    if (/cost_center/.test(where)) return 'el tipo de documento exige centro de costo';
+    if (/date|fecha/.test(where)) return 'la fecha de la factura no es válida para Siigo';
+    if (code === 'already_exists') return 'Siigo dice que esa factura ya existe';
+    return message ? `Siigo dijo: «${message.slice(0, 200)}»` : `error ${code || status}`;
+  });
+  const unique = [...new Set(reasons)];
+  return new ProviderValidationError(
+    unique.length
+      ? `Siigo no aceptó la factura: ${unique.join('; ')}.`
+      : `Siigo no aceptó la factura (error ${status}) y no dijo por qué.`,
+    raw.map((r) => `${r.code}: ${r.message}`.slice(0, 300)),
+    status,
+  );
 }
 
 /** ¿Hay otra página después de ésta? */

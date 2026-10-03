@@ -96,6 +96,13 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
     input: { view: 'cartera', weekday: 5, hour: 17, minute: 0, notifyEmail: true },
   },
   { toolId: 'vehicles.register', input: { plate: 'ABC123' } },
+  // Cuentas por pagar (0181).
+  { toolId: 'payables.record', input: { number: 'FEPA-451', supplierName: 'Papelería El Cóndor' } },
+  { toolId: 'payables.approve', input: { invoices: ['FEPA-451'] } },
+  { toolId: 'payables.approve', input: { invoices: ['a', 'b', 'c'] } },
+  { toolId: 'payables.reject', input: { invoices: ['a', 'b'], reason: 'Doble cobro' } },
+  { toolId: 'payables.schedule', input: { invoices: ['a'] } },
+  { toolId: 'payables.schedule', input: { invoices: ['a', 'b'], date: '2026-10-14' } },
   {
     toolId: 'goals.set',
     input: { metricKey: 'receivables_days', cadence: 'month', targetValue: 45, label: 'Cartera' },
@@ -106,7 +113,40 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
     toolId: 'goals.set',
     input: { metricKey: 'commitments_on_time', cadence: 'week', targetValue: 95 },
   },
+  {
+    toolId: 'inventory.move',
+    input: { product: 'T-10', kind: 'entrada', qty: 50, unitCost: 300 },
+  },
+  { toolId: 'inventory.move', input: { product: 'T-10', kind: 'ajuste', countedQty: 42 } },
+  { toolId: 'purchasing.create_po', input: { fromSuggestions: true, approve: true } },
+  {
+    toolId: 'purchasing.create_po',
+    input: { supplier: 'Ferretería Central', lines: [{ product: 'T-10', qty: 200 }] },
+  },
+  {
+    toolId: 'purchasing.send_po',
+    input: {
+      purchaseOrderId: 'x',
+      label: 'OC-0007',
+      supplierName: 'Ferretería Central',
+      expectedTotal: 1_250_000,
+    },
+  },
+  { toolId: 'purchasing.receive', input: { purchaseOrderId: 'OC-0007' } },
   { toolId: 'slack.post_message', input: { channel: '#general', text: 'hola' } },
+  // Ventas (0182).
+  {
+    toolId: 'sales.quote_create',
+    input: { client: 'Nexa', lines: [{ description: 'Flete Bogotá–Cali', quantity: 10 }] },
+  },
+  { toolId: 'sales.quote_send', input: { quote: 'COT-12', to: ['compras@nexa.co'] } },
+  { toolId: 'sales.quote_send', input: { quote: 'COT-12' } },
+  { toolId: 'sales.invoice_emit', input: { document: 'PED-3', provider: 'siigo' } },
+  { toolId: 'sales.invoice_emit', input: { document: 'COT-12' } },
+  {
+    toolId: 'whatsapp.reply',
+    input: { conversationId: '00000000-0000-4000-8000-000000000001', text: 'Ya te reviso.' },
+  },
 ];
 
 describe('la frase que describe una llamada parada', () => {

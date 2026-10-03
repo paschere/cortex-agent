@@ -48,6 +48,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'primary',
     icon: 'Users',
   },
+  whatsapp: {
+    name: 'Atención por WhatsApp',
+    blurb:
+      'Los clientes que escribieron al número de la empresa: qué les contestó Cortex, de dónde salió cada dato, y responderles como persona dentro de su conversación.',
+    tone: 'emerald',
+    icon: 'MessagesSquare',
+  },
   clients: {
     name: 'Clientes',
     blurb:
@@ -68,8 +75,9 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     icon: 'TrendingUp',
   },
   sales: {
-    name: 'Propuestas',
-    blurb: 'Redacción de propuestas para cliente, apoyada en el CRM y en el cerebro.',
+    name: 'Ventas',
+    blurb:
+      'Propuestas, cotizaciones con IVA y retenciones, pedidos y la factura electrónica: el cliente acepta la cotización desde un enlace con la marca de la empresa y la factura sale por Siigo o Alegra, que la sellan ante la DIAN, siempre con la aprobación de una persona.',
     tone: 'amber',
     icon: 'Handshake',
   },
@@ -87,6 +95,27 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'emerald',
     icon: 'Coins',
   },
+  payables: {
+    name: 'Cuentas por pagar',
+    blurb:
+      'Las facturas de los proveedores desde que llegan —el ZIP de la factura electrónica en el correo, un PDF en la Bandeja, una compra en Siigo, Alegra o QuickBooks, o dictada en el chat— hasta que el banco las paga: revisión sola (doble cobro, NIT equivocado, precio que subió, retención que falta, orden de compra), aprobación, día de pago sugerido contra la caja mínima y el programa de pagos de la semana. Cortex nunca paga: aprueba, programa y se entera por el extracto.',
+    tone: 'emerald',
+    icon: 'Coins',
+  },
+  inventory: {
+    name: 'Inventario',
+    blurb:
+      'Las existencias de cada producto por bodega, sumadas de un libro de entradas, salidas, ajustes y traslados —cada una con su referencia—, el costo promedio ponderado, lo que se consume por día y lo que está bajo el mínimo. Llegan del programa contable (Siigo, Alegra o QuickBooks, con existencias cuando lo dan) o de una hoja, y el conteo físico ajusta la diferencia.',
+    tone: 'amber',
+    icon: 'Boxes',
+  },
+  purchasing: {
+    name: 'Compras',
+    blurb:
+      'De «esto está bajo el mínimo» a la mercancía en bodega: órdenes de compra por proveedor con la cantidad que cubre los días de entrega, aprobación en la cola de siempre, el PDF con la marca de la empresa al correo del proveedor, la recepción total o en parte, y la factura del proveedor atada a su orden. Lo aprobado entra a la proyección de caja como compra comprometida.',
+    tone: 'amber',
+    icon: 'Receipt',
+  },
   accounting: {
     name: 'Programas contables',
     blurb:
@@ -97,7 +126,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   documents: {
     name: 'Documentos leídos',
     blurb:
-      'Facturas, guías, declaraciones de aduana, certificados de origen, contratos, pólizas y comprobantes de pago leídos a campos que se pueden sumar, sin perder las palabras de donde salió cada dato. Nada entra en una cifra hasta que una persona lo confirma.',
+      'Facturas, guías, declaraciones de aduana, certificados de origen, contratos, pólizas y comprobantes de pago leídos a campos que se pueden sumar, sin perder las palabras de donde salió cada dato; y los papeles que vencen (SOAT, tecnomecánica, pólizas, licencias, permisos, habilitaciones, contratos) con su fecha, su cita y quién los renueva. Nada entra en una cifra ni se vigila hasta que una persona lo confirma.',
     tone: 'amber',
     icon: 'Receipt',
   },
@@ -172,6 +201,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
       'Lo que Cortex hace solo cada mañana: arma el plan del día de la empresa, hace lo rutinario que tiene permitido (atar pagos que casan sin duda, categorizar el libro, reintentar sincronizaciones, recordar vencimientos) y deja la lista corta de lo que necesita tu decisión. Nunca mueve plata.',
     tone: 'primary',
     icon: 'Workflow',
+  },
+  tax: {
+    name: 'Impuestos',
+    blurb:
+      'El calendario tributario de la empresa sacado del NIT y del RUT —renta, IVA, retención, exógena, Régimen Simple, ICA, PILA, nómina electrónica y Cámara de Comercio— con avisos al contador y la evidencia de lo presentado o pagado. Cortex no presenta ni paga ante la DIAN.',
+    tone: 'amber',
+    icon: 'Receipt',
   },
   work: {
     name: 'Registro de trabajo',
@@ -548,6 +584,14 @@ const FAMILY_GROUP: Record<string, string> = {
   payments: 'billing',
   accounting: 'billing',
   ledger: 'billing',
+  payables: 'billing',
+  // Con la plata: una orden de compra es un «por pagar» que todavía no llega,
+  // y el inventario es plata quieta en la bodega.
+  inventory: 'billing',
+  purchasing: 'billing',
+  // Con la plata: un impuesto es una fecha y un pago, y quien pregunta por la
+  // retención es quien pregunta por la caja.
+  tax: 'billing',
   // Con los pagos y no con «Documentos y memoria»: lo que lee este módulo no es
   // documentación, son cifras con un papel detrás. La cartera se calcula
   // restándole los pagos a las facturas que salieron de aquí, así que separar
@@ -557,6 +601,8 @@ const FAMILY_GROUP: Record<string, string> = {
   actions: 'comms',
   outlook: 'comms',
   slack: 'comms',
+  // Con la comunicación: es contestarle a un cliente que escribió.
+  whatsapp: 'comms',
   chat: 'comms',
   people: 'comms',
   gcal: 'agenda',

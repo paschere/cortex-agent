@@ -7,8 +7,9 @@ import { readFinanceSources } from '@/lib/finance/sources';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { workspaceHref } from '@/lib/workspace-context';
-import { bogotaToday } from '@cortex/agent-tools';
-import { ChevronDown, FileSearch } from 'lucide-react';
+import { bogotaToday, listTaxObligations, spanishDay } from '@cortex/agent-tools';
+import { ArrowRight, ChevronDown, FileSearch, Landmark } from 'lucide-react';
+import Link from 'next/link';
 import { SourceClassification } from './SourceClassification';
 import {
   decideRecurringAction,
@@ -84,6 +85,15 @@ export default async function FinancePage({
     })),
   };
   const unclassified = sources.summary.unclassified;
+  // El próximo impuesto (calendario tributario, 0180): una línea que lleva a
+  // /impuestos. Si la lectura falla, la línea simplemente no sale.
+  const nextTax = await listTaxObligations(db, {
+    from: bogotaToday(),
+    statuses: ['pendiente'],
+    limit: 1,
+  })
+    .then((rows) => rows[0] ?? null)
+    .catch(() => null);
 
   const links: FinanceLinks = {
     self: href('/finance'),
@@ -106,48 +116,69 @@ export default async function FinancePage({
         saveMinimumCash: saveMinimumCashAction,
       }}
       documents={
-        <details
-          id="documentos"
-          className="group scroll-mt-6 rounded-card border border-border bg-surface shadow-card"
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6 [&::-webkit-details-marker]:hidden">
-            <span className="flex items-center gap-3">
-              <span className="grid h-9 w-9 place-items-center rounded-sm bg-primary-soft text-primary">
-                <FileSearch className="h-4 w-4" aria-hidden />
+        <>
+          <Link
+            href={href('/impuestos')}
+            className="flex items-center justify-between gap-3 rounded-card border border-border bg-surface px-5 py-4 shadow-card transition-colors hover:bg-surface-2 sm:px-6"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary">
+                <Landmark className="h-4 w-4" aria-hidden />
               </span>
-              <span>
-                <span className="block text-lg font-extrabold text-ink">
-                  Documentos por clasificar
-                </span>
-                <span className="block text-xs text-ink-muted">
-                  Facturas y documentos leídos: decide cuáles cuentan como por cobrar o por pagar.
+              <span className="min-w-0">
+                <span className="block text-lg font-extrabold text-ink">Impuestos</span>
+                <span className="block truncate text-xs text-ink-muted">
+                  {nextTax
+                    ? `Lo próximo: ${nextTax.title}, el ${spanishDay(nextTax.dueDate)}${nextTax.needsConfirmation ? ' (confirma con tu contador)' : ''}.`
+                    : 'El calendario tributario de la empresa: renta, IVA, retención, ICA y PILA, con avisos.'}
                 </span>
               </span>
             </span>
-            <span className="flex items-center gap-2">
-              {unclassified > 0 && (
-                <span className={statusPill('amber')}>
-                  {unclassified} {unclassified === 1 ? 'pendiente' : 'pendientes'}
+            <ArrowRight className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+          </Link>
+          <details
+            id="documentos"
+            className="group scroll-mt-6 rounded-card border border-border bg-surface shadow-card"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6 [&::-webkit-details-marker]:hidden">
+              <span className="flex items-center gap-3">
+                <span className="grid h-9 w-9 place-items-center rounded-sm bg-primary-soft text-primary">
+                  <FileSearch className="h-4 w-4" aria-hidden />
                 </span>
-              )}
-              <ChevronDown
-                className="h-4 w-4 text-ink-faint transition-transform group-open:rotate-180"
-                aria-hidden
+                <span>
+                  <span className="block text-lg font-extrabold text-ink">
+                    Documentos por clasificar
+                  </span>
+                  <span className="block text-xs text-ink-muted">
+                    Facturas y documentos leídos: decide cuáles cuentan como por cobrar o por pagar.
+                  </span>
+                </span>
+              </span>
+              <span className="flex items-center gap-2">
+                {unclassified > 0 && (
+                  <span className={statusPill('amber')}>
+                    {unclassified} {unclassified === 1 ? 'pendiente' : 'pendientes'}
+                  </span>
+                )}
+                <ChevronDown
+                  className="h-4 w-4 text-ink-faint transition-transform group-open:rotate-180"
+                  aria-hidden
+                />
+              </span>
+            </summary>
+            <div className="border-t border-border px-5 py-5 sm:px-6">
+              <SourceClassification
+                key={user.organization.id}
+                initial={sources}
+                apiHref={href('/api/finance/sources')}
+                extractionHref={href(
+                  `/chat?prompt=${encodeURIComponent('Revisa los documentos de esta empresa que ya están en Conocimiento, extrae los datos de factura con su cita y muéstrame cuáles quedan listos para clasificar en Finanzas.')}`,
+                )}
+                error={sourceRead.error}
               />
-            </span>
-          </summary>
-          <div className="border-t border-border px-5 py-5 sm:px-6">
-            <SourceClassification
-              key={user.organization.id}
-              initial={sources}
-              apiHref={href('/api/finance/sources')}
-              extractionHref={href(
-                `/chat?prompt=${encodeURIComponent('Revisa los documentos de esta empresa que ya están en Conocimiento, extrae los datos de factura con su cita y muéstrame cuáles quedan listos para clasificar en Finanzas.')}`,
-              )}
-              error={sourceRead.error}
-            />
-          </div>
-        </details>
+            </div>
+          </details>
+        </>
       }
     />
   );

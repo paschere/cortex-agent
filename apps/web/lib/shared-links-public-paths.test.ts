@@ -23,5 +23,10 @@ describe('los enlaces compartidos abren sin sesión', () => {
     expect(block).toContain("'/api/views/public'");
     // Sólo la subcarpeta pública: el resto de /api/views es del equipo.
     expect(block).not.toContain("'/api/views'");
+    // Cotizaciones (0182): la página y su subcarpeta pública, nada más.
+    expect(block).toContain("'/cotizacion'");
+    expect(block).toContain("'/api/sales/public'");
+    expect(block).not.toContain("'/api/sales'");
+    expect(block).not.toContain("'/ventas'");
   });
 });

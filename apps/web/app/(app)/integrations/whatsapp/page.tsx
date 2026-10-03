@@ -1,6 +1,6 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
-import { ArrowLeft, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Headset, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import { WhatsappConsole } from './_components/WhatsappConsole';
 
@@ -43,6 +43,15 @@ export default async function WhatsappPage() {
         title="WhatsApp"
         subtitle="Conecta el número de la empresa, decide de quién es cada teléfono que le escribe y qué grupos entran a Brain Knowledge."
         icon={<MessageCircle className="h-5 w-5" />}
+        actions={
+          <Link
+            href="/integrations/whatsapp/atencion"
+            className="inline-flex min-h-10 items-center gap-2 rounded-pill border border-border-strong bg-surface px-5 py-2 text-sm font-bold text-ink transition-colors duration-150 hover:text-primary"
+          >
+            <Headset className="h-4 w-4" />
+            Atención a clientes
+          </Link>
+        }
       />
       <WhatsappConsole isAdmin={user.role === 'org_admin'} />
     </>

@@ -97,7 +97,7 @@ export const SOURCES: SourceOption[] = [
 
 export type ProcessTemplate = {
   id: string;
-  area: 'Plata' | 'Ventas y clientes' | 'Operación' | 'Equipo';
+  area: 'Plata' | 'Ventas y clientes' | 'Operación' | 'Equipo' | 'Impuestos';
   title: string;
   body: string;
   needs: string;
@@ -125,6 +125,17 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
     prompt:
       'Quiero hacer seguimiento de mis envíos: arma una tabla con cada envío, consulta su estado en la fuente externa que corresponda y avísame cuando cambie. Pregúntame de dónde salen los envíos y qué servicio consultar.',
   },
+  // Documentos que vencen (0184): lo que ya está en el Cerebro, leído con su
+  // cita; nada se vigila hasta que alguien confirma la fecha.
+  {
+    id: 'document_expirations',
+    area: 'Operación',
+    title: 'Documentos que vencen',
+    body: 'SOAT, tecnomecánica, pólizas, licencias, permisos y contratos: Cortex les lee la fecha, le avisa a quien los renueva con tiempo y cierra el aviso cuando llega el documento renovado.',
+    needs: 'Los documentos en el Cerebro (subidos, de Drive o del correo)',
+    prompt:
+      'Quiero que me avises antes de que se venzan los documentos de la empresa: SOAT y tecnomecánica de los vehículos, pólizas, licencias, permisos, habilitaciones, certificados y contratos. Dime cuáles ya tengo vigilados y cuáles leíste de mis documentos y esperan que confirme la fecha, con la frase de donde salió cada una, y pregúntame quién responde por cada tipo. Si todavía no has revisado lo que ya está en el Cerebro, mándame a Documentos que vencen para buscarlo (lo hago por tandas); si falta algún papel, dime cómo subirlo o regístralo cuando te dé la fecha.',
+  },
   {
     id: 'pipeline',
     area: 'Ventas y clientes',
@@ -135,13 +146,22 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
       'Arma un tablero de oportunidades por etapas con lo que encuentres en mi correo, y avísame cuando lleve más de una semana sin escribirle a un cliente que está en negociación.',
   },
   {
+    id: 'quote_to_invoice',
+    area: 'Ventas y clientes',
+    title: 'Cotizar y facturar',
+    body: 'Cotizaciones con tu marca e IVA bien calculado; el cliente las acepta desde un enlace y la factura electrónica sale por Siigo o Alegra con tu aprobación.',
+    needs: 'Siigo o Alegra conectado para la factura electrónica (la cotización no lo necesita)',
+    prompt:
+      'Quiero cotizar y facturar desde Cortex: hazme la primera cotización (te digo el cliente, qué le vendo, cantidades y precios antes de IVA), y cuando la apruebe mándasela al cliente por correo con el enlace para aceptarla. Cuando la acepte, avísame y prepárame la factura electrónica en mi programa contable para que yo la apruebe. Si no tengo Siigo o Alegra conectado, dime cómo conectarlo.',
+  },
+  {
     id: 'inventory',
     area: 'Operación',
     title: 'Inventario con alertas',
-    body: 'Avisa cuando algo baja del mínimo y prepara la orden de compra para que la apruebes.',
-    needs: 'Hoja de inventario',
+    body: 'Existencias por bodega con costo promedio; cada mañana te dice qué bajó del mínimo y deja las órdenes de compra por proveedor listas para aprobar y enviar.',
+    needs: 'Programa contable (Siigo, Alegra o QuickBooks) o una hoja de inventario',
     prompt:
-      'Quiero alertas de inventario: toma mi hoja de inventario, avísame cuando un producto baje de su mínimo y prepárame la orden de compra para aprobarla. Pregúntame dónde está la hoja.',
+      'Quiero alertas de inventario: dime qué productos están bajo el mínimo y qué tengo que comprar (usa el inventario de Cortex en /inventario; si está vacío, dime si lo traigo del programa contable conectado o de mi hoja de inventario, y qué columnas necesita: código, nombre, existencias, mínimo, cantidad a pedir, costo, proveedor y días de entrega). Prepárame las órdenes de compra por proveedor para aprobarlas, y que el piloto automático me las deje listas cada mañana.',
   },
   {
     id: 'requests',
@@ -178,6 +198,55 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
     needs: 'El trabajo del equipo conectado (Gerencia, compromisos o una tabla con responsable)',
     prompt:
       'Quiero hacerle seguimiento al trabajo de mi equipo: programa un resumen cada lunes a las 7 a. m. con cómo nos fue la semana anterior (lo cerrado, lo vencido, lo que mejoró, lo que pide atención y lo que no tiene responsable), sin rankings ni notas por persona. Y avísame cuando alguien tenga mucha más carga que el resto, se le acumulen vencidos o se acumule trabajo sin responsable, con la sugerencia de a quién pasarle qué. Si el trabajo del equipo todavía no está conectado, dime qué tablas sirven y cómo conectarlas antes de cambiar nada.',
+  },
+  // Impuestos (0180). Los cuatro de la DIAN pasan por un trámite del
+  // navegador que la persona enseña una vez: Cortex nunca escribe la clave, el
+  // CAPTCHA, el código del celular ni la firma, y lo que escribe en el portal
+  // pide aprobación cada vez (`browser.submit_flow`).
+  {
+    id: 'tax_calendar',
+    area: 'Impuestos',
+    title: 'Calendario de impuestos que avisa solo',
+    body: 'Con el NIT y el RUT, Cortex arma las fechas del año (renta, IVA, retención, exógena, ICA, PILA) y le avisa al contador antes de cada una.',
+    needs: 'El NIT y el RUT (si está en el Cerebro, lo leo)',
+    prompt:
+      'Arma el calendario tributario de la empresa: lee el RUT si está en el Cerebro (si no, pregúntame el NIT y las casillas que necesitas: tipo de persona, gran contribuyente, Régimen Simple, IVA bimestral o cuatrimestral, agente de retención, ciudad del ICA, exógena, nómina electrónica y PILA), pregúntame quién es el contador y con cuántos días de anticipación avisarle, y propónme el perfil para que lo confirme.',
+  },
+  {
+    id: 'dian_invoices',
+    area: 'Impuestos',
+    title: 'Descargar facturas recibidas de la DIAN cada semana',
+    body: 'Cada lunes trae del portal de la DIAN las facturas electrónicas que te emitieron y las deja en el Cerebro, listas para cuadrar con el IVA.',
+    needs: 'Acceso al portal de la DIAN; enseñar el trámite una vez',
+    prompt:
+      'Quiero que cada lunes descargues del portal de la DIAN las facturas electrónicas recibidas de la semana anterior y las guardes en el Cerebro. La primera vez, enséñame el trámite en el navegador de Cortex (Trámites web) con el perfil de la empresa y apruébalo; el inicio de sesión, el CAPTCHA, el código que llega al celular y la firma electrónica los haces tú en la pestaña en vivo, yo nunca los escribo. Después programa la rutina semanal y avísame qué facturas nuevas llegaron.',
+  },
+  {
+    id: 'dian_mailbox',
+    area: 'Impuestos',
+    title: 'Revisar el buzón de la DIAN',
+    body: 'Mira el buzón de notificaciones de la DIAN y te avisa si llegó un requerimiento, un emplazamiento o algo con plazo.',
+    needs: 'Acceso al portal de la DIAN; enseñar el trámite una vez',
+    prompt:
+      'Revisa cada semana el buzón de notificaciones de la DIAN de la empresa y avísame si hay algo nuevo, con su plazo si lo tiene; si trae una fecha, propónmela como vencimiento. La primera vez, enséñame el trámite en el navegador de Cortex (Trámites web) con el perfil de la empresa y apruébalo; el inicio de sesión, el CAPTCHA, el código que llega al celular y la firma electrónica los haces tú en la pestaña en vivo, yo nunca los escribo. Sólo lees: no respondas nada en el portal sin que yo lo apruebe.',
+  },
+  {
+    id: 'dian_rut',
+    area: 'Impuestos',
+    title: 'Sacar el RUT actualizado',
+    body: 'Descarga la copia del RUT del portal de la DIAN, la guarda en el Cerebro y revisa si el perfil tributario sigue cuadrando.',
+    needs: 'Acceso al portal de la DIAN; enseñar el trámite una vez',
+    prompt:
+      'Descarga del portal de la DIAN la copia actualizada del RUT de la empresa y guárdala en el Cerebro. La primera vez, enséñame el trámite en el navegador de Cortex (Trámites web) con el perfil de la empresa y apruébalo; el inicio de sesión, el CAPTCHA, el código que llega al celular y la firma electrónica los haces tú en la pestaña en vivo, yo nunca los escribo. Luego léelo y dime si el perfil tributario de Impuestos sigue cuadrando (responsabilidades, régimen, actividad); si algo cambió, propónme el cambio.',
+  },
+  {
+    id: 'dian_account',
+    area: 'Impuestos',
+    title: 'Consultar el estado de cuenta en la DIAN',
+    body: 'Cada mes consulta las obligaciones pendientes y saldos a favor en la DIAN y te dice si algo no cuadra con lo marcado como pagado.',
+    needs: 'Acceso al portal de la DIAN; enseñar el trámite una vez',
+    prompt:
+      'Cada mes consulta el estado de cuenta de la empresa en el portal de la DIAN y compáralo con lo que está marcado como pagado en Impuestos; avísame si aparece una deuda, un saldo a favor o algo que no cuadre. La primera vez, enséñame el trámite en el navegador de Cortex (Trámites web) con el perfil de la empresa y apruébalo; el inicio de sesión, el CAPTCHA, el código que llega al celular y la firma electrónica los haces tú en la pestaña en vivo, yo nunca los escribo. Sólo consultas: nada de pagos ni solicitudes en el portal.',
   },
   {
     id: 'morning',

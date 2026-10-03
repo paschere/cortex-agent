@@ -85,6 +85,10 @@ export * from './clients';
 // matched against the client list, and after ./kb because the text it reads and
 // the visibility rule it obeys both live there.
 export * from './documents';
+// Documentos que vencen (migración 0184): SOAT, pólizas, licencias, permisos,
+// contratos, leídos con su cita y vigilados como vencimientos. Después de
+// ./documents (reusa su puerta de citas) y de ./commitments (vigila con él).
+export * from './doc-expirations';
 // Lo que de verdad entró, dicho por varias fuentes que no siempre coinciden
 // (migración 0098). Va después de ./documents porque la cartera se calcula
 // restando pagos a facturas confirmadas, y porque un comprobante de pago es un
@@ -143,6 +147,9 @@ export * from './accounting';
 // llenado desde el programa contable, los extractos, los pagos, los documentos
 // y el chat. Va después de ./payments y ./accounting, que son sus fuentes.
 export * from './ledger';
+// Ventas (migración 0182): cotizaciones → pedidos → facturas electrónicas por
+// Siigo o Alegra. Va después de ./accounting, por cuya sesión emite.
+export * from './sales';
 // La proyección de caja trae sus propias ayudas de fechas y de texto con nombres
 // genéricos. En la raíz del paquete mandan las que ya estaban (compromisos y
 // reportes), con el mismo significado; las del libro se usan desde adentro.
@@ -158,8 +165,9 @@ export { mondayOf } from './reports';
 export * from './errands';
 export * from './pipeline';
 export * from './meetings';
-// Library only — no tools are registered here. WhatsApp is a surface Cortex
-// listens on, not a system it calls. See ./whatsapp/index.ts.
+// WhatsApp is a surface Cortex listens on, not a system it calls. The only
+// tools here are the customer-service pair (0185): read the conversations, and
+// reply as a person inside one the client opened. See ./whatsapp/index.ts.
 export * from './whatsapp';
 export * from './cortex';
 export * from './memory';
@@ -253,3 +261,22 @@ export * from './autopilot';
 // de vencidos y el libro de recomendaciones con lo que pasó después. Al final:
 // lee del trabajo, Gerencia, compromisos, acciones y el libro de plata.
 export * from './follow-through';
+
+// El calendario tributario (migración 0180): el perfil tributario, el motor
+// puro de fechas DIAN/ICA/PILA, la sincronización con los vencimientos y
+// `tax.calendar`, `tax.configure`, `tax.mark`. Lee de ./commitments y
+// ./directory por módulo directo.
+export * from './tax';
+
+// Cuentas por pagar (migración 0181): facturas de proveedor del correo (DIAN
+// UBL), la Bandeja y el programa contable; revisión, aprobación, programación
+// contra la caja y `payables.*`. Lee de ./ledger, ./clients y ./directory por
+// módulo directo.
+export * from './payables';
+
+// Inventario y compras (migración 0183): catálogo, libro de existencias con
+// costo promedio, reposición y órdenes de compra hasta la factura del
+// proveedor. Lee de ./accounting, ./ledger, ./payables (proveedores) y
+// ./directory por módulo directo; expone `listProducts` (cotizaciones, 0182) y
+// `listOpenPurchaseOrders`/`markPurchaseOrderInvoiced` (cuentas por pagar, 0181).
+export * from './inventory';

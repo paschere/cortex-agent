@@ -180,6 +180,7 @@ const TOOL_NOUN: Record<string, [string, string]> = {
   'trackers.upsert_row': ['fila de tabla', 'filas de tabla'],
   'work.assign': ['reasignación', 'reasignaciones'],
   'payments.register': ['pago por registrar', 'pagos por registrar'],
+  'payables.approve': ['factura de proveedor por aprobar', 'facturas de proveedor por aprobar'],
 };
 
 /** «6 cobros de cartera», «2 correos», «3 acciones parecidas». */
@@ -201,6 +202,6 @@ export function batchApproveLabel(
   // El género lo pone el sustantivo: cobros, correos, recordatorios → los;
   // respuestas, filas, reasignaciones, acciones → las.
   const plural = noun?.[1] ?? 'acciones';
-  const feminine = /^(respuestas|filas|reasignaciones|acciones)/.test(plural);
+  const feminine = /^(respuestas|filas|reasignaciones|acciones|facturas)/.test(plural);
   return `Aprobar ${feminine ? 'las' : 'los'} ${n}`;
 }

@@ -263,6 +263,30 @@ export async function loadClientList(
   return { rows, pending: or(pending) ?? 0, missing };
 }
 
+/**
+ * Sólo las facturas de UN cliente, con las reglas de la cartera (0185: lo que
+ * la atención por WhatsApp le dice a ese cliente). LANZA si alguna lectura
+ * falla: «no debe nada» y «no pude leer» no se pueden confundir.
+ */
+export async function loadClientInvoices(
+  db: SupabaseClient,
+  clientId: string,
+  opts: { today?: string } = {},
+): Promise<ClientInvoice[]> {
+  const today = opts.today ?? bogotaToday();
+  const [acc, docs, pays] = await Promise.all([
+    readAccountingInvoices(db, { clientId, since: '1900-01-01' }),
+    readDocumentInvoices(db, { clientId }),
+    readPayments(db, { clientId }),
+  ]);
+  return (
+    invoicesByClient(
+      { accountingInvoices: acc, documentInvoices: docs, payments: pays },
+      today,
+    ).get(clientId) ?? []
+  ).filter((inv) => inv.balance >= 0);
+}
+
 function isoDaysBefore(today: string, days: number): string {
   const t = Date.parse(`${today}T00:00:00Z`) - days * 86_400_000;
   return new Date(t).toISOString().slice(0, 10);
@@ -485,7 +509,7 @@ export async function loadClient360(
   const linkIds = (kind: string) =>
     linkRows.filter((l) => l.entity_kind === kind && l.entity_id).map((l) => l.entity_id as string);
 
-  const [cases, work, emails, actions, notes, whatsapp] = await Promise.all([
+  const [cases, work, emails, actions, notes, whatsapp, waCustomer] = await Promise.all([
     settle(() => readCases(db, linkIds('case'), invoices), 'casos'),
     settle(
       () =>
@@ -528,6 +552,8 @@ export async function loadClient360(
       }>;
     }, 'notas'),
     settle(() => readWhatsapp(db, linkIds('whatsapp_group')), 'WhatsApp'),
+    // 0185: las conversaciones de atención por WhatsApp de este cliente.
+    settle(() => readCustomerConversations(db, clientId), 'atención por WhatsApp'),
   ]);
 
   // --- La línea de tiempo ---------------------------------------------------
@@ -651,6 +677,18 @@ export async function loadClient360(
     }
     for (const n of or(notes) ?? []) {
       items.push({ id: `note:${n.id}`, kind: 'note', at: n.created_at, title: n.body, by: null });
+    }
+    for (const w of or(waCustomer) ?? []) {
+      items.push({
+        id: `wac:${w.id}`,
+        kind: 'whatsapp',
+        at: w.last_message_at,
+        title: `Atención por WhatsApp${w.status === 'escalada' ? ' · con una persona' : w.status === 'cerrada' ? ' · cerrada' : ''}`,
+        detail: w.preview,
+        by: w.push_name,
+        href: `/integrations/whatsapp/atencion?c=${w.id}`,
+        tone: w.status === 'escalada' ? 'amber' : 'neutral',
+      });
     }
     return sortTimeline(items).slice(0, 400);
   }, 'No pude armar la línea de tiempo.');
@@ -875,6 +913,53 @@ async function readEmails(
 }
 
 /** Lo último que se dijo en sus grupos de WhatsApp vinculados. */
+/** 0185: las conversaciones de atención de este cliente, con su último mensaje. */
+async function readCustomerConversations(
+  db: SupabaseClient,
+  clientId: string,
+): Promise<
+  Array<{
+    id: string;
+    status: string;
+    push_name: string | null;
+    last_message_at: string;
+    preview: string | null;
+  }>
+> {
+  const { data, error } = await db
+    .from('wa_customer_conversations')
+    .select('id, status, push_name, last_message_at')
+    .eq('client_id', clientId)
+    .order('last_message_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{
+    id: string;
+    status: string;
+    push_name: string | null;
+    last_message_at: string;
+  }>;
+  if (rows.length === 0) return [];
+  const { data: msgs, error: msgError } = await db
+    .from('wa_customer_messages')
+    .select('conversation_id, body, created_at')
+    .in(
+      'conversation_id',
+      rows.map((r) => r.id),
+    )
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (msgError) throw msgError;
+  const last = new Map<string, string>();
+  for (const m of (msgs ?? []) as Array<{ conversation_id: string; body: string }>) {
+    if (!last.has(m.conversation_id)) last.set(m.conversation_id, m.body);
+  }
+  return rows.map((r) => {
+    const body = last.get(r.id) ?? null;
+    return { ...r, preview: body && body.length > 160 ? `${body.slice(0, 157)}…` : body };
+  });
+}
+
 async function readWhatsapp(
   db: SupabaseClient,
   groupIds: string[],

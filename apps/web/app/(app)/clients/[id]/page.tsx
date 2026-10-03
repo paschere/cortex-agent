@@ -1,4 +1,6 @@
 import { Client360 } from '@/components/clients/Client360';
+import { SubjectExpirations } from '@/components/doc-expirations/SubjectExpirations';
+import { ClientSalesCard } from '@/components/sales/ClientSalesCard';
 import {
   APPLYING_METHODS,
   type ClientStatus,
@@ -10,9 +12,17 @@ import {
 } from '@/lib/clients-shape';
 import { loadTeam } from '@/lib/clients/read';
 import { client360View } from '@/lib/clients/view360';
+import { clientSalesSummary } from '@/lib/sales/view';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { bogotaToday, listLinks, loadClient360 } from '@cortex/agent-tools';
+import {
+  adaptExpiration,
+  bogotaToday,
+  listExpirations,
+  listLinks,
+  listSalesDocuments,
+  loadClient360,
+} from '@cortex/agent-tools';
 import { notFound } from 'next/navigation';
 import { ClientAside } from '../_components/ClientAside';
 import { dayOf, stamp } from '../_components/format';
@@ -48,10 +58,17 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const db = getOrgScopedClient(user.organization.id);
   const today = bogotaToday();
 
-  const [hub, team, proposalRows] = await Promise.all([
+  const [hub, team, proposalRows, expiring, sales] = await Promise.all([
     loadClient360(db, id, { today }),
     loadTeam(db).catch(() => []),
     listLinks(db, { clientId: id, state: 'suggested', limit: 100 }).catch(() => []),
+    // Sus documentos que vencen (0184). Si falla, el panel dice «sin dato».
+    listExpirations(db, { clientId: id, includeClosed: false, limit: 50 }).then(
+      (rows) => ({ rows, error: null as string | null }),
+      () => ({ rows: [], error: 'No pude leer sus documentos que vencen.' }),
+    ),
+    // Sus cotizaciones, pedidos y facturas de Cortex (0182). Si falla, «sin dato».
+    listSalesDocuments(db, { clientId: id, limit: 50 }).catch(() => null),
   ]);
   if (!hub) notFound();
 
@@ -98,6 +115,31 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       view={view}
       team={team}
       today={today}
+      sales={
+        <ClientSalesCard
+          clientId={hub.client.id}
+          summary={clientSalesSummary(sales, today, 'No pude leer sus cotizaciones y pedidos.')}
+        />
+      }
+      expiring={
+        <SubjectExpirations
+          error={expiring.error}
+          href={`/documentos-vencen?sujeto=${encodeURIComponent(hub.client.name)}`}
+          items={expiring.rows.map((r) => {
+            const e = adaptExpiration(r, today);
+            return {
+              id: e.id,
+              title: e.title,
+              kindLabel: e.kindLabel,
+              expiresOn: e.expiresOn,
+              when: e.when,
+              status: e.status,
+              statusLabel: e.statusLabel,
+              needsReview: e.needsReview,
+            };
+          })}
+        />
+      }
       handlers={{
         addNote: addClientNote,
         createCommitment: createClientCommitment,

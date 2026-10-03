@@ -61,6 +61,11 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   // que la fila de auditoría de un turno no diga `ask_choice`.
   ask_choice: { label: 'Preguntarte', icon: 'HelpCircle' },
   sales_draft_proposal: { label: 'Redactar propuesta', icon: 'FileText' },
+  // Ventas (0182).
+  sales_quote_create: { label: 'Crear una cotización', icon: 'FilePlus2' },
+  sales_quote_send: { label: 'Mandar la cotización al cliente', icon: 'Send' },
+  sales_invoice_emit: { label: 'Emitir la factura electrónica', icon: 'Receipt' },
+  sales_list: { label: 'Ver cotizaciones, pedidos y facturas', icon: 'ClipboardList' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },
   management_brief: { label: 'Revisar la gerencia de la empresa', icon: 'Briefcase' },
@@ -205,6 +210,12 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
 
   // Mensajería de equipo.
   slack_post_message: { label: 'Publicar en un canal de Slack', icon: 'Hash' },
+  // Atención a clientes por WhatsApp (0185).
+  whatsapp_customer_conversations: {
+    label: 'Ver las conversaciones de atención por WhatsApp',
+    icon: 'MessagesSquare',
+  },
+  whatsapp_reply: { label: 'Responder a un cliente por WhatsApp', icon: 'MessageCircle' },
   chat_send_message: { label: 'Publicar en Google Chat', icon: 'MessageSquare' },
   chat_send_dm: { label: 'Mandar un privado por Google Chat', icon: 'MessageCircle' },
 
@@ -253,6 +264,13 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   documents_pending_review: { label: 'Ver los documentos por confirmar', icon: 'FileClock' },
   documents_confirm: { label: 'Confirmar lo que se leyó del documento', icon: 'FileCheck' },
   documents_reject: { label: 'Descartar la lectura del documento', icon: 'FileX' },
+  // Documentos que vencen (0184): leer no es vigilar, y confirmar sí.
+  documents_expiring: { label: 'Ver los documentos que vencen', icon: 'CalendarClock' },
+  documents_track_expiration: { label: 'Registrar un documento que vence', icon: 'CalendarPlus' },
+  documents_confirm_expiration: {
+    label: 'Confirmar el vencimiento leído del documento',
+    icon: 'CalendarCheck',
+  },
   documents_correction_stats: {
     label: 'Ver qué campos siempre hay que corregir',
     icon: 'FileWarning',
@@ -298,11 +316,35 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   ledger_set_minimum_cash: { label: 'Fijar la caja mínima de la empresa', icon: 'ShieldAlert' },
   ledger_categorize_pending: { label: 'Ponerle categoría a lo que no tiene', icon: 'Tags' },
 
+  // Cuentas por pagar (0181): facturas de proveedor, aprobación y programa de pagos.
+  payables_inbox: { label: 'Ver las facturas de proveedor por pagar', icon: 'Inbox' },
+  payables_pay_plan: { label: 'Ver el programa de pagos a proveedores', icon: 'CalendarClock' },
+  payables_record: { label: 'Anotar una factura de proveedor', icon: 'FilePlus2' },
+  payables_approve: { label: 'Aprobar facturas de proveedor', icon: 'BadgeCheck' },
+  payables_reject: { label: 'Rechazar facturas de proveedor', icon: 'FileX2' },
+  payables_schedule: { label: 'Programar el pago a proveedores', icon: 'CalendarCheck' },
+
   // El piloto automático (0176): lo que Cortex hace solo cada mañana.
   autopilot_plan: { label: 'Ver lo que haría el piloto hoy', icon: 'Plane' },
   autopilot_status: { label: 'Ver lo que hizo el piloto', icon: 'History' },
   autopilot_configure: { label: 'Configurar el piloto automático', icon: 'Settings' },
   autopilot_remind: { label: 'Recordarle algo a un compañero', icon: 'BellRing' },
+
+  // Inventario y compras (0183): existencias, reposición y órdenes de compra.
+  inventory_stock: { label: 'Ver el inventario', icon: 'Package' },
+  inventory_move: { label: 'Registrar un movimiento de inventario', icon: 'ArrowLeftRight' },
+  inventory_reorder: { label: 'Ver qué hay que pedir', icon: 'ClipboardList' },
+  purchasing_create_po: { label: 'Crear órdenes de compra', icon: 'ShoppingCart' },
+  purchasing_send_po: { label: 'Aprobar y enviar una orden de compra', icon: 'Send' },
+  purchasing_receive: {
+    label: 'Recibir la mercancía de una orden de compra',
+    icon: 'PackageCheck',
+  },
+
+  // El calendario tributario (0180).
+  tax_calendar: { label: 'Ver el calendario de impuestos', icon: 'CalendarClock' },
+  tax_configure: { label: 'Configurar el perfil tributario', icon: 'Landmark' },
+  tax_mark: { label: 'Marcar un impuesto presentado o pagado', icon: 'BadgeCheck' },
 
   // Metas. `goals_set` está arriba porque se para a pedir permiso.
   goals_offer_metrics: { label: 'Ver qué se puede medir aquí', icon: 'Ruler' },
@@ -498,6 +540,40 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
     }
     case 'vehicles_register':
       return `Registrar el vehículo de placa ${input.plate}`;
+    case 'payables_record':
+      return `Anotar la factura ${input.number} de ${input.supplierName}`;
+    case 'payables_approve': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Aprobar ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor — no paga nada; el pago se programa después`;
+    }
+    case 'payables_reject': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Rechazar ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor: «${String(input.reason ?? '').slice(0, 120)}»`;
+    }
+    case 'payables_schedule': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Programar el pago de ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor ${input.date ? `para el ${input.date}` : 'el día que sugiere la caja'}`;
+    }
+    case 'sales_quote_create':
+      return `Crear una cotización para «${input.client}» con ${Array.isArray(input.lines) ? input.lines.length : 0} línea(s)`;
+    case 'sales_quote_send':
+      return `Mandar la cotización ${input.quote} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'al correo del cliente'}`;
+    case 'sales_invoice_emit':
+      return `Emitir la factura electrónica de ${input.document} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : 'el programa contable'} — sale con su CUFE a la DIAN`;
+    case 'whatsapp_reply':
+      return `Responder por WhatsApp, como persona, en la conversación abierta: «${String(input.text ?? '').slice(0, 120)}»`;
+    case 'inventory_move':
+      return input.kind === 'ajuste'
+        ? `Ajustar «${input.product}» a ${input.countedQty} contados${input.location ? ` en ${input.location}` : ''}`
+        : `Registrar ${input.kind === 'traslado' ? `el traslado a ${input.toLocation}` : `la ${input.kind}`} de ${input.qty} de «${input.product}»${input.unitCost != null ? ` a $${input.unitCost}` : ''}`;
+    case 'purchasing_create_po':
+      return input.fromSuggestions
+        ? `Crear órdenes de compra con lo que hay que reponer${input.approve ? ', y dejarlas aprobadas' : ''}`
+        : `Crear una orden de compra a ${input.supplier} con ${Array.isArray(input.lines) ? input.lines.length : 0} producto(s)${input.approve ? ', y dejarla aprobada' : ''}`;
+    case 'purchasing_send_po':
+      return `Aprobar y enviar la orden de compra ${input.label ?? input.purchaseOrderId}${input.supplierName ? ` a ${input.supplierName}` : ''}${typeof input.expectedTotal === 'number' ? ` por $${input.expectedTotal.toLocaleString('es-CO')}` : ''}${input.to ? ` (${input.to})` : ''}`;
+    case 'purchasing_receive':
+      return `Recibir ${Array.isArray(input.lines) && input.lines.length ? 'parte de la mercancía' : 'toda la mercancía pendiente'} de la orden ${input.purchaseOrderId}`;
     case 'goals_set':
       // Sin la dirección («no pasar de» / «al menos»), que no viene en la
       // entrada: la pone el catálogo al guardar, y adivinarla aquí sería

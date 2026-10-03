@@ -1,6 +1,7 @@
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { authenticateBridge } from '@/lib/whatsapp/bridge';
 import { pairingReply } from '@/lib/whatsapp/pairing';
+import { type OutboxItem, claimOutbox } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -140,6 +141,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     reply_enabled: boolean;
   }>;
 
+  // ATENCIÓN A CLIENTES (0185). Dos cosas viajan en este latido:
+  //   * si está encendida, el puente tiene que reenviar mensajes directos aunque
+  //     el equipo tenga apagado «hablarle a Cortex» (la ruta dm decide cuál es
+  //     cuál);
+  //   * las respuestas que una persona escribió desde Cortex, para que el
+  //     puente las mande COMO RESPUESTA en esa conversación. Sólo existen
+  //     dentro de una conversación que el cliente abrió y en la que escribió en
+  //     las últimas 24 h (queueHumanReply lo exige), así que el número sigue
+  //     sin escribir primero.
+  // Leído a mano y sin tumbar el latido: una migración atrasada no puede dejar
+  // a un puente conectado sin su lista de grupos.
+  let customerEnabled = false;
+  let outbox: OutboxItem[] = [];
+  const customer = await db.from('wa_customer_settings').select('enabled').maybeSingle();
+  if (customer.error) {
+    logger.warn(`whatsapp-bridge: no pude leer la atención a clientes — ${customer.error.message}`);
+  } else {
+    customerEnabled = customer.data?.enabled === true;
+    if (status === 'connected') {
+      outbox = await claimOutbox(db, { now }).catch((err: Error) => {
+        logger.warn(`whatsapp-bridge: no pude armar la cola de respuestas — ${err.message}`);
+        return [];
+      });
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     /** The only groups the bridge may forward messages from, for archiving. */
@@ -153,7 +180,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
      * them is written down unless the group is ALSO on the archive list.
      */
     replyGroups: rows.filter((g) => g.reply_enabled).map((g) => g.jid),
-    dmEnabled: session?.dm_enabled !== false,
+    dmEnabled: session?.dm_enabled !== false || customerEnabled,
+    outbox,
     ...pairingReply(session, now),
   });
 }

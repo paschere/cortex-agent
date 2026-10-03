@@ -3,6 +3,7 @@ import { ForbiddenError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { isCompanyManager } from '../directory/store';
+import { withPayablesOverlay } from '../payables/overlay';
 import { forecast } from './forecast';
 import { compareScenarios } from './forecast-explain';
 import { PAYROLL_CONFIDENTIAL_KEY, isPayrollCategory } from './privacy';
@@ -555,11 +556,14 @@ export async function buildForecastInput(
     decisions
       .filter((d) => d.status === status && d.detectedKey)
       .map((d) => d.detectedKey as string);
+  // 0181: las facturas de proveedor programadas salen el día programado y por
+  // el neto; las pagadas o rechazadas ya no salen (payables/overlay.ts).
+  const movements = await withPayablesOverlay(db, ledger.movements);
   return {
     asOf: opts.today,
     currency,
     accounts: ledger.accounts,
-    movements: ledger.movements,
+    movements,
     recurring: decisions
       .filter((d) => d.status === 'declared' && d.currency === currency)
       .map(({ status: _s, ...flow }) => flow),

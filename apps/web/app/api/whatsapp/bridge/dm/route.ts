@@ -3,6 +3,7 @@ import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/ser
 import { readWaitingNotice } from '@/lib/waiting';
 import { briefingLetter, waitingQuestion, whatsappBriefingGate } from '@/lib/waiting-shape';
 import { authenticateBridge } from '@/lib/whatsapp/bridge';
+import { answerCustomer } from '@/lib/whatsapp/customer';
 import { humanDelayMs, toWhatsappText } from '@/lib/whatsapp/format';
 import {
   UNKNOWN_SENDER_REPLY,
@@ -79,6 +80,8 @@ interface IncomingDm {
 
 const EMPTY_REPLY = 'Aquí estoy. ¿Qué necesitas? ⚡';
 const BROKEN_REPLY = 'Esa se me rompió antes de terminarla. Vuelve a escribirme en un momento. ⚡';
+const CUSTOMER_BROKEN_REPLY =
+  'Gracias por escribirnos. No pude procesar tu mensaje en este momento; escríbenos de nuevo en unos minutos.';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const auth = authenticateBridge(req);
@@ -105,9 +108,46 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const sender = await resolveWhatsappSender(getSupabaseServiceClient(), jid);
 
   if (!sender || sender.organizationId !== auth.caller.organizationId) {
+    const orgDb = getOrgScopedClient(auth.caller.organizationId);
+
+    // ── ATENCIÓN A CLIENTES (0185) ─────────────────────────────────────────
+    // Si la empresa la encendió, quien no es del equipo NO recibe la negativa
+    // de abajo: recibe atención. Y no corre un turno del agente — corre
+    // `handleCustomerMessage`, que sólo sabe contestar una lista cerrada de
+    // cosas desde los datos de SU cliente, o pasar a una persona. Ninguna
+    // herramienta del agente se ejecuta para un número de fuera; esa regla de
+    // arriba sigue entera.
+    if (text) {
+      try {
+        const outcome = await answerCustomer(orgDb, {
+          phone,
+          jid,
+          pushName: body.pushName?.trim() || null,
+          text,
+          messageId: body.messageId?.trim() || null,
+        });
+        if (outcome.handled) {
+          const reply = outcome.reply ? toWhatsappText(outcome.reply) : null;
+          return NextResponse.json({
+            reply,
+            ...(reply ? { delayMs: humanDelayMs(reply.length) } : {}),
+            reason: outcome.why,
+          });
+        }
+      } catch (err) {
+        logger.error(
+          `whatsapp-atencion: falló — ${(err as Error).name}: ${(err as Error).message}`,
+        );
+        return NextResponse.json({
+          reply: CUSTOMER_BROKEN_REPLY,
+          delayMs: humanDelayMs(CUSTOMER_BROKEN_REPLY.length),
+        });
+      }
+    }
+
     // Recorded in the workspace the bridge is acting for, which is the one
     // whose line was written to — that is who needs to see it.
-    await recordUnknownSender(getOrgScopedClient(auth.caller.organizationId), {
+    await recordUnknownSender(orgDb, {
       phone,
       preview: text,
     });
@@ -116,6 +156,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const db = getOrgScopedClient(sender.organizationId);
+
+  // Desde 0185 el puente reenvía mensajes directos también cuando sólo la
+  // atención a clientes está encendida, así que el interruptor de «el equipo
+  // le escribe a Cortex» se mira aquí. Si la lectura falla se sigue como
+  // antes, cuando el puente era el único que lo miraba.
+  const dmSwitch = await db.from('whatsapp_sessions').select('dm_enabled').maybeSingle();
+  if (!dmSwitch.error && dmSwitch.data?.dm_enabled === false) {
+    return NextResponse.json({ reply: null, reason: 'team direct messages are off' });
+  }
+
   await db
     .from('whatsapp_links')
     .update({

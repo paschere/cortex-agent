@@ -138,6 +138,12 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   whatsapp_messages: tenant(),
   whatsapp_ingest_windows: tenant(),
   whatsapp_group_replies: tenant(),
+  // 0185: atención a clientes. Tenant las tres, en el sentido más delicado:
+  // cada conversación es de UN cliente de UNA empresa, y una fila ajena aquí
+  // sería el saldo de un cliente contado al de otra empresa.
+  wa_customer_settings: tenant(),
+  wa_customer_conversations: tenant(),
+  wa_customer_messages: tenant(),
 
   // --- Automation -----------------------------------------------------------
   scheduled_jobs: tenant(),
@@ -387,6 +393,12 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   document_fields: tenant(),
   document_field_corrections: tenant(),
   source_classification_audit: tenant(),
+  // --- Documentos que vencen (migración 0184) --------------------------------
+  // El SOAT, la póliza o la licencia de UNA empresa, con su cita y su
+  // responsable, y qué documentos ya se miraron. Tenant las dos: una fila
+  // ajena aquí sería avisarle a una empresa del vencimiento de otra.
+  document_expirations: tenant(),
+  document_expiration_scans: tenant(),
 
   // --- Pagos (migration 0098) -----------------------------------------------
   // Lo que dice cada fuente sobre un pago, y lo que creemos a partir de todas
@@ -493,6 +505,17 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // inventar. Tenant: son ventas, cartera y pagos de la empresa.
   pulse_snapshots: tenant(),
 
+  // --- Ventas (migración 0182) ----------------------------------------------
+  // Cotizaciones, pedidos y facturas con sus líneas, su línea de tiempo y el
+  // consecutivo por empresa. Tenant las cuatro: son precios, clientes y
+  // facturas de UNA empresa. El enlace público de una cotización se busca por
+  // token sin alcance en un solo sitio (apps/web/lib/sales/public.ts) y todo lo
+  // demás se lee con el espacio de esa fila.
+  sales_documents: tenant(),
+  sales_document_lines: tenant(),
+  sales_document_events: tenant(),
+  sales_sequences: tenant(),
+
   // --- Registro de trabajo (migración 0174) ----------------------------------
   // Quién tiene que hacer qué, quién lo hizo y cuándo. Tenant las tres, en el
   // sentido más delicado del producto: estas filas hablan de PERSONAS del
@@ -520,6 +543,33 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   autopilot_settings: tenant(),
   autopilot_runs: tenant(),
   autopilot_items: tenant(),
+
+  // --- Cuentas por pagar (migración 0181) ------------------------------------
+  // Proveedores, sus facturas con el flujo de aprobación y lo revisado al
+  // recibir. Tenant las tres: hablan de a quién le debe plata UNA empresa y
+  // cuándo piensa pagarle; una fila ajena sería la deuda de otra en la caja.
+  suppliers: tenant(),
+  payable_invoices: tenant(),
+  payable_intake_log: tenant(),
+
+  // --- Calendario tributario (migración 0180) --------------------------------
+  // El perfil tributario (NIT, casillas del RUT) y cada fecha del año que sale
+  // de él. Tenant las dos: el NIT y las fechas de una empresa en otra serían
+  // avisos de impuestos ajenos, con el nombre de su contador.
+  tax_profiles: tenant(),
+  tax_obligations: tenant(),
+
+  // --- Inventario y compras (migración 0183) ---------------------------------
+  // El catálogo, las bodegas, el libro de existencias (y su vista, que lleva
+  // organization_id) y las órdenes de compra con sus líneas. Tenant todas: una
+  // fila ajena aquí sería el costo, las existencias o lo que le compra una
+  // empresa a sus proveedores en la pantalla de otra.
+  products: tenant(),
+  stock_locations: tenant(),
+  stock_movements: tenant(),
+  stock_levels: tenant(),
+  purchase_orders: tenant(),
+  purchase_order_lines: tenant(),
 
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first
@@ -634,6 +684,8 @@ export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   // Migración 0156: gastar el intento de contraseña bajo candado, y limpiarlo.
   custom_view_reserve_unlock: 'organization',
   custom_view_clear_unlocks: 'organization',
+  // Migración 0182: el siguiente consecutivo de cotización, pedido o factura.
+  sales_next_number: 'organization',
   activation_automation_claim: 'organization',
   feed_source_signal: 'organization',
   activation_automation_finish: 'organization',

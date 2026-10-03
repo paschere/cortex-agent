@@ -368,6 +368,46 @@ line what it was about to do and that it is waiting. Approve it there or on
 
 ---
 
+## Customer service (migration 0185)
+
+Off by default. When an admin switches it on in **Integraciones › WhatsApp ›
+Atención a clientes**, a number that is NOT a linked team member stops getting
+"este número solo responde a personas registradas" and gets customer service
+instead. No agent turn runs for it: `handleCustomerMessage`
+(`packages/agent-tools/src/whatsapp/customer/handler.ts`) answers a closed list
+of things from company data, or hands the conversation to a person.
+
+- **What it can say.** Order/guide status (only the status and ETA columns of
+  the configured tables), open invoices and balance of THAT client, the
+  company's public info and opening hours, and FAQ answers the company wrote.
+  Each is a toggle. Every number comes from a row and the row ids are stored as
+  `sources` on the message.
+- **Who the client is.** The phone matches a contact of exactly one client, or
+  the person writes a NIT *and* one of that client's invoice numbers (three
+  failed tries lock it and hand off). A guide number alone shows that guide's
+  status only — and if the writer is identified and the row's client column is
+  another client, it is "not found".
+- **Hand-off.** Quotes, complaints, "un asesor", anything not understood, a
+  failed data read, or the hourly ceiling → the conversation becomes
+  `escalada`, a work item is opened for the escalation person (Equipo) and a
+  bell notification links to the conversation. From then on the bot only
+  acknowledges, once an hour.
+- **A person replies from Cortex** (or `whatsapp.reply` in chat, with
+  confirmation). Only inside an open conversation where the client wrote in the
+  last 24 h and did not opt out. The reply is queued in `wa_customer_messages`
+  and travels to the bridge in the heartbeat `outbox`; the bridge sends it with
+  "escribiendo…" and pacing and acks to `/api/whatsapp/bridge/customer/sent`.
+  This is still answering, never writing first.
+- **Ban hygiene.** Per-conversation hourly ceiling (default 12), human pacing,
+  opt-out phrases (whole message: "STOP", "baja", "no me escriban más") honoured
+  and inherited by the next conversation of that number until "ACTIVAR",
+  after-hours notice at most once per 12 h, no bulk or outbound path at all.
+- **Deploy.** Needs migration 0185 and a Railway redeploy of `whatsapp-bridge`
+  (the outbox). An old bridge still answers customers; it just never delivers
+  a person's reply (those expire as `fallido` after 24 h).
+
+---
+
 ## When something goes wrong
 
 ### The screen says "El servicio no está reportando"

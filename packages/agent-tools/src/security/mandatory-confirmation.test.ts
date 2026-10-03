@@ -10,6 +10,8 @@ describe('non-delegable company actions', () => {
       'security.set_action_policy',
       'reports.share',
       'payments.import_bank_statement',
+      'payables.approve',
+      'sales.invoice_emit',
     ])
       expect(mandatoryHumanConfirmation(id)).toBe(true);
   });

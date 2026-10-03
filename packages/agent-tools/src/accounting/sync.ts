@@ -31,6 +31,7 @@ import type {
   NormalizedCustomer,
   NormalizedInvoice,
   NormalizedPayment,
+  NormalizedProduct,
   NormalizedRecord,
   ProviderSession,
 } from './types';
@@ -302,6 +303,16 @@ export interface SyncDeps {
   deadline?: number;
   clock?: () => number;
   importPayments?: typeof importSystemPayments;
+  /**
+   * 0183: los productos también entran al catálogo de inventario (con sus
+   * existencias si el programa las da). Lo pasa el trabajo programado
+   * (inventory/products.ts › importAccountingProducts); sin él, sólo la tabla.
+   * Un fallo aquí no tumba la sincronización: se cuenta y sigue.
+   */
+  importProducts?: (
+    db: SupabaseClient,
+    input: { provider: string; records: NormalizedProduct[]; userId: string | null; today: string },
+  ) => Promise<{ created: number; updated: number; adjusted: number }>;
 }
 
 export interface SyncRunOutcome {
@@ -453,6 +464,21 @@ export async function runAccountingSync(
                 }),
               ),
             ));
+        }
+        if (kind === 'products' && deps.importProducts) {
+          try {
+            const imported = await deps.importProducts(db, {
+              provider: provider.id,
+              records: records as NormalizedProduct[],
+              userId: conn.created_by ?? null,
+              today,
+            });
+            counts.inventory_products =
+              (counts.inventory_products ?? 0) + imported.created + imported.updated;
+            counts.inventory_adjusted = (counts.inventory_adjusted ?? 0) + imported.adjusted;
+          } catch {
+            counts.inventory_errors = (counts.inventory_errors ?? 0) + 1;
+          }
         }
         if (kind === 'payments') {
           const rows = (records as NormalizedPayment[]).flatMap((p) =>

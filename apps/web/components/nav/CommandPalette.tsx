@@ -111,6 +111,12 @@ const SECTIONS: Section[] = [
         keywords: 'empresas cuentas clients companias contrapartes',
       },
       {
+        href: '/ventas',
+        label: 'Ventas',
+        note: 'Cotizaciones, pedidos y facturas electrónicas',
+        keywords: 'cotizaciones cotizar pedidos facturar factura electronica siigo alegra quotes',
+      },
+      {
         href: '/finance',
         label: 'Finanzas',
         note: 'Resumen financiero, cartera y calidad de las fuentes',
@@ -122,6 +128,13 @@ const SECTIONS: Section[] = [
         note: 'Quién debe, desde cuándo, y qué pagos están en disputa',
         keywords:
           'pagos cartera cobros abonos recaudo facturas payments dso mora vencida siigo alegra quickbooks',
+      },
+      {
+        href: '/pagar',
+        label: 'Por pagar',
+        note: 'Facturas de proveedor por aprobar y el programa de pagos de la semana',
+        keywords:
+          'pagar proveedores facturas compras cuentas por pagar aprobar programa pagos retencion cufe dian',
       },
       {
         href: '/feed',

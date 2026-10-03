@@ -16,6 +16,8 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
   'gcal.create_event':
     'Crea un evento y manda la invitación por correo a todos los asistentes — la gente de fuera la ve de inmediato.',
   'slack.post_message': 'Publica un mensaje en Slack que todos en el canal ven apenas cae.',
+  'whatsapp.reply':
+    'Le escribe al cliente por WhatsApp, desde el número de la empresa, dentro de la conversación que él abrió. Sale tal cual está escrito y no se puede borrar de su teléfono. Desde ese momento la conversación la atiende una persona, no el bot.',
   // Trámites web (migration 0087). The note has to say the two things that
   // make this different from every other write on the list: it happens on a
   // system nobody here administers, and with the company's own login.

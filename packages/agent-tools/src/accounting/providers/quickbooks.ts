@@ -13,6 +13,7 @@ import type {
   QueryPlanInput,
 } from '../types';
 import { amount, clip, currencyCode, day, monthsAgo } from './common';
+import { quickbooksBillPage } from './purchases';
 import {
   QUICKBOOKS_SETUP_MESSAGE,
   type QuickBooksAppConfig,
@@ -104,6 +105,10 @@ export interface QuickBooksItem {
   UnitPrice?: number;
   QtyOnHand?: number;
   TrackQtyOnHand?: boolean;
+  /** Costo de compra por unidad (0183). */
+  PurchaseCost?: number;
+  /** Punto de reorden (0183). */
+  ReorderPoint?: number;
   Active?: boolean;
   ParentRef?: Ref;
   Description?: string;
@@ -180,6 +185,8 @@ export function normalizeQuickbooksItem(i: QuickBooksItem): NormalizedProduct {
     price: amount(i.UnitPrice),
     stock: i.TrackQtyOnHand ? amount(i.QtyOnHand) : undefined,
     active: i.Active !== false,
+    cost: amount(i.PurchaseCost),
+    minStock: i.TrackQtyOnHand ? amount(i.ReorderPoint) : undefined,
   };
 }
 
@@ -392,6 +399,8 @@ export const quickbooksProvider: AccountingProvider = {
         return client?.requests ?? 0;
       },
       verify: () => ready().verify(),
+      listPurchases: async (since, page) =>
+        quickbooksBillPage(ready(), since, page, await homeCurrency()),
       revoke: async () => {
         await client?.revoke();
       },

@@ -123,7 +123,18 @@ export default async function CommitmentDetailPage({
               <Field label="Responde">{c.owner ?? 'Sin asignar'}</Field>
               <Field label="Aviso">{c.noticeDays} días antes</Field>
               {c.amountCop != null && <Field label="Valor">{cop(c.amountCop)}</Field>}
-              {c.vehiclePlate && <Field label="Vehículo">{c.vehiclePlate}</Field>}
+              {c.vehiclePlate && (
+                <Field label="Vehículo">
+                  {c.vehiclePlate}
+                  {/* Sus papeles (SOAT, tecnomecánica, pólizas) con su evidencia: 0184. */}
+                  <Link
+                    href={`/documentos-vencen?sujeto=${encodeURIComponent(c.vehiclePlate)}`}
+                    className="ml-2 text-xs font-semibold text-primary hover:underline"
+                  >
+                    Sus documentos
+                  </Link>
+                </Field>
+              )}
               <Field label="Repetición">{RECURRENCE_LABEL[c.recurrence]}</Field>
             </div>
 

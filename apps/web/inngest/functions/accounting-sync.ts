@@ -5,8 +5,12 @@ import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/ser
 import {
   accountingNoticeFor,
   accountingTableSpec,
+  addDays,
+  bogotaToday,
   claimAccountingConnection,
   getAccountingProvider,
+  importAccountingProducts,
+  importAccountingPurchases,
   markAccountingRun,
   openAccountingSession,
   providerName,
@@ -85,6 +89,8 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
       result = await runAccountingSync(db, conn, {
         session,
         deadline: Date.now() + RUN_BUDGET_MS,
+        // 0183: los productos también entran al inventario, con existencias.
+        importProducts: importAccountingProducts,
       });
     } catch (err) {
       result = {
@@ -139,6 +145,44 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
       } catch (err) {
         logger.warn({ err, organizationId }, 'ledger sync after accounting failed');
         return { status: 'error' as const };
+      }
+    });
+
+  // 0181: las compras (facturas de proveedor) que el programa expone entran a
+  // cuentas por pagar, con dedupe contra las que llegaron por correo o por la
+  // Bandeja. Sólo lectura en el programa. Su propio paso: si falla, lo demás
+  // ya quedó y se reintenta en la próxima corrida.
+  if ('status' in outcome && outcome.status !== 'error')
+    await step.run('supplier-invoices', async () => {
+      try {
+        const { data: conn, error } = await db
+          .from('accounting_connections')
+          .select('provider')
+          .eq('id', connectionId)
+          .maybeSingle();
+        if (error) throw error;
+        const system = (conn as { provider?: string } | null)?.provider;
+        if (!system) return { skipped: 'sin conexión' };
+        const session = await openAccountingSession(db, connectionId);
+        if (!session.listPurchases) return { skipped: 'el programa no expone compras' };
+        const today = bogotaToday();
+        const since = addDays(today, -90);
+        const purchases = [];
+        for (let page = 1; page <= 10; page++) {
+          const r = await session.listPurchases(since, page);
+          purchases.push(...r.records);
+          if (!r.hasMore) break;
+        }
+        const r = await importAccountingPurchases(db, purchases, { system, today });
+        return {
+          seen: purchases.length,
+          created: r.created,
+          paid: r.paid,
+          errors: r.errors.length,
+        };
+      } catch (err) {
+        logger.warn({ err, organizationId }, 'accounting purchases into payables failed');
+        return { failed: true as const };
       }
     });
 

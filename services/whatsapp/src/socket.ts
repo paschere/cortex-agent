@@ -13,6 +13,7 @@ import type { Config } from './config';
 import { CortexClient, type GroupContextLine, type OutboundMessage } from './cortex';
 import { extractDirectText, extractGroupMessage, extractMentionSignals } from './extract';
 import { baileysLogger, logger } from './logger';
+import { type OutboxMessage, gapMs, sanitizeOutbox, typingMs } from './outbox';
 import {
   CLOSE_CODES,
   IDLE_HINT,
@@ -124,6 +125,8 @@ export class WhatsappBridge {
    */
   private recent = new Map<string, GroupContextLine[]>();
   private dmEnabled = true;
+  /** Una sola tanda de respuestas de personas a la vez. */
+  private deliveringOutbox = false;
 
   private buffer: OutboundMessage[] = [];
   private flushing = false;
@@ -521,6 +524,11 @@ export class WhatsappBridge {
     }
     this.dmEnabled = reply.dmEnabled;
 
+    // Respuestas de una persona (0185). Nunca esperadas desde el latido: una
+    // tanda tarda segundos a propósito y el latido no puede quedarse quieto.
+    const outbox = sanitizeOutbox(reply.outbox);
+    if (outbox.length > 0) void this.deliverOutbox(outbox);
+
     this.request = {
       requested: reply.pairingRequested === true,
       phone:
@@ -885,6 +893,41 @@ export class WhatsappBridge {
       logger.error({ err: (err as Error).message }, 'could not answer a direct message');
     } finally {
       if (typing) clearInterval(typing);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Respuestas de una persona (Cortex 0185)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Manda, como respuesta en su conversación, lo que una persona escribió desde
+   * Cortex. Con «escribiendo…» y pausas, de a una, y le dice a Cortex qué salió.
+   * Si una tanda sigue en curso, la nueva se ignora: Cortex la vuelve a ofrecer
+   * cuando su reclamo caduca (2 min) y el acuse evita mandarla dos veces.
+   */
+  private async deliverOutbox(items: OutboxMessage[]): Promise<void> {
+    if (this.deliveringOutbox || this.status !== 'connected') return;
+    this.deliveringOutbox = true;
+    try {
+      for (const [index, item] of items.entries()) {
+        const sock = this.sock;
+        if (!sock || this.status !== 'connected') return;
+        let ok = false;
+        try {
+          if (index > 0) await sleep(gapMs());
+          await sock.sendPresenceUpdate('composing', item.jid).catch(() => undefined);
+          await sleep(typingMs(item.text));
+          await sock.sendPresenceUpdate('paused', item.jid).catch(() => undefined);
+          await sock.sendMessage(item.jid, { text: item.text });
+          ok = true;
+        } catch (err) {
+          logger.error({ err: (err as Error).message }, 'could not deliver a person reply');
+        }
+        await this.cortex.ackOutbox({ id: item.id, ok });
+      }
+    } finally {
+      this.deliveringOutbox = false;
     }
   }
 }

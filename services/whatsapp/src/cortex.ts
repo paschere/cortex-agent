@@ -39,6 +39,12 @@ export interface HeartbeatReply {
   pairingRequested?: boolean;
   /** E.164 digits to request a pairing CODE for; null/absent means show a QR. */
   pairingPhone?: string | null;
+  /**
+   * Replies a PERSON wrote from Cortex into an open customer-service
+   * conversation (0185) — the client wrote within the last 24 h. Optional: an
+   * older Cortex does not send it. Filtered again by `sanitizeOutbox`.
+   */
+  outbox?: unknown;
 }
 
 /** One line of the recent conversation, for context on a mention. */
@@ -158,6 +164,11 @@ export class CortexClient {
     messageId: string;
   }): Promise<{ reply: string | null; delayMs?: number } | null> {
     return this.call('/api/whatsapp/bridge/dm', { method: 'POST', body, timeoutMs: 280_000 });
+  }
+
+  /** Tell Cortex whether a person's reply from the outbox went out. */
+  ackOutbox(body: { id: string; ok: boolean }): Promise<unknown> {
+    return this.call('/api/whatsapp/bridge/customer/sent', { method: 'POST', body });
   }
 
   /**

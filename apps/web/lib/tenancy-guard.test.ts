@@ -63,6 +63,10 @@ const ALLOWED = new Map<string, string>([
     'The same posture as the presentation link, on purpose: a shared report is opened from WhatsApp or Outlook where no Cortex cookie exists, so the token is the credential. The row it finds carries its own workspace; nothing widens from there.',
   ],
   [
+    'lib/sales/public.ts',
+    'A quote link (/cotizacion/<token>, migration 0182) is opened by the client, who has no Cortex account, so the token is the credential — the same posture as a shared view. It is used for exactly two reads: the quote row by token and its workspace name. The lines, the brand, the logo and the acceptance are read and written through getOrgScopedClient(row.organization_id).',
+  ],
+  [
     'lib/views/public.ts',
     'A shared view (/v/<token>) is opened by people with no Cortex account, so the token is the credential — the same posture as the report link. It is used for exactly two reads: the view row by token and its workspace name. Every row the view then shows is read through getOrgScopedClient(view.organization_id).',
   ],

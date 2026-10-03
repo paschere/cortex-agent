@@ -66,6 +66,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'work.configure': 'Configura el registro de trabajo para ',
   'work.update_person': 'Anota mis días fuera: ',
   'work.query': '¿Qué tengo pendiente?',
+  'whatsapp.customer_conversations': '¿Qué clientes escribieron por WhatsApp?',
+  'whatsapp.reply': 'Contéstale por WhatsApp al cliente: ',
   'management.propose_decision': 'Prepara una propuesta de decisión para revisar: ',
 
   'actions.list': 'Muéstrame las acciones que esperan mi aprobación',
@@ -121,7 +123,10 @@ export const TOOL_PHRASE: Record<string, string> = {
   'cortex.remember': 'Recuerda de aquí en adelante que ',
 
   'documents.confirm': 'Confirma lo que leíste del documento ',
+  'documents.confirm_expiration': 'Confirma la fecha de vencimiento que leíste de ',
   'documents.correction_stats': '¿Qué campos de los documentos toca corregir siempre?',
+  // La pregunta de todos los días, no «lista los vencimientos».
+  'documents.expiring': '¿Qué documentos vencen este mes?',
   'documents.extract': 'Léeme este documento y sácale los datos: ',
   'documents.pending_review': 'Muéstrame los documentos leídos que faltan por confirmar',
   // «Documentos confirmados» es cómo lo llamamos nosotros. Nadie llega pidiendo
@@ -135,6 +140,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   // facturamos a Coltrans en julio») y no «súmame los documentos», que es la
   // implementación dicha en voz alta.
   'documents.totals': '¿Cuánto le hemos facturado a ',
+  'documents.track_expiration': 'Avísame antes de que venza ',
 
   'errands.answer': 'Respóndele al encargo: ',
   'errands.start': 'Investígame ',
@@ -277,10 +283,26 @@ export const TOOL_PHRASE: Record<string, string> = {
   'ledger.decide_recurring': 'Confirma el movimiento que se repite de ',
   'ledger.set_minimum_cash': 'Avísame si la caja baja de ',
   'ledger.categorize_pending': 'Ponle categoría a lo que falta en el libro de plata',
+  'payables.inbox': '¿Qué facturas de proveedor tengo por aprobar?',
+  'payables.pay_plan': '¿Qué pagos a proveedores hay esta semana y cómo queda la caja?',
+  'payables.record': 'Anota la factura de proveedor ',
+  'payables.approve': 'Aprueba las facturas de proveedor ',
+  'payables.reject': 'Rechaza la factura de proveedor ',
+  'payables.schedule': 'Programa el pago de las facturas aprobadas ',
   'autopilot.plan': '¿Qué vas a hacer hoy?',
   'autopilot.status': '¿Qué hiciste hoy?',
   'autopilot.configure': 'Hazte cargo de ',
   'autopilot.remind': 'Recuérdale a ',
+
+  'inventory.stock': '¿Qué productos están bajo el mínimo?',
+  'inventory.move': 'Registra que llegaron ',
+  'inventory.reorder': '¿Qué tengo que comprar esta semana?',
+  'purchasing.create_po': 'Prepárame las órdenes de compra de lo que está bajo el mínimo',
+  'purchasing.send_po': 'Envíale al proveedor la orden de compra ',
+  'purchasing.receive': 'Llegó la mercancía de la orden de compra ',
+  'tax.calendar': '¿Qué impuestos nos vencen este mes?',
+  'tax.configure': 'Configura el calendario tributario con el NIT ',
+  'tax.mark': 'Marca como pagada la declaración de ',
 
   'payroll.client_report': 'Dame el costo del equipo puesto en el cliente ',
   'payroll.cost_projection': 'Proyéctame lo que va a costar el equipo en ',
@@ -342,6 +364,10 @@ export const TOOL_PHRASE: Record<string, string> = {
   'views.update': 'Cambia la vista ',
 
   'sales.draft_proposal': 'Redáctame una propuesta para ',
+  'sales.quote_create': 'Hazle una cotización a ',
+  'sales.quote_send': 'Mándale al cliente la cotización ',
+  'sales.invoice_emit': 'Factura electrónicamente el pedido ',
+  'sales.list': '¿Qué cotizaciones están esperando respuesta?',
 
   'schedule.create': 'Todos los lunes a las 8 de la mañana, ',
   'schedule.list': 'Muéstrame mis rutinas programadas',

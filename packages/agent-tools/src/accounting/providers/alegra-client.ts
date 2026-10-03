@@ -1,3 +1,4 @@
+import { ProviderUncertainError, ProviderValidationError } from '../types';
 import { backoffMs } from './common';
 
 /**
@@ -184,6 +185,58 @@ export class AlegraClient {
     }
   }
 
+  /**
+   * POST (migración 0182: la factura de venta). Alegra no documenta una llave
+   * de idempotencia, así que esto NO reintenta nada que pudo haber llegado: una
+   * falla de red o un 5xx salen como `ProviderUncertainError` y quien llama
+   * deja la factura marcada para revisar en Alegra antes de repetir. Sólo un
+   * 429 (rechazado antes de procesar) espera y repite.
+   */
+  async post<T>(path: string, body: unknown): Promise<T> {
+    let attempt = 0;
+    for (;;) {
+      await this.pace();
+      this.requests += 1;
+      let res: Response;
+      try {
+        res = await this.doFetch(`${this.baseUrl}${path}`, {
+          method: 'POST',
+          headers: {
+            Authorization: this.authorization,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(this.timeoutMs * 2),
+        });
+      } catch {
+        throw new ProviderUncertainError(
+          'La conexión con Alegra se cortó mientras se enviaba la factura: no se sabe si quedó creada. Búscala en Alegra antes de volver a intentarlo.',
+        );
+      }
+      const text = await res.text();
+      let parsed: unknown = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (res.ok) return parsed as T;
+      if (res.status === 429 && attempt < this.maxRetries) {
+        attempt += 1;
+        await this.sleep(backoffMs(res.headers, attempt, 'x-rate-limit-reset'));
+        continue;
+      }
+      if (res.status === 400 || res.status === 422 || res.status === 409)
+        throw describeAlegraValidation(parsed, res.status);
+      if (res.status >= 500)
+        throw new ProviderUncertainError(
+          `Alegra respondió con un error interno (${res.status}) al recibir la factura: no se sabe si quedó creada. Búscala en Alegra antes de volver a intentarlo.`,
+        );
+      throw describeFailure(res.status, path);
+    }
+  }
+
   /** Una página de un listado: `start` sale del número de página (desde 1). */
   async page<T>(path: string, query: Query, page: number): Promise<AlegraPage<T>> {
     const body = await this.get<{ metadata?: { total?: number | string }; data?: T[] } | T[]>(
@@ -213,6 +266,38 @@ export class AlegraClient {
   async verify(): Promise<void> {
     await this.get('/contacts', { start: 0, limit: 1 });
   }
+}
+
+/**
+ * Lo que Alegra dijo de una factura que no aceptó. Alegra contesta
+ * `{ code, message }` (a veces dentro de `error`), y el mensaje ya viene en
+ * español; se completa con una pista cuando el código es de los conocidos.
+ */
+export function describeAlegraValidation(body: unknown, status: number): ProviderValidationError {
+  const b = (body ?? {}) as {
+    code?: number | string;
+    message?: string;
+    error?: { code?: number | string; message?: string };
+  };
+  const code = String(b.code ?? b.error?.code ?? '');
+  const message = String(b.message ?? b.error?.message ?? '').slice(0, 300);
+  const lower = message.toLowerCase();
+  const hint = /client|cliente|contact/.test(lower)
+    ? ' Revisa que el cliente exista en Alegra con ese NIT.'
+    : /item|producto|ítem/.test(lower)
+      ? ' Cada línea tiene que ser un producto o servicio que exista en Alegra.'
+      : /numeraci|template|resoluci/.test(lower)
+        ? ' Revisa la numeración de facturas (resolución DIAN) en Alegra.'
+        : /stamp|electr|dian/.test(lower)
+          ? ' Revisa que la facturación electrónica esté habilitada en Alegra.'
+          : '';
+  return new ProviderValidationError(
+    message
+      ? `Alegra no aceptó la factura: «${message}».${hint}`
+      : `Alegra no aceptó la factura (error ${code || status}) y no dijo por qué.`,
+    [`${code}: ${message}`],
+    status,
+  );
 }
 
 /** ¿Hay otra página después de ésta? */

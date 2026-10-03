@@ -94,6 +94,13 @@ const PUBLIC_PATHS = [
   // lib/views/public.ts. El resto de /api/views sigue detrás de la sesión.
   '/v',
   '/api/views/public',
+  // Cotizaciones compartidas (migración 0182): la página por token donde el
+  // cliente ve la cotización con la marca de la empresa y la acepta, y sus
+  // endpoints — el PDF, el logo y «Aceptar cotización». Cada uno valida el
+  // token (lib/sales/public.ts); el resto de /ventas y /api/sales sigue
+  // detrás de la sesión.
+  '/cotizacion',
+  '/api/sales/public',
   // La hoja de estilos de informes y gráficas (app/report.css/route.ts): la
   // carga el layout raíz en TODAS las páginas, también las públicas — una
   // vista compartida o la landing la pedían sin cookie y rebotaban a /login.

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns4:CreditNote xmlns:ns4="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2" xmlns:a="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:b="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <b:ID>NC-77</b:ID>
+  <b:UUID schemeName="CUDE-SHA384">cude0001cude0001cude0001</b:UUID>
+  <b:IssueDate>2026-09-30</b:IssueDate>
+  <b:DocumentCurrencyCode>COP</b:DocumentCurrencyCode>
+  <a:BillingReference><a:InvoiceDocumentReference><b:ID>FEPA-00451</b:ID></a:InvoiceDocumentReference></a:BillingReference>
+  <a:AccountingSupplierParty><a:Party><a:PartyLegalEntity><b:RegistrationName>PAPELERIA EL CONDOR S.A.S.</b:RegistrationName><b:CompanyID>900.373.115-2</b:CompanyID></a:PartyLegalEntity></a:Party></a:AccountingSupplierParty>
+  <a:LegalMonetaryTotal><b:LineExtensionAmount>100000</b:LineExtensionAmount><b:PayableAmount>119000</b:PayableAmount></a:LegalMonetaryTotal>
+  <a:CreditNoteLine><b:ID>1</b:ID><b:CreditedQuantity unitCode="94">10</b:CreditedQuantity><b:LineExtensionAmount>100000</b:LineExtensionAmount><a:Item><b:Description>Devolución resmas</b:Description></a:Item><a:Price><b:PriceAmount>10000</b:PriceAmount></a:Price></a:CreditNoteLine>
+</ns4:CreditNote>

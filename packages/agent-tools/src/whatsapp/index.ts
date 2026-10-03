@@ -93,3 +93,7 @@ export {
   transcribeVoiceNote,
 } from './media';
 export type { AttachmentIngestResult, VoiceTranscriptionResult } from './media';
+
+// Atención a clientes (0185): alguien de fuera escribe al número de la empresa
+// y recibe su estado de pedido, sus facturas y su saldo — o una persona.
+export * from './customer';

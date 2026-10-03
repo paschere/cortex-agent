@@ -122,6 +122,8 @@ export function Client360({
   handlers,
   aside,
   today,
+  expiring,
+  sales,
 }: {
   view: Client360View;
   team: TeamMember[];
@@ -129,6 +131,10 @@ export function Client360({
   /** Contactos, dominios y propuestas (ClientAside). */
   aside?: ReactNode;
   today: string;
+  /** Sus documentos que vencen (contratos, pólizas…; 0184), si la página los trae. */
+  expiring?: ReactNode;
+  /** «Cotizaciones y pedidos» (0182), si la página las trae. */
+  sales?: ReactNode;
 }) {
   return (
     <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 sm:py-8">
@@ -148,7 +154,9 @@ export function Client360({
         <Timeline view={view} />
         <div className="space-y-4">
           <OpenItems view={view} />
+          {sales}
           <Documents view={view} />
+          {expiring}
           <Aliases view={view} handlers={handlers} />
           {aside}
         </div>
@@ -748,7 +756,7 @@ function TimelineRow({ item, header }: { item: TimelineEntry; header: string | n
   return (
     <>
       {header && (
-        <li className="mb-1 mt-4 text-[11px] font-bold uppercase tracking-wide text-ink-faint first:mt-0">
+        <li className="mb-1 mt-4 text-micro font-bold uppercase tracking-wide text-ink-faint first:mt-0">
           {header}
         </li>
       )}

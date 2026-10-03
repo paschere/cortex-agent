@@ -1,5 +1,7 @@
 import { longDate, shortDate } from '../actions/draft';
 import { daysBetween, plural } from '../commitments/shape';
+import { type SnapshotExpiration, collectDocumentExpirations } from '../doc-expirations/autopilot';
+import { type SnapshotReorder, collectReposicion } from '../inventory/autopilot-collect';
 import { overdueStage } from '../payments/risk';
 import type { AutopilotArea, PlanItem } from './types';
 
@@ -77,6 +79,19 @@ export interface SnapshotCommitment {
   ownerName: string | null;
 }
 
+/** Una obligación tributaria pendiente (calendario tributario, 0180). */
+export interface SnapshotTaxObligation {
+  id: string;
+  title: string;
+  authority: string;
+  dueOn: string;
+  /** El vencimiento que la vigila: la misma cosa que ve `collectVencimientos`. */
+  commitmentId: string | null;
+  needsConfirmation: boolean;
+  ownerUserId: string | null;
+  ownerName: string | null;
+}
+
 export interface SnapshotSignal {
   kind: string;
   personId?: string | null;
@@ -99,6 +114,19 @@ export interface SnapshotApproval {
   expiresAt: string;
 }
 
+export interface SnapshotSupplierInvoices {
+  /** Ids de las que esperan aprobación, la que vence primero adelante (hasta 25). */
+  ids: string[];
+  count: number;
+  /** Neto de retenciones, en `currency`. */
+  amount: number;
+  currency: string;
+  firstDue: string | null;
+  firstLabel: string | null;
+  /** Cuántas traen un aviso de la revisión (posible doble cobro, NIT, precio…). */
+  flagged: number;
+}
+
 export interface SnapshotCashAlert {
   kind: string;
   week?: string | null;
@@ -119,8 +147,15 @@ export interface AutopilotSnapshot {
   uncategorized?: { count: number; amount: number; currency: string };
   syncs?: SnapshotSync[];
   commitments?: SnapshotCommitment[];
+  taxObligations?: SnapshotTaxObligation[];
+  /** Documentos que vencen (0184): lo abierto y lo que espera confirmación. */
+  documentExpirations?: SnapshotExpiration[];
   signals?: SnapshotSignal[];
   staleApprovals?: SnapshotApproval[];
+  /** Facturas de proveedor esperando aprobación (0181, cuentas por pagar). */
+  supplierInvoices?: SnapshotSupplierInvoices;
+  /** Lo que hay que reponer del inventario (0183). */
+  reorder?: SnapshotReorder;
   cash?: {
     currency: string;
     alerts: SnapshotCashAlert[];
@@ -257,6 +292,37 @@ export function collectPagos(s: AutopilotSnapshot): PlanItem[] {
       currency: 'COP',
       dedupeKey: `pagos:semana:${s.today}`,
       href: '/payments',
+    },
+  ];
+}
+
+/**
+ * Facturas de proveedor por aprobar (0181): UNA pregunta con todas, para
+ * aprobarlas de una vez. Aprobar no paga: después se programa el día contra la
+ * caja (/pagar). Siempre pregunta: aprobar una deuda es de una persona.
+ */
+export function collectProveedores(s: AutopilotSnapshot): PlanItem[] {
+  const p = s.supplierInvoices;
+  if (!p || p.count === 0 || p.ids.length === 0) return [];
+  const first = p.firstDue
+    ? `, vence la primera el ${shortDate(p.firstDue)}${p.firstLabel ? ` (${p.firstLabel})` : ''}`
+    : '';
+  return [
+    {
+      area: 'pagos',
+      title: `${plural(p.count, 'factura de proveedor', 'facturas de proveedor')} por aprobar (${money(p.amount, p.currency)})${first}`,
+      why: `${p.flagged > 0 ? `${p.flagged === 1 ? 'Una trae' : `${p.flagged} traen`} un aviso de la revisión (míralo en Por pagar antes de aprobar). ` : ''}Aprobar no paga nada: después programo el día de pago contra la caja, y el pago lo haces tú en el banco.`,
+      proposedAction: { toolId: 'payables.approve', input: { invoices: p.ids } },
+      effect: 'money',
+      risk: p.flagged > 0 ? 'high' : 'medium',
+      amount: p.amount,
+      currency: p.currency,
+      counterparty: p.firstLabel,
+      dedupeKey: `pagos:proveedores:${[...p.ids]
+        .sort()
+        .map((id) => id.slice(0, 8))
+        .join(',')}`.slice(0, 300),
+      href: '/pagar',
     },
   ];
 }
@@ -478,6 +544,80 @@ export function collectVencimientos(s: AutopilotSnapshot): PlanItem[] {
 }
 
 // ---------------------------------------------------------------------------
+// Impuestos: lo que vence con la DIAN, el ICA, la PILA…
+// ---------------------------------------------------------------------------
+
+/**
+ * Días hacia adelante para un impuesto. Más que los dos de un vencimiento
+ * cualquiera: una declaración pide sacar cifras, revisar con el contador y
+ * tener la plata, y enterarse dos días antes es enterarse tarde.
+ */
+export const TAX_REMIND_WITHIN_DAYS = 5;
+
+/**
+ * «Vence la retención de septiembre en 3 días»: un recordatorio al
+ * responsable de los impuestos o, si no hay, un aviso al dueño.
+ *
+ * Usa la MISMA clave que `collectVencimientos` cuando la obligación tiene su
+ * vencimiento (`vence:<compromiso>:<fecha>`), y corre antes que él: la cosa
+ * es una sola, y gana la frase que dice qué impuesto es y si la fecha está
+ * por confirmar. Nunca presenta ni paga nada.
+ */
+export function collectImpuestos(s: AutopilotSnapshot): PlanItem[] {
+  const out: PlanItem[] = [];
+  const rows = (s.taxObligations ?? [])
+    .map((o) => ({ o, left: daysBetween(s.today, o.dueOn) }))
+    .filter(({ left }) => Number.isFinite(left) && left >= 0 && left <= TAX_REMIND_WITHIN_DAYS)
+    .sort((a, b) => a.left - b.left);
+  for (const { o, left } of rows.slice(0, PER_AREA_CAP.vencimientos)) {
+    const when = left === 0 ? 'vence hoy' : `vence en ${plural(left, 'día')}`;
+    const doubt = o.needsConfirmation ? ' La fecha está por confirmar con el contador.' : '';
+    const why = `«${clip(o.title, 90)}» (${o.authority}) ${when}, el ${longDate(o.dueOn)}.${doubt}`;
+    const dedupeKey = o.commitmentId
+      ? `vence:${o.commitmentId}:${o.dueOn}`
+      : `impuesto:${o.id}:${o.dueOn}`;
+    if (!o.ownerUserId) {
+      out.push({
+        area: 'vencimientos',
+        title: `${clip(o.title, 70)} ${when}`,
+        why: `${why} Nadie responde por los impuestos: elige al contador en Impuestos.`,
+        proposedAction: null,
+        effect: null,
+        risk: 'medium',
+        counterparty: o.authority,
+        dedupeKey,
+        href: '/impuestos',
+      });
+      continue;
+    }
+    out.push({
+      area: 'vencimientos',
+      title: `Recordarle a ${o.ownerName ?? 'quien lleva los impuestos'}: ${clip(o.title, 60)} ${when}`,
+      why,
+      proposedAction: {
+        toolId: 'autopilot.remind',
+        input: {
+          person: o.ownerUserId,
+          title: clip(`${o.title} ${when}`, 160),
+          body: clip(
+            `${why} Cuando quede presentada o pagada, márcala en Impuestos con el comprobante y dejo de recordártelo.`,
+            600,
+          ),
+          href: '/impuestos',
+          key: dedupeKey,
+        },
+      },
+      effect: 'internal_notice',
+      risk: 'low',
+      counterparty: o.authority,
+      dedupeKey,
+      href: '/impuestos',
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Equipo: gente sobrecargada
 // ---------------------------------------------------------------------------
 
@@ -572,10 +712,16 @@ export const COLLECTORS: Array<{
 }> = [
   { area: 'cobro', run: collectCobro },
   { area: 'pagos', run: collectPagos },
+  { area: 'pagos', run: collectProveedores },
+  // 0183: lo que está bajo el mínimo → órdenes de compra para aprobar.
+  { area: 'pagos', run: (s) => collectReposicion(s.reorder, s.today) },
   { area: 'conciliacion', run: collectConciliacion },
   { area: 'finanzas', run: collectFinanzas },
   { area: 'procesos', run: collectProcesos },
+  // Antes que los vencimientos: comparten clave y gana la frase del impuesto.
+  { area: 'vencimientos', run: collectImpuestos },
   { area: 'vencimientos', run: collectVencimientos },
+  { area: 'vencimientos', run: (s) => collectDocumentExpirations(s.documentExpirations, s.today) },
   { area: 'equipo', run: collectEquipo },
   { area: 'gerencia', run: collectGerencia },
 ];

@@ -99,6 +99,11 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   // dos y `approvals-parity.test.ts` exige que no se separen.
   ask_choice: 'Preguntarte',
   sales_draft_proposal: 'Redactar propuesta',
+  // Ventas (0182).
+  sales_quote_create: 'Crear una cotización',
+  sales_quote_send: 'Mandar la cotización al cliente',
+  sales_invoice_emit: 'Emitir la factura electrónica',
+  sales_list: 'Ver cotizaciones, pedidos y facturas',
   web_search: 'Buscar en internet',
   web_scrape: 'Abrir página web',
   browser_list_flows: 'Ver los trámites aprendidos',
@@ -177,6 +182,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   presentations_create_pdf: 'Armar la presentación en PDF',
   presentations_list_recent: 'Ver presentaciones ya armadas',
   slack_post_message: 'Publicar en un canal de Slack',
+  whatsapp_customer_conversations: 'Ver las conversaciones de atención por WhatsApp',
+  whatsapp_reply: 'Responder a un cliente por WhatsApp',
   chat_send_message: 'Publicar en Google Chat',
   chat_send_dm: 'Mandar un privado por Google Chat',
   people_search: 'Buscar el correo de una persona',
@@ -203,6 +210,9 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   documents_pending_review: 'Ver los documentos por confirmar',
   documents_confirm: 'Confirmar lo que se leyó del documento',
   documents_reject: 'Descartar la lectura del documento',
+  documents_expiring: 'Ver los documentos que vencen',
+  documents_track_expiration: 'Registrar un documento que vence',
+  documents_confirm_expiration: 'Confirmar el vencimiento leído del documento',
   documents_correction_stats: 'Ver qué campos siempre hay que corregir',
   documents_records: 'Ver los documentos confirmados',
   documents_totals: 'Sumar lo facturado',
@@ -230,10 +240,25 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   ledger_decide_recurring: 'Confirmar o ignorar un movimiento que se repite',
   ledger_set_minimum_cash: 'Fijar la caja mínima de la empresa',
   ledger_categorize_pending: 'Ponerle categoría a lo que no tiene',
+  payables_inbox: 'Ver las facturas de proveedor por pagar',
+  payables_pay_plan: 'Ver el programa de pagos a proveedores',
+  payables_record: 'Anotar una factura de proveedor',
+  payables_approve: 'Aprobar facturas de proveedor',
+  payables_reject: 'Rechazar facturas de proveedor',
+  payables_schedule: 'Programar el pago a proveedores',
   autopilot_plan: 'Ver lo que haría el piloto hoy',
   autopilot_status: 'Ver lo que hizo el piloto',
   autopilot_configure: 'Configurar el piloto automático',
   autopilot_remind: 'Recordarle algo a un compañero',
+  inventory_stock: 'Ver el inventario',
+  inventory_move: 'Registrar un movimiento de inventario',
+  inventory_reorder: 'Ver qué hay que pedir',
+  purchasing_create_po: 'Crear órdenes de compra',
+  purchasing_send_po: 'Aprobar y enviar una orden de compra',
+  purchasing_receive: 'Recibir la mercancía de una orden de compra',
+  tax_calendar: 'Ver el calendario de impuestos',
+  tax_configure: 'Configurar el perfil tributario',
+  tax_mark: 'Marcar un impuesto presentado o pagado',
   goals_offer_metrics: 'Ver qué se puede medir aquí',
   goals_list: 'Ver las metas y cómo van',
   goals_measure: 'Medir cómo vamos este período',
@@ -364,6 +389,40 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
     }
     case 'vehicles_register':
       return `Registrar el vehículo de placa ${input.plate}`;
+    case 'payables_record':
+      return `Anotar la factura ${input.number} de ${input.supplierName}`;
+    case 'payables_approve': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Aprobar ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor — no paga nada; el pago se programa después`;
+    }
+    case 'payables_reject': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Rechazar ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor: «${String(input.reason ?? '').slice(0, 120)}»`;
+    }
+    case 'payables_schedule': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Programar el pago de ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor ${input.date ? `para el ${input.date}` : 'el día que sugiere la caja'}`;
+    }
+    case 'sales_quote_create':
+      return `Crear una cotización para «${input.client}» con ${Array.isArray(input.lines) ? input.lines.length : 0} línea(s)`;
+    case 'sales_quote_send':
+      return `Mandar la cotización ${input.quote} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'al correo del cliente'}`;
+    case 'sales_invoice_emit':
+      return `Emitir la factura electrónica de ${input.document} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : 'el programa contable'} — sale con su CUFE a la DIAN`;
+    case 'whatsapp_reply':
+      return `Responder por WhatsApp, como persona, en la conversación abierta: «${String(input.text ?? '').slice(0, 120)}»`;
+    case 'inventory_move':
+      return input.kind === 'ajuste'
+        ? `Ajustar «${input.product}» a ${input.countedQty} contados${input.location ? ` en ${input.location}` : ''}`
+        : `Registrar ${input.kind === 'traslado' ? `el traslado a ${input.toLocation}` : `la ${input.kind}`} de ${input.qty} de «${input.product}»${input.unitCost != null ? ` a $${input.unitCost}` : ''}`;
+    case 'purchasing_create_po':
+      return input.fromSuggestions
+        ? `Crear órdenes de compra con lo que hay que reponer${input.approve ? ', y dejarlas aprobadas' : ''}`
+        : `Crear una orden de compra a ${input.supplier} con ${Array.isArray(input.lines) ? input.lines.length : 0} producto(s)${input.approve ? ', y dejarla aprobada' : ''}`;
+    case 'purchasing_send_po':
+      return `Aprobar y enviar la orden de compra ${input.label ?? input.purchaseOrderId}${input.supplierName ? ` a ${input.supplierName}` : ''}${typeof input.expectedTotal === 'number' ? ` por $${input.expectedTotal.toLocaleString('es-CO')}` : ''}${input.to ? ` (${input.to})` : ''}`;
+    case 'purchasing_receive':
+      return `Recibir ${Array.isArray(input.lines) && input.lines.length ? 'parte de la mercancía' : 'toda la mercancía pendiente'} de la orden ${input.purchaseOrderId}`;
     case 'goals_set':
       return `Fijar la meta «${input.label || input.metricKey}» — objetivo ${input.targetValue}, ${
         input.cadence === 'week' ? 'semanal' : 'mensual'

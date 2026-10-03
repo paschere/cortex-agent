@@ -372,7 +372,35 @@ const autopilotRemind: SafeActionPolicy<
 };
 const retrySync: AnySafeActionPolicy = { windowMs: 30 * 60_000, noun: 'el reintento' };
 
+/**
+ * Ventas (0182). Crear la misma cotización dos veces en media hora es un
+ * doble clic; mandar el mismo correo o emitir la misma factura en un día, un
+ * error caro — la factura se protege además con la llave de idempotencia del
+ * programa contable (ver sales/emit.ts).
+ */
+const salesQuoteCreate: AnySafeActionPolicy = {
+  windowMs: 30 * 60_000,
+  noun: 'la cotización',
+  key: (input: unknown) => input,
+};
+const salesQuoteSend: AnySafeActionPolicy = {
+  windowMs: 24 * 60 * 60_000,
+  noun: 'el correo con la cotización',
+  key: (input: unknown) => input,
+};
+const salesInvoiceEmit: AnySafeActionPolicy = {
+  windowMs: 24 * 60 * 60_000,
+  noun: 'la factura',
+  key: (input: unknown) => {
+    const i = (input ?? {}) as { document?: unknown; provider?: unknown };
+    return { document: i.document ?? null, provider: i.provider ?? null };
+  },
+};
+
 export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> = {
+  'sales.quote_create': salesQuoteCreate,
+  'sales.quote_send': salesQuoteSend,
+  'sales.invoice_emit': salesInvoiceEmit,
   'gmail.send_message': gmailSendMessage as unknown as AnySafeActionPolicy,
   'gmail.send_draft': gmailSendDraft as unknown as AnySafeActionPolicy,
   'outlook.send_draft': outlookSendDraft as unknown as AnySafeActionPolicy,

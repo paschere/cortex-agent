@@ -14,6 +14,7 @@ import {
   getFile,
   isDegraded,
 } from '@cortex/agent-tools';
+import { detectDocumentExpiration } from '@cortex/agent-tools/src/doc-expirations/ingest';
 import { extractDocumentData } from '@cortex/agent-tools/src/documents/ingest';
 import { chunkText } from '@cortex/agent-tools/src/kb/chunker';
 import { embedInBatches, embeddingModelId } from '@cortex/agent-tools/src/kb/embedder';
@@ -479,7 +480,19 @@ export const ingestDocumentJob: JobHandler = async ({ event, step }) => {
       return await extractDocumentData(sb, documentId, { createdBy: null });
     });
 
-    return { ...settled, extraction };
+    // -----------------------------------------------------------------------
+    // 5. ¿Es un papel que vence? (SOAT, póliza, licencia… — migración 0184)
+    // -----------------------------------------------------------------------
+    // Después de la lectura de 0076 porque la usa: lo que ya se leyó como
+    // factura o guía no se paga dos veces. Una llamada como mucho, y sólo si
+    // el texto pasa un filtro gratis; su propio paso por la misma razón que
+    // el anterior (un reintento no la vuelve a comprar), y tampoco lanza.
+    // Lo que encuentra queda «por revisar» en /documentos-vencen.
+    const expirations = await step.run('detect-document-expiration', async () => {
+      return await detectDocumentExpiration(sb, documentId);
+    });
+
+    return { ...settled, extraction, expirations };
   } catch (err) {
     await sb
       .from('kb_documents')

@@ -6,11 +6,15 @@ import { addDays } from '../commitments/shape';
 import { listCommitments } from '../commitments/store';
 import { personLabel } from '../directory/line';
 import { listDirectory } from '../directory/store';
+import { loadExpirationSnapshot } from '../doc-expirations/autopilot';
+import { loadReorderSnapshot } from '../inventory/autopilot';
 import { hasLedgerCash } from '../ledger/forecast-explain';
 import { runForecast } from '../ledger/plans';
+import { supplierInvoicesSnapshot } from '../payables/autopilot';
 import { bankReconciliation } from '../payments/bank/store';
 import { moneyAtRisk } from '../payments/risk';
 import { overdueReceivableInvoices } from '../payments/store';
+import { listTaxObligations, readTaxProfile } from '../tax/store';
 import { toolErrorMessage } from '../tool-error';
 import { lastDaysPeriod, loadTeamReport } from '../work/view-sources';
 import type { AutopilotSnapshot, SnapshotInvoice } from './collectors';
@@ -37,7 +41,9 @@ export type SourceKey =
   | 'vencimientos'
   | 'equipo'
   | 'aprobaciones'
-  | 'caja';
+  | 'caja'
+  | 'impuestos'
+  | 'inventario';
 
 export const SOURCE_LABEL: Record<SourceKey, string> = {
   cartera: 'la cartera',
@@ -49,6 +55,8 @@ export const SOURCE_LABEL: Record<SourceKey, string> = {
   equipo: 'el registro de trabajo',
   aprobaciones: 'las aprobaciones',
   caja: 'la proyección de caja',
+  impuestos: 'el calendario tributario',
+  inventario: 'el inventario',
 };
 
 interface ContactRow {
@@ -251,6 +259,15 @@ export async function loadSnapshot(
   const directory = await attempt('vencimientos', () => listDirectory(db));
   const names = new Map((directory ?? []).map((p) => [p.id, personLabel(p)]));
 
+  // Fuera del Promise.all para no tocar su forma, pero en paralelo con él: una
+  // lectura más, aislada como las demás. Sin perfil tributario, lista vacía.
+  const taxRead = attempt('impuestos', () => taxSnapshot(db, today, names));
+  // Documentos que vencen (0184): igual, aparte y en paralelo.
+  const docsRead = attempt('vencimientos', () => loadExpirationSnapshot(db, today, names));
+  // Facturas de proveedor por aprobar (0181): igual, aparte y en paralelo.
+  const supplierRead = attempt('pagos', () => supplierInvoicesSnapshot(db));
+  // Lo que hay que reponer (0183): igual, aparte y en paralelo.
+  const reorderRead = attempt('inventario', () => loadReorderSnapshot(db, today));
   const [overdueInvoices, risk, recon, ledger, syncs, commitments, team, approvals, forecast] =
     await Promise.all([
       attempt('cartera', () => overdueWithContacts(db, today)),
@@ -270,6 +287,10 @@ export async function loadSnapshot(
       attempt('aprobaciones', () => staleApprovals(db, now, names)),
       attempt('caja', () => runForecast(db, { today })),
     ]);
+  const tax = await taxRead;
+  const documentExpirations = await docsRead;
+  const supplierInvoices = await supplierRead;
+  const reorder = await reorderRead;
 
   const snapshot: AutopilotSnapshot = {
     today,
@@ -311,8 +332,12 @@ export async function loadSnapshot(
       ownerUserId: c.owner_user_id,
       ownerName: c.owner_user_id ? (names.get(c.owner_user_id) ?? null) : null,
     })),
+    taxObligations: tax,
+    documentExpirations,
     signals: team?.report.signals,
     staleApprovals: approvals,
+    supplierInvoices,
+    reorder,
     cash:
       forecast && hasLedgerCash(forecast.base)
         ? {
@@ -324,4 +349,33 @@ export async function loadSnapshot(
         : undefined,
   };
   return { snapshot, errors };
+}
+
+/**
+ * Las obligaciones tributarias pendientes de los próximos días (0180), con el
+ * responsable del perfil. Sin perfil, una lista vacía: no es un error.
+ */
+async function taxSnapshot(
+  db: SupabaseClient,
+  today: string,
+  names: Map<string, string>,
+): Promise<NonNullable<AutopilotSnapshot['taxObligations']>> {
+  const profile = await readTaxProfile(db);
+  if (!profile) return [];
+  const rows = await listTaxObligations(db, {
+    from: today,
+    to: addDays(today, 7),
+    statuses: ['pendiente'],
+    limit: 50,
+  });
+  return rows.map((o) => ({
+    id: o.id,
+    title: o.title,
+    authority: o.authority,
+    dueOn: o.dueDate,
+    commitmentId: o.commitmentId,
+    needsConfirmation: o.needsConfirmation,
+    ownerUserId: profile.ownerUserId,
+    ownerName: profile.ownerUserId ? (names.get(profile.ownerUserId) ?? null) : null,
+  }));
 }

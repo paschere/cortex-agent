@@ -59,6 +59,12 @@ export interface RunCounts extends Partial<Record<AccountingEntity, EntityCounts
   payments_created?: number;
   /** Peticiones al programa en la corrida. */
   requests?: number;
+  /** 0183: productos creados o actualizados en el catálogo de inventario. */
+  inventory_products?: number;
+  /** 0183: ajustes de existencias por la diferencia con el programa. */
+  inventory_adjusted?: number;
+  /** 0183: páginas de productos que no se pudieron pasar al inventario. */
+  inventory_errors?: number;
 }
 
 export interface AccountingConnectionRow {

@@ -12,6 +12,8 @@ import type {
   ProviderSession,
   QueryPlanInput,
 } from '../types';
+import { siigoInvoicing } from './invoicing';
+import { siigoPurchasePage } from './purchases';
 import { SiigoClient, hasMorePages } from './siigo-client';
 
 /**
@@ -86,6 +88,10 @@ export interface SiigoProduct {
   unit_label?: string;
   reference?: string;
   available_quantity?: number;
+  /** Si el producto controla inventario en Siigo. */
+  stock_control?: boolean;
+  /** Existencias por bodega (0183). */
+  warehouses?: Array<{ id?: number | string; name?: string; quantity?: number }>;
   metadata?: Metadata;
 }
 
@@ -195,6 +201,11 @@ export function normalizeSiigoCustomer(c: SiigoCustomer): NormalizedCustomer {
   };
 }
 
+/** Una lista vacía es «no lo dijo» (0183). */
+function nonEmpty<T>(list: T[]): T[] | undefined {
+  return list.length ? list : undefined;
+}
+
 export function normalizeSiigoProduct(p: SiigoProduct): NormalizedProduct {
   const firstPrice = p.prices?.[0]?.price_list?.find((x) => typeof x.value === 'number');
   return {
@@ -211,10 +222,22 @@ export function normalizeSiigoProduct(p: SiigoProduct): NormalizedProduct {
             : undefined,
     group: clip(p.account_group?.name, 120),
     price: amount(firstPrice?.value),
-    stock: amount(p.available_quantity),
+    stock: p.stock_control === false ? undefined : amount(p.available_quantity),
     unit: clip(p.unit_label ?? p.unit?.name, 60),
     reference: clip(p.reference, 120),
     active: p.active !== false,
+    warehouses:
+      p.stock_control === false
+        ? undefined
+        : nonEmpty(
+            (p.warehouses ?? [])
+              .filter((w) => w.id !== undefined && amount(w.quantity) !== undefined)
+              .map((w) => ({
+                externalId: String(w.id),
+                name: clip(w.name, 100) ?? 'Bodega',
+                quantity: amount(w.quantity) as number,
+              })),
+          ),
   };
 }
 
@@ -380,6 +403,8 @@ export const siigoProvider: AccountingProvider = {
         return client.requests;
       },
       verify: () => client.verify(),
+      invoicing: siigoInvoicing(client),
+      listPurchases: (since, page) => siigoPurchasePage(client, since, page),
       async listPage(entity, query, page) {
         const result = await client.page<unknown>(PATHS[entity], query, page);
         const records = result.results

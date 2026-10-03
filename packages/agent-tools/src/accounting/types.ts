@@ -1,3 +1,4 @@
+import type { PurchasePage } from './providers/purchases';
 /**
  * LA FORMA COMÚN DE UN PROGRAMA CONTABLE (migración 0165).
  *
@@ -52,6 +53,12 @@ export interface NormalizedProduct {
   unit?: string;
   reference?: string;
   active?: boolean;
+  /** 0183: costo por unidad, si el programa lo da (Alegra `unitCost`, QuickBooks `PurchaseCost`). */
+  cost?: number;
+  /** 0183: existencia mínima / punto de reorden, si el programa lo da. */
+  minStock?: number;
+  /** 0183: existencias por bodega, si el programa las da (Siigo, Alegra). */
+  warehouses?: Array<{ externalId: string; name: string; quantity: number }>;
 }
 
 export type InvoiceStatus = 'open' | 'paid' | 'annulled';
@@ -153,6 +160,66 @@ export interface ProviderSession {
   readonly requests: number;
   /** Al desconectar: avisarle al programa que la llave ya no se usa (OAuth). Nunca lanza. */
   revoke?(): Promise<void>;
+  /**
+   * Compras / facturas de proveedor desde `since` (AAAA-MM-DD), página a
+   * página (0181, cuentas por pagar). Sólo lectura; providers/purchases.ts.
+   */
+  listPurchases?(since: string, page: number): Promise<PurchasePage>;
+  /**
+   * Emitir facturas de venta (migración 0182). Sólo los programas que saben
+   * hacerlo (Siigo, Alegra); la ÚNICA escritura de Cortex en un programa
+   * contable, y siempre después de la aprobación de una persona (ver
+   * packages/agent-tools/src/sales/emit.ts).
+   */
+  invoicing?: ProviderInvoicing;
+}
+
+/** Lo que el programa necesita que se elija antes de facturar, ya traducido. */
+export interface InvoicingCatalog {
+  /** Tipos de documento de factura de venta (Siigo: FV). Alegra: numeraciones. */
+  documentTypes: Array<{
+    id: string;
+    name: string;
+    electronic: boolean;
+    /** Siigo: cómo lee `discount` cada ítem. Alegra siempre en porcentaje. */
+    discountType?: 'percentage' | 'value';
+  }>;
+  /** Vendedores (Siigo exige uno). */
+  sellers: Array<{ id: string; name: string }>;
+  /** Formas de pago (Siigo). En Alegra la forma de pago es CASH/CREDIT. */
+  paymentTypes: Array<{ id: string; name: string; credit: boolean }>;
+  /** Impuestos configurados en el programa. */
+  taxes: Array<{
+    id: string;
+    name: string;
+    kind: 'iva' | 'retefuente' | 'reteica' | 'reteiva' | 'other';
+    percentage: number;
+  }>;
+}
+
+export interface CreatedProviderInvoice {
+  id: string;
+  number: string | null;
+  cufe: string | null;
+  /** Estado de la DIAN en español, si el programa lo devolvió. */
+  einvoiceStatus: string | null;
+  url: string | null;
+  total: number | null;
+}
+
+export interface ProviderInvoicing {
+  catalog(): Promise<InvoicingCatalog>;
+  /** El cliente en el programa por NIT (sólo dígitos, sin DV). `null` si no está. */
+  findCustomer(taxId: string): Promise<{ id: string; name: string | null } | null>;
+  /**
+   * POST de la factura. `idempotencyKey` va en la cabecera cuando el programa
+   * la acepta (Siigo: `Idempotency-Key`); NUNCA se reintenta solo ante una
+   * falla de red: quien llama decide.
+   */
+  createInvoice(
+    payload: unknown,
+    opts: { idempotencyKey: string },
+  ): Promise<CreatedProviderInvoice>;
 }
 
 export interface CredentialField {
@@ -215,4 +282,29 @@ export interface ProviderInfo {
   connect: 'credentials' | 'oauth';
   /** Qué falta configurar en la instalación para conectarlo; `null` si nada. */
   setupMissing: string | null;
+}
+
+/**
+ * Una escritura que el programa rechazó por el CONTENIDO (un 400/422): el
+ * mensaje ya está en español para la persona, y `details` trae lo que dijo el
+ * programa, para el registro. Distinta de una falla de red: ésta es segura de
+ * corregir y volver a mandar.
+ */
+export class ProviderValidationError extends Error {
+  constructor(
+    message: string,
+    readonly details: string[] = [],
+    readonly status: number | null = null,
+  ) {
+    super(message);
+    this.name = 'ProviderValidationError';
+  }
+}
+
+/** No se sabe si la escritura llegó (la red se cortó después de mandarla). */
+export class ProviderUncertainError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProviderUncertainError';
+  }
 }
