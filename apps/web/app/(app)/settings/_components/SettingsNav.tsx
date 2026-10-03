@@ -23,7 +23,18 @@ export interface NavSection {
   label: string;
 }
 
-export function SettingsNav({ sections }: { sections: NavSection[] }) {
+export function SettingsNav({
+  sections,
+  counts,
+}: {
+  sections: NavSection[];
+  /**
+   * Con una búsqueda activa, cuántos resultados hay por grupo. Entonces el
+   * índice deja de ser de anclas (los grupos no se pintan, se pinta una lista
+   * ordenada por relevancia) y pasa a decir de dónde salió cada resultado.
+   */
+  counts?: Record<string, number>;
+}) {
   const [active, setActive] = useState<string>(sections[0]?.id ?? '');
 
   useEffect(() => {
@@ -50,8 +61,29 @@ export function SettingsNav({ sections }: { sections: NavSection[] }) {
     return () => observer.disconnect();
   }, [sections]);
 
+  if (counts) {
+    const shown = sections.filter((s) => (counts[s.id] ?? 0) > 0);
+    return (
+      <nav aria-label="Resultados por grupo" className="min-w-0 lg:sticky lg:top-6">
+        <ul className="flex flex-wrap gap-1.5 lg:flex-col lg:gap-0.5">
+          {shown.map((s) => (
+            <li
+              key={s.id}
+              className="flex items-center justify-between gap-3 rounded-sm px-3 py-2 text-sm text-ink-muted"
+            >
+              <span className="whitespace-nowrap">{s.label}</span>
+              <span className="tabular rounded-pill bg-surface-2 px-2 text-xs font-semibold text-ink">
+                {counts[s.id]}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    );
+  }
+
   return (
-    <nav aria-label="Secciones de configuración" className="lg:sticky lg:top-6">
+    <nav aria-label="Secciones de configuración" className="min-w-0 lg:sticky lg:top-6">
       <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0">
         {sections.map((s) => (
           <li key={s.id}>

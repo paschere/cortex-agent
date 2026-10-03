@@ -267,9 +267,10 @@ const SECTIONS: Section[] = [
       },
       {
         href: '/settings',
-        label: 'Configuración',
-        note: 'Tus preferencias y por dónde te escribe Cortex',
-        keywords: 'ajustes preferencias zona horaria settings memoria perfil',
+        label: 'Ajustes',
+        note: 'Todo lo configurable en un solo lugar: tu cuenta, la empresa, conexiones y ayuda',
+        keywords:
+          'ajustes configuracion preferencias settings zona horaria memoria perfil tema oscuro notificaciones voz correo privacidad datos seguridad',
       },
       {
         href: '/settings/modulos',

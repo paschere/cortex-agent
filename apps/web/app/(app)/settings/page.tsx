@@ -1,9 +1,22 @@
 import type { ChatDmStatus, PreferencesView } from '@/app/api/settings/preferences/schema';
+import { ThemeToggle } from '@/components/nav/ThemeToggle';
 import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
 import { isChatOutboundConfigured } from '@/lib/google-chat';
+import { companyModules } from '@/lib/modules/server';
 import { requireSession } from '@/lib/session';
+import { toHubEntries } from '@/lib/settings/hub';
+import { type SettingsStateKey, visibleSettings } from '@/lib/settings/registry';
+import {
+  type SettingsState,
+  mailState,
+  memoryState,
+  notificationsState,
+  profileState,
+  versionState,
+} from '@/lib/settings/state-text';
+import { loadSettingsStates } from '@/lib/settings/states';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { managesTeam } from '@/lib/team/read';
 import { workspaceHref } from '@/lib/workspace-context';
 import {
   PREFERENCE_COLUMNS,
@@ -11,121 +24,98 @@ import {
   listMemories,
   rowToPreferences,
 } from '@cortex/agent-tools';
-import {
-  Boxes,
-  Brain,
-  Building2,
-  ChevronRight,
-  Mail,
-  MessagesSquare,
-  Mic2,
-  Settings as SettingsIcon,
-  ShieldCheck,
-} from 'lucide-react';
-import Link from 'next/link';
+import { Settings as SettingsIcon } from 'lucide-react';
 import { SettingsForm } from './SettingsForm';
 import { MailboxLearning, type MailboxState } from './_components/MailboxLearning';
-import { type NavSection, SettingsNav } from './_components/SettingsNav';
+import { SettingsHub } from './_components/SettingsHub';
+import { LegalLinks, ProfileFacts, ROLE_LABEL, VersionInfo } from './_components/SettingsInlines';
+
+/** El commit que está corriendo, si el entorno lo dice (Railway o Vercel). */
+const buildSha = process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null;
+const buildEnv = process.env.NODE_ENV === 'production' ? 'Producción' : 'Desarrollo';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: 'Ajustes · Cortex' };
 
 /**
- * /settings — los controles de una persona sobre sí misma, no una pantalla de
- * administración. La única fila que lee o escribe es la de su propia sesión.
+ * /settings — EL RECIBIDOR DE AJUSTES: todo lo que se puede configurar en
+ * Cortex, en un solo lugar y ordenado por lo que alguien viene a hacer.
  *
  * ===========================================================================
- * POR QUÉ ESTA PANTALLA SE REORGANIZÓ
+ * POR QUÉ ES UN RECIBIDOR Y NO UNA PANTALLA MÁS
  * ===========================================================================
- * Era una columna de siete paneles, todos del mismo tamaño y todos sobre lo
- * mismo (el resumen diario), con dos enlaces al final a las dos cosas que la
- * gente viene a buscar de verdad: qué recuerda Cortex de ellos y cómo trabaja
- * su empresa. Para llegar a eso había que pasar por el webhook de Google Chat.
+ * Los ajustes vivían en veinte pantallas (Datos de la empresa, Sin preguntar,
+ * Plan, Conectar Claude, la voz, la privacidad, el piloto…) y la única forma de
+ * dar con uno era saber dónde estaba. Esta página no los reemplaza: los reúne.
+ * Cada uno aparece con su título, una línea que lo explica, su estado cuando
+ * es barato saberlo («Plan Equipo · prueba: 9 días») y, según el caso, su
+ * control a la mano (apariencia, avisos, correo) o un «Abrir» a su pantalla.
  *
- * Ahora la página está partida en secciones con un índice al lado, y las
- * secciones están ordenadas por lo que alguien viene a hacer:
+ * La lista sale de `lib/settings/registry.ts`, puro y probado. Aquí sólo se
+ * decide qué ve ESTA persona (su rol y los módulos que la empresa prendió) y se
+ * leen los datos cortos. Lo que se esconde por módulo apagado se cuenta al
+ * pie con el enlace a Módulos; lo que se esconde por rol, también se dice.
  *
- *   1. TU CUENTA        quién eres para Cortex y en qué empresa. Antes no
- *                       estaba en ninguna parte, y es lo primero que uno mira
- *                       cuando entra a «configuración» de cualquier producto.
- *   2. TU CORREO        lo más grande que se decide aquí: si Cortex aprende de
- *                       tu buzón. Va segundo porque es una decisión, no un
- *                       ajuste, y porque es nuevo.
- *   3. EL RESUMEN       lo que ya estaba, intacto en su comportamiento.
- *   4. TU CEREBRO       los dos enlaces, que ahora se ven sin bajar hasta el
- *                       fondo.
- *
- * Son ANCLAS y no pestañas: la página sigue siendo una sola, se puede buscar
- * con Ctrl+F y `/settings#correo` es un enlace que funciona desde cualquier
- * sitio.
+ * Nada de lo que se guarda cambió: el formulario de avisos, el del correo, la
+ * voz, la memoria y la privacidad son los mismos de siempre, y los enlaces
+ * viejos (`/settings#correo`, `#resumen`, `#cerebro`, `/settings/voice`…) siguen
+ * llevando al mismo control.
  */
 
-const SECTIONS: NavSection[] = [
-  { id: 'cuenta', label: 'Tu cuenta' },
-  { id: 'correo', label: 'Tu correo' },
-  { id: 'resumen', label: 'Resumen diario' },
-  { id: 'cerebro', label: 'Tu cerebro' },
-  { id: 'privacidad', label: 'Privacidad y datos' },
-];
-
-/** Cómo se llama cada papel en la empresa, en español y sin jerga de sistema. */
-const ROLE_LABEL: Record<string, string> = {
-  org_admin: 'Administradora o administrador del espacio',
-  team_admin: 'Lidera un equipo',
-  member: 'Miembro del equipo',
-};
-
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
   // Las preferencias, el enlace de Chat, las memorias, la entrevista y el buzón
   // son lecturas independientes; ninguna bloquea a las otras.
-  const [{ data }, link, memories, setup, mailbox, google] = await Promise.all([
-    db.from('user_preferences').select(PREFERENCE_COLUMNS).eq('user_id', user.id).maybeSingle(),
-    // El hilo de mensaje directo se descubre, no se crea: esta fila sólo existe
-    // cuando la persona ya le escribió a Cortex en Google Chat. Leerla aquí es
-    // lo que convierte el interruptor del DM de una casilla que puede no hacer
-    // nada en una que dice, en la página, si va a funcionar.
-    db
-      .from('google_chat_links')
-      .select('display_name, dm_space')
-      .eq('user_id', user.id)
-      .not('dm_space', 'is', null)
-      .order('last_seen_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    // Nunca tumba la página: una lectura de memorias que falle debe costar sus
-    // números, no el formulario.
-    listMemories(db, user.id).catch(() => []),
-    // Cuántas cosas ha creado de verdad la entrevista de arranque. Misma
-    // postura que la lectura de memorias: un fallo cuesta este número, jamás la
-    // página.
-    db
-      .from('guided_setup_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'created')
-      .then((r) => r.count ?? 0)
-      .then(
-        (n) => n,
-        () => null,
-      ),
-    // El buzón que Cortex está aprendiendo, si hay alguno. Es de esta persona:
-    // `gmail_sync_state` tiene una fila por usuario y esto nombra la suya.
-    getSyncState(db, user.id).catch(() => null),
-    // Si su cuenta de Google está conectada. Sin eso, el panel del buzón dice
-    // qué falta en vez de ofrecer un botón que no puede funcionar.
-    db
-      .from('integrations')
-      .select('provider')
-      .eq('user_id', user.id)
-      .eq('provider', 'google')
-      .maybeSingle()
-      .then((r) => Boolean(r.data))
-      .then(
-        (connected) => connected,
-        () => false,
-      ),
-  ]);
+  const [modulesOn, { data, error: prefsError }, link, memories, mailbox, google] =
+    await Promise.all([
+      companyModules(user.organization.id),
+      db.from('user_preferences').select(PREFERENCE_COLUMNS).eq('user_id', user.id).maybeSingle(),
+      // El hilo de mensaje directo se descubre, no se crea: esta fila sólo existe
+      // cuando la persona ya le escribió a Cortex en Google Chat. Leerla aquí es
+      // lo que convierte el interruptor del DM de una casilla que puede no hacer
+      // nada en una que dice, en la página, si va a funcionar.
+      db
+        .from('google_chat_links')
+        .select('display_name, dm_space')
+        .eq('user_id', user.id)
+        .not('dm_space', 'is', null)
+        .order('last_seen_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      // Nunca tumba la página: una lectura de memorias que falle debe costar sus
+      // números, no el formulario.
+      listMemories(db, user.id).catch(() => []),
+      // El buzón que Cortex está aprendiendo, si hay alguno. Es de esta persona:
+      // `gmail_sync_state` tiene una fila por usuario y esto nombra la suya.
+      getSyncState(db, user.id).catch(() => null),
+      // Si su cuenta de Google está conectada. Sin eso, el panel del buzón dice
+      // qué falta en vez de ofrecer un botón que no puede funcionar.
+      db
+        .from('integrations')
+        .select('provider')
+        .eq('user_id', user.id)
+        .eq('provider', 'google')
+        .maybeSingle()
+        .then((r) => !r.error && Boolean(r.data))
+        .then(
+          (connected) => connected,
+          () => false,
+        ),
+    ]);
+
+  const viewer = {
+    admin: user.role === 'org_admin',
+    teamManager: managesTeam(user),
+    modulesOn,
+  };
+  const visible = visibleSettings(viewer);
 
   const activeMemories = memories.filter((m) => m.status === 'active').length;
   const pendingMemories = memories.filter((m) => m.status === 'suggested').length;
@@ -150,299 +140,97 @@ export default async function SettingsPage() {
 
   const chatDm: ChatDmStatus = {
     configured: isChatOutboundConfigured(),
-    linked: Boolean(link.data?.dm_space),
-    displayName: (link.data?.display_name as string | null | undefined) ?? null,
+    linked: !link.error && Boolean(link.data?.dm_space),
+    displayName:
+      (!link.error ? (link.data?.display_name as string | null | undefined) : null) ?? null,
   };
+
+  // Los datos cortos: los que ya se leyeron para los formularios, más los que
+  // cuestan una lectura y sólo se piden si la entrada se va a ver.
+  const wanted = new Set(visible.entries.flatMap((e) => (e.state ? [e.state] : [])));
+  const loaded = await loadSettingsStates({
+    db,
+    userId: user.id,
+    wanted,
+    modulesOnCount: modulesOn.size,
+  });
+  const states: Partial<Record<SettingsStateKey, SettingsState>> = {
+    ...loaded,
+    perfil: profileState(user.name, ROLE_LABEL[user.organization.role] ?? user.organization.role),
+    ...(prefsError
+      ? {}
+      : {
+          notificaciones: notificationsState({
+            digestEnabled: p.enabled,
+            digestTime: p.time,
+            mailAlertsEnabled: p.mailAlertsEnabled,
+          }),
+        }),
+    memoria: memoryState(activeMemories, pendingMemories),
+    correo: mailState(google, mailbox),
+    empresa: { text: user.organization.name, tone: 'neutral' },
+    version: versionState(buildSha),
+  };
+
+  const entries = toHubEntries(visible.entries, states, (href) =>
+    workspaceHref(user.organization.id, href),
+  );
 
   return (
     <>
       <PageHeader
         title="Ajustes"
-        subtitle="Tu cuenta, qué puede hacer Cortex por ti y por dónde te escribe"
+        subtitle="Todo lo que se puede configurar en Cortex, en un solo lugar: lo tuyo, lo de la empresa, lo que Cortex hace solo y de dónde saca la información."
         icon={<SettingsIcon className="h-5 w-5" />}
       />
-
-      <div className="grid gap-6 lg:grid-cols-[190px_minmax(0,1fr)]">
-        <SettingsNav sections={SECTIONS} />
-
-        <div className="min-w-0 space-y-10">
-          {/* ---- 1. Quién eres para Cortex --------------------------------- */}
-          <section id="cuenta" className="scroll-mt-6">
-            <SectionHead
-              icon={<ShieldCheck className="h-4 w-4" />}
-              title="Tu cuenta"
-              blurb="Con qué identidad trabaja Cortex cuando hace algo por ti. Todo lo que lee y escribe pasa por estos datos."
+      <SettingsHub
+        entries={entries}
+        hiddenByModule={visible.hiddenByModule}
+        hiddenByRole={visible.hiddenByRole}
+        modulesHref={workspaceHref(user.organization.id, '/settings/modulos')}
+        initialQuery={(q ?? '').slice(0, 80)}
+        inline={{
+          perfil: (
+            <ProfileFacts
+              name={user.name}
+              email={user.email}
+              workspace={user.organization.name}
+              role={user.organization.role}
             />
-            <Panel className="p-5">
-              <dl className="grid gap-4 sm:grid-cols-2">
-                <Fact label="Nombre" value={user.name?.trim() || 'Sin nombre'} />
-                <Fact label="Correo" value={user.email} mono />
-                <Fact
-                  label="Espacio de trabajo"
-                  value={user.organization.name}
-                  icon={<Building2 className="h-3.5 w-3.5" />}
-                />
-                <Fact
-                  label="Tu papel aquí"
-                  value={ROLE_LABEL[user.organization.role] ?? user.organization.role}
-                />
-              </dl>
-              <p className="mt-4 border-t border-border pt-3 text-xs leading-relaxed text-ink-faint">
-                El nombre y el correo salen de tu cuenta de Google y no se cambian desde aquí. Si
-                perteneces a dos empresas, cada una tiene su propia configuración: ésta es la de{' '}
-                <span className="font-semibold text-ink-muted">{user.organization.name}</span>.
-              </p>
-            </Panel>
-          </section>
-
-          {/* ---- 2. La decisión grande ------------------------------------- */}
-          <section id="correo" className="scroll-mt-6">
-            <SectionHead
-              icon={<Mail className="h-4 w-4" />}
-              title="Tu correo"
-              blurb="Consulta, seguimiento y aprendizaje, con controles separados y sin archivar todo en el cerebro."
-            />
-            <Panel className="p-5">
-              <MailboxLearning
-                googleConnected={google}
-                state={
-                  mailbox
-                    ? ({
-                        emailAddress: mailbox.emailAddress,
-                        backfillWindow: mailbox.backfillWindow,
-                        backfillThreads: mailbox.backfillThreads,
-                        backfillDoneAt: mailbox.backfillDoneAt,
-                        lastSyncedAt: mailbox.lastSyncedAt,
-                        lastError: mailbox.lastError,
-                        paused: mailbox.paused,
-                      } satisfies MailboxState)
-                    : null
-                }
-              />
-            </Panel>
-          </section>
-
-          {/* ---- 3. Lo de siempre ------------------------------------------ */}
-          <section id="resumen" className="scroll-mt-6">
-            <SectionHead
-              icon={<MessagesSquare className="h-4 w-4" />}
-              title="Resumen diario y parte semanal"
-              blurb="Qué te manda Cortex sin que se lo pidas, a qué hora y por dónde."
-            />
-            <SettingsForm initial={initial} chatDm={chatDm} />
-          </section>
-
-          {/* ---- 4. Lo que la gente viene a buscar -------------------------- */}
-          <section id="cerebro" className="scroll-mt-6">
-            <SectionHead
-              icon={<Brain className="h-4 w-4" />}
-              title="Tu cerebro"
-              blurb="Lo que Cortex sabe de ti y de tu empresa, y que puedes revisar o quitar cuando quieras."
-            />
-            <div className="space-y-3">
-              {/* Su propia página, enlazada desde aquí: la lista se actúa más
-                  que se rellena, y tiene que encontrarse desde el único sitio
-                  donde la gente busca «qué guarda este producto sobre mí». */}
-              <RowLink
-                href={workspaceHref(user.organization.id, '/settings/memory')}
-                icon={<Brain className="h-4 w-4" />}
-                title="Lo que Cortex recuerda de ti"
-              >
-                {activeMemories === 0 ? (
-                  'Todavía nada. Cortex va anotando cosas a medida que trabajan juntos.'
-                ) : (
-                  <>
-                    <span className="tabular text-ink">{activeMemories}</span>{' '}
-                    {activeMemories === 1 ? 'cosa que lleva' : 'cosas que lleva'} a cada
-                    conversación.
-                  </>
-                )}
-                {pendingMemories > 0 && (
-                  <>
-                    {' '}
-                    <span className="tabular text-ink">{pendingMemories}</span>{' '}
-                    {pendingMemories === 1 ? 'espera' : 'esperan'} a que las guardes o las
-                    descartes.
-                  </>
-                )}
-              </RowLink>
-
-              <RowLink
-                href={workspaceHref(user.organization.id, '/settings/voice')}
-                icon={<Mic2 className="h-4 w-4" />}
-                title="La voz de Cortex"
-              >
-                Elige cómo suena Cortex en las llamadas de esta empresa y, si administras el
-                espacio, crea una voz propia con consentimiento verificable.
-              </RowLink>
-
-              {/* La entrevista vive aquí, al lado de la lista de memorias, por
-                  la razón que dice esa fila: éste es el sitio donde se busca
-                  «qué guarda y qué hace este producto en mi nombre».
-                  También se llega desde /onboarding, pero sólo mientras no haya
-                  una fuente conectada y una primera pregunta hecha — sensato
-                  para el primer día, inútil como dirección permanente. Contarle
-                  a Cortex cómo trabaja la empresa no es tarea de la primera
-                  semana: es algo que alguien recuerda un martes de marzo, y
-                  entonces va a buscarlo a Configuración. */}
-              <RowLink
-                href={workspaceHref(user.organization.id, '/onboarding/entrevista')}
-                icon={<MessagesSquare className="h-4 w-4" />}
-                title="Cuéntale cómo trabaja tu empresa"
-              >
-                {setup === null || setup === 0 ? (
-                  'Le explicas tus procesos, te hace unas preguntas, y te propone qué vigilar y qué hacer solo. Nada se crea sin que lo apruebes.'
-                ) : (
-                  <>
-                    Ya dejó <span className="tabular text-ink">{setup}</span>{' '}
-                    {setup === 1 ? 'cosa andando' : 'cosas andando'}. Cuéntale algo más y te propone
-                    lo siguiente.
-                  </>
-                )}
-              </RowLink>
-
-              <RowLink
-                href={workspaceHref(user.organization.id, '/integrations')}
-                icon={<Building2 className="h-4 w-4" />}
-                title="Lo que Cortex tiene conectado"
-              >
-                Google, Microsoft, WhatsApp, HubSpot y los demás sistemas de los que saca
-                información — y quién conectó cada uno.
-              </RowLink>
-
-              {/* Módulos (0186): qué áreas de Cortex usa la empresa. */}
-              <RowLink
-                href={workspaceHref(user.organization.id, '/settings/modulos')}
-                icon={<Boxes className="h-4 w-4" />}
-                title="Módulos de la empresa"
-              >
-                Prende lo que la empresa usa —inventario, nómina, flota, piloto automático— y apaga
-                lo que no. Lo apagado sale del menú y del chat sin borrar datos.
-              </RowLink>
-            </div>
-          </section>
-
-          {/* ---- 5. Los derechos del titular (Ley 1581, migración 0188) ---- */}
-          <section id="privacidad" className="scroll-mt-6">
-            <SectionHead
-              icon={<ShieldCheck className="h-4 w-4" />}
-              title="Privacidad y datos"
-              blurb="Descarga o borra tus datos, revisa tus autorizaciones y haz consultas o reclamos."
-            />
-            <RowLink
-              href={workspaceHref(user.organization.id, '/settings/privacidad')}
-              icon={<ShieldCheck className="h-4 w-4" />}
-              title="Privacidad y datos"
-            >
-              Descargar mis datos o los de la empresa, eliminar mi usuario o la cuenta de la
-              empresa, y consultas y reclamos con su plazo legal.
-            </RowLink>
-            <p className="mt-3 text-xs text-ink-faint">
-              <a
-                href="/privacidad"
-                target="_blank"
-                rel="noreferrer"
-                className="mr-3 hover:underline"
-              >
-                Privacidad
-              </a>
-              <a
-                href="/tratamiento-de-datos"
-                target="_blank"
-                rel="noreferrer"
-                className="mr-3 hover:underline"
-              >
-                Tratamiento de datos
-              </a>
-              <a href="/terminos" target="_blank" rel="noreferrer" className="mr-3 hover:underline">
-                Términos
-              </a>
-              <a href="/cookies" target="_blank" rel="noreferrer" className="hover:underline">
-                Cookies
-              </a>
+          ),
+          apariencia: <ThemeToggle />,
+          // Si la lectura falló, NO se pinta el formulario con los valores por
+          // defecto: guardar encima sería pisar lo que la persona sí tenía.
+          notificaciones: prefsError ? (
+            <p className="text-sm text-rose">
+              No pudimos leer tus preferencias de avisos. Recarga la página; si sigue igual,
+              escríbenos desde Ayuda.
             </p>
-          </section>
-        </div>
-      </div>
+          ) : (
+            <SettingsForm initial={initial} chatDm={chatDm} />
+          ),
+          correo: (
+            <MailboxLearning
+              googleConnected={google}
+              state={
+                mailbox
+                  ? ({
+                      emailAddress: mailbox.emailAddress,
+                      backfillWindow: mailbox.backfillWindow,
+                      backfillThreads: mailbox.backfillThreads,
+                      backfillDoneAt: mailbox.backfillDoneAt,
+                      lastSyncedAt: mailbox.lastSyncedAt,
+                      lastError: mailbox.lastError,
+                      paused: mailbox.paused,
+                    } satisfies MailboxState)
+                  : null
+              }
+            />
+          ),
+          legales: <LegalLinks />,
+          version: <VersionInfo sha={buildSha} env={buildEnv} />,
+        }}
+      />
     </>
-  );
-}
-
-/** El encabezado de una sección: dice de qué va antes de enseñar los controles. */
-function SectionHead({
-  icon,
-  title,
-  blurb,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  blurb: string;
-}) {
-  return (
-    <div className="mb-3 flex items-start gap-2.5">
-      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <h2 className="text-sm font-bold text-ink">{title}</h2>
-        <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{blurb}</p>
-      </div>
-    </div>
-  );
-}
-
-/** Un dato de la cuenta. Etiqueta arriba, valor abajo, sin adornos. */
-function Fact({
-  label,
-  value,
-  mono,
-  icon,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="field-label">{label}</dt>
-      <dd className="mt-1 flex items-center gap-1.5 text-sm text-ink">
-        {icon && <span className="shrink-0 text-ink-faint">{icon}</span>}
-        <span className={mono ? 'tabular truncate' : 'truncate'}>{value}</span>
-      </dd>
-    </div>
-  );
-}
-
-/** Una fila que lleva a otra pantalla. */
-function RowLink({
-  href,
-  icon,
-  title,
-  children,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Panel>
-      <Link
-        href={href}
-        className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-surface-2"
-      >
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
-            {icon}
-          </span>
-          <div>
-            <div className="text-sm font-semibold text-ink">{title}</div>
-            <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{children}</p>
-          </div>
-        </div>
-        <ChevronRight className="h-4 w-4 shrink-0 text-ink-faint" />
-      </Link>
-    </Panel>
   );
 }
