@@ -21,6 +21,7 @@ import {
   Inbox,
   Landmark,
   LayoutDashboard,
+  LayoutGrid,
   LayoutPanelTop,
   LifeBuoy,
   MessageCircle,
@@ -632,15 +633,12 @@ export function moreGroups({
     {
       id: 'work',
       label: 'Mi trabajo',
-      items: pick([
-        '/management',
-        '/clients',
-        '/payments',
-        '/impuestos',
-        '/documentos-vencen',
-        '/goals',
-        '/calls',
-      ]),
+      items: [
+        // El lanzador de módulos (/areas): nómina, contratos, estados, proyectos…
+        // se encuentran ahí sin alargar este menú.
+        { href: '/areas', label: 'Todas las áreas', icon: LayoutGrid },
+        ...pick(['/management', '/clients', '/payments', '/goals', '/calls']),
+      ],
     },
     {
       id: 'data',

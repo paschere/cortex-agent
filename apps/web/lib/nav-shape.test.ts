@@ -227,7 +227,9 @@ describe('«Más», corto', () => {
     const known = new Set(everyDestination());
     for (const g of moreGroups({ admin: true, founder: true })) {
       for (const item of g.items) {
-        if (item.href !== '/overview') expect(known.has(item.href)).toBe(true);
+        if (item.href !== '/overview' && item.href !== '/areas') {
+          expect(known.has(item.href)).toBe(true);
+        }
       }
     }
   });
