@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FeedDetail } from './shared';
 
 export const FEED_COLUMNS =
-  'id, filename, feed_kind, source_url, created_at, purge_at, byte_size, conversation_id, promoted_document_id, feed_truncated';
+  'id, filename, feed_kind, source_url, created_at, purge_at, byte_size, conversation_id, promoted_document_id, feed_truncated, feed_source_id';
 
 /** The client pins the organization; Feed additionally belongs to its uploader. */
 export function ownedFeed(db: SupabaseClient, userId: string, columns = FEED_COLUMNS) {

@@ -198,6 +198,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   clients_overview: 'Ver la ficha del cliente',
   clients_register: 'Registrar o actualizar el cliente',
   clients_link: 'Enganchar esto a la ficha del cliente',
+  clients_merge: 'Unir dos clientes repetidos',
   documents_extract: 'Leer los datos del documento',
   documents_pending_review: 'Ver los documentos por confirmar',
   documents_confirm: 'Confirmar lo que se leyó del documento',

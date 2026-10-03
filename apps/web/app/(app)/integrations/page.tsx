@@ -1,10 +1,16 @@
 import { DirectionPair } from '@/components/connect/DirectionPair';
+import { ConnectCatalog } from '@/components/sources/ConnectCatalog';
+import { ConnectedSources } from '@/components/sources/ConnectedSources';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { SourceDiagnostics } from '@/components/ui/source-diagnostics';
+import { canManageAccounting } from '@/lib/accounting/card';
 import { quickbooksErrorMessage } from '@/lib/accounting/quickbooks-oauth';
 import { readSetupDiagnostics } from '@/lib/management/diagnostics';
 import { requireSession } from '@/lib/session';
+import { buildCatalog } from '@/lib/sources/catalog';
+import { buildConnectedSources, unreadParts } from '@/lib/sources/overview';
+import { readSourcesSnapshot } from '@/lib/sources/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { workspaceHref } from '@/lib/workspace-context';
 import {
@@ -15,69 +21,40 @@ import {
 } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
-  Boxes,
   Brain,
-  Building2,
-  CircleCheck,
+  ChevronDown,
   Gauge,
-  GitBranch,
   Globe,
-  Inbox,
-  ListTodo,
-  Mail,
-  MessageCircle,
   MessageSquare,
   Plug,
   Server,
   Sparkles,
   TriangleAlert,
-  Users,
   Wallet,
-  Wrench,
 } from 'lucide-react';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { AccountingSection } from './_components/AccountingSection';
 import { AddMcpServerForm } from './_components/AddMcpServerForm';
 import { type McpServer, McpServerList } from './_components/McpServerList';
-import { SourceIntake } from './_components/SourceIntake';
+import { syncAccountingProgramNow } from './accounting-actions';
+import { syncSourceNow } from './source-actions';
+
+/**
+ * DATOS Y CONEXIONES: UNA SOLA IDEA POR PANTALLA.
+ *
+ * Arriba, «Conectado»: todo lo que la empresa ya trae a Cortex —cuentas de
+ * Google o Microsoft, programas contables, carpetas de Drive que llenan
+ * tablas, hojas sincronizadas, APIs, extractos del banco, WhatsApp, la
+ * bandeja— como tarjetas de estado con la misma forma, y el resumen de salud
+ * («6 conectadas · 1 con error»). Abajo, «Conecta algo nuevo»: el catálogo
+ * agrupado por lo que la gente quiere traer, cada tarjeta a su flujo. Lo
+ * técnico (servidores MCP, servicios que activa el equipo de Cortex, el
+ * diagnóstico, la telemetría del cerebro) va plegado en «Avanzado».
+ */
 
 const MAX_MCP_SERVERS = 5;
 const MAX_MCP_TOOLS = 50;
-
-/** Connected for the whole team, connected by this person, or not at all. */
-type ConnState = 'workspace' | 'user' | 'disconnected' | 'unknown';
-
-interface ProviderCard {
-  key: string;
-  name: string;
-  icon: typeof Mail;
-  /** Tool families this system backs — drives the live tool count. */
-  families: string[];
-  state: ConnState;
-  /** Plain language: what Cortex can do because this is connected. */
-  unlocks: string;
-  /** Plain language: what stops working while it is disconnected. */
-  offline: string;
-  /** Who turned it on — or who would have to. */
-  owner: string;
-  connectHref?: string;
-  /** Overrides the "Conectar" label when the card leads to a settings screen. */
-  ctaLabel?: string;
-  /** Replaces the tool count for a system that is a channel, not a toolbox. */
-  footNote?: string;
-  scope: 'company' | 'personal';
-}
-
-/**
- * A connection is a document in force or one that never arrived. Amber, not
- * grey, for the missing ones: it is something to act on, not a neutral fact.
- */
-const STATE_TAG: Record<ConnState, { label: string; cls: string }> = {
-  workspace: { label: 'Configurada', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
-  user: { label: 'Autorizada', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
-  disconnected: { label: 'Sin conectar', cls: 'border-amber/40 bg-amber-soft text-amber' },
-  unknown: { label: 'Sin comprobar', cls: 'border-border bg-surface-2 text-ink-muted' },
-};
 
 /** Lo que vuelve en `?connected=` tras un OAuth, dicho como lo diría una persona. */
 const CONNECTED_NAME: Record<string, string> = {
@@ -91,14 +68,6 @@ const CONNECTED_NAME: Record<string, string> = {
   alegra: 'Alegra',
 };
 
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('es-CO', {
-    day: 'numeric',
-    month: 'short',
-  });
-}
-
 export default async function IntegrationsPage({
   searchParams,
 }: {
@@ -106,314 +75,39 @@ export default async function IntegrationsPage({
 }) {
   const user = await requireSession();
   const isAdmin = user.role === 'org_admin';
+  const canManage = canManageAccounting(user.organization.role);
   const sp = await searchParams;
   const db = getOrgScopedClient(user.organization.id);
-  const diagnosticsPromise = readSetupDiagnostics(db, user.id);
+  const workspaceId = user.organization.id;
+  const href = (path: string) => workspaceHref(workspaceId, path);
 
-  // Every OAuth row, not just this user's: "who connected it" is part of the
-  // answer, and a team-sized table makes this a cheap read.
-  const { data: integrationRows, error: integrationError } = await db
-    .from('integrations')
-    .select('provider, scopes, updated_at, user_id')
-    .limit(1000);
-
-  const rows = (integrationRows ?? []) as Array<{
-    provider: string;
-    scopes: string[] | null;
-    updated_at: string | null;
-    user_id: string;
-  }>;
-
-  const mine: Record<string, (typeof rows)[number]> = {};
-  const teammates: Record<string, number> = {};
-  for (const r of rows) {
-    if (r.user_id === user.id) mine[r.provider] = r;
-    else teammates[r.provider] = (teammates[r.provider] ?? 0) + 1;
-  }
-
-  /** Owner line for a per-user OAuth provider. */
-  function personalOwner(provider: string): string {
-    if (integrationError) return 'No se pudo comprobar quién autorizó esta integración';
-    const own = mine[provider];
-    if (own) {
-      const when = fmtDate(own.updated_at);
-      return when ? `La conectaste tú · ${when}` : 'La conectaste tú';
-    }
-    const n = teammates[provider] ?? 0;
-    if (n > 0) {
-      return `${n} ${n === 1 ? 'compañero la conectó' : 'compañeros la conectaron'}; tu cuenta no`;
-    }
-    return 'Nadie la ha conectado todavía';
-  }
-
-  function personalState(provider: string): ConnState {
-    if (integrationError) return 'unknown';
-    return mine[provider] ? 'user' : 'disconnected';
-  }
-
-  /** Owner line for a workspace credential provisioned by ops. */
-  // Un dueño sin equipo técnico no sabe qué es «la API key de búsqueda»: lo que
-  // necesita saber es que esto lo activa Cortex y no él. El detalle técnico
-  // sigue ahí para quien administra, que es quien lo va a pedir.
-  function opsOwner(connected: boolean, what: string): string {
-    if (connected) return 'Activa para toda la empresa';
-    return isAdmin
-      ? `La activa el equipo de Cortex; pídesela · detalle: ${what}`
-      : 'La activa el equipo de Cortex; pídesela a quien administra la empresa';
-  }
-
-  // Tool counts per family, straight from the live registry.
-  const toolsByFamily: Record<string, number> = {};
-  for (const t of listTools()) {
-    if (t.id.startsWith('test.')) continue;
-    const fam = t.id.split('.')[0] ?? '';
-    toolsByFamily[fam] = (toolsByFamily[fam] ?? 0) + 1;
-  }
-  const famCount = (families: string[]) =>
-    families.reduce((sum, f) => sum + (toolsByFamily[f] ?? 0), 0);
-
-  const googleScopes = (mine.google?.scopes ?? []).length;
-  const microsoftScopes = (mine.microsoft?.scopes ?? []).length;
-  // Whether the Azure app registration exists at all. Without it the card says
-  // "ask the technical team" instead of offering a button that answers 409.
+  const hubspotWorkspace = !!process.env.HUBSPOT_PRIVATE_APP_TOKEN;
   const microsoftConfigured =
     !!process.env.MICROSOFT_CLIENT_ID && !!process.env.MICROSOFT_REDIRECT_URI;
-  const hubspotWorkspace = !!process.env.HUBSPOT_PRIVATE_APP_TOKEN;
-  const matcherOn = !!process.env.MATCHER_URL;
-  const payrollOn = !!process.env.PAYROLL_API_URL;
-  // Two different keys, reported as one card because they fail as one product.
-  // Reasoning runs on Claude; retrieval by MEANING additionally needs Voyage.
-  // Losing the second is a degradation (keyword search still works), losing the
-  // first is an outage — so only the first switches the card off.
-  const brainOn = !!process.env.ANTHROPIC_API_KEY;
-  // Which embedding provider this deployment is actually pointed at, and what it
-  // has cost lately. Both live here rather than on the Brain Knowledge screen
-  // because this is the page about credentials somebody in ops owns, and the
-  // thing that went wrong was a credential nobody was watching.
-  const embedding = embeddingConfig();
-  const embeddingOk = !('error' in embedding);
-  const semanticSearchOn = embeddingOk && embedding.keyConfigured;
-  const spend = await readEmbeddingSpend(db, { days: 30 });
-  const webOn = !!process.env.TAVILY_API_KEY;
-  const slackOn = !!process.env.SLACK_BOT_TOKEN;
 
-  // WhatsApp is not a credential somebody pastes: it is a phone that was paired
-  // and a set of decisions about it. The card reports the connection and hands
-  // off to /integrations/whatsapp, where all of it is configured.
-  const { data: waSession } = await db
-    .from('whatsapp_sessions')
-    .select('status, phone_number, last_seen_at')
-    .maybeSingle();
-  const waStatus = (waSession?.status as string | null) ?? 'disconnected';
-  const waAlive =
-    Date.now() - Date.parse((waSession?.last_seen_at as string | null) ?? '') < 3 * 60_000;
-  const waOn = waStatus === 'connected' && waAlive;
+  const [snapshot, diagnostics, mcpRead, spend] = await Promise.all([
+    readSourcesSnapshot(db, { userId: user.id, canManage, hubspotWorkspace }),
+    readSetupDiagnostics(db, user.id),
+    db
+      .from('user_mcp_servers')
+      .select(
+        'id, name, url, auth_type, auth_value_encrypted, enabled, trusted, tool_count, last_checked_at, last_error, user_mcp_tools(tool_name, tool_description)',
+      )
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true }),
+    readEmbeddingSpend(db, { days: 30 }),
+  ]);
 
-  const { data: waGroupRows } = await db
-    .from('whatsapp_groups')
-    .select('archive_enabled, reply_enabled')
-    .or('archive_enabled.eq.true,reply_enabled.eq.true')
-    .limit(500);
-  const waGroups = (waGroupRows ?? []).length;
+  const connected = buildConnectedSources(snapshot);
+  const unread = unreadParts(snapshot);
+  const mine = new Set(
+    (snapshot.integrations ?? []).filter((r) => r.user_id === user.id).map((r) => r.provider),
+  );
 
-  const { count: waLinkCount } = await db
-    .from('whatsapp_links')
-    .select('phone_e164', { count: 'exact', head: true });
-  const waLinks = waLinkCount ?? 0;
-  // The one fact that decides whether Cortex answers this person on WhatsApp.
-  const { data: myWaLink } = await db
-    .from('whatsapp_links')
-    .select('phone_e164')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  const providers: ProviderCard[] = [
-    {
-      key: 'google',
-      name: 'Google Workspace',
-      icon: Mail,
-      families: ['gmail', 'gcal', 'gsheets', 'gdrive', 'meetings', 'chat'],
-      state: personalState('google'),
-      scope: 'personal',
-      unlocks:
-        'Leer y redactar tu correo, ver y crear eventos del calendario, abrir archivos de Docs, Sheets y Drive, y traer transcripciones de reuniones.',
-      offline:
-        'Sin correo, sin calendario, sin Drive y sin notas de reuniones: Cortex no ve nada de tu día.',
-      owner: mine.google
-        ? `La conectaste tú${googleScopes ? ` · ${googleScopes} permisos otorgados` : ''}`
-        : 'Se otorga al entrar. Si la saltaste, conéctala aquí',
-      connectHref: mine.google ? undefined : '/api/integrations/google?preset=all',
-    },
-    {
-      key: 'microsoft',
-      name: 'Microsoft 365',
-      icon: Inbox,
-      families: ['outlook', 'mscal'],
-      state: personalState('microsoft'),
-      scope: 'personal',
-      unlocks:
-        'Leer y buscar tu correo de Outlook, leer un hilo completo, dejar borradores y enviarlos, ver y crear eventos del calendario, y guardar en el cerebro la correspondencia con clientes y proveedores.',
-      offline:
-        'Sin correo ni calendario para quienes trabajan en Outlook: Cortex no ve nada de su día.',
-      // The one thing this line has to make unmissable: nobody's mailbox is
-      // read because an administrator approved something. Each person connects
-      // their own, and only their own.
-      owner: mine.microsoft
-        ? `La conectaste tú${microsoftScopes ? ` · ${microsoftScopes} permisos otorgados` : ''}`
-        : microsoftConfigured
-          ? 'Cada quien conecta su propio buzón. Nadie ve el correo de otro'
-          : 'Todavía no está habilitado en tu cuenta de Cortex; pídeselo al equipo de Cortex',
-      connectHref:
-        !mine.microsoft && microsoftConfigured
-          ? '/api/integrations/microsoft?preset=all'
-          : undefined,
-    },
-    {
-      key: 'whatsapp',
-      name: 'WhatsApp',
-      icon: MessageCircle,
-      families: [],
-      state: waOn ? 'workspace' : 'disconnected',
-      scope: 'company',
-      unlocks:
-        'Escribirle a Cortex por mensaje directo desde tu teléfono, y guardar en el cerebro los grupos que elijas, con quién dijo qué y cuándo.',
-      offline:
-        'Nadie puede conversar con Cortex por WhatsApp y no entra nada de los grupos al cerebro.',
-      owner: waOn
-        ? myWaLink
-          ? 'Número de la empresa en línea · el tuyo ya está vinculado'
-          : 'Número de la empresa en línea · falta vincular el tuyo para que te conteste'
-        : waStatus === 'pairing'
-          ? 'Alguien está vinculando el número de la empresa ahora mismo'
-          : 'Falta vincular el número dedicado de la empresa: se hace desde esta tarjeta, con QR o con el número',
-      connectHref: '/integrations/whatsapp',
-      ctaLabel: waOn ? 'Configurar' : 'Emparejar',
-      footNote: waOn
-        ? `${waGroups} ${waGroups === 1 ? 'grupo' : 'grupos'} · ${waLinks} ${waLinks === 1 ? 'número' : 'números'}`
-        : 'sin emparejar',
-    },
-    {
-      key: 'hubspot',
-      name: 'HubSpot',
-      icon: Building2,
-      families: ['hubspot'],
-      state: hubspotWorkspace ? 'workspace' : personalState('hubspot'),
-      scope: hubspotWorkspace ? 'company' : 'personal',
-      unlocks:
-        'Negocios, empresas, contactos, cómo va el embudo de ventas y la actividad reciente.',
-      offline:
-        'Sin respuestas de negocios, embudo ni contactos: todo el lado comercial queda a oscuras.',
-      owner: hubspotWorkspace ? 'Activa para toda la empresa' : personalOwner('hubspot'),
-      connectHref: !hubspotWorkspace && !mine.hubspot ? '/api/integrations/hubspot' : undefined,
-    },
-    {
-      key: 'matcher',
-      name: 'Presentaciones de candidatos',
-      icon: Sparkles,
-      families: ['presentations'],
-      state: matcherOn ? 'workspace' : 'disconnected',
-      scope: 'company',
-      unlocks:
-        'Ver quién está en una vacante, armar la presentación de un candidato para el cliente y volver a bajar las que ya se hicieron, en PDF con la carta de la empresa.',
-      offline: 'No se pueden armar ni consultar presentaciones de candidatos para el cliente.',
-      owner: opsOwner(matcherOn, 'la URL del servicio de presentaciones no está configurada'),
-    },
-    {
-      key: 'payroll',
-      name: 'Nómina',
-      icon: Wallet,
-      families: ['payroll'],
-      state: payrollOn ? 'workspace' : 'disconnected',
-      scope: 'company',
-      unlocks:
-        'Quién está asignado a qué cliente, reportes de nómina y gastos, y proyecciones de costo hacia adelante.',
-      offline: 'Sin respuestas de costo del equipo, asignaciones ni gastos.',
-      owner: opsOwner(payrollOn, 'no hay URL de la API de nómina en este entorno'),
-    },
-    {
-      key: 'brain',
-      name: 'El cerebro de Cortex',
-      icon: Brain,
-      families: ['kb', 'pipeline', 'schedule', 'inbox', 'security'],
-      state: brainOn ? 'workspace' : 'disconnected',
-      scope: 'company',
-      unlocks:
-        'Buscar y recordar lo que guardas, los flujos, las rutinas y el resumen del correo: el razonamiento propio de Cortex.',
-      offline: 'Se para todo: sin cerebro, sin flujos y sin rutinas.',
-      owner:
-        brainOn && !semanticSearchOn
-          ? 'Activo · por ahora el cerebro busca por palabras, no por significado'
-          : opsOwner(brainOn, 'falta la API key del modelo'),
-    },
-    {
-      key: 'web',
-      name: 'Investigación web',
-      icon: Globe,
-      families: ['web', 'growth'],
-      state: webOn ? 'workspace' : 'disconnected',
-      scope: 'company',
-      unlocks:
-        'Búsqueda en vivo y lectura de páginas para investigar prospectos y señales de crecimiento.',
-      offline: 'Cortex se queda con lo que ya sabe: no puede investigar empresas al día.',
-      owner: opsOwner(webOn, 'no hay API key de búsqueda en este entorno'),
-    },
-    {
-      key: 'slack',
-      name: 'Slack',
-      icon: MessageSquare,
-      families: ['slack'],
-      state: slackOn ? 'workspace' : 'disconnected',
-      scope: 'company',
-      unlocks:
-        'Publicar avances, informes y resultados de rutinas directo en los canales del equipo.',
-      offline: 'Los resultados se quedan en la app y en el correo: nada llega a Slack.',
-      owner: opsOwner(slackOn, 'todavía no está aprovisionado el token del bot'),
-    },
-    {
-      key: 'github',
-      name: 'GitHub',
-      icon: GitBranch,
-      families: ['github'],
-      state: personalState('github'),
-      scope: 'personal',
-      unlocks: 'Repositorios, issues, pull requests y métricas de actividad de ingeniería.',
-      offline:
-        'Sin visibilidad de repos, issues ni PRs: las preguntas de ingeniería quedan sin respuesta.',
-      owner: mine.github
-        ? personalOwner('github')
-        : `${personalOwner('github')} · la habilita el equipo de Cortex`,
-    },
-    {
-      key: 'linear',
-      name: 'Linear',
-      icon: ListTodo,
-      families: ['linear'],
-      state: personalState('linear'),
-      scope: 'personal',
-      unlocks: 'Proyectos, ciclos, issues y carga del equipo para ver el roadmap.',
-      offline:
-        'Sin respuestas de roadmap ni de carga: Cortex no ve qué está construyendo el equipo.',
-      owner: mine.linear
-        ? personalOwner('linear')
-        : `${personalOwner('linear')} · la habilita el equipo de Cortex`,
-    },
-  ];
-
-  const { data: mcpRows } = await db
-    .from('user_mcp_servers')
-    .select(
-      'id, name, url, auth_type, auth_value_encrypted, enabled, trusted, tool_count, last_checked_at, last_error, user_mcp_tools(tool_name, tool_description)',
-    )
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: true });
-
-  const mcpServers: McpServer[] = (mcpRows ?? []).map((r) => {
+  const mcpServers: McpServer[] = (mcpRead.error ? [] : (mcpRead.data ?? [])).map((r) => {
     const row = r as Record<string, unknown> & {
       auth_value_encrypted: string | null;
-      user_mcp_tools?: Array<{
-        tool_name: string;
-        tool_description: string | null;
-      }>;
+      user_mcp_tools?: Array<{ tool_name: string; tool_description: string | null }>;
     };
     return {
       id: row.id as string,
@@ -425,61 +119,99 @@ export default async function IntegrationsPage({
       tool_count: (row.tool_count as number) ?? 0,
       last_checked_at: (row.last_checked_at as string | null) ?? null,
       last_error: (row.last_error as string | null) ?? null,
-      // Never the secret itself — only whether one is stored.
+      // Nunca el secreto: sólo si hay uno guardado.
       authConfigured: !!row.auth_value_encrypted,
       tools: row.user_mcp_tools ?? [],
     };
   });
-
   const atServerCapacity = mcpServers.length >= MAX_MCP_SERVERS;
   const totalMcpTools = mcpServers.reduce((sum, s) => sum + s.tool_count, 0);
   const atToolCapacity = totalMcpTools >= MAX_MCP_TOOLS;
+  const mcpErrors = mcpServers.filter((s) => s.enabled && s.last_error).length;
 
-  const connected = providers.filter((p) => p.state === 'workspace' || p.state === 'user');
-  const missing = providers.filter((p) => p.state === 'disconnected');
-  const totalToolCount = Object.values(toolsByFamily).reduce((a, b) => a + b, 0);
-  const diagnostics = await diagnosticsPromise;
+  const wa = snapshot.whatsapp;
+  const catalog = buildCatalog({
+    googleConnected: mine.has('google'),
+    microsoftConnected: mine.has('microsoft'),
+    microsoftConfigured,
+    hubspot: hubspotWorkspace ? 'workspace' : mine.has('hubspot') ? 'mine' : 'none',
+    github: mine.has('github'),
+    linear: mine.has('linear'),
+    whatsapp: wa?.status === 'connected' ? 'on' : wa?.status === 'pairing' ? 'pairing' : 'off',
+    bankAccounts: snapshot.bank?.length ?? 0,
+    mcpServers: mcpServers.length,
+  });
 
-  /** The register header: what the organisation holds, counted in mono. */
-  const stats = [
+  // Servicios que no conecta nadie de la empresa: los activa el equipo de Cortex.
+  const toolsByFamily: Record<string, number> = {};
+  for (const t of listTools()) {
+    if (t.id.startsWith('test.')) continue;
+    const fam = t.id.split('.')[0] ?? '';
+    toolsByFamily[fam] = (toolsByFamily[fam] ?? 0) + 1;
+  }
+  const famCount = (families: string[]) =>
+    families.reduce((sum, f) => sum + (toolsByFamily[f] ?? 0), 0);
+  const embedding = embeddingConfig();
+  const embeddingOk = !('error' in embedding);
+  const semanticSearchOn = embeddingOk && embedding.keyConfigured;
+  const brainOn = !!process.env.ANTHROPIC_API_KEY;
+  const services = [
     {
-      label: 'Conectados',
-      value: `${connected.length}/${providers.length}`,
-      sub: 'sistemas que Cortex ya puede usar',
-      icon: CircleCheck,
-      tone: 'text-emerald',
+      key: 'brain',
+      name: 'El cerebro de Cortex',
+      icon: Brain,
+      on: brainOn,
+      what:
+        brainOn && !semanticSearchOn
+          ? 'Activo · por ahora busca por palabras, no por significado'
+          : 'Buscar y recordar lo que guardas, los flujos y las rutinas',
+      off: 'falta la API key del modelo',
+      tools: famCount(['kb', 'pipeline', 'schedule', 'inbox', 'security']),
     },
     {
-      label: 'Sin conectar',
-      value: String(missing.length),
-      sub: missing.length > 0 ? missing.map((p) => p.name).join(', ') : 'no falta ninguno',
-      icon: TriangleAlert,
-      tone: missing.length > 0 ? 'text-amber' : 'text-emerald',
+      key: 'web',
+      name: 'Investigación web',
+      icon: Globe,
+      on: !!process.env.TAVILY_API_KEY,
+      what: 'Búsqueda en vivo y lectura de páginas para investigar prospectos',
+      off: 'no hay API key de búsqueda en este entorno',
+      tools: famCount(['web', 'growth']),
     },
     {
-      label: 'Cosas que sabe hacer',
-      value: String(totalToolCount),
-      sub: 'acciones disponibles para Cortex',
-      icon: Wrench,
-      tone: 'text-ink',
+      key: 'slack',
+      name: 'Slack',
+      icon: MessageSquare,
+      on: !!process.env.SLACK_BOT_TOKEN,
+      what: 'Publicar avances e informes en los canales del equipo',
+      off: 'todavía no está aprovisionado el token del bot',
+      tools: famCount(['slack']),
     },
     {
-      label: 'Extras que agregaste',
-      value: String(totalMcpTools),
-      sub:
-        mcpServers.length === 0
-          ? 'ninguno (es opcional)'
-          : `desde ${mcpServers.length} ${mcpServers.length === 1 ? 'conexión avanzada' : 'conexiones avanzadas'}`,
-      icon: Boxes,
-      tone: 'text-ink',
+      key: 'matcher',
+      name: 'Presentaciones de candidatos',
+      icon: Sparkles,
+      on: !!process.env.MATCHER_URL,
+      what: 'Armar la presentación de un candidato para el cliente, en PDF',
+      off: 'la URL del servicio de presentaciones no está configurada',
+      tools: famCount(['presentations']),
+    },
+    {
+      key: 'payroll',
+      name: 'Nómina',
+      icon: Wallet,
+      on: !!process.env.PAYROLL_API_URL,
+      what: 'Asignaciones, reportes de nómina y gastos, y proyecciones de costo',
+      off: 'no hay URL de la API de nómina en este entorno',
+      tools: famCount(['payroll']),
     },
   ];
+  const servicesOn = services.filter((s) => s.on).length;
 
   return (
-    <>
+    <div className="flex flex-col gap-8">
       <PageHeader
         title="Datos y conexiones"
-        subtitle={`De dónde saca Cortex lo que sabe de ${user.organization.name}: conecta tu correo, tu contabilidad o una carpeta, y Cortex trabaja con eso. Lo que no esté conectado, no lo ve.`}
+        subtitle={`De dónde saca Cortex lo que sabe de ${user.organization.name}. Lo que no esté conectado, no lo ve.`}
         icon={<Plug className="h-5 w-5" />}
         actions={
           <>
@@ -490,7 +222,7 @@ export default async function IntegrationsPage({
               ¿Qué conecto primero?
             </Link>
             <Link
-              href={workspaceHref(user.organization.id, '/activations')}
+              href={href('/activations')}
               className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-5 py-2 text-sm font-bold text-ink transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               Reglas sobre tus datos
@@ -499,252 +231,198 @@ export default async function IntegrationsPage({
         }
       />
 
-      <SourceIntake workspaceId={user.organization.id} />
-
-      {integrationError && (
-        <div className="mb-5 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
-          No se pudieron leer las autorizaciones personales. Los estados “Sin comprobar” no
-          significan que esas cuentas estén desconectadas.
+      {(sp.connected || sp.error || !brainOn) && (
+        <div className="-mt-4 flex flex-col gap-2">
+          {sp.connected && (
+            <output className="block rounded-card bg-emerald-soft px-4 py-3 text-sm font-semibold text-emerald">
+              Listo: quedó conectado {CONNECTED_NAME[sp.connected] ?? 'el sistema'}.
+            </output>
+          )}
+          {sp.error && (
+            <p role="alert" className="rounded-card bg-rose-soft px-4 py-3 text-sm text-ink">
+              {quickbooksErrorMessage(sp.error) ??
+                'No se pudo terminar la conexión. Inténtalo otra vez desde la tarjeta; si se repite, cuéntaselo a Cortex en el chat.'}
+            </p>
+          )}
+          {!brainOn && (
+            <p role="alert" className="rounded-card bg-rose-soft px-4 py-3 text-sm text-ink">
+              <span className="font-bold">El cerebro de Cortex está apagado</span>: sin él no hay
+              respuestas, flujos ni rutinas. Lo activa el equipo de Cortex.
+            </p>
+          )}
         </div>
       )}
 
-      <div className="mb-5">
-        <SourceDiagnostics
-          checks={diagnostics}
-          workspaceId={user.organization.id}
-          workspaceName={user.organization.name}
-        />
-      </div>
+      <ConnectedSources
+        sources={connected}
+        unread={unread}
+        workspaceId={workspaceId}
+        actions={{ syncSource: syncSourceNow, syncAccounting: syncAccountingProgramNow }}
+      />
 
-      {sp.connected && (
-        <div className="mb-4 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-xs text-emerald">
-          Listo: quedó conectado {CONNECTED_NAME[sp.connected] ?? 'el sistema'}.
+      <ConnectCatalog
+        groups={catalog}
+        workspaceId={workspaceId}
+        googleConnected={mine.has('google')}
+        slots={{
+          accounting: (
+            <AccountingSection organizationId={workspaceId} role={user.organization.role} />
+          ),
+        }}
+      />
+
+      <section aria-labelledby="avanzado-title" id="avanzado" className="flex flex-col gap-3">
+        <div>
+          <h2 id="avanzado-title" className="text-lg font-extrabold tracking-tight text-ink">
+            Avanzado
+          </h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            Para quien administra o para equipos técnicos. Nada de esto hace falta para empezar.
+          </p>
         </div>
-      )}
-      {sp.error && (
-        <div className="mb-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
-          {quickbooksErrorMessage(sp.error) ??
-            'No se pudo terminar la conexión. Inténtalo otra vez desde la tarjeta; si se repite, cuéntaselo a Cortex en el chat.'}
-        </div>
-      )}
 
-      {/* Programas contables (0165): Siigo, Alegra, QuickBooks. Sólo para administradores. */}
-      <AccountingSection organizationId={user.organization.id} role={user.organization.role} />
+        <Fold
+          title="Diagnóstico de lectura"
+          hint={`${diagnostics.filter((d) => d.state === 'blocked').length} por atender · ${diagnostics.length} comprobaciones`}
+        >
+          <SourceDiagnostics
+            checks={diagnostics}
+            workspaceId={workspaceId}
+            workspaceName={user.organization.name}
+          />
+        </Fold>
 
-      {/* Hairlines come from the gap showing the border colour through, so the
-          rules stay correct at every breakpoint the grid reflows to. */}
-      <Panel className="mb-5 overflow-hidden">
-        <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
-          {stats.map((s) => (
-            <div key={s.label} className="bg-surface p-4">
-              <div className="flex items-center gap-1.5">
-                <s.icon className={clsx('h-3.5 w-3.5', s.tone)} />
-                <span className="field-label">{s.label}</span>
-              </div>
-              <div className={clsx('stat-num mt-1.5 text-xl leading-none', s.tone)}>{s.value}</div>
-              <div className="mt-1.5 line-clamp-2 text-micro leading-snug text-ink-faint">
-                {s.sub}
+        <Fold
+          title="Servicios que activa el equipo de Cortex"
+          hint={`${servicesOn} de ${services.length} activos`}
+        >
+          <Panel className="overflow-hidden">
+            <ul className="divide-y divide-border">
+              {services.map((s) => (
+                <li key={s.key} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <span
+                    className={clsx(
+                      'grid h-8 w-8 shrink-0 place-items-center rounded-sm',
+                      s.on ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-faint',
+                    )}
+                  >
+                    <s.icon className="h-4 w-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-ink">{s.name}</span>
+                    <span className="block text-xs text-ink-muted">
+                      {s.on
+                        ? s.what
+                        : isAdmin
+                          ? `Pídesela al equipo de Cortex · detalle: ${s.off}`
+                          : 'Pídesela a quien administra la empresa'}
+                    </span>
+                  </span>
+                  <span className="tabular text-micro text-ink-faint">
+                    {s.tools} {s.tools === 1 ? 'herramienta' : 'herramientas'}
+                  </span>
+                  <span
+                    className={clsx(
+                      'rounded-pill px-2.5 py-0.5 text-micro font-bold',
+                      s.on ? 'bg-emerald-soft text-emerald' : 'bg-surface-2 text-ink-muted',
+                    )}
+                  >
+                    {s.on ? 'Activo' : 'Apagado'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        </Fold>
+
+        {/* Los servidores MCP son otra entrada de herramientas: misma dirección que
+            una integración, así que viven aquí, plegados. */}
+        <Fold
+          id="mcp"
+          title="Servidores MCP"
+          hint={
+            mcpServers.length
+              ? `${mcpServers.length} conectados · ${totalMcpTools} herramientas${mcpErrors ? ` · ${mcpErrors} con error` : ''}`
+              : 'Ninguno (es opcional)'
+          }
+          open={mcpServers.length > 0}
+          alert={mcpErrors > 0}
+        >
+          <Panel className="p-5">
+            <div className="flex flex-wrap items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-surface-2 text-ink-muted">
+                <Server className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="field-label">Avanzado · solo tu cuenta</div>
+                <h3 className="mt-0.5 text-base font-bold tracking-tight text-ink">
+                  Herramientas extra que le conectas a Cortex
+                </h3>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
+                  Apunta Cortex a un servidor MCP (Model Context Protocol) —Notion, el servidor de
+                  un proveedor, algo que tú mismo alojes— y sus herramientas se suman a las tuyas,
+                  solo para tu cuenta.
+                </p>
+                <p className="mt-1 text-micro text-ink-faint">
+                  Hasta <span className="tabular">{MAX_MCP_SERVERS}</span> servidores y{' '}
+                  <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas en total. ¿Lo que
+                  buscas es preguntarle a Cortex <em>desde</em> Claude o ChatGPT?{' '}
+                  <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
+                    Esa es la otra página
+                  </Link>
+                  .
+                </p>
               </div>
             </div>
-          ))}
-        </div>
-      </Panel>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {providers.map((p) => {
-          const tag = STATE_TAG[p.state];
-          const tools = famCount(p.families);
-          const isOn = p.state === 'workspace' || p.state === 'user';
-          return (
-            <Panel key={p.key} className="flex h-full flex-col gap-3 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <span
-                  className={clsx(
-                    'grid h-10 w-10 shrink-0 place-items-center rounded-card',
-                    isOn ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-faint',
-                  )}
-                >
-                  <p.icon className="h-5 w-5" />
-                </span>
-                <span
-                  className={clsx(
-                    'rounded-pill border px-2.5 py-0.5 text-micro font-semibold',
-                    tag.cls,
-                  )}
-                >
-                  {tag.label}
-                </span>
-              </div>
-
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-sm font-bold text-ink">{p.name}</div>
-                  <span className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 text-micro font-semibold text-ink-muted">
-                    {p.scope === 'company' ? 'Ámbito de empresa' : 'Tu cuenta'}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-xs leading-snug text-ink-muted">{p.unlocks}</p>
-              </div>
-
-              <p className="flex items-start gap-1.5 text-micro leading-snug text-ink-faint">
-                <Users className="mt-px h-3 w-3 shrink-0" />
-                {p.state === 'unknown'
-                  ? 'No se pudo comprobar quién tiene esta conexión.'
-                  : p.owner}
+            {mcpRead.error && (
+              <p className="mt-4 rounded-sm bg-amber-soft px-3 py-2 text-xs text-ink">
+                No se pudieron leer tus servidores MCP. Si agregaste alguno, sigue ahí; vuelve a
+                cargar en un momento.
               </p>
-
-              {p.state === 'disconnected' && (
-                <p className="flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
-                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-                  <span>
-                    <span className="font-semibold">Mientras esté apagada: </span>
-                    {p.offline}
-                  </span>
+            )}
+            <div className="mt-4 border-t border-border pt-4">
+              <McpServerList servers={mcpServers} />
+              {atServerCapacity && (
+                <p className="mt-4 rounded-sm bg-amber-soft px-3 py-2 text-xs text-ink">
+                  Llegaste al tope de <span className="tabular">{MAX_MCP_SERVERS}</span> servidores.
+                  Elimina uno de arriba para agregar otro.
                 </p>
               )}
-
-              <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2.5">
-                <span className="inline-flex items-center gap-1 text-micro text-ink-faint">
-                  {p.footNote ? (
-                    <>
-                      <MessageCircle className="h-3 w-3" />
-                      <span className="tabular">{p.footNote}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Wrench className="h-3 w-3" />
-                      {tools > 0 ? (
-                        <>
-                          <span className="tabular">{tools}</span>{' '}
-                          {tools === 1 ? 'herramienta' : 'herramientas'}
-                        </>
-                      ) : (
-                        'todavía sin herramientas'
-                      )}
-                    </>
-                  )}
-                </span>
-                {p.connectHref && (
-                  <Link
-                    href={workspaceHref(user.organization.id, p.connectHref)}
-                    className="rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
-                  >
-                    {p.ctaLabel ?? 'Conectar'}
-                  </Link>
-                )}
-              </div>
-            </Panel>
-          );
-        })}
-      </div>
-
-      <section className="mt-5 rounded-card border border-primary/25 bg-primary-soft p-5 sm:p-6">
-        <h2 className="text-lg font-extrabold tracking-tight text-ink">
-          ¿Usas otro programa que no está aquí?
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
-          Inventario, pedidos, un ERP propio: cuéntale a Cortex cuál es y te dice cómo traerlo. Si
-          ese programa tiene una API, quien lo maneje puede conectarla con su documentación.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link
-            href={`/chat?prompt=${encodeURIComponent('Quiero conectar otro programa que uso en mi empresa: ')}`}
-            className="inline-flex min-h-10 items-center rounded-pill bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-strong"
-          >
-            Contárselo a Cortex
-          </Link>
-          <Link
-            href={workspaceHref(user.organization.id, '/tools#custom-tools')}
-            className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-5 py-2 text-sm font-bold text-ink transition-colors hover:bg-surface-2"
-          >
-            Conectar una API (técnico)
-          </Link>
-        </div>
-      </section>
-
-      <div className="mt-5">
-        <DirectionPair active="outbound" />
-      </div>
-
-      {/* Advanced: external MCP servers are just another inbound source of
-          tools — same direction as an integration, so they live here. */}
-      <details className="group mt-5 scroll-mt-5" id="mcp" open={mcpServers.length > 0}>
-        <summary className="cursor-pointer list-none rounded-card border border-border bg-surface px-4 py-3 text-sm font-semibold text-ink-muted shadow-card hover:text-ink [&::-webkit-details-marker]:hidden">
-          Avanzado: conectar herramientas externas (servidores MCP)
-          <span className="ml-1 text-ink-faint group-open:hidden">(casi nadie lo necesita)</span>
-        </summary>
-        <Panel className="mt-3 p-5">
-          <div className="flex flex-wrap items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-surface-2 text-ink-muted">
-              <Server className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="field-label">Avanzado · solo tu cuenta</div>
-              <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">
-                Herramientas extra que le conectas a Cortex
-              </h2>
-              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
-                Para equipos técnicos: apunta Cortex a un servidor MCP (Model Context Protocol)
-                —Notion, el servidor de un proveedor, algo que tú mismo alojes— y sus herramientas
-                se suman a las de arriba, solo para tu cuenta.
-              </p>
-              <p className="mt-1 text-micro text-ink-faint">
-                Hasta <span className="tabular">{MAX_MCP_SERVERS}</span> servidores y{' '}
-                <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas en total. ¿Lo que
-                buscas es preguntarle a Cortex <em>desde</em> Claude o ChatGPT?{' '}
-                <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
-                  Esa es la otra página
-                </Link>
-                .
-              </p>
+              {atToolCapacity && (
+                <p className="mt-2 rounded-sm bg-amber-soft px-3 py-2 text-xs text-ink">
+                  Llegaste al tope de <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas.
+                  Cortex deja de sincronizar nuevas hasta que elimines un servidor.
+                </p>
+              )}
+              {!atServerCapacity && (
+                <div className="mt-4 border-t border-border pt-4">
+                  <h4 className="text-xs font-semibold text-ink">Agregar un servidor</h4>
+                  <AddMcpServerForm disabled={atServerCapacity} />
+                </div>
+              )}
             </div>
-          </div>
+          </Panel>
+        </Fold>
 
-          <div className="mt-4 border-t border-border pt-4">
-            <McpServerList servers={mcpServers} />
+        <Fold title="Hacia dónde van los datos" hint="Lo que entra a Cortex y lo que sale">
+          <DirectionPair active="outbound" />
+        </Fold>
 
-            {atServerCapacity && (
-              <p className="mt-4 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
-                Llegaste al tope de <span className="tabular">{MAX_MCP_SERVERS}</span> servidores.
-                Elimina uno de arriba para agregar otro.
-              </p>
-            )}
-            {atToolCapacity && (
-              <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
-                Llegaste al tope de <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas.
-                Cortex deja de sincronizar nuevas hasta que elimines un servidor de arriba.
-              </p>
-            )}
-
-            {!atServerCapacity && (
-              <div className="mt-4 border-t border-border pt-4">
-                <h3 className="text-xs font-semibold text-ink">Agregar un servidor</h3>
-                <AddMcpServerForm disabled={atServerCapacity} />
-              </div>
-            )}
-          </div>
-        </Panel>
-      </details>
-      {/* THE PANEL THAT WOULD HAVE CAUGHT IT ON DAY ONE.
-          A single document once burned an entire embedding account, and nobody
-          found out until Brain Knowledge stopped indexing. Nothing here is a
-          billing system — it is the four facts that would have made somebody
-          ask a question: which model is running, whether that model has any
-          free allowance at all, how much has been embedded this month, and
-          which document accounted for most of it. */}
-      {/* Telemetría de operación: útil para quien administra, ruido para los
-          demás. Plegada y al final, nunca entre el título y las conexiones. */}
-      {isAdmin && (
-        <details className="group mt-5">
-          <summary className="cursor-pointer list-none rounded-card border border-border bg-surface px-4 py-3 text-sm font-semibold text-ink-muted shadow-card hover:text-ink [&::-webkit-details-marker]:hidden">
-            Detalles técnicos del cerebro · sólo administradores
-            <span className="ml-1 text-ink-faint group-open:hidden">(mostrar)</span>
-          </summary>
-          <div className="mt-3">
+        {/* LA TELEMETRÍA QUE HABRÍA AVISADO EL PRIMER DÍA. Un solo documento se
+            gastó una cuenta entera de embeddings y nadie se enteró hasta que el
+            cerebro dejó de indexar: qué modelo corre, si tiene tokens gratis,
+            cuánto se ha embebido este mes y qué documento se llevó la mayor
+            parte. Sólo para quien administra. */}
+        {isAdmin && (
+          <Fold
+            title="Detalles técnicos del cerebro"
+            hint={semanticSearchOn ? 'Indexando por significado' : 'Solo por palabras'}
+            alert={!embeddingOk}
+          >
             <Panel className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-start gap-2.5">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary">
                     <Gauge className="h-5 w-5" />
                   </span>
                   <div>
@@ -766,102 +444,71 @@ export default async function IntegrationsPage({
                 </div>
                 <span
                   className={clsx(
-                    'rounded-pill border px-2.5 py-0.5 text-micro font-semibold',
-                    semanticSearchOn
-                      ? 'border-emerald/40 bg-emerald-soft text-emerald'
-                      : 'border-amber/40 bg-amber-soft text-amber',
+                    'rounded-pill px-2.5 py-0.5 text-micro font-bold',
+                    semanticSearchOn ? 'bg-emerald-soft text-emerald' : 'bg-amber-soft text-amber',
                   )}
                 >
                   {semanticSearchOn ? 'Indexando por significado' : 'Solo por palabras'}
                 </span>
               </div>
 
-              {!embeddingOk && (
-                <p className="mt-3 flex items-start gap-1.5 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro leading-snug text-rose">
-                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-                  <span>{embedding.error}</span>
-                </p>
-              )}
-
-              {/* The lesson of the incident, stated as a rule the screen enforces: a
-                model without a free allowance is a decision, not a default, and it
-                should be visible before the credits run out rather than after. */}
+              {!embeddingOk && <Warn tone="rose">{embedding.error}</Warn>}
               {embeddingOk && embedding.facts && embedding.facts.freeTierTokens === 0 && (
-                <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
-                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-                  <span>
-                    <span className="font-semibold">Este modelo no tiene tokens gratis: </span>
-                    se paga desde el primero. {embedding.facts.note} Si no fue una decisión
-                    deliberada, vuelve a <span className="font-mono">voyage-4-lite</span>, que trae
-                    200 millones gratis y las mismas 1024 dimensiones.
-                  </span>
-                </p>
+                <Warn>
+                  <span className="font-semibold">Este modelo no tiene tokens gratis: </span>
+                  se paga desde el primero. {embedding.facts.note} Si no fue una decisión
+                  deliberada, vuelve a <span className="font-mono">voyage-4-lite</span>, que trae
+                  200 millones gratis y las mismas 1024 dimensiones.
+                </Warn>
               )}
               {embeddingOk && !embedding.facts && (
-                <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
-                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-                  <span>
-                    No conocemos <span className="font-mono">{embedding.model}</span>, así que no
-                    podemos decir qué cuesta ni si tiene nivel gratuito. Verifícalo con{' '}
-                    {embedding.provider.label} antes de indexar un corpus grande.
-                  </span>
-                </p>
+                <Warn>
+                  No conocemos <span className="font-mono">{embedding.model}</span>, así que no
+                  podemos decir qué cuesta ni si tiene nivel gratuito. Verifícalo con{' '}
+                  {embedding.provider.label} antes de indexar un corpus grande.
+                </Warn>
               )}
               {embeddingOk && !embedding.keyConfigured && (
-                <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
-                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
-                  <span>
-                    Falta <span className="font-mono">{embedding.apiKeyEnv}</span>. Nada se pierde:
-                    los documentos se guardan, se buscan por palabras y quedan en cola sin vector.
-                    En cuanto exista la llave, el trabajo de reindexado los completa solo.
-                  </span>
-                </p>
+                <Warn>
+                  Falta <span className="font-mono">{embedding.apiKeyEnv}</span>. Nada se pierde:
+                  los documentos se guardan, se buscan por palabras y quedan en cola sin vector. En
+                  cuanto exista la llave, el trabajo de reindexado los completa solo.
+                </Warn>
               )}
 
-              <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-4">
-                <div className="bg-surface p-3">
-                  <span className="field-label">Tokens embebidos · 30 días</span>
-                  <div className="stat-num mt-1 text-xl leading-none text-ink">
-                    {spend.tokens.toLocaleString('es-CO')}
-                  </div>
-                  <div className="mt-1 text-micro leading-snug text-ink-faint">
-                    {spend.anyEstimated ? 'incluye estimados nuestros' : 'según el proveedor'}
-                  </div>
-                </div>
-                <div className="bg-surface p-3">
-                  <span className="field-label">Costo aproximado</span>
-                  <div className="stat-num mt-1 text-xl leading-none text-ink">
-                    {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
+              <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-border bg-border sm:grid-cols-4">
+                <Stat
+                  label="Tokens embebidos · 30 días"
+                  value={spend.tokens.toLocaleString('es-CO')}
+                  sub={spend.anyEstimated ? 'incluye estimados nuestros' : 'según el proveedor'}
+                />
+                <Stat
+                  label="Costo aproximado"
+                  value={
+                    embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
                       ? `US$${((spend.tokens / 1_000_000) * embedding.facts.pricePerMillionTokensUsd).toFixed(4)}`
-                      : '—'}
-                  </div>
-                  <div className="mt-1 text-micro leading-snug text-ink-faint">
-                    {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
+                      : '—'
+                  }
+                  sub={
+                    embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
                       ? `US$${embedding.facts.pricePerMillionTokensUsd}/millón · precio verificado el ${PRICES_CHECKED_ON}`
-                      : 'el proveedor no publica precio por token'}
-                  </div>
-                </div>
-                <div className="bg-surface p-3">
-                  <span className="field-label">Fragmentos</span>
-                  <div className="stat-num mt-1 text-xl leading-none text-ink">
-                    {spend.texts.toLocaleString('es-CO')}
-                  </div>
-                  <div className="mt-1 text-micro leading-snug text-ink-faint">
-                    en {spend.requests.toLocaleString('es-CO')}{' '}
-                    {spend.requests === 1 ? 'llamada' : 'llamadas'}
-                  </div>
-                </div>
-                <div className="bg-surface p-3">
-                  <span className="field-label">Modelos usados</span>
-                  <div className="stat-num mt-1 text-xl leading-none text-ink">
-                    {spend.models.length || '—'}
-                  </div>
-                  <div className="mt-1 line-clamp-2 text-micro leading-snug text-ink-faint">
-                    {spend.models.length > 1
+                      : 'el proveedor no publica precio por token'
+                  }
+                />
+                <Stat
+                  label="Fragmentos"
+                  value={spend.texts.toLocaleString('es-CO')}
+                  sub={`en ${spend.requests.toLocaleString('es-CO')} ${spend.requests === 1 ? 'llamada' : 'llamadas'}`}
+                />
+                <Stat
+                  label="Modelos usados"
+                  value={String(spend.models.length || '—')}
+                  sub={
+                    spend.models.length > 1
                       ? 'hubo un cambio de modelo; se está reindexando'
-                      : (spend.models[0] ?? 'nada embebido en el periodo')}
-                  </div>
-                </div>
+                      : (spend.models[0] ?? 'nada embebido en el periodo')
+                  }
+                />
               </div>
 
               {spend.topDocuments.length > 0 && (
@@ -885,9 +532,74 @@ export default async function IntegrationsPage({
                 </div>
               )}
             </Panel>
-          </div>
-        </details>
+          </Fold>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Fold({
+  id,
+  title,
+  hint,
+  open,
+  alert,
+  children,
+}: {
+  id?: string;
+  title: string;
+  hint: string;
+  open?: boolean;
+  alert?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details id={id} open={open} className="group scroll-mt-6">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3 shadow-card [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0">
+          <span className="text-sm font-extrabold text-ink">{title}</span>
+          <span
+            className={clsx(
+              'ml-2 text-xs tabular',
+              alert ? 'font-semibold text-rose' : 'text-ink-faint',
+            )}
+          >
+            {hint}
+          </span>
+        </span>
+        <ChevronDown
+          className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-open:rotate-180 motion-reduce:transition-none"
+          aria-hidden
+        />
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
+function Warn({ children, tone = 'amber' }: { children: ReactNode; tone?: 'amber' | 'rose' }) {
+  return (
+    <p
+      className={clsx(
+        'mt-3 flex items-start gap-1.5 rounded-sm px-2.5 py-1.5 text-micro leading-snug text-ink',
+        tone === 'rose' ? 'bg-rose-soft' : 'bg-amber-soft',
       )}
-    </>
+    >
+      <TriangleAlert
+        className={clsx('mt-px h-3 w-3 shrink-0', tone === 'rose' ? 'text-rose' : 'text-amber')}
+      />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="bg-surface p-3">
+      <span className="field-label">{label}</span>
+      <div className="stat-num mt-1 text-xl leading-none text-ink">{value}</div>
+      <div className="mt-1 line-clamp-2 text-micro leading-snug text-ink-faint">{sub}</div>
+    </div>
   );
 }

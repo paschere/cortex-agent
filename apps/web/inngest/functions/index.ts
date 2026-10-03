@@ -2,6 +2,7 @@ import { accountingDispatch, accountingRun } from './accounting-sync';
 import { actionsSweepDispatch, actionsSweepWorkspace } from './actions-sweep';
 import { activationDispatch, activationRun } from './activation-followup';
 import { autopilotDispatch, autopilotRemind, autopilotWorkspace } from './autopilot';
+import { clientsLinkDispatch, clientsLinkWorkspace } from './clients-link';
 import { commitmentsWatchDispatch, commitmentsWatchWorkspace } from './commitments-watch';
 import { devTaskIntake } from './dev-task-intake';
 import { devTaskRun } from './dev-task-run';
@@ -35,6 +36,8 @@ import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
 import { workAssigned, workSyncDispatch, workSyncWorkspace } from './work-sync';
 
 export {
+  clientsLinkDispatch,
+  clientsLinkWorkspace,
   followThroughDispatch,
   followThroughWorkspace,
   autopilotDispatch,
@@ -88,6 +91,8 @@ export {
   workAssigned,
 };
 export const functions = [
+  clientsLinkDispatch,
+  clientsLinkWorkspace,
   followThroughDispatch,
   followThroughWorkspace,
   autopilotDispatch,

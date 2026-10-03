@@ -351,6 +351,15 @@ export const LINK_ENTITY_KINDS = [
   'email_thread',
   'vehicle',
   'contact',
+  // 0179: la plata y el trabajo.
+  'invoice',
+  'extraction',
+  'payment',
+  'ledger_movement',
+  'commitment',
+  'case',
+  'work_item',
+  'action',
 ] as const;
 export type LinkEntityKind = (typeof LINK_ENTITY_KINDS)[number];
 
@@ -361,6 +370,14 @@ export const ENTITY_KIND_LABEL: Record<LinkEntityKind, string> = {
   email_thread: 'Correo',
   vehicle: 'Vehículo',
   contact: 'Contacto',
+  invoice: 'Factura',
+  extraction: 'Factura leída de un documento',
+  payment: 'Pago',
+  ledger_movement: 'Movimiento de plata',
+  commitment: 'Vencimiento',
+  case: 'Caso',
+  work_item: 'Trabajo',
+  action: 'Acción',
 };
 
 export const LINK_STATES = ['suggested', 'confirmed', 'rejected'] as const;
@@ -380,6 +397,8 @@ export const LINK_METHODS = [
   'name_partial',
   'manual',
   'inherited',
+  'alias',
+  'contact_name',
 ] as const;
 export type LinkMethod = (typeof LINK_METHODS)[number];
 
@@ -391,6 +410,8 @@ export const METHOD_LABEL: Record<LinkMethod, string> = {
   name_partial: 'Nombre parecido',
   manual: 'Vinculado a mano',
   inherited: 'Heredado de algo ya vinculado',
+  alias: 'Otro nombre confirmado',
+  contact_name: 'Nombre de un contacto',
 };
 
 /**
@@ -405,6 +426,9 @@ export const METHOD_SENTENCE: Record<LinkMethod, string> = {
   name_partial: 'Hay un parecido en el nombre, pero no es exacto.',
   manual: 'Alguien lo vinculó a mano.',
   inherited: 'Llegó adjunto a algo que ya estaba vinculado a este cliente.',
+  alias: 'Viene escrito con otro nombre que una persona ya confirmó como de este cliente.',
+  contact_name:
+    'Aparece el nombre de una persona de este cliente, pero puede ser otra con el mismo nombre.',
 };
 
 /**
@@ -438,6 +462,10 @@ export const METHOD_SENTENCE: Record<LinkMethod, string> = {
 export const APPLYING_METHODS: ReadonlySet<LinkMethod> = new Set<LinkMethod>([
   'email_domain',
   'contact_email',
+  // Un alias de `client_aliases` con `verified_by`: alguien dijo «"COLTRANS SAS
+  // BOGOTA" en el extracto es Coltrans». Igual que un dominio, repetirlo es
+  // aplicar su frase, no inferir (migración 0179).
+  'alias',
 ]);
 
 export function methodApplies(method: LinkMethod): boolean {
@@ -455,7 +483,9 @@ export const METHOD_CONFIDENCE: Record<LinkMethod, number> = {
   contact_email: 1,
   manual: 1,
   inherited: 0.8,
+  alias: 0.95,
   tax_id: 0.75,
+  contact_name: 0.4,
   name_exact: 0.6,
   name_partial: 0.35,
 };
@@ -465,7 +495,27 @@ export const METHOD_CONFIDENCE: Record<LinkMethod, number> = {
 // ---------------------------------------------------------------------------
 
 export const CLIENT_COLUMNS =
-  'id, organization_id, name, legal_name, tax_id, tax_id_dv, name_key, status, city, department, address, phone, website, services, customs_role, payment_terms_days, credit_limit_cop, owner_user_id, since, notes, created_by, created_at, updated_at';
+  'id, organization_id, name, legal_name, tax_id, tax_id_dv, name_key, status, city, department, address, phone, website, services, customs_role, payment_terms_days, credit_limit_cop, owner_user_id, since, notes, tags, source, source_detail, created_by, created_at, updated_at';
+
+/** De dónde salió un cliente (0179). */
+export const CLIENT_SOURCES = [
+  'manual',
+  'accounting',
+  'invoice',
+  'chat',
+  'split',
+  'import',
+] as const;
+export type ClientSource = (typeof CLIENT_SOURCES)[number];
+
+export const CLIENT_SOURCE_LABEL: Record<ClientSource, string> = {
+  manual: 'Registrado a mano',
+  accounting: 'Del programa contable',
+  invoice: 'De una factura',
+  chat: 'Desde el chat',
+  split: 'Separado de otro cliente',
+  import: 'Importado',
+};
 
 export interface ClientRow {
   id: string;
@@ -488,6 +538,10 @@ export interface ClientRow {
   owner_user_id: string | null;
   since: string | null;
   notes: string | null;
+  /** 0179. Opcionales en el tipo para que un fixture viejo siga siendo un ClientRow. */
+  tags?: string[] | null;
+  source?: ClientSource | null;
+  source_detail?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -512,6 +566,7 @@ export const clientSchema = z.object({
   owner: z.string().nullable().describe('Who answers for this client here'),
   since: z.string().nullable(),
   notes: z.string().nullable(),
+  tags: z.array(z.string()).describe('Etiquetas puestas por el equipo'),
   updatedAt: z.string(),
 });
 
@@ -535,6 +590,7 @@ export function adaptClient(row: ClientRow): Client {
     owner: row.owner_name ?? null,
     since: row.since,
     notes: row.notes,
+    tags: row.tags ?? [],
     updatedAt: row.updated_at,
   };
 }

@@ -22,6 +22,8 @@ export interface FeedEntry {
   conversation_id: string | null;
   promoted_document_id: string | null;
   feed_truncated: boolean;
+  /** La fuente registrada de la que es captura o versión (0150); la bandeja la usa para «En tabla». */
+  feed_source_id?: string | null;
 }
 export interface FeedDetail extends FeedEntry {
   recommendation?: FeedUseRecommendation;

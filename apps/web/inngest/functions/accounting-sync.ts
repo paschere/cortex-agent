@@ -142,6 +142,14 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
       }
     });
 
+  // 0179: lo que llegó (clientes, facturas, recibos) se cuelga de cada
+  // cliente en su propio trabajo, y si falta un cliente se crea desde aquí.
+  if ('status' in outcome && outcome.status === 'ok')
+    await step.sendEvent('link-clients', {
+      name: 'clients/link-workspace' as const,
+      data: { organizationId },
+    });
+
   // Una carga a medias sigue enseguida, sin esperar al próximo barrido.
   if ('status' in outcome && outcome.status === 'partial')
     await step.sendEvent('continue', {

@@ -1,5 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { STATUS_LABEL as CLIENT_STATUS_LABEL, SERVICE_LABEL, fullNit } from '../clients/shape';
+import { loadClientList } from '../clients/hub-read';
+import {
+  CLIENT_SOURCE_LABEL,
+  STATUS_LABEL as CLIENT_STATUS_LABEL,
+  SERVICE_LABEL,
+  fullNit,
+} from '../clients/shape';
 import { listClients } from '../clients/store';
 import {
   COMMITMENT_KINDS,
@@ -426,30 +432,68 @@ const pagos: PlatformSource = {
 // Clientes
 // ---------------------------------------------------------------------------
 
+/**
+ * UNA FILA POR CLIENTE, CON SU PLATA Y SU CONTACTO (0179). Las cifras salen de
+ * `loadClientList` (clients/hub-read.ts), la misma lectura de la lista de
+ * /clients y de la ficha: facturado 12 meses, saldo, vencido, días de pago,
+ * último contacto, próximo vencimiento y salud. Es INTERNA desde que lleva el
+ * responsable y cuánto debe cada cliente: no se comparte por enlace.
+ */
+const HEALTH_LABELS = [
+  'Al día',
+  'Pagos atrasados',
+  'Cartera muy vencida',
+  'Debe y está callado',
+  'Sin movimiento',
+  'Bloqueado',
+];
+
 const clientes: PlatformSource = {
   id: 'cortex.clientes',
   name: 'Clientes',
   description:
-    'Los clientes registrados con su NIT, estado, ciudad, servicios, plazo de pago y cupo. Sin responsable interno, teléfonos ni notas.',
-  sensitivity: 'shareable',
+    'Una fila por cliente: NIT, estado, responsable, etiquetas y origen, con lo facturado en 12 meses, el saldo por cobrar, lo vencido, los días promedio de pago, el último contacto, el próximo vencimiento y su salud en palabras. Interna.',
+  sensitivity: 'internal',
   fields: [
     field('razon_social', 'Razón social', 'text'),
     field('nit', 'NIT', 'text'),
     field('estado', 'Estado', 'select', Object.values(CLIENT_STATUS_LABEL)),
+    field('responsable', 'Responsable', 'text'),
+    field('etiquetas', 'Etiquetas', 'text'),
+    field('origen', 'Origen', 'select', Object.values(CLIENT_SOURCE_LABEL)),
     field('ciudad', 'Ciudad', 'text'),
     field('departamento', 'Departamento', 'text'),
     field('servicios', 'Servicios', 'text'),
     field('plazo_pago', 'Plazo de pago (días)', 'number'),
     field('cupo', 'Cupo de crédito (COP)', 'money'),
     field('cliente_desde', 'Cliente desde', 'date'),
+    field('facturado_12m', 'Facturado 12 meses (COP)', 'money'),
+    field('saldo', 'Saldo por cobrar (COP)', 'money'),
+    field('vencido', 'Vencido (COP)', 'money'),
+    field('dias_pago', 'Días promedio de pago', 'number'),
+    field('ultimo_contacto', 'Último contacto', 'date'),
+    field('proximo_vencimiento', 'Próximo vencimiento', 'date'),
+    field('salud', 'Salud', 'select', HEALTH_LABELS),
   ],
-  async read(db, cap) {
-    const all = await listClients(db, { limit: cap + 1 });
+  async read(db, cap, today) {
+    const [all, list] = await Promise.all([
+      listClients(db, { limit: cap + 1 }),
+      loadClientList(db, { today }),
+    ]);
+    const hub = new Map(list.rows.map((r) => [r.id, r]));
     const rows = all.slice(0, cap).map((c) => {
+      const h = hub.get(c.id);
       const values: Values = {};
       put(values, 'razon_social', c.legal_name);
       put(values, 'nit', fullNit(c.tax_id));
       put(values, 'estado', CLIENT_STATUS_LABEL[c.status] ?? c.status);
+      put(values, 'responsable', c.owner_name);
+      put(values, 'etiquetas', (c.tags ?? []).join(', '));
+      put(
+        values,
+        'origen',
+        CLIENT_SOURCE_LABEL[(c.source ?? 'manual') as keyof typeof CLIENT_SOURCE_LABEL],
+      );
       put(values, 'ciudad', c.city);
       put(values, 'departamento', c.department);
       put(
@@ -462,6 +506,13 @@ const clientes: PlatformSource = {
       put(values, 'plazo_pago', c.payment_terms_days);
       put(values, 'cupo', num(c.credit_limit_cop));
       put(values, 'cliente_desde', dayOf(c.since));
+      put(values, 'facturado_12m', h?.invoiced12m);
+      put(values, 'saldo', h?.outstanding);
+      put(values, 'vencido', h?.overdue);
+      put(values, 'dias_pago', h?.paymentDays);
+      put(values, 'ultimo_contacto', dayOf(h?.lastContactAt));
+      put(values, 'proximo_vencimiento', h?.nextDueOn);
+      put(values, 'salud', h?.health.label);
       return row(c.id, c.name, values, c.created_at, c.updated_at);
     });
     return { rows, truncated: all.length > cap };

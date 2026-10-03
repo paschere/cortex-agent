@@ -72,6 +72,14 @@ export const LINK_ENTITY_KINDS = [
   'email_thread',
   'vehicle',
   'contact',
+  'invoice',
+  'extraction',
+  'payment',
+  'ledger_movement',
+  'commitment',
+  'case',
+  'work_item',
+  'action',
 ] as const;
 export type LinkEntityKind = (typeof LINK_ENTITY_KINDS)[number];
 
@@ -82,6 +90,14 @@ export const ENTITY_KIND_LABEL: Record<LinkEntityKind, string> = {
   email_thread: 'Correo',
   vehicle: 'Vehículo',
   contact: 'Contacto',
+  invoice: 'Factura',
+  extraction: 'Factura leída de un documento',
+  payment: 'Pago',
+  ledger_movement: 'Movimiento de plata',
+  commitment: 'Vencimiento',
+  case: 'Caso',
+  work_item: 'Trabajo',
+  action: 'Acción',
 };
 
 export const LINK_METHODS = [
@@ -92,6 +108,8 @@ export const LINK_METHODS = [
   'name_partial',
   'manual',
   'inherited',
+  'alias',
+  'contact_name',
 ] as const;
 export type LinkMethod = (typeof LINK_METHODS)[number];
 
@@ -103,6 +121,8 @@ export const METHOD_LABEL: Record<LinkMethod, string> = {
   name_partial: 'Nombre parecido',
   manual: 'Vinculado a mano',
   inherited: 'Heredado de algo ya vinculado',
+  alias: 'Otro nombre confirmado',
+  contact_name: 'Nombre de un contacto',
 };
 
 export const METHOD_SENTENCE: Record<LinkMethod, string> = {
@@ -113,6 +133,9 @@ export const METHOD_SENTENCE: Record<LinkMethod, string> = {
   name_partial: 'Hay un parecido en el nombre, pero no es exacto.',
   manual: 'Alguien lo vinculó a mano.',
   inherited: 'Llegó adjunto a algo que ya estaba vinculado a este cliente.',
+  alias: 'Viene escrito con otro nombre que una persona ya confirmó como de este cliente.',
+  contact_name:
+    'Aparece el nombre de una persona de este cliente, pero puede ser otra con el mismo nombre.',
 };
 
 /**
@@ -121,7 +144,7 @@ export const METHOD_SENTENCE: Record<LinkMethod, string> = {
  * is APPLYING_METHODS in packages/agent-tools/src/clients/shape.ts, and the
  * parity test fails if this drifts from it.
  */
-export const APPLYING_METHODS: LinkMethod[] = ['email_domain', 'contact_email'];
+export const APPLYING_METHODS: LinkMethod[] = ['email_domain', 'contact_email', 'alias'];
 
 /** Free mail providers — the register form warns before the insert refuses. */
 export const PUBLIC_EMAIL_DOMAINS = [

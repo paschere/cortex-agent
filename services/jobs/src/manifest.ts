@@ -97,6 +97,8 @@ export const JOBS: JobSpec[] = [
   { name: 'work/sync.dispatch', cron: '45 11 * * *', retryLimit: 1, concurrency: 1 },
   // Perseguir lo pendiente (0177): cada hora hábil de 07:45 a 16:45 de Bogotá
   // (cada quien tiene su franja); recordatorios reclamados una vez por día.
+  // Ver apps/web/inngest/functions/clients-link.ts: colgar de cada cliente lo ya guardado (0179).
+  { name: 'clients/link-dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   // Ver apps/web/inngest/functions/follow-through.ts.
   { name: 'follow-through/dispatch', cron: '45 12-21 * * 1-5', retryLimit: 1, concurrency: 1 },
   // El piloto automático (0176): cada hora y cinco reparte las empresas cuya
@@ -148,6 +150,12 @@ export const JOBS: JobSpec[] = [
   { name: 'work/assigned', retryLimit: 1, concurrency: 5 },
   // Una empresa: recordatorios de aprobaciones, resumen de vencidos y la cuenta
   // de lo recomendado. Reintentar no repite avisos (follow_through_notices).
+  {
+    name: 'clients/link-workspace',
+    retryLimit: 1,
+    concurrency: 3,
+    singletonKeyFrom: 'organizationId',
+  },
   { name: 'follow-through/workspace', retryLimit: 1, concurrency: 5 },
   // Una empresa a la vez por corrida (la corrida es una por día: el índice lo
   // garantiza). Reintentar retoma la misma corrida sin repetir lo hecho.

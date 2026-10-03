@@ -99,6 +99,7 @@ export const TOOL_PHRASE: Record<string, string> = {
 
   'clients.directory': 'Muéstrame los clientes',
   'clients.link': 'Cuelga esto del cliente ',
+  'clients.merge': 'Une estos dos clientes, son la misma empresa: ',
   'clients.overview': 'Dame el panorama completo del cliente ',
   'clients.register': 'Registra al cliente ',
   // Con el NIT dicho: la herramienta busca por nombre, por NIT, por dominio de

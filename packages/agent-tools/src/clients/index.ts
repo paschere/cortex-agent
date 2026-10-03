@@ -7,14 +7,96 @@
 // makes them reachable together — see the header of migration 0075.
 export { clientsSearch } from './search';
 export { clientsDirectory } from './directory';
-export { clientsOverview, resolveClient } from './overview';
+export { clientsOverview, resolveClientRef } from './overview';
 export { clientsRegister, domainWarning } from './register';
 export { clientsLink } from './link';
+export { clientsMerge } from './merge-tool';
+
+// 0179: identidad, barrido, unir/separar y la ficha/lista con plata.
+export {
+  buildClientIndex,
+  nitVariants,
+  resolveAgainst,
+} from './identity';
+export type {
+  ClientIndex,
+  MatchedBy,
+  ResolveCandidate,
+  ResolveInput,
+  ResolveResult,
+} from './identity';
+export {
+  OWNER_COLUMN,
+  accountingCustomersMissing,
+  confirmClientLinks,
+  describeLinkRun,
+  groupProposals,
+  linkClientRecords,
+  loadClientIndex,
+  rejectClientLinks,
+  resolveClient,
+  writeOwnerColumn,
+} from './links';
+export type { ConfirmOutcome, LinkRunOptions, LinkRunReport, ProposalGroup } from './links';
+export {
+  ALIAS_COLUMNS,
+  MergeRefusedError,
+  addAlias,
+  duplicatePairs,
+  listAliases,
+  mergeClients,
+  mergeRefusal,
+  splitAlias,
+} from './merge';
+export type { AliasRow, DuplicatePair, MergeResult, SplitResult } from './merge';
+export {
+  CONTACT_KIND_LABEL,
+  LATE_DAYS,
+  QUIET_DAYS,
+  TIMELINE_KIND_LABEL,
+  assembleClientRows,
+  clientHealth,
+  invoicesByClient,
+  moneyOf,
+  paymentDaysOf,
+} from './hub';
+export type {
+  AccountingInvoiceIn,
+  CommitmentIn,
+  ContactIn,
+  DocumentInvoiceIn,
+  LedgerIn,
+  ListClientIn,
+  PaymentIn,
+  ClientHealth,
+  ClientInvoice,
+  ClientListRow,
+  ClientMoney,
+  ContactKind,
+  HealthTone,
+  ListInputs,
+  PaymentDays,
+  TimelineItem,
+  TimelineKind,
+} from './hub';
+export { loadClient360, loadClientList } from './hub-read';
+export type {
+  Client360,
+  ClientDocument,
+  ClientListResult,
+  ExpectedCollection,
+  OpenCase,
+  OpenCommitment,
+  OpenWork,
+  Section,
+} from './hub-read';
 
 export {
   APPLYING_METHODS,
   CLIENT_COLUMNS,
   CLIENT_SERVICES,
+  CLIENT_SOURCES,
+  CLIENT_SOURCE_LABEL,
   CLIENT_STATUSES,
   CONTACT_COLUMNS,
   CUSTOMS_ROLES,
@@ -62,6 +144,7 @@ export type {
   Client,
   ClientRow,
   ClientService,
+  ClientSource,
   ClientStatus,
   Contact,
   ContactRow,
@@ -92,6 +175,7 @@ export {
   listLinks,
   listProposals,
   matchCommitmentsToClients,
+  normalizeTags,
   registerClient,
   rejectLink,
   removeDomain,

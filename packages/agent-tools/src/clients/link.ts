@@ -1,7 +1,8 @@
 import { ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { resolveClient } from './overview';
+import { OWNER_COLUMN, writeOwnerColumn } from './links';
+import { resolveClientRef } from './overview';
 import { ENTITY_KIND_LABEL, LINK_ENTITY_KINDS, adaptLink, linkSchema } from './shape';
 import { applyOrPropose } from './store';
 
@@ -27,13 +28,13 @@ import { applyOrPropose } from './store';
 export const clientsLink = registerTool({
   id: 'clients.link',
   description:
-    'Attach something Cortex already stored — an email thread, a meeting, a document, a WhatsApp group, a vehicle — to a client, so it shows up on their card. Use it when the person tells you what something belongs to. It records that THEY said so; it never claims the link came from a domain or a NIT. If the thing is already attached to a different client, nothing is written and you are told which one — say so and ask, do not reattach. Requires confirmation.',
+    'Attach something Cortex already stored — an email thread, a meeting, a document, a WhatsApp group, a vehicle, an invoice, a payment, a ledger movement, a commitment, a management case, a work item or a collection action — to a client, so it shows up on their card and counts in their numbers. Use it when the person tells you what something belongs to. It records that THEY said so; it never claims the link came from a domain or a NIT. If the thing is already attached to a different client, nothing is written and you are told which one — say so and ask, do not reattach. Requires confirmation.',
   inputSchema: z.object({
     client: z.string().min(2).describe('Client id, name or NIT'),
     kind: z
       .enum(LINK_ENTITY_KINDS)
       .describe(
-        'What is being attached: document, meeting, whatsapp_group, email_thread, vehicle or contact',
+        'What is being attached: document, meeting, whatsapp_group, email_thread, vehicle, contact, invoice (accounting invoice), extraction (invoice read from a document), payment, ledger_movement, commitment, case, work_item or action',
       ),
     id: z
       .string()
@@ -70,7 +71,7 @@ export const clientsLink = registerTool({
         'Falta identificar qué se está vinculando: el id interno, o el id del hilo si es un correo.',
       );
     }
-    const clientId = await resolveClient(ctx.db, input.client);
+    const clientId = await resolveClientRef(ctx.db, input.client);
     const kindLabel = ENTITY_KIND_LABEL[input.kind] ?? input.kind;
 
     const result = await applyOrPropose(ctx.db, {
@@ -85,6 +86,12 @@ export const clientsLink = registerTool({
       witnessUserId: ctx.userId,
       createdBy: ctx.userId,
     });
+
+    // Lo que tiene columna propia (factura, pago, movimiento…) la llena: así
+    // cuenta en la cartera y en el libro, no sólo en la ficha.
+    if (result.outcome === 'applied' && input.id && OWNER_COLUMN[input.kind]) {
+      await writeOwnerColumn(ctx.db, input.kind, input.id, clientId);
+    }
 
     const guidance =
       result.outcome === 'taken_by_another_client'

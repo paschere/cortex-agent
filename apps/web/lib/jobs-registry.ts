@@ -36,6 +36,7 @@ import {
   autopilotRemindJob,
   autopilotWorkspaceJob,
 } from '@/inngest/functions/autopilot';
+import { clientsLinkDispatchJob, clientsLinkWorkspaceJob } from '@/inngest/functions/clients-link';
 import {
   commitmentsWatchDispatchJob,
   commitmentsWatchWorkspaceJob,
@@ -119,6 +120,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'goals/watch.dispatch': goalsWatchDispatchJob,
   'reports/weekly.dispatch': weeklyReportDispatchJob,
   'work/sync.dispatch': workSyncDispatchJob,
+  'clients/link-dispatch': clientsLinkDispatchJob,
   'follow-through/dispatch': followThroughDispatchJob,
   'autopilot/dispatch': autopilotDispatchJob,
 
@@ -147,6 +149,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'reports/weekly.workspace': weeklyReportWorkspaceJob,
   'work/sync.workspace': workSyncWorkspaceJob,
   'work/assigned': workAssignedJob,
+  'clients/link-workspace': clientsLinkWorkspaceJob,
   'follow-through/workspace': followThroughWorkspaceJob,
   'autopilot/workspace': autopilotWorkspaceJob,
   'autopilot/remind': autopilotRemindJob,

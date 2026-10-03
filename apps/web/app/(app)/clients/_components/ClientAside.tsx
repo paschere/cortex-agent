@@ -7,9 +7,9 @@ import { Provenance } from '@/components/ui/provenance';
 // fails the browser bundle. See the header of lib/clients-shape.ts.
 import {
   CLIENT_STATUSES,
+  type ClientStatus,
   PUBLIC_EMAIL_DOMAINS,
   STATUS_LABEL,
-  type ClientStatus,
 } from '@/lib/clients-shape';
 import { clsx } from 'clsx';
 import { AtSign, Check, Loader2, Plus, Users, X } from 'lucide-react';
@@ -101,9 +101,7 @@ function Proposals({
         la ficha ni cuenta en ningún número.
       </p>
       {error && (
-        <p className="mx-5 mt-3 rounded-sm bg-rose-soft px-3 py-2 text-xs text-rose">
-          {error}
-        </p>
+        <p className="mx-5 mt-3 rounded-sm bg-rose-soft px-3 py-2 text-xs text-rose">{error}</p>
       )}
       <ul className="mt-3 divide-y divide-border">
         {proposals.map((p) => (

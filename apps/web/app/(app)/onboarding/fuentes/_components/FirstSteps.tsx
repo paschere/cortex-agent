@@ -1,22 +1,12 @@
 'use client';
 
 import { ProcessCatalog } from '@/components/self-service/ProcessCatalog';
+import { CATALOG_ICON, SourceTile } from '@/components/sources/visuals';
 import { SOURCES, type SourceId, type SourceOption, sourceHref } from '@/lib/self-service/catalog';
 import { FIRST_STEPS_SEEN_COOKIE } from '@/lib/self-service/setup';
+import type { CatalogIcon, CatalogTone } from '@/lib/sources/catalog';
 import { clsx } from 'clsx';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Braces,
-  Check,
-  FileSpreadsheet,
-  FileText,
-  Folder,
-  Lock,
-  Mail,
-  MessageSquareText,
-  Sparkles,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -30,22 +20,15 @@ import { useEffect, useState } from 'react';
  * guarda nada, así que volver atrás o cerrar la pestaña no deja nada a medias.
  */
 
-const ICONS: Record<SourceId, typeof Folder> = {
-  drive: Folder,
-  sheet: FileSpreadsheet,
-  email: Mail,
-  file: FileText,
-  describe: MessageSquareText,
-  api: Braces,
-};
-
-const TONES: Record<SourceId, string> = {
-  drive: 'bg-primary-soft text-primary',
-  sheet: 'bg-emerald-soft text-emerald',
-  email: 'bg-rose-soft text-rose',
-  file: 'bg-amber-soft text-amber',
-  describe: 'bg-primary-soft text-primary',
-  api: 'bg-surface-2 text-ink-muted',
+// Los mismos iconos y colores que «Conecta algo nuevo» en Datos y conexiones:
+// una carpeta de Drive se reconoce igual en las dos pantallas.
+const VISUAL: Record<SourceId, { icon: CatalogIcon; tone: CatalogTone }> = {
+  drive: { icon: 'folder', tone: 'primary' },
+  sheet: { icon: 'sheet', tone: 'emerald' },
+  email: { icon: 'google', tone: 'rose' },
+  file: { icon: 'calculator', tone: 'amber' },
+  describe: { icon: 'chat', tone: 'primary' },
+  api: { icon: 'api', tone: 'neutral' },
 };
 
 type Step = 'source' | 'process';
@@ -203,7 +186,6 @@ function SourceStep({
         <fieldset className="grid gap-3 sm:grid-cols-2">
           <legend className="sr-only">Fuente de datos</legend>
           {SOURCES.map((s) => {
-            const Icon = ICONS[s.id];
             const active = s.id === picked;
             return (
               <button
@@ -215,24 +197,25 @@ function SourceStep({
                   setUrl('');
                 }}
                 className={clsx(
-                  'flex items-start gap-3.5 rounded-card border p-4 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                  'flex items-start rounded-card border p-4 text-left shadow-card transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                   active
                     ? 'border-primary bg-primary-soft/50 ring-1 ring-primary'
                     : 'border-border bg-surface hover:border-border-strong',
                 )}
               >
-                <span
-                  className={clsx(
-                    'grid h-10 w-10 shrink-0 place-items-center rounded-card',
-                    TONES[s.id],
-                  )}
-                >
-                  <Icon className="h-5 w-5" aria-hidden />
-                </span>
-                <span className="flex flex-col gap-1">
-                  <span className="text-sm font-extrabold text-ink">{s.title}</span>
-                  <span className="text-xs leading-relaxed text-ink-muted">{s.body}</span>
-                </span>
+                <SourceTile
+                  icon={CATALOG_ICON[VISUAL[s.id].icon]}
+                  tone={VISUAL[s.id].tone}
+                  title={s.title}
+                  body={s.body}
+                  badge={
+                    s.needsGoogle && googleConnected ? (
+                      <span className="rounded-pill bg-emerald-soft px-2 py-0.5 text-micro font-bold text-emerald">
+                        Google conectado
+                      </span>
+                    ) : null
+                  }
+                />
               </button>
             );
           })}
@@ -340,6 +323,12 @@ function SourceStep({
           Cortex solo lee lo que le das. Nada sale de tu empresa sin que lo apruebes, y cada acción
           queda registrada.
         </p>
+        <Link
+          href="/integrations#conecta"
+          className="inline-flex items-center gap-1 px-1 text-xs font-bold text-primary hover:underline"
+        >
+          Ver todo lo que puedes conectar <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
       </aside>
     </div>
   );

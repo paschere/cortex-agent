@@ -1,137 +1,217 @@
 'use client';
 
-import { type SpaceChoice, listWritableSpacesAction } from '@/app/(chat)/chat/actions';
+import type { SpaceChoice } from '@/app/(chat)/chat/actions';
 import { PageHeader } from '@/components/ui/page-header';
-import {
-  FEED_ACCEPT,
-  FEED_MAX_BYTES,
-  FEED_MAX_TEXT,
-  type FeedDetail,
-  type FeedEntry,
-} from '@/lib/feed/shared';
-import type { FeedSourceSummary } from '@/lib/feed/source-management';
+import type { FeedDetail, FeedEntry } from '@/lib/feed/shared';
 import { workspaceHref } from '@/lib/workspace-context';
+import { clsx } from 'clsx';
 import {
+  ArrowRight,
   Brain,
   Check,
-  FileText,
   Inbox,
-  Link2,
+  LayoutGrid,
+  List,
   Loader2,
-  MessageSquare,
-  Plug,
-  Plus,
+  Lock,
   Search,
+  Sparkles,
+  Table2,
   Trash2,
-  Upload,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { ConnectApiWizard, httpApiWizardClient } from './ConnectApiWizard';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ApiWizardClient, httpApiWizardClient } from './ConnectApiWizard';
+import { FeedDrawer } from './FeedDrawer';
+import { FeedIntake, type IntakeMode } from './FeedIntake';
+import { FeedSourceRegistry } from './FeedSourceRegistry';
 import { SourceIntelligence } from './SourceIntelligence';
-import { SourceReliability } from './SourceReliability';
+import { TypeIcon } from './TypeIcon';
+import { type FeedClient, httpFeedClient } from './feed-client';
+import {
+  DATE_LABEL,
+  type DateRange,
+  type FeedOrigin,
+  type FeedStatus,
+  type FeedType,
+  type InboxFilters,
+  NO_FILTERS,
+  ORIGIN_LABEL,
+  STATUS_LABEL,
+  STATUS_TONE,
+  TABLE_PROMPT,
+  TYPE_LABEL,
+  countByStatus,
+  feedOrigin,
+  feedStatus,
+  feedType,
+  filterEntries,
+  formatBytes,
+  shortWhen,
+  withPrompt,
+} from './inbox-model';
 
-const inputClass =
-  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
-const buttonClass =
-  'inline-flex items-center justify-center gap-2 rounded-sm px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed';
-const icons = { file: FileText, url: Link2, text: FileText, api: Plug, combined: Link2 };
-const kinds = {
-  file: 'Archivo',
-  url: 'Enlace',
-  text: 'Texto',
-  api: 'API',
-  combined: 'Fuentes combinadas',
-};
+/**
+ * LA BANDEJA DE ARCHIVOS, COMO UN BUZÓN.
+ *
+ * Todo lo que llegó —archivos subidos, enlaces, textos, capturas de una API,
+ * fotos de una hoja— en una lista que se filtra (tipo, por dónde llegó, en qué
+ * quedó, cuándo), se busca, se selecciona de a varios (clasificar, guardar en
+ * el cerebro, convertir en tabla, borrar) y se abre en un cajón con la vista
+ * previa. Arriba, una zona grande para soltar archivos o pegar un enlace.
+ *
+ * Bandeja ≠ cerebro: la bandeja es tuya y temporal (siete días); el cerebro es
+ * de la empresa y permanente. Se dice en pantalla porque es la duda que más
+ * llega.
+ *
+ * Todo lo que se pide al servidor pasa por `FeedClient` (las rutas de siempre
+ * en /api/feed), así el fixture de /v la dibuja con datos inventados.
+ */
+
+type View = 'entries' | 'sources' | 'cross';
+const NO_IDS: string[] = [];
+type Layout = 'list' | 'grid';
+
+const select =
+  'min-h-9 rounded-pill border border-border bg-surface px-3 text-xs font-semibold text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20';
+const bulkBtn =
+  'inline-flex min-h-8 items-center gap-1.5 rounded-pill px-3 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50';
 
 export function Feed({
   initialEntries,
   workspaceId,
   initialMode = 'file',
+  initialView = 'entries',
+  initialOpenId,
+  tableSourceIds = NO_IDS,
+  client: injected,
+  apiClient: injectedApi,
+  now: fixedNow,
 }: {
   initialEntries: FeedEntry[];
   workspaceId: string;
-  initialMode?: 'file' | 'url' | 'text' | 'api';
+  initialMode?: IntakeMode;
+  initialView?: View;
+  /** Abre esta entrada al cargar (el fixture de /v). */
+  initialOpenId?: string;
+  /** Fuentes que llenan una tabla: sus entradas dicen «En tabla». */
+  tableSourceIds?: string[];
+  /** Sólo el fixture de /v los pasa. */
+  client?: FeedClient;
+  apiClient?: ApiWizardClient;
+  now?: string;
 }) {
-  const href = (path: string) => workspaceHref(workspaceId, path);
+  const href = useCallback((path: string) => workspaceHref(workspaceId, path), [workspaceId]);
+  const client = useMemo(() => injected ?? httpFeedClient(workspaceId), [injected, workspaceId]);
   const apiClient = useMemo(
     () =>
+      injectedApi ??
       httpApiWizardClient({
         apiSources: workspaceHref(workspaceId, '/api/feed/api-sources'),
         sources: workspaceHref(workspaceId, '/api/feed/sources'),
         entry: (id) => workspaceHref(workspaceId, `/api/feed/${id}`),
       }),
-    [workspaceId],
+    [injectedApi, workspaceId],
   );
   const router = useRouter();
+  const now = useMemo(() => (fixedNow ? new Date(fixedNow) : new Date()), [fixedNow]);
+  const ctx = useMemo(() => ({ tableSourceIds: new Set(tableSourceIds) }), [tableSourceIds]);
+
   const [entries, setEntries] = useState(initialEntries);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [mode, setMode] = useState<IntakeMode>(initialMode);
+  const [view, setView] = useState<View>(initialView);
+  const [layout, setLayout] = useState<Layout>('list');
+  const [filters, setFilters] = useState<InboxFilters>(NO_FILTERS);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
   const [detail, setDetail] = useState<FeedDetail | null>(null);
-  const [mode, setMode] = useState<'file' | 'url' | 'text' | 'api'>(initialMode);
-  const [query, setQuery] = useState('');
-  const [url, setUrl] = useState('');
-  const [title, setTitle] = useState('');
-  const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [spaces, setSpaces] = useState<SpaceChoice[]>([]);
-  const [space, setSpace] = useState('');
-  const [sheet, setSheet] = useState(0);
-  const [showHistory, setShowHistory] = useState(false);
+  const [areas, setAreas] = useState<Record<string, string[]>>({});
+  const [bulk, setBulk] = useState<
+    null | { kind: 'promote'; spaces: SpaceChoice[] } | { kind: 'delete' }
+  >(null);
+  const [bulkSpace, setBulkSpace] = useState('');
+  const [sourceCount, setSourceCount] = useState<number | null>(null);
   const [versionTarget, setVersionTarget] = useState<{
     id: string;
     kind: 'file' | 'text';
     name: string;
   } | null>(null);
+  const intakeRef = useRef<HTMLDivElement>(null);
 
-  async function refresh() {
-    const res = await fetch(href('/api/feed'));
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? 'No se pudo actualizar la bandeja.');
-    setEntries(data.entries);
-  }
+  const visible = useMemo(
+    () => filterEntries(entries, filters, ctx, now),
+    [entries, filters, ctx, now],
+  );
+  const counts = useMemo(() => countByStatus(entries, ctx), [entries, ctx]);
+  const openEntry = entries.find((e) => e.id === openId) ?? null;
+  const checkedEntries = entries.filter((e) => checked.has(e.id));
+  const filtering =
+    filters.query !== '' ||
+    filters.type !== 'all' ||
+    filters.origin !== 'all' ||
+    filters.status !== 'all' ||
+    filters.date !== 'all';
+
+  const refresh = useCallback(async () => {
+    setEntries(await client.list());
+  }, [client]);
 
   useEffect(() => {
     setDetail(null);
-    setSaving(false);
-    setDeleting(false);
-    setSheet(0);
-    if (!selected) return;
+    if (!openId) return;
     const controller = new AbortController();
-    void fetch(workspaceHref(workspaceId, `/api/feed/${selected}`), { signal: controller.signal })
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'No se pudo leer la entrada.');
-        setDetail(data.entry);
-      })
+    client
+      .detail(openId, controller.signal)
+      .then((d) => setDetail(d))
       .catch((err) => {
-        if (!controller.signal.aborted) {
-          setError(err.message);
-          setSelected(null);
-        }
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : 'No se pudo leer la entrada.');
+        setOpenId(null);
       });
     return () => controller.abort();
-  }, [selected, workspaceId]);
+  }, [openId, client]);
+
+  // Pegar en cualquier parte de la página (fuera de un campo) trae lo pegado.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const files = [...(e.clipboardData?.files ?? [])];
+      if (files.length) {
+        e.preventDefault();
+        void upload(files);
+        return;
+      }
+      const text = e.clipboardData?.getData('text') ?? '';
+      if (/^https?:\/\/\S+$/i.test(text.trim())) {
+        e.preventDefault();
+        void submit({ kind: 'url', url: text.trim() });
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  });
+
+  function prepend(entry: FeedEntry) {
+    setEntries((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
+  }
 
   async function add(form: FormData) {
     if (versionTarget) form.set('targetSourceId', versionTarget.id);
-    const res = await fetch(href('/api/feed'), { method: 'POST', body: form });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? 'No se pudo añadir la entrada.');
-    setEntries((prev) => [data.entry, ...prev.filter((entry) => entry.id !== data.entry.id)]);
-    setSelected(data.entry.id);
+    const data = await client.add(form);
+    prepend(data.entry);
+    setOpenId(data.entry.id);
     setNotice(
       versionTarget
         ? `Nueva versión guardada en ${versionTarget.name}.`
         : data.deduplicated
-          ? 'El contenido ya estaba en tu bandeja. Se reutilizó la entrada, sin duplicarla ni ampliar su vencimiento.'
-          : 'Fuente leída. Cortex propone su uso por pestaña; permanece temporal hasta que decidas guardarla.',
+          ? 'Eso ya estaba en tu bandeja: se reutilizó la entrada, sin duplicarla ni alargar su vencimiento.'
+          : 'Listo, ya está en tu bandeja. Cortex propone para qué sirve; sigue temporal hasta que decidas guardarla.',
     );
     setVersionTarget(null);
   }
@@ -154,809 +234,865 @@ export function Feed({
     }
   }
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: FEED_ACCEPT,
-    maxSize: FEED_MAX_BYTES,
-    disabled: busy,
-    onDropAccepted: (files) => void upload(files),
-    onDropRejected: () =>
-      setError('Usa PDF, DOCX, XLSX, CSV, TXT o Markdown, de hasta 10 MB por archivo.'),
-  });
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+  async function submit(input: {
+    kind: 'url' | 'text';
+    url?: string;
+    title?: string;
+    text?: string;
+  }) {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const form = new FormData();
-      form.set('kind', mode);
-      form.set('url', url);
-      form.set('title', title);
-      form.set('text', text);
+      form.set('kind', input.kind);
+      form.set('url', input.url ?? '');
+      form.set('title', input.title ?? '');
+      form.set('text', input.text ?? '');
       await add(form);
-      setUrl('');
-      setTitle('');
-      setText('');
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo añadir la entrada.');
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
-  async function act(action: 'consult' | 'promote' | 'delete') {
-    if (!detail) return;
+  async function run<T>(work: () => Promise<T>): Promise<T | undefined> {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch(href(`/api/feed/${detail.id}`), {
-        method: action === 'delete' ? 'DELETE' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        ...(action === 'delete'
-          ? {}
-          : { body: JSON.stringify({ action, ...(space ? { space } : {}) }) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'No se pudo completar la acción.');
-      if (action === 'consult') {
-        router.push(href(data.href));
-        return;
-      }
-      if (action === 'delete') {
-        setSelected(null);
-        setDetail(null);
-        setNotice('Entrada eliminada de la bandeja.');
-      } else {
-        setDetail({ ...detail, promoted_document_id: data.result.documentId });
-        setSaving(false);
-        setNotice(data.result.note);
-      }
-      await refresh();
+      return await work();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo completar la acción.');
+      return undefined;
     } finally {
       setBusy(false);
     }
   }
 
-  async function openSave() {
-    setError(null);
-    try {
-      setSpaces(await listWritableSpacesAction());
-      setSpace('');
-      setSaving(true);
-    } catch {
-      setError('No se pudieron cargar los espacios.');
-    }
+  const consult = (id: string, prompt?: string) =>
+    run(async () => {
+      const to = await client.consult(id);
+      router.push(prompt ? withPrompt(to, prompt) : to);
+    });
+
+  const promote = (ids: string[], space: string) =>
+    run(async () => {
+      let saved = 0;
+      let lastNote = '';
+      for (const id of ids) {
+        const entry = entries.find((e) => e.id === id);
+        if (entry?.promoted_document_id) continue;
+        const result = await client.promote(id, space || undefined);
+        lastNote = result.note;
+        saved += 1;
+        setEntries((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, promoted_document_id: result.documentId } : e)),
+        );
+        setDetail((d) =>
+          d && d.id === id ? { ...d, promoted_document_id: result.documentId } : d,
+        );
+      }
+      setBulk(null);
+      setChecked(new Set());
+      setNotice(
+        ids.length === 1
+          ? lastNote || 'Guardado en el cerebro.'
+          : `${saved} ${saved === 1 ? 'entrada guardada' : 'entradas guardadas'} en el cerebro${saved < ids.length ? '; las demás ya estaban' : ''}.`,
+      );
+    });
+
+  const remove = (ids: string[]) =>
+    run(async () => {
+      for (const id of ids) await client.remove(id);
+      setEntries((prev) => prev.filter((e) => !ids.includes(e.id)));
+      if (openId && ids.includes(openId)) setOpenId(null);
+      setChecked(new Set());
+      setBulk(null);
+      setNotice(
+        ids.length === 1
+          ? 'Entrada borrada de la bandeja.'
+          : `${ids.length} entradas borradas de la bandeja.`,
+      );
+    });
+
+  const classify = (ids: string[]) =>
+    run(async () => {
+      const found: Record<string, string[]> = {};
+      for (let i = 0; i < ids.length; i += 3) {
+        const batch = await Promise.all(ids.slice(i, i + 3).map((id) => client.detail(id)));
+        for (const d of batch)
+          found[d.id] = [...new Set((d.recommendation?.tables ?? []).flatMap((t) => t.areas))];
+      }
+      setAreas((prev) => ({ ...prev, ...found }));
+      setNotice(
+        `Listo: Cortex propuso para qué sirve ${ids.length === 1 ? 'la entrada' : `cada una de las ${ids.length}`}. Ábrela para ver el detalle por pestaña.`,
+      );
+    });
+
+  function toggle(id: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
-  const sourceKeys = new Set<string>();
-  const latest = [...entries]
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .filter((entry) => {
-      const key = entry.source_url ?? entry.id;
-      if (!showHistory && sourceKeys.has(key)) return false;
-      sourceKeys.add(key);
-      return true;
-    });
-  const filtered = latest.filter((entry) =>
-    `${entry.filename} ${entry.source_url ?? ''}`.toLowerCase().includes(query.toLowerCase()),
-  );
-  const table = detail?.feed_tables?.[sheet];
+  const allChecked = visible.length > 0 && visible.every((e) => checked.has(e.id));
 
   return (
-    <div className="w-full space-y-6">
+    <div className="flex w-full flex-col gap-6">
       <PageHeader
         title="Bandeja de archivos"
         icon={<Inbox className="h-5 w-5" />}
-        subtitle="Trae archivos, enlaces o texto para trabajar con Cortex. Solo tú puedes verlos; duran siete días y tú decides qué guardar en el cerebro."
+        subtitle="Todo lo que le traes a Cortex para consultarlo: archivos, enlaces, textos y capturas. Sólo tú lo ves."
         actions={
-          <Link
-            href={href('/activations')}
-            className={`${buttonClass} border border-border bg-surface text-ink`}
-          >
-            Activaciones
-          </Link>
+          <>
+            <Link
+              href={href('/integrations')}
+              className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-4 text-sm font-bold text-ink hover:bg-surface-2"
+            >
+              Datos y conexiones
+            </Link>
+            <Link
+              href={href('/activations')}
+              className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-4 text-sm font-bold text-ink hover:bg-surface-2"
+            >
+              Activaciones
+            </Link>
+          </>
         }
       />
 
-      <section
-        aria-label="Añadir información"
-        className="mb-7 rounded-card border border-border bg-surface p-4 sm:p-5"
-      >
-        <div className="mb-4 flex flex-wrap gap-1" aria-label="Tipo de entrada">
-          {(['file', 'url', 'text', 'api'] as const).map((kind) => {
-            const Icon =
-              kind === 'file' ? Upload : kind === 'url' ? Link2 : kind === 'api' ? Plug : FileText;
-            return (
-              <button
-                key={kind}
-                type="button"
-                disabled={busy}
-                aria-pressed={mode === kind}
-                onClick={() => {
-                  setMode(kind);
-                  if (kind !== versionTarget?.kind) setVersionTarget(null);
-                }}
-                className={`${buttonClass} ${mode === kind ? 'bg-primary-soft text-primary' : 'text-ink-muted hover:bg-surface-2'}`}
-              >
-                <Icon size={16} aria-hidden />
-                {kind === 'file'
-                  ? 'Subir archivos'
-                  : kind === 'url'
-                    ? 'Pegar enlace'
-                    : kind === 'text'
-                      ? 'Escribir texto'
-                      : 'Conectar API'}
-              </button>
-            );
-          })}
-        </div>
-        {versionTarget ? (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-sm bg-primary-soft px-3 py-2 text-sm text-ink">
-            <span>
-              Nueva versión de <strong>{versionTarget.name}</strong>
-            </span>
-            <button
-              type="button"
-              onClick={() => setVersionTarget(null)}
-              className="font-semibold text-primary"
-            >
-              Cancelar
-            </button>
-          </div>
-        ) : null}
-        {mode === 'api' ? (
-          <ConnectApiWizard
-            client={apiClient}
-            onAdded={(entry) => {
-              setEntries((prev) => [entry, ...prev.filter((item) => item.id !== entry.id)]);
-              setSelected(entry.id);
-            }}
-          />
-        ) : mode === 'file' ? (
-          <div
-            {...getRootProps()}
-            className={`flex cursor-pointer flex-col items-center rounded-sm border border-dashed px-4 py-8 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${isDragActive ? 'border-primary bg-primary-soft' : 'border-border-strong bg-surface-2'}`}
-          >
-            <input {...getInputProps({ 'aria-label': 'Subir archivos a la bandeja' })} />
-            {busy ? (
-              <Loader2 className="mb-3 animate-spin text-primary" aria-hidden />
-            ) : (
-              <Upload className="mb-3 text-primary" aria-hidden />
-            )}
-            <p className="font-medium text-ink">
-              {busy
-                ? 'Leyendo el contenido…'
-                : isDragActive
-                  ? 'Suelta los archivos aquí'
-                  : 'Arrastra archivos o haz clic para elegir'}
-            </p>
-            <p className="mt-1 text-xs text-ink-muted">
-              PDF, Word, Excel, CSV y texto · Hasta 10 MB por archivo
-            </p>
-          </div>
-        ) : (
-          <form onSubmit={submit} className="space-y-3">
-            {mode === 'url' ? (
-              <>
-                <label htmlFor="feed-url" className="block text-sm font-medium text-ink">
-                  Google Sheets o página pública
-                </label>
-                <input
-                  id="feed-url"
-                  type="url"
-                  required
-                  maxLength={2048}
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://ejemplo.com/informe"
-                  className={inputClass}
-                  disabled={busy}
-                />
-                <p className="text-xs text-ink-muted">
-                  Sheets usa tu conexión de Google de esta empresa. Se toma una captura: puedes
-                  actualizarla aquí. Otras URLs deben ser públicas.
-                </p>
-                <a
-                  href={href('/integrations')}
-                  className="inline-block text-xs font-medium text-primary underline"
-                >
-                  Revisar conexión de Google
-                </a>
-              </>
-            ) : (
-              <>
-                <label htmlFor="feed-title" className="block text-sm font-medium text-ink">
-                  Título
-                </label>
-                <input
-                  id="feed-title"
-                  value={title}
-                  maxLength={200}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Por ejemplo: contexto para la reunión"
-                  className={inputClass}
-                  disabled={busy}
-                />
-                <label htmlFor="feed-text" className="block text-sm font-medium text-ink">
-                  Contenido
-                </label>
-                <textarea
-                  id="feed-text"
-                  required
-                  value={text}
-                  maxLength={FEED_MAX_TEXT}
-                  onChange={(e) => setText(e.target.value)}
-                  rows={5}
-                  placeholder="Pega tus notas, un correo o la información que quieres consultar…"
-                  className={inputClass}
-                  disabled={busy}
-                />
-              </>
-            )}
-            <button
-              disabled={busy}
-              type="submit"
-              className={`${buttonClass} bg-primary text-white hover:bg-primary-strong`}
-            >
-              {busy ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}Añadir a
-              la bandeja
-            </button>
-          </form>
-        )}
-      </section>
-      <details className="rounded-card border border-border bg-surface">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-ink">
-          Cruzar fuentes y explorar activaciones{' '}
-          <span className="ml-2 text-xs font-normal text-ink-muted">
-            Combina datos para encontrar qué requiere atención
-          </span>
-        </summary>
-        <div className="border-t border-border p-3 sm:p-4">
-          <SourceIntelligence
-            workspaceId={workspaceId}
-            refreshKey={entries.map((entry) => entry.id).join(',')}
-            onCaptured={() => {
-              void refresh();
-            }}
-          />
-        </div>
-      </details>
-      <FeedSourceRegistry
-        refreshKey={entries.map((entry) => entry.id).join(',')}
-        workspaceId={workspaceId}
-        apiHref={href('/api/feed/sources')}
-        onCaptured={(entry) => {
-          if (entry) setEntries((prev) => [entry, ...prev.filter((item) => item.id !== entry.id)]);
-        }}
-        onAddVersion={(source) => {
-          setVersionTarget(source);
-          setMode(source.kind);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-      />
+      <InboxVsBrain href={href} />
+
+      <div ref={intakeRef} className="scroll-mt-6">
+        <FeedIntake
+          mode={mode}
+          onMode={(m) => {
+            setMode(m);
+            if (m !== versionTarget?.kind) setVersionTarget(null);
+          }}
+          busy={busy}
+          versionTarget={versionTarget}
+          onCancelVersion={() => setVersionTarget(null)}
+          onFiles={(files) => void upload(files)}
+          onRejected={() =>
+            setError('Usa PDF, DOCX, XLSX, CSV, TXT o Markdown, de hasta 10 MB por archivo.')
+          }
+          onSubmit={submit}
+          apiClient={apiClient}
+          onApiAdded={(entry) => {
+            prepend(entry);
+            setOpenId(entry.id);
+          }}
+        />
+      </div>
 
       {error && (
         <div
           role="alert"
-          className="mb-4 flex items-start justify-between gap-3 rounded-sm bg-rose-soft p-3 text-sm text-rose"
+          className="flex items-start justify-between gap-3 rounded-card bg-rose-soft px-4 py-3 text-sm text-ink"
         >
           {error}
-          <button type="button" aria-label="Cerrar error" onClick={() => setError(null)}>
-            <X size={16} />
+          <button type="button" aria-label="Cerrar el aviso" onClick={() => setError(null)}>
+            <X className="h-4 w-4" />
           </button>
         </div>
       )}
       {notice && (
-        <output className="mb-4 rounded-sm bg-emerald-soft p-3 text-sm text-ink">{notice}</output>
+        <output className="flex items-start justify-between gap-3 rounded-card bg-emerald-soft px-4 py-3 text-sm text-ink">
+          <span className="flex items-start gap-2">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald" aria-hidden />
+            {notice}
+          </span>
+          <button type="button" aria-label="Cerrar el aviso" onClick={() => setNotice(null)}>
+            <X className="h-4 w-4" />
+          </button>
+        </output>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.4fr)]">
-        <section aria-label="Tus entradas" className="min-w-0">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-ink">Tus entradas</h2>
-            <span className="text-sm text-ink-faint">{entries.length}</span>
+      <section aria-label="Lo que llegó" className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border">
+          <div className="-mb-px flex gap-1 overflow-x-auto">
+            {(
+              [
+                ['entries', 'Entradas', latestCount(entries)],
+                ['sources', 'Fuentes que se actualizan', sourceCount],
+                ['cross', 'Cruzar fuentes', null],
+              ] as const
+            ).map(([id, label, n]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={view === id}
+                onClick={() => setView(id)}
+                className={clsx(
+                  'shrink-0 border-b-2 px-3 pb-2.5 pt-1 text-sm font-bold transition-colors',
+                  view === id
+                    ? 'border-primary text-ink'
+                    : 'border-transparent text-ink-muted hover:text-ink',
+                )}
+              >
+                {label}
+                {n !== null && (
+                  <span className="tabular ml-1.5 text-xs font-semibold text-ink-faint">{n}</span>
+                )}
+              </button>
+            ))}
           </div>
-          {entries.length > 0 && (
-            <div className="relative mb-3">
-              <Search size={16} className="absolute left-3 top-3 text-ink-faint" aria-hidden />
-              <input
-                aria-label="Buscar en la bandeja"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar por nombre o enlace"
-                className={`${inputClass} pl-9`}
-              />
-            </div>
+          {view === 'entries' && entries.length > 0 && (
+            <StatusStrip
+              counts={counts}
+              active={filters.status}
+              onPick={(s) => setFilters((f) => ({ ...f, status: f.status === s ? 'all' : s }))}
+            />
           )}
-          {filtered.length === 0 ? (
-            <div className="py-8 text-sm leading-relaxed text-ink-muted">
-              {query
-                ? 'No hay entradas que coincidan con esa búsqueda.'
-                : 'Lo que añadas aparecerá aquí. Puedes consultarlo primero y decidir después si vale la pena conservarlo.'}
-            </div>
+        </div>
+
+        {view === 'sources' && (
+          <FeedSourceRegistry
+            client={client}
+            workspaceId={workspaceId}
+            refreshKey={entries.map((e) => e.id).join(',')}
+            onCount={setSourceCount}
+            onCaptured={(entry) => entry && prepend(entry)}
+            onAddVersion={(source) => {
+              setVersionTarget(source);
+              setMode(source.kind);
+              intakeRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
+        )}
+
+        {view === 'cross' && (
+          <div className="rounded-card border border-border bg-surface p-3 shadow-card sm:p-4">
+            <SourceIntelligence
+              workspaceId={workspaceId}
+              refreshKey={entries.map((e) => e.id).join(',')}
+              onCaptured={() => void refresh().catch(() => undefined)}
+            />
+          </div>
+        )}
+
+        {view === 'entries' &&
+          (entries.length === 0 ? (
+            <EmptyInbox onPick={() => intakeRef.current?.scrollIntoView({ behavior: 'smooth' })} />
           ) : (
-            <div>
-              <label className="mb-3 flex items-center gap-2 text-xs text-ink-muted">
-                <input
-                  type="checkbox"
-                  checked={showHistory}
-                  onChange={(event) => setShowHistory(event.target.checked)}
-                />
-                Ver también capturas anteriores
-              </label>
-              <ul className="divide-y divide-border">
-                {filtered.map((entry) => {
-                  const Icon = icons[entry.feed_kind] ?? FileText;
-                  return (
-                    <li key={entry.id}>
+            <>
+              <Toolbar
+                filters={filters}
+                setFilters={setFilters}
+                layout={layout}
+                setLayout={setLayout}
+                filtering={filtering}
+              />
+
+              {checked.size > 0 && (
+                <div className="sticky top-2 z-30 flex flex-col gap-2 rounded-card bg-ink px-4 py-3 text-surface shadow-pop">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="mr-2 text-sm font-bold">
+                      <span className="tabular">{checked.size}</span>{' '}
+                      {checked.size === 1 ? 'seleccionada' : 'seleccionadas'}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void classify([...checked])}
+                      className={clsx(bulkBtn, 'bg-surface/10 hover:bg-surface/20')}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden /> Clasificar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          setBulkSpace('');
+                          setBulk({ kind: 'promote', spaces: await client.spaces() });
+                        })
+                      }
+                      className={clsx(bulkBtn, 'bg-surface/10 hover:bg-surface/20')}
+                    >
+                      <Brain className="h-3.5 w-3.5" aria-hidden /> Mover al cerebro
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || checked.size !== 1}
+                      title={
+                        checked.size !== 1
+                          ? 'Elige una sola entrada para convertirla en tabla'
+                          : undefined
+                      }
+                      onClick={() => void consult([...checked][0] as string, TABLE_PROMPT)}
+                      className={clsx(bulkBtn, 'bg-surface/10 hover:bg-surface/20')}
+                    >
+                      <Table2 className="h-3.5 w-3.5" aria-hidden /> Convertir en tabla
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setBulk({ kind: 'delete' })}
+                      className={clsx(bulkBtn, 'bg-rose/80 hover:bg-rose')}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden /> Borrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChecked(new Set());
+                        setBulk(null);
+                      }}
+                      className={clsx(bulkBtn, 'ml-auto hover:bg-surface/10')}
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden /> Quitar selección
+                    </button>
+                    {busy && (
+                      <Loader2
+                        className="h-4 w-4 animate-spin motion-reduce:animate-none"
+                        aria-hidden
+                      />
+                    )}
+                  </div>
+                  {bulk?.kind === 'promote' && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-surface/15 pt-2 text-sm">
+                      <label htmlFor="bulk-space">Guardar una copia en</label>
+                      <select
+                        id="bulk-space"
+                        value={bulkSpace}
+                        onChange={(e) => setBulkSpace(e.target.value)}
+                        className="min-h-8 rounded-pill bg-surface px-3 text-xs font-semibold text-ink"
+                      >
+                        <option value="">Mis notas privadas</option>
+                        {bulk.spaces.map((s) => (
+                          <option key={s.id} value={s.name} disabled={!s.writable}>
+                            {s.name}
+                            {!s.writable ? ' (sin permiso de escritura)' : ''}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         type="button"
                         disabled={busy}
-                        aria-pressed={selected === entry.id}
-                        onClick={() => setSelected(entry.id)}
-                        className={`flex w-full gap-3 rounded-sm px-3 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${selected === entry.id ? 'bg-primary-soft' : 'hover:bg-surface'}`}
+                        onClick={() => void promote([...checked], bulkSpace)}
+                        className={clsx(bulkBtn, 'bg-primary hover:bg-primary-strong')}
                       >
-                        <Icon size={18} className="mt-0.5 shrink-0 text-primary" aria-hidden />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-ink">
-                            {entry.filename}
-                          </span>
-                          <span className="mt-1 block text-xs text-ink-muted">
-                            {kinds[entry.feed_kind]} ·{' '}
-                            {new Date(entry.created_at).toLocaleDateString('es-CO', {
-                              timeZone: 'America/Bogota',
-                            })}
-                          </span>
-                          {entry.source_url && (
-                            <span className="mt-1 block text-xs text-ink-faint">
-                              {
-                                entries.filter((item) => item.source_url === entry.source_url)
-                                  .length
-                              }{' '}
-                              capturas de esta fuente
-                            </span>
-                          )}
-                          <span className="mt-1 block text-xs text-ink-muted">
-                            {entry.promoted_document_id
-                              ? 'También guardado en el cerebro'
-                              : 'Sólo para consulta'}
-                          </span>
-                        </span>
+                        Guardar <span className="tabular">{checked.size}</span>
                       </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-        </section>
-
-        <section
-          aria-label="Vista previa"
-          className="min-w-0 rounded-card border border-border bg-surface p-4 sm:p-5"
-        >
-          {!detail ? (
-            <div className="flex min-h-64 flex-col items-center justify-center text-center text-ink-muted">
-              <Inbox size={28} className="mb-3 text-ink-faint" aria-hidden />
-              <p className="text-sm">
-                {selected ? 'Cargando la entrada…' : 'Elige una entrada para ver su contenido.'}
-              </p>
-            </div>
-          ) : (
-            <>
-              <h2 className="break-words text-lg font-semibold text-ink">{detail.filename}</h2>
-              <p className="mt-1 text-xs text-ink-muted">
-                Disponible hasta el{' '}
-                {new Date(detail.purge_at).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
-              </p>
-              {detail.source_url && (
-                <a
-                  href={detail.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 block break-all text-sm text-primary underline"
-                >
-                  Abrir página original
-                </a>
-              )}
-              {detail.recommendation && (
-                <div className="mt-4 space-y-3 rounded-sm border border-primary/20 bg-primary-soft p-4">
-                  <p className="text-sm font-semibold text-ink">Dónde puede aportar esta fuente</p>
-                  <p className="text-xs leading-relaxed text-ink-muted">
-                    {detail.promoted_document_id
-                      ? 'Este archivo ya tiene una copia en el cerebro. Esta propuesta no ha aplicado cambios a cifras.'
-                      : 'Propuesta basada en los encabezados. No se ha copiado al cerebro ni aplicado a cifras.'}
-                  </p>
-                  {detail.recommendation.tables.map((table, index) => (
-                    <div key={`${table.name}:${index}`} className="border-t border-border pt-3">
-                      <p className="text-sm font-medium text-ink">{table.name}</p>
-                      <p className="mt-1 text-xs text-primary">
-                        {table.areas
-                          .map(
-                            (area) =>
-                              ({
-                                financial: 'Finanzas',
-                                administrative: 'Administración',
-                                commercial: 'Comercial',
-                                operations: 'Operaciones',
-                              })[area],
-                          )
-                          .join(' · ') || 'Uso por confirmar'}
-                      </p>
-                      <p className="mt-1 text-xs text-ink-muted">{table.reasons.join(' ')}</p>
-                      {table.missingRequiredFields.length > 0 && (
-                        <p className="mt-2 text-xs text-amber">
-                          Falta revisar: {table.missingRequiredFields.join(', ')}
-                        </p>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setBulk(null)}
+                        className={clsx(bulkBtn, 'hover:bg-surface/10')}
+                      >
+                        Cancelar
+                      </button>
                     </div>
-                  ))}
-                  {detail.recommendation.tables.length === 0 && (
-                    <p className="text-xs text-ink-muted">
-                      Cortex necesita revisar el contenido contigo para proponer un destino.
-                    </p>
+                  )}
+                  {bulk?.kind === 'delete' && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-surface/15 pt-2 text-sm">
+                      <span>
+                        ¿Borrar <span className="tabular">{checked.size}</span>{' '}
+                        {checked.size === 1 ? 'entrada' : 'entradas'} de la bandeja? Las copias del
+                        cerebro y las respuestas del chat se quedan.
+                      </span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void remove([...checked])}
+                        className={clsx(bulkBtn, 'bg-rose hover:opacity-90')}
+                      >
+                        Sí, borrar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBulk(null)}
+                        className={clsx(bulkBtn, 'hover:bg-surface/10')}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
-              <div className="my-4 flex flex-wrap gap-2">
-                {detail.source_url && (
+
+              {visible.length === 0 ? (
+                <div className="rounded-card border border-dashed border-border-strong p-8 text-center text-sm text-ink-muted">
+                  Nada coincide con esos filtros.{' '}
                   <button
                     type="button"
-                    disabled={busy}
-                    className={`${buttonClass} border border-border text-ink`}
-                    onClick={() => {
-                      const form = new FormData();
-                      form.set('kind', 'url');
-                      form.set('url', detail.source_url ?? '');
-                      setBusy(true);
-                      setError(null);
-                      void add(form)
-                        .catch((err) =>
-                          setError(err instanceof Error ? err.message : 'No se pudo actualizar.'),
-                        )
-                        .finally(() => setBusy(false));
-                    }}
+                    onClick={() => setFilters(NO_FILTERS)}
+                    className="font-bold text-primary hover:underline"
                   >
-                    Actualizar captura
+                    Quitar filtros
                   </button>
-                )}
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void act('consult')}
-                  className={`${buttonClass} bg-primary text-white hover:bg-primary-strong`}
-                >
-                  <MessageSquare size={16} />
-                  {detail.conversation_id ? 'Continuar consulta' : 'Consultar con Cortex'}
-                </button>
-                <Link
-                  href={href(`/activations?source=${encodeURIComponent(detail.id)}`)}
-                  className={`${buttonClass} border border-border text-ink`}
-                >
-                  Crear activación con esta fuente
-                </Link>
-                {detail.promoted_document_id ? (
-                  <span className="inline-flex items-center gap-1 px-2 text-xs text-emerald">
-                    <Check size={14} />
-                    Guardado en el cerebro
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void openSave()}
-                    className={`${buttonClass} border border-border text-ink hover:bg-surface-2`}
-                  >
-                    <Brain size={16} />
-                    Guardar en el cerebro
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-label="Eliminar entrada"
-                  onClick={() => setDeleting(true)}
-                  className={`${buttonClass} text-ink-muted hover:bg-rose-soft hover:text-rose`}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-              {saving && (
-                <div className="mb-4 space-y-3 rounded-sm bg-surface-2 p-3">
-                  <p className="text-sm text-ink">
-                    Se conservará en el espacio que elijas y podrá usarse en futuras respuestas.
-                  </p>
-                  <label htmlFor="feed-space" className="block text-sm font-medium text-ink">
-                    Guardar en
-                  </label>
-                  <select
-                    id="feed-space"
-                    value={space}
-                    onChange={(e) => setSpace(e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">Mis notas privadas</option>
-                    {spaces.map((s) => (
-                      <option key={s.id} value={s.name} disabled={!s.writable}>
-                        {s.name}
-                        {!s.writable ? ' (sin permiso de escritura)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void act('promote')}
-                      className={`${buttonClass} bg-primary text-white`}
-                    >
-                      {busy ? 'Guardando…' : 'Guardar en este espacio'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setSaving(false)}
-                      className={buttonClass}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
                 </div>
-              )}
-              {deleting && (
-                <div className="mb-4 rounded-sm bg-rose-soft p-3 text-sm text-ink">
-                  <p>
-                    Se eliminarán esta entrada y su archivo temporal. Las respuestas del chat y las
-                    copias que guardaste en el cerebro se conservan.
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void act('delete')}
-                      className={`${buttonClass} text-rose`}
-                    >
-                      Eliminar de la bandeja
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setDeleting(false)}
-                      className={buttonClass}
-                    >
-                      Cancelar
-                    </button>
+              ) : layout === 'list' ? (
+                <div className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
+                  <div className="hidden items-center gap-3 border-b border-border bg-surface-2/60 px-4 py-2 text-micro font-semibold text-ink-faint md:flex">
+                    <input
+                      type="checkbox"
+                      aria-label="Seleccionar todas las entradas visibles"
+                      checked={allChecked}
+                      onChange={() =>
+                        setChecked(allChecked ? new Set() : new Set(visible.map((e) => e.id)))
+                      }
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <span className="flex-1 pl-11">Nombre</span>
+                    <span className="w-28">Llegó</span>
+                    <span className="w-20 text-right">Tamaño</span>
+                    <span className="w-28">Estado</span>
                   </div>
-                </div>
-              )}
-              {(detail.feed_truncated || detail.extracted_text.length > 12000) && (
-                <p className="mb-3 rounded-sm bg-amber-soft p-3 text-xs text-ink">
-                  {detail.feed_truncated
-                    ? 'La fuente se capturó parcialmente; los cálculos no cubren el archivo original completo. '
-                    : ''}
-                  El chat recibe una lectura inicial de hasta 12.000 caracteres. Para hojas de
-                  cálculo, Cortex también puede consultar las filas y calcular sobre toda la captura
-                  almacenada.
-                </p>
-              )}
-              {table ? (
-                <>
-                  <label htmlFor="feed-sheet" className="mb-2 block text-xs text-ink-muted">
-                    Hoja de cálculo
-                  </label>
-                  <select
-                    id="feed-sheet"
-                    value={sheet}
-                    onChange={(e) => setSheet(Number(e.target.value))}
-                    className={inputClass}
-                  >
-                    {detail.feed_tables?.map((t, i) => (
-                      <option key={`${i}-${t.name}`} value={i}>
-                        {t.name} ({t.rows.length} filas)
-                      </option>
+                  <ul className="divide-y divide-border">
+                    {visible.map((entry) => (
+                      <EntryRow
+                        key={entry.id}
+                        entry={entry}
+                        status={feedStatus(entry, ctx)}
+                        areas={areas[entry.id]}
+                        now={now}
+                        checked={checked.has(entry.id)}
+                        open={openId === entry.id}
+                        captures={
+                          entry.source_url
+                            ? entries.filter((e) => e.source_url === entry.source_url).length
+                            : 0
+                        }
+                        onToggle={() => toggle(entry.id)}
+                        onOpen={() => setOpenId(entry.id)}
+                      />
                     ))}
-                  </select>
-                  <div className="mt-3 max-h-96 overflow-auto rounded-sm border border-border">
-                    <table className="w-full text-left text-xs">
-                      <caption className="sr-only">Vista previa de {table.name}</caption>
-                      <tbody>
-                        {table.rows.slice(0, 100).map((row, r) => (
-                          <tr
-                            key={`${table.name}-row-${r}`}
-                            className={
-                              r === 0 ? 'bg-surface-2 font-semibold' : 'border-t border-border'
-                            }
-                          >
-                            <th
-                              scope="row"
-                              className="sticky left-0 bg-surface-2 px-2 py-2 text-ink-faint"
-                            >
-                              {r + 1}
-                            </th>
-                            {row.map((cell, c) => (
-                              <td
-                                key={`${table.name}-cell-${r}-${c}`}
-                                className="max-w-64 truncate whitespace-nowrap px-3 py-2 text-ink"
-                                title={String(cell ?? '')}
-                              >
-                                {String(cell ?? '')}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="mt-2 text-xs text-ink-muted">
-                    Vista previa: {Math.min(table.rows.length, 100)} de {table.rows.length} filas.
-                    Se conservan todas las celdas leídas. Las fórmulas usan el resultado guardado en
-                    Excel.
-                  </p>
-                </>
+                  </ul>
+                </div>
               ) : (
-                <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words border-t border-border pt-4 font-sans text-sm leading-relaxed text-ink">
-                  {detail.extracted_text}
-                </pre>
+                <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {visible.map((entry) => (
+                    <EntryCard
+                      key={entry.id}
+                      entry={entry}
+                      status={feedStatus(entry, ctx)}
+                      areas={areas[entry.id]}
+                      now={now}
+                      checked={checked.has(entry.id)}
+                      onToggle={() => toggle(entry.id)}
+                      onOpen={() => setOpenId(entry.id)}
+                    />
+                  ))}
+                </ul>
               )}
             </>
-          )}
-        </section>
+          ))}
+      </section>
+
+      {openEntry && (
+        <FeedDrawer
+          entry={openEntry}
+          detail={detail?.id === openEntry.id ? detail : null}
+          status={feedStatus(openEntry, ctx)}
+          busy={busy}
+          activationHref={href(`/activations?source=${encodeURIComponent(openEntry.id)}`)}
+          onClose={() => setOpenId(null)}
+          onConsult={() => void consult(openEntry.id)}
+          onTable={() => void consult(openEntry.id, TABLE_PROMPT)}
+          onRefresh={
+            openEntry.source_url
+              ? () => void submit({ kind: 'url', url: openEntry.source_url ?? '' })
+              : null
+          }
+          onLoadSpaces={() => client.spaces()}
+          onPromote={(space) => void promote([openEntry.id], space)}
+          onDelete={() => void remove([openEntry.id])}
+        />
+      )}
+    </div>
+  );
+}
+
+function latestCount(entries: FeedEntry[]): number {
+  return filterEntries(entries, NO_FILTERS, { tableSourceIds: new Set() }, new Date()).length;
+}
+
+function InboxVsBrain({ href }: { href: (p: string) => string }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
+      <div className="flex gap-3 rounded-card border border-border bg-surface p-4 shadow-card">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-surface-2 text-ink-muted">
+          <Lock className="h-5 w-5" aria-hidden />
+        </span>
+        <div>
+          <p className="text-sm font-extrabold text-ink">
+            Bandeja <span className="font-semibold text-ink-muted">· temporal y privada</span>
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
+            Sólo tú la ves. Cada entrada dura <span className="tabular">7</span> días: sirve para
+            preguntarle a Cortex ya, sin que se vuelva memoria de la empresa.
+          </p>
+        </div>
+      </div>
+      <div className="hidden items-center text-ink-faint md:flex" aria-hidden>
+        <ArrowRight className="h-5 w-5" />
+      </div>
+      <div className="flex gap-3 rounded-card border border-primary/20 bg-primary-soft/50 p-4">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-surface text-primary">
+          <Brain className="h-5 w-5" aria-hidden />
+        </span>
+        <div>
+          <p className="text-sm font-extrabold text-ink">
+            Cerebro <span className="font-semibold text-ink-muted">· de la empresa</span>
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
+            Lo que guardas ahí se queda y Cortex lo usa en adelante, con los permisos de cada
+            espacio. Elige «Guardar en el cerebro» en una entrada, o{' '}
+            <Link href={href('/kb')} className="font-bold text-primary hover:underline">
+              abre el cerebro
+            </Link>
+            .
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-type FeedSourceView = FeedSourceSummary;
-function FeedSourceRegistry({
-  refreshKey,
-  workspaceId,
-  apiHref,
-  onCaptured,
-  onAddVersion,
+function StatusStrip({
+  counts,
+  active,
+  onPick,
 }: {
-  workspaceId: string;
-  apiHref: string;
-  refreshKey: string;
-  onCaptured: (entry?: FeedEntry) => void;
-  onAddVersion: (source: { id: string; kind: 'file' | 'text'; name: string }) => void;
+  counts: Record<FeedStatus, number>;
+  active: FeedStatus | 'all';
+  onPick: (s: FeedStatus) => void;
 }) {
-  const [sources, setSources] = useState<FeedSourceView[]>([]);
-  const [impactTruncated, setImpactTruncated] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [working, setWorking] = useState<string | null>(null);
-  const [registryError, setRegistryError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    const response = await fetch(apiHref, { cache: 'no-store' });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error);
-    setSources(body.sources ?? []);
-    setImpactTruncated(body.impactTruncated === true);
-  }, [apiHref]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: New captures invalidate registry health and source pointers.
-  useEffect(() => {
-    void load().catch((error) => setRegistryError(error.message));
-  }, [load, refreshKey]);
-  async function act(body: unknown, id: string) {
-    setWorking(id);
-    setRegistryError(null);
-    try {
-      const response = await fetch(apiHref, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      if (data.capture?.entry) onCaptured(data.capture.entry);
-      await load();
-    } catch (error) {
-      setRegistryError(error instanceof Error ? error.message : 'No se pudo actualizar la fuente.');
-    } finally {
-      setWorking(null);
-    }
-  }
-  if (!sources.length && !registryError) return null;
   return (
-    <details
-      open={open}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
-      className="rounded-card border border-border bg-surface"
-    >
-      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">
-        Fuentes conectadas · {sources.length}
-      </summary>
-      <div className="border-t border-border px-4">
-        {impactTruncated ? (
-          <p className="py-2 text-xs text-ink-muted">
-            Los conteos de activaciones muestran una vista parcial.
-          </p>
-        ) : null}
-        {registryError ? <p className="py-3 text-xs text-rose">{registryError}</p> : null}
-        <ul className="divide-y divide-border">
-          {sources.map((source) => (
-            <li key={source.id} className="flex flex-wrap items-center gap-3 py-3 text-xs">
-              <span className="min-w-0 flex-1">
-                <span className="block font-semibold text-ink">{source.name}</span>
-                <span className="text-ink-muted">
-                  {source.kind === 'google_sheet'
-                    ? 'Google Sheets'
-                    : source.kind === 'combined'
-                      ? 'Combinada'
-                      : source.kind === 'api'
-                        ? 'API'
-                        : source.kind === 'file'
-                          ? 'Archivo'
-                          : source.kind === 'text'
-                            ? 'Texto'
-                            : 'URL'}{' '}
-                  · {source.health?.label ?? source.status}
-                  {source.lastCheckedAt
-                    ? ` · revisada ${new Date(source.lastCheckedAt).toLocaleString('es-CO')}`
-                    : ''}
-                </span>
-                {source.health && (
-                  <span className="mt-1 block text-ink-muted">
-                    {source.health.detail} · {source.health.affectedActivations} activaciones
-                    vinculadas
-                  </span>
-                )}
-                {source.error ? <span className="block text-rose">{source.error}</span> : null}
-              </span>
-              {['url', 'google_sheet', 'api', 'combined'].includes(source.kind) &&
-              source.enabled ? (
-                <button
-                  type="button"
-                  disabled={working === source.id}
-                  onClick={() => void act({ action: 'refresh', id: source.id }, source.id)}
-                  className="font-semibold text-primary"
-                >
-                  Actualizar captura
-                </button>
-              ) : null}
-              {source.enabled && (source.kind === 'file' || source.kind === 'text') ? (
-                <button
-                  type="button"
-                  disabled={working === source.id}
-                  onClick={() =>
-                    onAddVersion({
-                      id: source.id,
-                      kind: source.kind as 'file' | 'text',
-                      name: source.name,
-                    })
-                  }
-                  className="font-semibold text-primary"
-                >
-                  Añadir versión
-                </button>
-              ) : null}
-              {source.enabled ? (
-                <button
-                  type="button"
-                  disabled={working === source.id}
-                  onClick={() => void act({ action: 'disable', id: source.id }, source.id)}
-                  className="font-semibold text-rose"
-                >
-                  Desconectar
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={working === source.id}
-                  onClick={() => void act({ action: 'reconnect', id: source.id }, source.id)}
-                  className="font-semibold text-primary"
-                >
-                  Reconectar
-                </button>
-              )}
-              <SourceReliability source={source} workspaceId={workspaceId} onChanged={load} />
-            </li>
-          ))}
-        </ul>
+    <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Filtrar por estado">
+      {(Object.keys(STATUS_LABEL) as FeedStatus[]).map((s) => (
+        <button
+          key={s}
+          type="button"
+          aria-pressed={active === s}
+          onClick={() => onPick(s)}
+          className={clsx(
+            'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-micro font-bold transition-shadow',
+            STATUS_TONE[s],
+            active === s ? 'ring-2 ring-current' : 'opacity-90 hover:opacity-100',
+          )}
+        >
+          <span className="tabular">{counts[s]}</span> {STATUS_LABEL[s].toLowerCase()}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Toolbar({
+  filters,
+  setFilters,
+  layout,
+  setLayout,
+  filtering,
+}: {
+  filters: InboxFilters;
+  setFilters: React.Dispatch<React.SetStateAction<InboxFilters>>;
+  layout: Layout;
+  setLayout: (l: Layout) => void;
+  filtering: boolean;
+}) {
+  const set = <K extends keyof InboxFilters>(key: K, value: InboxFilters[K]) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+  return (
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+      <div className="relative min-w-0 flex-1">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
+          aria-hidden
+        />
+        <input
+          aria-label="Buscar en la bandeja"
+          value={filters.query}
+          onChange={(e) => set('query', e.target.value)}
+          placeholder="Buscar por nombre o enlace"
+          className="min-h-10 w-full rounded-pill border border-border bg-surface pl-9 pr-4 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary/20"
+        />
       </div>
-    </details>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label="Tipo"
+          value={filters.type}
+          onChange={(e) => set('type', e.target.value as FeedType | 'all')}
+          className={select}
+        >
+          <option value="all">Todos los tipos</option>
+          {(Object.keys(TYPE_LABEL) as FeedType[]).map((t) => (
+            <option key={t} value={t}>
+              {TYPE_LABEL[t]}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Fuente"
+          value={filters.origin}
+          onChange={(e) => set('origin', e.target.value as FeedOrigin | 'all')}
+          className={select}
+        >
+          <option value="all">Todas las fuentes</option>
+          {(Object.keys(ORIGIN_LABEL) as FeedOrigin[]).map((o) => (
+            <option key={o} value={o}>
+              {ORIGIN_LABEL[o]}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Estado"
+          value={filters.status}
+          onChange={(e) => set('status', e.target.value as FeedStatus | 'all')}
+          className={select}
+        >
+          <option value="all">Cualquier estado</option>
+          {(Object.keys(STATUS_LABEL) as FeedStatus[]).map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABEL[s]}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Fecha"
+          value={filters.date}
+          onChange={(e) => set('date', e.target.value as DateRange | 'all')}
+          className={select}
+        >
+          <option value="all">Cualquier fecha</option>
+          {(Object.keys(DATE_LABEL) as DateRange[]).map((d) => (
+            <option key={d} value={d}>
+              {DATE_LABEL[d]}
+            </option>
+          ))}
+        </select>
+        <label className="inline-flex min-h-9 items-center gap-2 rounded-pill px-2 text-xs font-semibold text-ink-muted">
+          <input
+            type="checkbox"
+            checked={filters.history}
+            onChange={(e) => set('history', e.target.checked)}
+            className="h-4 w-4 accent-primary"
+          />
+          Capturas anteriores
+        </label>
+        {filtering && (
+          <button
+            type="button"
+            onClick={() => setFilters(NO_FILTERS)}
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            Quitar filtros
+          </button>
+        )}
+        <div
+          className="inline-flex rounded-pill border border-border bg-surface p-0.5"
+          aria-label="Cómo ver la bandeja"
+        >
+          {(
+            [
+              ['list', List, 'Lista'],
+              ['grid', LayoutGrid, 'Cuadrícula'],
+            ] as const
+          ).map(([id, Icon, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={layout === id}
+              aria-label={label}
+              title={label}
+              onClick={() => setLayout(id)}
+              className={clsx(
+                'grid h-8 w-8 place-items-center rounded-pill transition-colors',
+                layout === id ? 'bg-ink text-surface' : 'text-ink-muted hover:text-ink',
+              )}
+            >
+              <Icon className="h-4 w-4" aria-hidden />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const AREA: Record<string, string> = {
+  financial: 'Finanzas',
+  administrative: 'Administración',
+  commercial: 'Comercial',
+  operations: 'Operaciones',
+};
+
+function AreaChips({ areas }: { areas?: string[] }) {
+  if (!areas) return null;
+  return (
+    <span className="flex flex-wrap gap-1">
+      {(areas.length ? areas : ['']).map((a) => (
+        <span
+          key={a || 'none'}
+          className="rounded-pill bg-primary-soft px-2 py-0.5 text-micro font-bold text-primary"
+        >
+          {AREA[a] ?? 'Uso por confirmar'}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function EntryRow({
+  entry,
+  status,
+  areas,
+  now,
+  checked,
+  open,
+  captures,
+  onToggle,
+  onOpen,
+}: {
+  entry: FeedEntry;
+  status: FeedStatus;
+  areas?: string[];
+  now: Date;
+  checked: boolean;
+  open: boolean;
+  captures: number;
+  onToggle: () => void;
+  onOpen: () => void;
+}) {
+  const type = feedType(entry);
+  return (
+    <li
+      className={clsx(
+        'flex items-center gap-3 px-4 py-3 transition-colors',
+        checked || open ? 'bg-primary-soft/50' : 'hover:bg-surface-2/50',
+      )}
+    >
+      <input
+        type="checkbox"
+        aria-label={`Seleccionar ${entry.filename}`}
+        checked={checked}
+        onChange={onToggle}
+        className="h-4 w-4 shrink-0 accent-primary"
+      />
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <TypeIcon type={type} size="sm" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-bold text-ink">{entry.filename}</span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-faint">
+            <span>
+              {TYPE_LABEL[type]} · {ORIGIN_LABEL[feedOrigin(entry)]}
+            </span>
+            {captures > 1 && <span className="tabular">{captures} capturas</span>}
+            <span className="tabular md:hidden">{shortWhen(entry.created_at, now)}</span>
+            <AreaChips areas={areas} />
+          </span>
+        </span>
+      </button>
+      <span className="tabular hidden w-28 text-xs text-ink-muted md:block">
+        {shortWhen(entry.created_at, now)}
+      </span>
+      <span className="tabular hidden w-20 text-right text-xs text-ink-muted md:block">
+        {formatBytes(entry.byte_size)}
+      </span>
+      <span className="w-auto shrink-0 md:w-28">
+        <span
+          className={clsx(
+            'inline-flex rounded-pill px-2.5 py-0.5 text-micro font-bold',
+            STATUS_TONE[status],
+          )}
+        >
+          {STATUS_LABEL[status]}
+        </span>
+      </span>
+    </li>
+  );
+}
+
+function EntryCard({
+  entry,
+  status,
+  areas,
+  now,
+  checked,
+  onToggle,
+  onOpen,
+}: {
+  entry: FeedEntry;
+  status: FeedStatus;
+  areas?: string[];
+  now: Date;
+  checked: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+}) {
+  const type = feedType(entry);
+  return (
+    <li
+      className={clsx(
+        'relative flex flex-col gap-3 rounded-card border bg-surface p-4 shadow-card transition-colors',
+        checked ? 'border-primary' : 'border-border hover:border-border-strong',
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <TypeIcon type={type} />
+        <input
+          type="checkbox"
+          aria-label={`Seleccionar ${entry.filename}`}
+          checked={checked}
+          onChange={onToggle}
+          className="relative z-10 h-4 w-4 accent-primary"
+        />
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="text-left after:absolute after:inset-0 focus-visible:outline-none"
+      >
+        <span className="line-clamp-2 text-sm font-bold text-ink">{entry.filename}</span>
+        <span className="mt-1 block text-micro text-ink-faint">
+          {TYPE_LABEL[type]} · {ORIGIN_LABEL[feedOrigin(entry)]}
+        </span>
+      </button>
+      <AreaChips areas={areas} />
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3 text-micro text-ink-faint">
+        <span className="tabular">
+          {shortWhen(entry.created_at, now)} · {formatBytes(entry.byte_size)}
+        </span>
+        <span className={clsx('rounded-pill px-2.5 py-0.5 font-bold', STATUS_TONE[status])}>
+          {STATUS_LABEL[status]}
+        </span>
+      </div>
+    </li>
+  );
+}
+
+function EmptyInbox({ onPick }: { onPick: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-border-strong bg-surface/60 px-6 py-12 text-center">
+      <span className="grid h-14 w-14 place-items-center rounded-card bg-surface text-ink-faint shadow-card">
+        <Inbox className="h-6 w-6" aria-hidden />
+      </span>
+      <p className="text-base font-extrabold text-ink">Tu bandeja está vacía</p>
+      <p className="max-w-md text-sm leading-relaxed text-ink-muted">
+        Suelta aquí un Excel de ventas, el PDF de un contrato o pega el enlace de una hoja. Cortex
+        lo lee, te dice para qué sirve y tú decides si guardarlo.
+      </p>
+      <button
+        type="button"
+        onClick={onPick}
+        className="inline-flex min-h-10 items-center gap-1.5 rounded-pill bg-primary px-5 text-sm font-bold text-white hover:bg-primary-strong"
+      >
+        Traer algo <ArrowRight className="h-4 w-4" aria-hidden />
+      </button>
+    </div>
   );
 }

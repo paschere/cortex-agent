@@ -65,8 +65,10 @@ describe('el registro de fuentes', () => {
     // La plata recuperada es interna: lo manual lleva el título de un asunto de Gerencia.
     // El libro de plata, la caja, su proyección y el PyG también: traen nómina,
     // arriendo y saldos. Y el registro de trabajo: nombra a gente del equipo.
+    // Clientes (0179): lleva el responsable y cuánto debe cada cliente.
     expect(internal).toEqual([
       'cortex.caja',
+      'cortex.clientes',
       'cortex.compromisos',
       'cortex.equipo',
       'cortex.flujo_caja',

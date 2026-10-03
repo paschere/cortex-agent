@@ -12,6 +12,7 @@ import {
   type Candidate,
   type ClientRow,
   type ClientService,
+  type ClientSource,
   type ClientStatus,
   type ContactRow,
   type CustomsRole,
@@ -278,6 +279,24 @@ export interface ClientInput {
   ownerUserId?: string | null;
   since?: string | null;
   notes?: string | null;
+  /** 0179: etiquetas, ya limpias por `normalizeTags`. */
+  tags?: string[];
+  source?: ClientSource;
+  sourceDetail?: string | null;
+}
+
+/** Etiquetas: sin espacios de sobra, sin repetir (sin importar mayúsculas), máximo 20. */
+export function normalizeTags(tags: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    const tag = raw.trim().replace(/\s+/g, ' ').slice(0, 40);
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+  }
+  return out.slice(0, 20);
 }
 
 function clientColumns(input: Partial<ClientInput>): Record<string, unknown> {
@@ -298,6 +317,10 @@ function clientColumns(input: Partial<ClientInput>): Record<string, unknown> {
   if (input.ownerUserId !== undefined) patch.owner_user_id = input.ownerUserId;
   if (input.since !== undefined) patch.since = input.since || null;
   if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
+  if (input.tags !== undefined) patch.tags = normalizeTags(input.tags);
+  if (input.source !== undefined) patch.source = input.source;
+  if (input.sourceDetail !== undefined)
+    patch.source_detail = input.sourceDetail?.slice(0, 200) || null;
   return patch;
 }
 

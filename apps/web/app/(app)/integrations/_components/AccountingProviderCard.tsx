@@ -1,5 +1,6 @@
 'use client';
 
+import { IconTile } from '@/components/sources/visuals';
 import { Button } from '@/components/ui/button';
 import {
   type AccountingCardData,
@@ -9,6 +10,7 @@ import {
 } from '@/lib/accounting/card';
 import type { AccountingEntity } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
+import { Calculator } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
@@ -160,9 +162,10 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
 
   if (!card.provider.available)
     return (
-      <div className="flex h-full flex-col gap-2 rounded-card border border-dashed border-border bg-surface-2/40 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-bold text-ink">{name}</span>
+      <div className="flex h-full flex-col gap-2 rounded-card border border-dashed border-border-strong bg-surface/60 p-4">
+        <div className="flex items-center gap-3">
+          <IconTile icon={Calculator} tone="neutral" />
+          <span className="min-w-0 flex-1 text-sm font-extrabold text-ink">{name}</span>
           <span className="rounded-pill bg-surface-2 px-2 py-0.5 text-micro font-semibold text-ink-muted">
             Próximamente
           </span>
@@ -191,18 +194,21 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 rounded-card border border-border bg-surface p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-sm font-bold text-ink">{name}</div>
-          {card.accountLabel && (
-            <div className="mt-0.5 truncate text-micro text-ink-faint">
+    <div className="flex h-full flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card">
+      <div className="flex items-start gap-3">
+        <IconTile icon={Calculator} tone="amber" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-extrabold text-ink">{name}</div>
+          {card.accountLabel ? (
+            <div className="mt-0.5 truncate text-xs text-ink-muted">
               Cuenta: {card.accountLabel}
             </div>
+          ) : (
+            <div className="mt-0.5 text-xs text-ink-muted">Programa contable</div>
           )}
         </div>
         <span
-          className={clsx('shrink-0 rounded-pill px-2 py-0.5 text-micro font-semibold', tone.pill)}
+          className={clsx('shrink-0 rounded-pill px-2.5 py-0.5 text-micro font-bold', tone.pill)}
         >
           {tone.label}
         </span>
@@ -211,7 +217,7 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
       {card.connected && <p className="text-xs leading-snug text-ink-muted">{card.status}</p>}
 
       {card.error && (
-        <p className="rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
+        <p className="rounded-sm bg-rose-soft px-3 py-2 text-xs leading-relaxed text-ink">
           {card.error}
         </p>
       )}

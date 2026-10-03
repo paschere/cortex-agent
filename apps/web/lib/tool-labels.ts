@@ -244,6 +244,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   clients_overview: { label: 'Ver la ficha del cliente', icon: 'Building2' },
   clients_register: { label: 'Registrar o actualizar el cliente', icon: 'Building' },
   clients_link: { label: 'Enganchar esto a la ficha del cliente', icon: 'Link2' },
+  clients_merge: { label: 'Unir dos clientes repetidos', icon: 'Merge' },
 
   // Documentos: facturas, guías, declaraciones. Lo que se lee de ellos no
   // cuenta hasta que una persona lo confirma, y las frases mantienen esa

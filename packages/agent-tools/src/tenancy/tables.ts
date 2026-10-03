@@ -371,6 +371,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   client_domains: tenant(),
   client_contacts: tenant(),
   client_links: tenant(),
+  // 0179: los otros nombres de un cliente y las notas de su ficha.
+  client_aliases: tenant(),
+  client_notes: tenant(),
 
   // --- Document extraction (migration 0076) ---------------------------------
   // What was read out of each document, field by field, with the sentence each
@@ -481,6 +484,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   custom_view_submissions: tenant(),
   // 0160: cada edición, tarjeta movida o botón usado en una vista, con quién.
   custom_view_events: tenant(),
+  // 0178: las vistas guardadas del visualizador de datos (filtros, orden,
+  // columnas) por alcance — una tabla de la empresa, la lista de clientes.
+  // Tenant: el nombre y los filtros de una vista dicen qué mira una empresa
+  // («clientes en mora de Antioquia»), y una ajena en la lista sería una fuga.
+  grid_views: tenant(),
   // 0171: las cifras que el pulso calculó cada día, para comparar sin
   // inventar. Tenant: son ventas, cartera y pagos de la empresa.
   pulse_snapshots: tenant(),

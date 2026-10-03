@@ -34,10 +34,10 @@ export default async function WhatsappPage() {
     <>
       <Link
         href="/integrations"
-        className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint transition-colors duration-150 hover:text-primary motion-reduce:transition-none"
+        className="mb-3 inline-flex min-h-8 items-center gap-1.5 rounded-pill border border-border bg-surface px-3 text-xs font-bold text-ink-muted shadow-card transition-colors duration-150 hover:text-primary motion-reduce:transition-none"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Integraciones
+        Datos y conexiones
       </Link>
       <PageHeader
         title="WhatsApp"

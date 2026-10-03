@@ -111,8 +111,11 @@ describe('which signals may be applied', () => {
   // above APPLYING_METHODS before changing it. Widening this set is how one
   // customer's mail ends up on another customer's card.
   it('applies only what a person already stated', () => {
-    expect([...APPLYING_METHODS].sort()).toEqual(['contact_email', 'email_domain']);
+    // `alias` (0179) entra por la misma razón que el dominio: es un nombre que
+    // una persona afirmó en client_aliases.verified_by, no una inferencia.
+    expect([...APPLYING_METHODS].sort()).toEqual(['alias', 'contact_email', 'email_domain']);
     expect(methodApplies('email_domain')).toBe(true);
+    expect(methodApplies('contact_name')).toBe(false);
     expect(methodApplies('contact_email')).toBe(true);
     expect(methodApplies('tax_id')).toBe(false);
     expect(methodApplies('name_exact')).toBe(false);

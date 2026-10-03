@@ -8,12 +8,12 @@ import {
   CLIENT_STATUSES,
   CUSTOMS_ROLES,
   CUSTOMS_ROLE_LABEL,
-  PUBLIC_EMAIL_DOMAINS,
-  SERVICE_LABEL,
-  STATUS_LABEL,
   type ClientService,
   type ClientStatus,
   type CustomsRole,
+  PUBLIC_EMAIL_DOMAINS,
+  SERVICE_LABEL,
+  STATUS_LABEL,
 } from '@/lib/clients-shape';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';

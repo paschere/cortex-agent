@@ -9,24 +9,6 @@ import type { ClientStatus, LinkEntityKind, LinkMethod } from '@/lib/clients-sha
  * badge cannot recompute "aplicado" differently from the list it sits in.
  */
 
-export interface ClientRowView {
-  id: string;
-  name: string;
-  legalName: string | null;
-  nit: string | null;
-  status: ClientStatus;
-  statusLabel: string;
-  city: string | null;
-  services: string[];
-  owner: string | null;
-  /** Applied links plus open commitments — how much is actually hanging here. */
-  attached: number;
-  openCommitments: number;
-  overdueCommitments: number;
-  domains: string[];
-  updatedLabel: string;
-}
-
 export interface LinkView {
   id: string;
   kind: LinkEntityKind;
@@ -61,36 +43,9 @@ export interface ContactView {
   lastSeenLabel: string | null;
 }
 
-export interface CommitmentView {
-  id: string;
-  title: string;
-  kindLabel: string;
-  dueLabel: string;
-  daysLeft: number;
-  state: 'in_force' | 'due_soon' | 'overdue' | 'met' | 'dropped';
-  stateLabel: string;
-  amountCop: number | null;
-}
-
 export interface DomainView {
   id: string;
   domain: string;
   verifiedBy: string | null;
   verifiedLabel: string | null;
-}
-
-/** A counterparty on a commitment that no client answers for yet. */
-export interface BacklogView {
-  counterparty: string;
-  count: number;
-  /** Existing clients the text could be about. Never applied — offered. */
-  candidates: Array<{ id: string; name: string; why: string }>;
-}
-
-export interface ActionResult {
-  ok: boolean;
-  error?: string;
-  /** Set by actions that want to say what happened, not only that it worked. */
-  note?: string;
-  clientId?: string;
 }
