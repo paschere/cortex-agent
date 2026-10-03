@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { Building2, Users } from 'lucide-react';
+import { Building2, Inbox, Users } from 'lucide-react';
 import Link from 'next/link';
 
 /**
@@ -12,14 +12,20 @@ import Link from 'next/link';
 export function FounderTabs({
   current,
   showPeople,
+  showAccess = false,
 }: {
-  current: 'companies' | 'people';
+  current: 'companies' | 'people' | 'access';
   showPeople: boolean;
+  /** «Solicitudes» (0187): sólo para quien opera la plataforma. */
+  showAccess?: boolean;
 }) {
   const tabs = [
     { id: 'companies', href: '/overview', label: 'Empresas', Icon: Building2 },
     ...(showPeople
       ? [{ id: 'people', href: '/overview/people', label: 'Personas', Icon: Users }]
+      : []),
+    ...(showAccess
+      ? [{ id: 'access', href: '/overview/access', label: 'Solicitudes', Icon: Inbox }]
       : []),
   ] as const;
   if (tabs.length < 2) return null;

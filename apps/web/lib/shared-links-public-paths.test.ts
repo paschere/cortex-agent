@@ -28,5 +28,15 @@ describe('los enlaces compartidos abren sin sesión', () => {
     expect(block).toContain("'/api/sales/public'");
     expect(block).not.toContain("'/api/sales'");
     expect(block).not.toContain("'/ventas'");
+    // PQRS (0195): el formulario por token y su subcarpeta pública, nada más.
+    expect(block).toContain("'/pqrs'");
+    expect(block).toContain("'/api/pqrs/public'");
+    expect(block).not.toContain("'/api/pqrs'");
+    expect(block).not.toContain("'/cumplimiento'");
+    // Encuestas (0193): la página y su subcarpeta pública, nada más.
+    expect(block).toContain("'/encuesta'");
+    expect(block).toContain("'/api/crm/public'");
+    expect(block).not.toContain("'/api/crm'");
+    expect(block).not.toContain("'/comercial'");
   });
 });

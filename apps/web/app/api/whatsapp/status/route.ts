@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { pairingView } from '@/lib/whatsapp/pairing';
 import { isGroupReplyScope, listVisibleSpaces } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { NextResponse } from 'next/server';
 
 /**
@@ -36,31 +37,66 @@ export async function GET(): Promise<NextResponse> {
   const db = getOrgScopedClient(session.organization.id);
   const isAdmin = session.role === 'org_admin';
 
-  const { data: connection } = await db
+  const connectionRead = await db
     .from('whatsapp_sessions')
     .select(
-      'status, phone_number, pairing_qr, pairing_qr_expires_at, last_connected_at, last_seen_at, last_error, dm_enabled, pairing_requested_at, pairing_phone, pairing_code, pairing_code_expires_at',
+      'status, phone_number, pairing_qr, pairing_qr_expires_at, last_connected_at, last_seen_at, last_error, dm_enabled, pairing_requested_at, pairing_phone, pairing_code, pairing_code_expires_at, paired, unlink_requested_at',
     )
     .maybeSingle();
+  // Checked: an error read as "no row" would tell an admin to pair a number
+  // that is already paired.
+  if (connectionRead.error) {
+    logger.error(`whatsapp: could not read the session — ${connectionRead.error.message}`);
+    return NextResponse.json({ error: 'No se pudo leer el estado de WhatsApp.' }, { status: 500 });
+  }
+  const connection = connectionRead.data;
+
+  // QUÉ PUENTE HAY (0189). Un proceso multiempresa vivo sirve a cada empresa
+  // que vincule su número sin tocar Railway: entonces no tener fila, o no tener
+  // latidos propios mientras nadie vincula, es lo normal y no «el servicio no
+  // reporta». Sólo un puente de una empresa (WHATSAPP_ORGANIZATION_ID) deja a
+  // las demás sin servicio. La tabla no tiene datos de ninguna empresa.
+  const instances = await db
+    .from('whatsapp_bridge_instances')
+    .select('mode')
+    .gt('last_seen_at', new Date(Date.now() - STALE_AFTER_MS).toISOString())
+    .limit(20);
+  if (instances.error) {
+    logger.warn(`whatsapp: could not read the bridge processes — ${instances.error.message}`);
+  }
+  const modes = new Set(((instances.data ?? []) as Array<{ mode: string }>).map((row) => row.mode));
+  const service: 'multi' | 'single' | 'unknown' = modes.has('multi')
+    ? 'multi'
+    : modes.has('single')
+      ? 'single'
+      : 'unknown';
 
   const lastSeenMs = connection?.last_seen_at ? Date.parse(connection.last_seen_at as string) : 0;
-  const bridgeAlive = Date.now() - lastSeenMs < STALE_AFTER_MS;
+  const paired = connection?.paired === true;
+  const reportedRecently = Date.now() - lastSeenMs < STALE_AFTER_MS;
+  // Multiempresa: una empresa sin sesión emparejada no tiene conexión abierta
+  // hasta que alguien pide vincular, y eso no es una caída. Con sesión
+  // emparejada sí se exigen sus propios latidos.
+  const bridgeAlive = reportedRecently || (service === 'multi' && !paired);
   const qrFresh =
     Boolean(connection?.pairing_qr) &&
     Date.parse((connection?.pairing_qr_expires_at as string | null) ?? '') > Date.now();
   const pairing = pairingView(connection);
 
-  // EL PUENTE ESTÁ, PERO PARA OTRO ESPACIO DE TRABAJO.
+  // EL PUENTE ESTÁ, PERO PARA OTRO ESPACIO DE TRABAJO — sólo en modo de una
+  // empresa. Con un puente multiempresa vivo esto no aplica: cada empresa
+  // vincula el suyo.
   //
-  // El puente se presenta con `WHATSAPP_ORGANIZATION_ID` y todo lo que reporta
-  // cae en la fila de ESE espacio. Si es otro, esta pantalla no tiene fila y
-  // sólo podría decir «el servicio no está reportando» — falso, y mandaría a
-  // alguien a revisar Railway por un problema que es una variable. La lectura
-  // es sin acotar (es justamente la fila que el cliente acotado no ve) y sale de
-  // aquí convertida en un sí o un no: ni qué espacio, ni qué número, ni cuándo.
-  // Sólo para administradores, que son quienes pueden cambiar la variable.
+  // El puente de una empresa se presenta con `WHATSAPP_ORGANIZATION_ID` y todo
+  // lo que reporta cae en la fila de ESE espacio. Si es otro, esta pantalla no
+  // tiene fila y sólo podría decir «el servicio no está reportando» — falso, y
+  // mandaría a alguien a revisar Railway por un problema que es una variable. La
+  // lectura es sin acotar (es justamente la fila que el cliente acotado no ve) y
+  // sale de aquí convertida en un sí o un no: ni qué espacio, ni qué número, ni
+  // cuándo. Sólo para administradores, que son quienes pueden cambiar la
+  // variable.
   let bridgeElsewhere = false;
-  if (!connection && isAdmin) {
+  if (!connection && isAdmin && service !== 'multi') {
     const elsewhere = await getSupabaseServiceClient()
       .from('whatsapp_sessions')
       .select('organization_id')
@@ -155,8 +191,13 @@ export async function GET(): Promise<NextResponse> {
   return NextResponse.json({
     isAdmin,
     connection: {
-      status: (connection?.status as string | null) ?? 'disconnected',
+      // Sin fila: nadie ha vinculado todavía. Eso es «esperando», no «caído».
+      status: (connection?.status as string | null) ?? 'waiting',
       bridgeAlive,
+      /** La sesión guardada es de un dispositivo que WhatsApp aceptó. */
+      paired,
+      /** Se pidió «Desvincular» y el puente todavía no lo hizo. */
+      unlinking: Boolean(connection?.unlink_requested_at),
       phoneNumber: (connection?.phone_number as string | null) ?? null,
       qr: qrFresh ? (connection?.pairing_qr as string) : null,
       lastConnectedAt: (connection?.last_connected_at as string | null) ?? null,
@@ -169,9 +210,13 @@ export async function GET(): Promise<NextResponse> {
     },
     // Only ever true for an admin, and only a yes/no: see above.
     bridgeElsewhere,
-    // The id to put in WHATSAPP_ORGANIZATION_ID. Admins only — it is not a
-    // secret, but nobody else can act on it.
-    workspaceId: isAdmin ? session.organization.id : null,
+    // 'multi': cada empresa vincula el suyo. 'single': un puente fijado a un
+    // espacio por variable. 'unknown': ningún proceso que lo diga (apagado, o
+    // un puente anterior a 0189).
+    service,
+    // The id to put in WHATSAPP_ORGANIZATION_ID — only meaningful in single
+    // mode. Admins only: it is not a secret, but nobody else can act on it.
+    workspaceId: isAdmin && service !== 'multi' ? session.organization.id : null,
     groups: (
       (groupRows ?? []) as Array<{
         id: string;

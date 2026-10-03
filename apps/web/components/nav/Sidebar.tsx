@@ -16,6 +16,7 @@ import type { NavCounts } from '@/lib/nav-signals';
 import { recordVisit } from '@/lib/nav-usage';
 import { panelForHref } from '@/lib/panels/shape';
 import { workspaceHref } from '@/lib/workspace-context';
+import type { ModuleKey } from '@cortex/agent-tools';
 import type { ActiveOrganization, Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
@@ -59,6 +60,7 @@ import { CreateCompanyButton, WorkspaceSwitcher } from './WorkspaceSwitcher';
  */
 
 const EMPTY: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
+const NO_MODULES_OFF: ModuleKey[] = [];
 
 function matches(path: string, href: string) {
   if (href.includes('?')) return false;
@@ -80,7 +82,10 @@ function Navigation({
   onNavigate,
   organization,
   onExpand,
+  modulesOff,
 }: {
+  /** Módulos que la empresa apagó (0186): sus pantallas no salen en el menú. */
+  modulesOff: ModuleKey[];
   role: Role;
   counts: NavCounts;
   collapsed: boolean;
@@ -93,8 +98,8 @@ function Navigation({
   const commands = useCommandMenu();
   const admin = role === 'org_admin';
   const founder = organization?.kind === 'company' && organization.role === 'owner';
-  const rail = buildRail([], admin);
-  const primary = primaryNav({ admin, founder });
+  const rail = buildRail([], admin, modulesOff);
+  const primary = primaryNav({ admin, founder, modulesOff });
   const primaryHrefs = new Set(primary.map((item) => item.href));
   // «Más» corto (ver `moreGroups` en lib/nav-shape.ts): lo de la semana en tres
   // grupos, la administración aparte para quien administra, y el resto en la
@@ -102,7 +107,7 @@ function Navigation({
   const globalItems: NavItem[] = [
     { href: '/overview', label: 'Todas mis empresas', icon: LayoutDashboard },
   ];
-  const groups: Group[] = moreGroups({ admin, founder }).map((g) => ({
+  const groups: Group[] = moreGroups({ admin, founder, modulesOff }).map((g) => ({
     ...g,
     items: g.items.filter((item) => !primaryHrefs.has(item.href)),
   }));
@@ -418,7 +423,14 @@ export function Sidebar({
   role,
   counts = EMPTY,
   organization,
-}: { role: Role; counts?: NavCounts; organization?: ActiveOrganization }) {
+  modulesOff = NO_MODULES_OFF,
+}: {
+  role: Role;
+  counts?: NavCounts;
+  organization?: ActiveOrganization;
+  /** Módulos que la empresa apagó (0186). Lo lee el shell, una vez. */
+  modulesOff?: ModuleKey[];
+}) {
   const path = usePathname();
   const inChat = path.startsWith('/chat');
   const mobile = useMobileSidebar();
@@ -482,6 +494,7 @@ export function Sidebar({
           onNavigate={onNavigate}
           organization={organization}
           onExpand={() => setPeek(true)}
+          modulesOff={modulesOff}
         />
         {small && !inChat && (
           <button

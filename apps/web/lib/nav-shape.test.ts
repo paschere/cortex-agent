@@ -11,6 +11,7 @@ import {
   moreGroups,
   primaryActive,
   primaryNav,
+  routeVisible,
   waitingHref,
 } from './nav-shape';
 import { QUEUE_HREF, WAITING_QUEUES, waitingTotal } from './waiting-shape';
@@ -68,14 +69,23 @@ describe('el rail', () => {
   });
 
   it('una sección que se queda vacía no deja su encabezado colgando', () => {
-    const rail = buildRail(['/clients', '/ventas', '/payments', '/trackers'], false);
+    const rail = buildRail(['/clients', '/ventas', '/comercial', '/payments', '/trackers'], false);
     expect(rail.rest.map((s) => s.id)).not.toContain('work');
   });
 
   it('Finanzas reúne el resumen y la cartera sin duplicar destinos', () => {
     expect(
       SECTIONS.find((section) => section.id === 'finance')?.items.map((item) => item.href),
-    ).toEqual(['/finance', '/payments', '/pagar', '/inventario', '/impuestos']);
+    ).toEqual([
+      '/finance',
+      '/payments',
+      '/pagar',
+      '/inventario',
+      '/impuestos',
+      '/estados',
+      '/presupuesto',
+      '/informe-socios',
+    ]);
     expect(everyDestination().filter((href) => href === '/finance')).toHaveLength(1);
   });
 
@@ -220,5 +230,54 @@ describe('«Más», corto', () => {
         if (item.href !== '/overview') expect(known.has(item.href)).toBe(true);
       }
     }
+  });
+});
+
+describe('los módulos apagados (0186)', () => {
+  const shownIn = (rail: ReturnType<typeof buildRail>) =>
+    [
+      ...rail.pinned,
+      ...rail.quick,
+      ...rail.rest.flatMap((s) => s.items),
+      ...rail.company.items,
+      ...rail.footer,
+    ].map((i) => i.href);
+
+  it('sin nada apagado, el rail es el mismo de siempre', () => {
+    expect(buildRail([], true, [])).toEqual(buildRail([], true));
+  });
+
+  it('esconde las pantallas de un módulo apagado en el rail, «Más» y las puertas', () => {
+    const rail = buildRail([], true, ['inventory', 'payables', 'team']);
+    const hrefs = shownIn(rail);
+    expect(hrefs).not.toContain('/inventario');
+    expect(hrefs).not.toContain('/pagar');
+    expect(hrefs).not.toContain('/team');
+    expect(hrefs).not.toContain('/team/yo');
+    // Lo que no es de ningún módulo sigue.
+    expect(hrefs).toContain('/clients');
+    expect(hrefs).toContain('/payments');
+    expect(rail.restCount).toBe(rail.rest.flatMap((s) => s.items).length);
+
+    const more = moreGroups({ admin: false, founder: false, modulesOff: ['taxes'] })
+      .flatMap((g) => g.items)
+      .map((i) => i.href);
+    expect(more).not.toContain('/impuestos');
+    expect(more).toContain('/payments');
+  });
+
+  it('con Equipo apagado, quien administra conserva la puerta a las personas', () => {
+    const admin = primaryNav({ admin: true, founder: false, modulesOff: ['team'] });
+    expect(admin.find((i) => i.label === 'Equipo')?.href).toBe('/admin/users');
+    const member = primaryNav({ admin: false, founder: false, modulesOff: ['team'] });
+    expect(member.find((i) => i.label === 'Equipo')).toBeUndefined();
+    expect(member.map((i) => i.href)).toContain('/chat');
+  });
+
+  it('routeVisible mira la ruta y sus subpáginas', () => {
+    expect(routeVisible('/inventario/ordenes', ['inventory'])).toBe(false);
+    expect(routeVisible('/inventario', [])).toBe(true);
+    expect(routeVisible('/integrations/whatsapp', ['whatsapp_service'])).toBe(true);
+    expect(routeVisible('/integrations/whatsapp/atencion', ['whatsapp_service'])).toBe(false);
   });
 });

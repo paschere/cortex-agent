@@ -1,6 +1,9 @@
+import { BillingBanner } from '@/components/billing/BillingBanner';
+import { ConsentGate } from '@/components/legal/ConsentGate';
 import { AppShell } from '@/components/nav/AppShell';
 import { MobileTabBar } from '@/components/nav/MobileTabBar';
 import { Topbar } from '@/components/nav/Topbar';
+import { modulesOffFor } from '@/lib/modules/server';
 import { requireSession } from '@/lib/session';
 import type { ReactNode } from 'react';
 
@@ -16,15 +19,19 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // /agents, which then failed on env vars that only exist at runtime. The
   // middleware is what turns a signed-out visit into a redirect.
   const user = await requireSession();
+  // La misma lectura que hace el shell, servida por `cache` (lib/modules/server).
+  const modulesOff = await modulesOffFor(user.organization.id);
   return (
     <AppShell user={user}>
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar email={user.email} />
+        <BillingBanner organizationId={user.organization.id} />
         <main className="scroll-slim flex-1 overflow-y-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8">{children}</div>
         </main>
-        <MobileTabBar organizationId={user.organization.id} />
+        <MobileTabBar organizationId={user.organization.id} modulesOff={modulesOff} />
       </div>
+      <ConsentGate organizationId={user.organization.id} />
     </AppShell>
   );
 }

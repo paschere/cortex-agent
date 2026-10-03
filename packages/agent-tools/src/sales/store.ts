@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { getClient, listContacts } from '../clients/store';
 import { bogotaToday } from '../commitments/shape';
+import { reconcileQuoteStages } from '../crm/sync';
 import { addDaysIso } from './einvoice';
 import {
   type SalesDocumentRow,
@@ -320,6 +321,16 @@ export async function recordSalesEvent(
     actor_label: opts.actorLabel?.slice(0, 200) ?? null,
   });
   if (error) throw error;
+  // 0193: lo que le pasa a una cotización mueve su negocio en el embudo
+  // (enviada → «Cotización enviada», aceptada/pedido → «Ganada»). Nunca tumba
+  // a Ventas: si el embudo no se puede poner al día, se pone en la próxima.
+  if (kind === 'sent' || kind === 'accepted' || kind === 'rejected' || kind === 'converted') {
+    try {
+      await reconcileQuoteStages(db, { quoteId: documentId });
+    } catch {
+      // El embudo se reconcilia también al abrir /comercial y cada mañana.
+    }
+  }
 }
 
 async function nextNumber(db: SupabaseClient, kind: SalesKind): Promise<number> {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { assertPeriodOpen } from '../close/lock';
 import { bogotaToday } from '../commitments/shape';
 import { registerTool } from '../index';
 import { categorizeByRules } from './categorize';
@@ -291,6 +292,11 @@ export const ledgerRecord = registerTool({
   requiresConfirmation: true,
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
+    // Un mes cerrado (0192) no se cambia desde Cortex.
+    await assertPeriodOpen(ctx.db, input.date, {
+      action: 'anotar un movimiento en el libro',
+      userId: ctx.userId,
+    });
     const today = bogotaToday();
     let accountId: string | null = null;
     let accountNote = '';
@@ -508,6 +514,12 @@ export const ledgerRecordBatch = registerTool({
   rateLimit: { perMinute: 5 },
   handler: async (input, ctx) => {
     const plan = planBatch(input, { today: bogotaToday(), userId: ctx.userId });
+    // Un mes cerrado (0192) no se cambia desde Cortex: ni una fila de él.
+    for (const month of [...new Set(plan.drafts.map((d) => d.date.slice(0, 7)))])
+      await assertPeriodOpen(ctx.db, `${month}-01`, {
+        action: 'anotar movimientos en el libro',
+        userId: ctx.userId,
+      });
     const result = await upsertMovements(ctx.db, plan.drafts, { recordedBy: ctx.userId });
     const rejected = [
       ...plan.rejected,
@@ -577,6 +589,19 @@ export const ledgerRecategorize = registerTool({
     if (!category) throw new Error(`No reconozco la categoría «${input.category}».`);
     const label = CATEGORY_LABEL[category] ?? category;
     if (input.movementId) {
+      // Un mes cerrado (0192) no se recategoriza desde Cortex.
+      const moved = await ctx.db
+        .from('ledger_movements')
+        .select('date')
+        .eq('id', input.movementId)
+        .maybeSingle();
+      if (moved.error) throw moved.error;
+      const day = (moved.data as { date?: string } | null)?.date;
+      if (day)
+        await assertPeriodOpen(ctx.db, day, {
+          action: 'cambiar la categoría de un movimiento',
+          userId: ctx.userId,
+        });
       const ok = await setMovementCategory(ctx.db, input.movementId, category);
       if (!ok) throw new Error('No encontré ese movimiento en el libro.');
       return {

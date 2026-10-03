@@ -6,6 +6,7 @@ import {
   AskChoiceSchema,
   askChoiceResult,
 } from '@/lib/ask-choice';
+import { READ_ONLY_MESSAGE } from '@/lib/billing/billing-shape';
 import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { CITATION_RULE } from '@/lib/citations';
@@ -15,6 +16,7 @@ import { enqueueJobs } from '@/lib/jobs';
 // Solo para la persistencia de `onFinish`: la cronología del mensaje, recortada
 // a sus topes (100 KB por resultado, ~1 MB por mensaje — ver lib/message-parts.ts).
 import { buildStoredParts, capStoredParts } from '@/lib/message-parts';
+import { ragQueryFor } from '@/lib/rag-query';
 import {
   POINT_AT_DESCRIPTION,
   POINT_AT_TOOL_ID,
@@ -26,7 +28,6 @@ import {
   pointAtResult,
   screenBlock,
 } from '@/lib/screen-glance';
-import { ragQueryFor } from '@/lib/rag-query';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
@@ -51,6 +52,7 @@ import {
   checkMeter,
   combineStickySelection,
   customToolDef,
+  enabledModules,
   familiesFrom,
   fetchEnabledCustomTools,
   fetchEnabledExternalTools,
@@ -66,6 +68,7 @@ import {
   runTool,
   saveStickyToolIds,
   selectToolsForTurn,
+  toolAllowedByModules,
   toolErrorDetail,
   toolErrorMessage,
   toolIdAllowed,
@@ -191,6 +194,14 @@ export async function POST(req: NextRequest) {
   // Nothing is persisted on the refusal path, so a refused turn costs the person
   // nothing and is not metered — the meter counts answers, and there was none.
   const answers = await checkMeter(db, 'answers');
+  // Solo lectura por cobro (0187): la prueba terminó o el plan está sin pagar.
+  // Otro mensaje que el del cupo, porque la salida es otra: pagar, no ampliar.
+  if (isRefused(answers) && answers.blockedBy === 'billing') {
+    return NextResponse.json(
+      { error: READ_ONLY_MESSAGE, reason: 'billing_read_only', meter: 'answers' },
+      { status: 402 },
+    );
+  }
   if (isRefused(answers)) {
     const { plan } = await readWorkspacePlan(db);
     return NextResponse.json(
@@ -595,7 +606,7 @@ export async function POST(req: NextRequest) {
     //
     // Per-user MCP failures must never break the turn, so that fetch is
     // best-effort.
-    const [deniedPatterns, externalServers, customRows, stickyIds] = await Promise.all([
+    const [deniedPatterns, externalServers, customRows, stickyIds, modulesOn] = await Promise.all([
       deniedToolPatterns(db, user.id),
       fetchEnabledExternalTools(db, user.id).catch(() => []),
       fetchEnabledCustomTools(db).catch(() => []),
@@ -604,10 +615,15 @@ export async function POST(req: NextRequest) {
       // cabecera de tool-selection/sticky.ts. Nunca lanza; fallar aquí cuesta
       // una reescritura de caché, no el turno.
       loadStickyToolIds(db, conversationId),
+      // Los módulos que esta empresa prendió (0186): lo de un módulo apagado no
+      // se ofrece. Una lectura, recordada para el resto del turno (runTool la
+      // vuelve a pedir y no paga otra). Nunca lanza: cae al estado por defecto.
+      enabledModules(db),
     ]);
 
     const registryCandidates: Candidate[] = filterTools(agent.allowedTools)
       .filter((t) => deniedPatterns.length === 0 || !isToolDenied(t.id, deniedPatterns))
+      .filter((t) => toolAllowedByModules(t.id, modulesOn))
       .map((t) => ({
         id: t.id,
         family: t.id.split('.')[0] ?? t.id,

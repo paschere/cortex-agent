@@ -158,6 +158,10 @@ export function Landing() {
           <a href="#preguntas">Preguntas</a>
           <Link href="/signup">Crear mi espacio</Link>
           <Link href="/login">Iniciar sesión</Link>
+          <Link href="/privacidad">Privacidad</Link>
+          <Link href="/tratamiento-de-datos">Tratamiento de datos</Link>
+          <Link href="/terminos">Términos</Link>
+          <Link href="/cookies">Cookies</Link>
         </nav>
         <p>Contexto para decidir. Capacidad para avanzar.</p>
       </footer>

@@ -52,7 +52,8 @@ type ProfileForEngine = Pick<
   | 'nominaElectronica'
   | 'pila'
   | 'facturacionElectronica'
->;
+> &
+  Partial<Pick<TaxProfile, 'impuestoPatrimonio' | 'vinculadosExterior' | 'rubLastChange'>>;
 
 const BIMESTERS = ['ene–feb', 'mar–abr', 'may–jun', 'jul–ago', 'sep–oct', 'nov–dic'];
 const CUATRIMESTERS = ['ene–abr', 'may–ago', 'sep–dic'];
@@ -386,6 +387,82 @@ export function buildTaxCalendar(profile: ProfileForEngine, year: number): TaxCa
       requiresPayment: true,
       sourceNote: 'Código de Comercio, art. 33: dentro de los tres primeros meses del año',
     });
+  }
+
+  // --- Impuesto al patrimonio (0197): declaración y dos cuotas ----------------
+  // La fecha sale de la regla por último dígito (mayo y septiembre); todo por
+  // confirmar: quién está obligado cambió con la emergencia económica de
+  // diciembre de 2025 y no se verificó contra el calendario de la DIAN.
+  if (profile.impuestoPatrimonio) {
+    const plan: Array<[string, string, string]> = [
+      ['dec', `${year}-05`, 'declaración y primera cuota'],
+      ['c2', `${year}-09`, 'segunda cuota'],
+    ];
+    for (const [code, month, what] of plan) {
+      const due = byDigit(month);
+      if (!due) continue;
+      push({
+        key: `patrimonio:${code}`,
+        kind: 'patrimonio',
+        period: `Patrimonio al 1 de enero de ${year}`,
+        title: `Impuesto al patrimonio ${year} — ${what}`,
+        authority: 'DIAN',
+        form: '420',
+        dueDate: due,
+        requiresPayment: true,
+        needsConfirmation: true,
+        sourceNote:
+          'Ley 2277 de 2022 (art. 292-3 ET): personas naturales con patrimonio líquido de 72.000 UVT o más al 1 de enero. Fecha calculada por último dígito; confirma con tu contador si aplica y cuándo vence',
+      });
+    }
+  }
+
+  // --- Precios de transferencia (0197): declaración informativa -------------
+  if (profile.vinculadosExterior && profile.personType === 'juridica') {
+    const due = byDigit(`${year}-09`);
+    if (due)
+      push({
+        key: 'precios_transferencia:dec',
+        kind: 'precios_transferencia',
+        period: `Año gravable ${ag}`,
+        title: `Precios de transferencia ${ag} — declaración informativa`,
+        authority: 'DIAN',
+        form: '120',
+        dueDate: due,
+        requiresPayment: false,
+        needsConfirmation: true,
+        sourceNote:
+          'Art. 260-5 ET: aplica con operaciones con vinculados del exterior si el patrimonio bruto es de 100.000 UVT o más o los ingresos de 61.000 UVT o más. Fecha calculada por último dígito en septiembre; la documentación comprobatoria tiene otra fecha: confirma con tu contador',
+      });
+  }
+
+  // --- RUB (0197): dentro del mes siguiente a cada cambio ---------------------
+  if (profile.personType === 'juridica') {
+    const change = profile.rubLastChange ?? null;
+    const changeYear = change ? Number(change.slice(0, 4)) : null;
+    if (change && changeYear !== null) {
+      const next = nextMonth(change.slice(0, 7), 1);
+      const [ny, nm] = next.split('-').map(Number) as [number, number];
+      const due = new Date(Date.UTC(ny, nm, 0)).toISOString().slice(0, 10);
+      if (Number(due.slice(0, 4)) === year)
+        push({
+          key: `rub:${change}`,
+          kind: 'rub',
+          period: `Cambio del ${change}`,
+          title: 'Actualizar el registro de beneficiarios finales (RUB)',
+          authority: 'DIAN',
+          form: null,
+          dueDate: due,
+          requiresPayment: false,
+          needsConfirmation: true,
+          sourceNote:
+            'Resolución DIAN 000164 de 2021 (mod. 000037 de 2022): se actualiza dentro del mes siguiente a cualquier cambio de beneficiarios finales. Confirma la fecha con tu contador',
+        });
+    } else {
+      gaps.push(
+        'El registro de beneficiarios finales (RUB) no tiene fecha fija: se actualiza dentro del mes siguiente a cada cambio de socios o beneficiarios finales. Anota en el perfil la fecha del último cambio y armo el vencimiento.',
+      );
+    }
   }
 
   // --- ICA -----------------------------------------------------------------------

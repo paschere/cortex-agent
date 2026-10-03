@@ -124,6 +124,7 @@ export function Client360({
   today,
   expiring,
   sales,
+  opportunities,
 }: {
   view: Client360View;
   team: TeamMember[];
@@ -135,6 +136,8 @@ export function Client360({
   expiring?: ReactNode;
   /** «Cotizaciones y pedidos» (0182), si la página las trae. */
   sales?: ReactNode;
+  /** «Oportunidades» del embudo comercial (0193), si la página las trae. */
+  opportunities?: ReactNode;
 }) {
   return (
     <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 sm:py-8">
@@ -154,6 +157,7 @@ export function Client360({
         <Timeline view={view} />
         <div className="space-y-4">
           <OpenItems view={view} />
+          {opportunities}
           {sales}
           <Documents view={view} />
           {expiring}

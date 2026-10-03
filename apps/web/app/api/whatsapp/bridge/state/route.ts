@@ -1,5 +1,6 @@
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { authenticateBridge } from '@/lib/whatsapp/bridge';
+import { authorizeBridgeSession } from '@/lib/whatsapp/bridge';
+import { isWipeReason, wipeWhatsappSession } from '@/lib/whatsapp/wipe';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -41,7 +42,7 @@ interface KeyRow {
 
 /** Boot: the paired identity and every signal key, in one read. */
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const auth = authenticateBridge(req);
+  const auth = await authorizeBridgeSession(req);
   if (!auth.ok) return auth.response;
 
   const db = getOrgScopedClient(auth.caller.organizationId);
@@ -91,7 +92,7 @@ interface StateWrite {
  * site keeps the bridge's auth-state adapter a straight pass-through.
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const auth = authenticateBridge(req);
+  const auth = await authorizeBridgeSession(req);
   if (!auth.ok) return auth.response;
 
   const body = (await req.json().catch(() => ({}))) as StateWrite;
@@ -153,32 +154,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
  * them produces an endless reconnect loop against a device that no longer
  * exists. Wiping them is what makes the next boot show a QR code instead of
  * retrying forever — see the reconnect policy in `services/whatsapp/src/socket.ts`.
+ *
+ * Since 0189 also after «Desvincular» and after a number turned out to be
+ * another workspace's (`?reason=unlink|phone_taken`). The number is cleared
+ * too, so it is free to be linked again — here or anywhere. Groups and links
+ * stay (see lib/whatsapp/wipe.ts).
  */
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
-  const auth = authenticateBridge(req);
+  const auth = await authorizeBridgeSession(req);
   if (!auth.ok) return auth.response;
 
+  const asked = new URL(req.url).searchParams.get('reason');
+  const reason = isWipeReason(asked) ? asked : 'logged_out';
   const db = getOrgScopedClient(auth.caller.organizationId);
-  const now = new Date().toISOString();
 
-  await db.from('whatsapp_session_keys').delete().neq('key_type', '__none__');
-  await db.from('whatsapp_sessions').upsert(
-    {
-      creds: null,
-      status: 'logged_out',
-      pairing_qr: null,
-      pairing_qr_expires_at: null,
-      last_error:
-        'WhatsApp cerró la sesión de este dispositivo. Hay que volver a emparejar escaneando el código QR.',
-      updated_at: now,
-    },
-    { onConflict: 'organization_id' },
-  );
+  const wiped = await wipeWhatsappSession(db, reason);
+  if (wiped.error) {
+    logger.error(`whatsapp-bridge: could not wipe the session — ${wiped.error}`);
+    return NextResponse.json({ error: 'Could not wipe the session' }, { status: 500 });
+  }
 
-  // Groups and links are deliberately left alone. Re-pairing the same number
-  // should not mean choosing every archived group again from scratch — the
-  // decisions about what is archived and where were made by people and are not
-  // the connection's to throw away.
-  logger.warn('whatsapp-bridge: session wiped after a logout; re-pairing required');
+  logger.warn(`whatsapp-bridge: session wiped (${reason}); re-pairing required`);
   return NextResponse.json({ ok: true });
 }

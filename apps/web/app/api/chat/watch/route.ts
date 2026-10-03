@@ -170,8 +170,10 @@ export async function POST(req: NextRequest) {
       aviso: null,
       motivo: 'plan',
       mensaje:
-        'Se acabaron las respuestas de tu plan este mes, así que apagué la vigilancia de la pantalla. ' +
-        'Puedes seguir compartiendo la pestaña para preguntar cuando amplíes el plan.',
+        answers.blockedBy === 'billing'
+          ? 'Tu espacio está en solo lectura por el pago del plan, así que apagué la vigilancia de la pantalla.'
+          : 'Se acabaron las respuestas de tu plan este mes, así que apagué la vigilancia de la pantalla. ' +
+            'Puedes seguir compartiendo la pestaña para preguntar cuando amplíes el plan.',
     });
   }
 

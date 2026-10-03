@@ -1,4 +1,6 @@
+import type { ProviderWriter } from '../close/writeback/shape';
 import type { PurchasePage } from './providers/purchases';
+import type { ProviderReports } from './providers/reports';
 /**
  * LA FORMA COMÚN DE UN PROGRAMA CONTABLE (migración 0165).
  *
@@ -172,6 +174,18 @@ export interface ProviderSession {
    * packages/agent-tools/src/sales/emit.ts).
    */
   invoicing?: ProviderInvoicing;
+  /**
+   * Balance general y estado de resultados (migración 0191, estados
+   * financieros). Sólo lectura; providers/reports*.ts dice qué expone cada
+   * programa y cómo se lee.
+   */
+  reports?: ProviderReports;
+  /**
+   * Registrar en el programa (migración 0192, cierre contable): causar una
+   * compra, un recibo de caja, un pago a proveedor. Siempre después de la
+   * vista previa y la aprobación de una persona (close/writeback/store.ts).
+   */
+  writer?: ProviderWriter;
 }
 
 /** Lo que el programa necesita que se elija antes de facturar, ya traducido. */

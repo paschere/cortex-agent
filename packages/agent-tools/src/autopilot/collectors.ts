@@ -1,8 +1,27 @@
 import { longDate, shortDate } from '../actions/draft';
+import { type SnapshotBudget, collectPresupuesto } from '../budget/autopilot-collect';
+import { type SnapshotClose, collectCierre } from '../close/autopilot-collect';
 import { daysBetween, plural } from '../commitments/shape';
+import {
+  type ComplianceAutopilotSnapshot,
+  collectComplianceDue,
+  collectPqrsDeadlines,
+} from '../compliance/autopilot';
+import { type SnapshotContractNotice, collectContractNotices } from '../contracts/autopilot';
+import {
+  type SnapshotCrm,
+  collectClientesEnRiesgo,
+  collectNegociosQuietos,
+} from '../crm/autopilot-collect';
 import { type SnapshotExpiration, collectDocumentExpirations } from '../doc-expirations/autopilot';
+import { type SnapshotFleet, collectFlota } from '../fleet/autopilot-collect';
 import { type SnapshotReorder, collectReposicion } from '../inventory/autopilot-collect';
+import type { ModuleKey } from '../modules/catalog';
 import { overdueStage } from '../payments/risk';
+import { type SnapshotPayroll, collectNomina } from '../payroll/autopilot';
+import { type SnapshotProjects, collectProyectos } from '../projects/autopilot-collect';
+import { type SnapshotSst, collectSst } from '../sst/autopilot';
+import { type SnapshotTaxDraft, collectBorradores } from '../tax/autopilot-drafts';
 import type { AutopilotArea, PlanItem } from './types';
 
 /**
@@ -148,6 +167,8 @@ export interface AutopilotSnapshot {
   syncs?: SnapshotSync[];
   commitments?: SnapshotCommitment[];
   taxObligations?: SnapshotTaxObligation[];
+  /** Declaraciones con borrador que vencen en una semana (0197). */
+  taxDrafts?: SnapshotTaxDraft[];
   /** Documentos que vencen (0184): lo abierto y lo que espera confirmación. */
   documentExpirations?: SnapshotExpiration[];
   signals?: SnapshotSignal[];
@@ -156,12 +177,32 @@ export interface AutopilotSnapshot {
   supplierInvoices?: SnapshotSupplierInvoices;
   /** Lo que hay que reponer del inventario (0183). */
   reorder?: SnapshotReorder;
+  /** Gastos que se salieron del presupuesto (0191). */
+  budget?: SnapshotBudget;
+  /** El cierre del mes anterior, del día 1 al 5 (0192). */
+  close?: SnapshotClose;
+  /** Negocios quietos y clientes que subieron de riesgo (0193, embudo comercial). */
+  crm?: SnapshotCrm;
+  /** Proyectos sobre el presupuesto y terminados sin facturar (0196). */
+  projects?: SnapshotProjects;
+  /** Mantenimiento que toca y consumo de combustible raro (0196). */
+  fleet?: SnapshotFleet;
   cash?: {
     currency: string;
     alerts: SnapshotCashAlert[];
     lowestWeek: string | null;
     lowestClosing: number | null;
   };
+  /** La nómina del periodo y las ausencias por aprobar (0194). */
+  payroll?: SnapshotPayroll;
+  /** Plazos de accidentes y actividades del SG-SST (0194). */
+  sst?: SnapshotSst;
+  /** Contratos en su ventana de aviso previo o por terminar (0195). */
+  contractNotices?: SnapshotContractNotice[];
+  /** PQRS por vencer y obligaciones de la lista de cumplimiento (0195). */
+  compliance?: ComplianceAutopilotSnapshot;
+  /** Módulos que la empresa apagó (0186): sus recolectores no corren. */
+  modulesOff?: ModuleKey[];
 }
 
 // ---------------------------------------------------------------------------
@@ -709,21 +750,58 @@ export function collectGerencia(s: AutopilotSnapshot, now: Date): PlanItem[] {
 export const COLLECTORS: Array<{
   area: AutopilotArea;
   run: (s: AutopilotSnapshot, now: Date) => PlanItem[];
+  /** El módulo del que es (0186). Apagado ese módulo, el recolector no corre. */
+  module?: ModuleKey;
 }> = [
   { area: 'cobro', run: collectCobro },
   { area: 'pagos', run: collectPagos },
-  { area: 'pagos', run: collectProveedores },
+  { area: 'pagos', run: collectProveedores, module: 'payables' },
   // 0183: lo que está bajo el mínimo → órdenes de compra para aprobar.
-  { area: 'pagos', run: (s) => collectReposicion(s.reorder, s.today) },
+  { area: 'pagos', run: (s) => collectReposicion(s.reorder, s.today), module: 'inventory' },
   { area: 'conciliacion', run: collectConciliacion },
-  { area: 'finanzas', run: collectFinanzas },
+  { area: 'finanzas', run: collectFinanzas, module: 'finance' },
+  // 0191: lo que se salió del presupuesto (sólo aviso).
+  { area: 'finanzas', run: (s) => collectPresupuesto(s.budget), module: 'budget' },
+  // 0192: «Cierre de septiembre: faltan 4 cosas» (sólo aviso, días 1–5).
+  { area: 'finanzas', run: (s) => collectCierre(s.close, s.today), module: 'accounting_close' },
   { area: 'procesos', run: collectProcesos },
   // Antes que los vencimientos: comparten clave y gana la frase del impuesto.
-  { area: 'vencimientos', run: collectImpuestos },
+  { area: 'vencimientos', run: collectImpuestos, module: 'taxes' },
+  // 0197: «Borrador de IVA listo para revisión del contador» (sólo aviso, 7 días antes).
+  { area: 'vencimientos', run: (s) => collectBorradores(s.taxDrafts, s.today), module: 'taxes' },
   { area: 'vencimientos', run: collectVencimientos },
-  { area: 'vencimientos', run: (s) => collectDocumentExpirations(s.documentExpirations, s.today) },
-  { area: 'equipo', run: collectEquipo },
+  {
+    area: 'vencimientos',
+    run: (s) => collectDocumentExpirations(s.documentExpirations, s.today),
+    module: 'doc_expirations',
+  },
+  // 0195: PQRS por vencer (pregunta: el plazo es legal), avisos previos de
+  // contratos y lo que vence de la lista de cumplimiento (sólo aviso).
+  { area: 'vencimientos', run: (s) => collectPqrsDeadlines(s.compliance), module: 'compliance' },
+  {
+    area: 'vencimientos',
+    run: (s) => collectContractNotices(s.contractNotices, s.today),
+    module: 'contracts',
+  },
+  {
+    area: 'vencimientos',
+    run: (s) => collectComplianceDue(s.compliance, s.today),
+    module: 'compliance',
+  },
+  { area: 'equipo', run: collectEquipo, module: 'team' },
+  // 0194: la nómina que vence (aviso) y las ausencias por aprobar (pregunta).
+  { area: 'pagos', run: (s) => collectNomina(s.payroll, s.today), module: 'payroll' },
+  // 0194: plazos de FURAT e investigación, actividades sin registrar (aviso).
+  { area: 'vencimientos', run: (s) => collectSst(s.sst, s.today), module: 'sst' },
   { area: 'gerencia', run: collectGerencia },
+  // 0193: negocios quietos → tarea de seguimiento (pregunta); clientes que
+  // subieron de riesgo de perderse (sólo aviso, sólo lo nuevo).
+  { area: 'gerencia', run: (s) => collectNegociosQuietos(s.crm, s.today), module: 'crm' },
+  { area: 'gerencia', run: (s) => collectClientesEnRiesgo(s.crm), module: 'crm' },
+  // 0196: proyectos pasados del presupuesto (aviso) y terminados sin facturar
+  // (pregunta: deja la factura en borrador); mantenimiento y combustible (aviso).
+  { area: 'gerencia', run: (s) => collectProyectos(s.projects, s.today), module: 'service_orders' },
+  { area: 'vencimientos', run: (s) => collectFlota(s.fleet, s.today), module: 'fleet' },
 ];
 
 /**
@@ -738,7 +816,9 @@ export function collectAll(
   const items: PlanItem[] = [];
   const errors: Array<{ source: string; message: string }> = [];
   const seen = new Set<string>();
+  const off = new Set(s.modulesOff ?? []);
   for (const c of COLLECTORS) {
+    if (c.module && off.has(c.module)) continue;
     try {
       for (const item of c.run(s, now)) {
         if (seen.has(item.dedupeKey)) continue;

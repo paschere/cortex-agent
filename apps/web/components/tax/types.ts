@@ -1,4 +1,5 @@
 import type { StatusTone } from '@/lib/status-chip';
+import type { DraftFigures, DraftStatus } from '@cortex/agent-tools';
 
 /**
  * Lo que la pantalla de Impuestos recibe ya armado (lib/tax/screen.ts). Sólo
@@ -36,6 +37,9 @@ export interface TaxObligationView {
   statusNote: string | null;
   evidenceHref: string | null;
   evidenceLabel: string | null;
+  /** «Ver borrador» (0197): la ruta del borrador, si esta obligación tiene. */
+  draftHref: string | null;
+  draftStatus: DraftStatus | null;
 }
 
 export interface TaxPerson {
@@ -59,6 +63,12 @@ export interface TaxProfileView {
   nominaElectronica: boolean;
   pila: boolean;
   facturacionElectronica: boolean;
+  impuestoPatrimonio: boolean;
+  vinculadosExterior: boolean;
+  rubLastChange: string | null;
+  autorretencionRate: number | null;
+  simpleRate: number | null;
+  icaActivities: Array<{ code: string; label: string; ratePerMil: number }>;
   ownerUserId: string | null;
   ownerName: string | null;
   noticeDays: number;
@@ -105,6 +115,9 @@ export interface TaxLinks {
   commitments: string;
   /** POST multipart para subir la evidencia al Cerebro. */
   uploadApi: string;
+  /** Las pestañas (0197). */
+  certificates?: string;
+  exogena?: string;
 }
 
 export interface TaxMarkInput {
@@ -126,3 +139,114 @@ export interface TaxActions {
  * pasa uno de mentira.
  */
 export type TaxUpload = (file: File) => Promise<{ ok: boolean; documentId?: string; note: string }>;
+
+// ---------------------------------------------------------------------------
+// Borradores (0197)
+// ---------------------------------------------------------------------------
+
+/** La pestaña activa de /impuestos. */
+export type TaxTab = 'calendario' | 'certificados' | 'exogena';
+
+export interface TaxTabLinks {
+  calendario: string;
+  certificados: string;
+  exogena: string;
+}
+
+export interface TaxDraftScreen {
+  obligation: {
+    id: string;
+    title: string;
+    dueLabel: string;
+    whenText: string;
+    tone: StatusTone;
+    needsConfirmation: boolean;
+    statusLabel: string;
+    form: string | null;
+  };
+  figures: DraftFigures;
+  /** El borrador guardado, si lo hay. */
+  saved: {
+    id: string;
+    status: DraftStatus;
+    statusLabel: string;
+    reviewedLabel: string | null;
+    presentedLabel: string | null;
+    evidenceHref: string | null;
+    notes: string | null;
+  } | null;
+  /** Las cifras son de ahora (true) o las congeladas al revisar (false). */
+  live: boolean;
+  canAct: boolean;
+  /** Para armar los enlaces del detalle dentro del espacio. */
+  hrefs: { back: string; pdf: string; upload: string; tabs: TaxTabLinks };
+  /** Rutas del detalle («/ventas/…») ya con el espacio. */
+  sourceHref: Record<string, string>;
+}
+
+export interface TaxDraftActions {
+  save: (note: string | null) => Promise<{ ok: boolean; note: string }>;
+  review: (note: string | null, expectedResult: number) => Promise<{ ok: boolean; note: string }>;
+  present: (input: {
+    evidenceDocumentId: string | null;
+    evidenceUrl: string | null;
+    note: string | null;
+  }) => Promise<{ ok: boolean; note: string }>;
+  annul: (note: string | null) => Promise<{ ok: boolean; note: string }>;
+}
+
+export interface CertificateRowView {
+  key: string;
+  supplierId: string | null;
+  supplierName: string;
+  supplierNit: string | null;
+  concept: string | null;
+  /** El concepto de retención guardado en el proveedor (sólo renta). */
+  supplierConcept: string | null;
+  base: number;
+  withheld: number;
+  invoices: number;
+  hasEmail: boolean;
+  sentLabel: string | null;
+  pdfHref: string;
+}
+
+export interface CertificatesScreen {
+  kind: 'renta' | 'iva' | 'ica';
+  year: number;
+  period: number | null;
+  years: number[];
+  rows: CertificateRowView[];
+  total: number;
+  canAct: boolean;
+  concepts: Array<{ value: string; label: string }>;
+  hrefs: { tabs: TaxTabLinks; self: string };
+}
+
+export interface CertificatesActions {
+  send: (suppliers: string[]) => Promise<{ ok: boolean; note: string }>;
+  setConcept: (
+    supplierId: string,
+    concept: string | null,
+  ) => Promise<{ ok: boolean; note: string }>;
+}
+
+export interface ExogenaFormatView {
+  code: string;
+  title: string;
+  rows: number;
+  total: number;
+  columns: string[];
+  preview: Array<Array<string | number>>;
+  missing: string[];
+  notes: string[];
+  csvHref: string;
+}
+
+export interface ExogenaScreen {
+  year: number;
+  years: number[];
+  formats: ExogenaFormatView[];
+  versionNote: string;
+  hrefs: { tabs: TaxTabLinks; self: string };
+}

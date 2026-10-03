@@ -3,6 +3,8 @@ import { CompanyGroups } from '@/components/overview/CompanyGroups';
 import { FounderOverview } from '@/components/overview/FounderOverview';
 import { FounderTabs } from '@/components/overview/FounderTabs';
 import { PageHeader } from '@/components/ui/page-header';
+import { signupMode } from '@/lib/billing/config';
+import { isPlatformOperator } from '@/lib/billing/operators';
 import { readOwnedBusiness } from '@/lib/founder-business';
 import { readFounderConsole } from '@/lib/founder-console';
 import { buildConsoleRows } from '@/lib/founder-console-shape';
@@ -79,7 +81,11 @@ export default async function OverviewPage({
           </>
         }
       />
-      <FounderTabs current="companies" showPeople={founder} />
+      <FounderTabs
+        current="companies"
+        showPeople={founder}
+        showAccess={signupMode() === 'request' && (await isPlatformOperator(context.accountId))}
+      />
       <FounderOverview
         rows={rows}
         business={business}

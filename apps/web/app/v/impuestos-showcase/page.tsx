@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { TaxFixture } from './Showcase';
-import { fixtureData } from './data';
+import { certificatesFixture, draftFixture, exogenaFixture, fixtureData } from './data';
 
 /**
  * IMPUESTOS CON DATOS INVENTADOS. SÓLO EN DESARROLLO.
@@ -24,5 +24,22 @@ export default async function ImpuestosShowcasePage({
   const q = await searchParams;
   const one = (k: string) => (typeof q[k] === 'string' ? (q[k] as string) : null);
   const { data, links } = fixtureData({ empty: one('vacio') === '1' });
-  return <TaxFixture dark={one('modo') === 'oscuro'} data={data} links={links} />;
+  const vista = one('vista');
+  // 0197: `?vista=borrador` (IVA), `borrador-retencion`, `certificados`, `exogena`.
+  return (
+    <TaxFixture
+      dark={one('modo') === 'oscuro'}
+      data={data}
+      links={links}
+      draft={
+        vista === 'borrador'
+          ? draftFixture('iva')
+          : vista === 'borrador-retencion'
+            ? draftFixture('retencion')
+            : null
+      }
+      certificates={vista === 'certificados' ? certificatesFixture() : null}
+      exogena={vista === 'exogena' ? exogenaFixture() : null}
+    />
+  );
 }

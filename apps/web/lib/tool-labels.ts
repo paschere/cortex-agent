@@ -66,6 +66,13 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   sales_quote_send: { label: 'Mandar la cotización al cliente', icon: 'Send' },
   sales_invoice_emit: { label: 'Emitir la factura electrónica', icon: 'Receipt' },
   sales_list: { label: 'Ver cotizaciones, pedidos y facturas', icon: 'ClipboardList' },
+  // Embudo comercial (0193): oportunidades, seguimiento, riesgo y encuestas.
+  crm_pipeline: { label: 'Ver el embudo comercial', icon: 'SquareKanban' },
+  crm_create_opportunity: { label: 'Abrir una oportunidad de venta', icon: 'Handshake' },
+  crm_update_opportunity: { label: 'Mover o actualizar una oportunidad', icon: 'ArrowRightLeft' },
+  crm_log_activity: { label: 'Anotar una actividad comercial', icon: 'PhoneCall' },
+  crm_at_risk: { label: 'Ver los clientes en riesgo de perderse', icon: 'TrendingDown' },
+  crm_send_nps: { label: 'Mandar la encuesta de satisfacción', icon: 'MessageSquareHeart' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },
   management_brief: { label: 'Revisar la gerencia de la empresa', icon: 'Briefcase' },
@@ -199,6 +206,18 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   payroll_payroll_stats: { label: 'Ver cuánto cuesta la nómina', icon: 'Wallet' },
   payroll_client_report: { label: 'Ver el costo de la cuenta del cliente', icon: 'Calculator' },
   payroll_cost_projection: { label: 'Proyectar el costo del equipo', icon: 'TrendingUp' },
+  // La nómina que se liquida en Cortex (0194).
+  payroll_period_summary: { label: 'Ver cómo va la nómina del periodo', icon: 'Wallet' },
+  payroll_register_novelty: { label: 'Registrar una novedad de nómina', icon: 'FilePlus2' },
+  payroll_approve_period: { label: 'Aprobar la nómina', icon: 'BadgeCheck' },
+  payroll_payslip: { label: 'Ver el desprendible de pago', icon: 'Receipt' },
+  payroll_leave_request: { label: 'Pedir vacaciones o un permiso', icon: 'CalendarPlus' },
+  payroll_leave_status: { label: 'Ver el saldo de vacaciones', icon: 'CalendarCheck' },
+  payroll_leave_decide: { label: 'Aprobar o rechazar una ausencia', icon: 'CalendarCheck' },
+  // SG-SST (0194).
+  sst_status: { label: 'Ver cómo va el SG-SST', icon: 'ShieldCheck' },
+  sst_log_activity: { label: 'Registrar una actividad del SG-SST', icon: 'ClipboardList' },
+  sst_report_incident: { label: 'Reportar un accidente de trabajo', icon: 'TriangleAlert' },
 
   // Internet. Las otras dos están arriba.
   web_news: { label: 'Buscar noticias', icon: 'Newspaper' },
@@ -266,6 +285,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   documents_reject: { label: 'Descartar la lectura del documento', icon: 'FileX' },
   // Documentos que vencen (0184): leer no es vigilar, y confirmar sí.
   documents_expiring: { label: 'Ver los documentos que vencen', icon: 'CalendarClock' },
+  // La ayuda de Cortex (/ayuda): cómo se usa el producto, no los datos.
+  help_search: { label: 'Buscar en la ayuda de Cortex', icon: 'LifeBuoy' },
   documents_track_expiration: { label: 'Registrar un documento que vence', icon: 'CalendarPlus' },
   documents_confirm_expiration: {
     label: 'Confirmar el vencimiento leído del documento',
@@ -330,6 +351,10 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   autopilot_configure: { label: 'Configurar el piloto automático', icon: 'Settings' },
   autopilot_remind: { label: 'Recordarle algo a un compañero', icon: 'BellRing' },
 
+  // Módulos por empresa (0186): qué áreas de Cortex están prendidas.
+  modules_list: { label: 'Ver los módulos prendidos', icon: 'LayoutGrid' },
+  modules_set: { label: 'Prender o apagar un módulo', icon: 'ToggleRight' },
+
   // Inventario y compras (0183): existencias, reposición y órdenes de compra.
   inventory_stock: { label: 'Ver el inventario', icon: 'Package' },
   inventory_move: { label: 'Registrar un movimiento de inventario', icon: 'ArrowLeftRight' },
@@ -341,10 +366,65 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     icon: 'PackageCheck',
   },
 
+  // Proyectos y órdenes de servicio · flota y rutas (0196).
+  projects_create: { label: 'Abrir una orden de servicio o proyecto', icon: 'FolderPlus' },
+  projects_status: { label: 'Ver cómo van los proyectos', icon: 'FolderKanban' },
+  projects_log_time: { label: 'Registrar horas en un proyecto', icon: 'Timer' },
+  projects_profitability: { label: 'Ver la rentabilidad de los proyectos', icon: 'TrendingUp' },
+  projects_invoice: { label: 'Dejar en borrador la factura de un proyecto', icon: 'FileText' },
+  fleet_status: { label: 'Ver la flota', icon: 'Truck' },
+  fleet_log_fuel: { label: 'Registrar un tanqueo', icon: 'Fuel' },
+  fleet_log_maintenance: { label: 'Registrar un mantenimiento', icon: 'Wrench' },
+  fleet_log_trip: { label: 'Registrar un recorrido', icon: 'Route' },
+
   // El calendario tributario (0180).
   tax_calendar: { label: 'Ver el calendario de impuestos', icon: 'CalendarClock' },
   tax_configure: { label: 'Configurar el perfil tributario', icon: 'Landmark' },
   tax_mark: { label: 'Marcar un impuesto presentado o pagado', icon: 'BadgeCheck' },
+  tax_draft: { label: 'Armar el borrador de una declaración', icon: 'FileText' },
+  tax_certificates: { label: 'Mandar certificados de retención', icon: 'Send' },
+  tax_exogena_export: { label: 'Preparar la exógena', icon: 'FileSpreadsheet' },
+
+  // Estados financieros, presupuesto, pronóstico e informe para socios (0191).
+  statements_get: { label: 'Ver los estados financieros', icon: 'FileBarChart' },
+  budget_get: { label: 'Ver el presupuesto contra lo real', icon: 'Target' },
+  budget_set_line: { label: 'Fijar una línea del presupuesto', icon: 'PencilLine' },
+  forecast_pnl: { label: 'Pronosticar ventas y resultados', icon: 'TrendingUp' },
+  board_generate: { label: 'Armar el informe para socios', icon: 'FileText' },
+  board_send: { label: 'Mandar el informe para socios', icon: 'Send' },
+
+  // Contratos y cumplimiento (0195).
+  contracts_draft: { label: 'Redactar un borrador de contrato', icon: 'FilePenLine' },
+  contracts_list: { label: 'Ver los contratos', icon: 'FileText' },
+  contracts_obligations: { label: 'Ver las obligaciones de los contratos', icon: 'ListChecks' },
+  contracts_extract_obligations: {
+    label: 'Leer las obligaciones de un contrato',
+    icon: 'ScanText',
+  },
+  compliance_status: { label: 'Ver cómo va el cumplimiento', icon: 'ShieldCheck' },
+  compliance_mark: { label: 'Marcar una obligación de cumplimiento', icon: 'BadgeCheck' },
+  compliance_pqrs_create: { label: 'Radicar una PQRS', icon: 'Inbox' },
+  compliance_pqrs_respond: {
+    label: 'Guardar la respuesta de una PQRS',
+    icon: 'MessageSquareReply',
+  },
+  compliance_case_update: { label: 'Actualizar un proceso judicial', icon: 'Gavel' },
+  // Cierre contable (0192).
+  close_status: { label: 'Ver cómo va el cierre del mes', icon: 'ListChecks' },
+  close_mark_task: { label: 'Marcar una tarea del cierre', icon: 'CheckSquare' },
+  close_close_period: { label: 'Cerrar el mes', icon: 'Lock' },
+  accounting_write_purchase: {
+    label: 'Causar facturas de compra en el programa contable',
+    icon: 'BookPlus',
+  },
+  accounting_write_receipt: {
+    label: 'Registrar recibos de caja en el programa contable',
+    icon: 'ReceiptText',
+  },
+  accounting_write_supplier_payment: {
+    label: 'Registrar pagos a proveedores en el programa contable',
+    icon: 'BookCheck',
+  },
 
   // Metas. `goals_set` está arriba porque se para a pedir permiso.
   goals_offer_metrics: { label: 'Ver qué se puede medir aquí', icon: 'Ruler' },
@@ -550,6 +630,22 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
       return `Rechazar ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor: «${String(input.reason ?? '').slice(0, 120)}»`;
     }
+    case 'tax_certificates': {
+      const kind =
+        input.kind === 'iva' ? 'IVA' : input.kind === 'ica' ? 'ICA' : 'retención en la fuente';
+      const n = Array.isArray(input.suppliers) ? input.suppliers.length : 0;
+      return `Mandar por correo los certificados de ${kind} ${input.period ? `del bimestre ${input.period} de ${input.year}` : `de ${input.year}`} ${n ? `a ${n === 1 ? 'un proveedor' : `${n} proveedores`}` : 'a todos los proveedores con retención y correo'}`;
+    }
+    case 'payroll_register_novelty':
+      return `Registrar ${String(input.kind ?? 'una novedad').replace(/_/g, ' ')} en la nómina de ${input.person} desde el ${input.date}${input.dateTo ? ` hasta el ${input.dateTo}` : ''}`;
+    case 'payroll_approve_period':
+      return `Aprobar la nómina ${input.label ? `de ${input.label}` : 'liquidada más reciente'} — no paga nada; el pago se hace desde el banco`;
+    case 'payroll_leave_decide':
+      return `${input.decision === 'rechazada' ? 'Rechazar' : 'Aprobar'} la solicitud de ausencia${input.person ? ` de ${input.person}` : ''}${input.decision === 'rechazada' && input.note ? `: «${String(input.note).slice(0, 120)}»` : ''}`;
+    case 'sst_log_activity':
+      return `Registrar en el SG-SST ${String(input.kind ?? 'una actividad').replace(/_/g, ' ')}${input.title ? ` «${input.title}»` : ''} del ${input.date}`;
+    case 'sst_report_incident':
+      return `Reportar ${input.kind === 'incidente' ? 'un incidente' : input.kind === 'enfermedad_laboral' ? 'una enfermedad laboral' : 'un accidente de trabajo'} del ${input.occurredOn} y crear los avisos de FURAT e investigación`;
     case 'payables_schedule': {
       const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
       return `Programar el pago de ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor ${input.date ? `para el ${input.date}` : 'el día que sugiere la caja'}`;
@@ -560,8 +656,40 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       return `Mandar la cotización ${input.quote} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'al correo del cliente'}`;
     case 'sales_invoice_emit':
       return `Emitir la factura electrónica de ${input.document} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : 'el programa contable'} — sale con su CUFE a la DIAN`;
+    case 'crm_create_opportunity':
+      return `Abrir la oportunidad «${input.title}» con ${input.client}${typeof input.value === 'number' ? ` por $${input.value.toLocaleString('es-CO')}` : ''}${input.stage ? ` en ${input.stage}` : ''}`;
+    case 'crm_update_opportunity':
+      return `Actualizar la oportunidad «${input.opportunity}»${input.stage ? `: pasarla a ${input.stage}` : ''}${input.lostReasonKind ? ` (perdida por ${input.lostReasonKind})` : ''}${typeof input.value === 'number' ? `, valor $${input.value.toLocaleString('es-CO')}` : ''}`;
+    case 'crm_log_activity':
+      return `Anotar ${input.kind === 'task' ? 'la tarea' : 'la actividad'} «${String(input.title ?? '').slice(0, 120)}»${input.opportunity ? ` en «${input.opportunity}»` : input.client ? ` de ${input.client}` : ''}${input.kind === 'task' && input.dueOn ? ` para el ${input.dueOn}` : ''}`;
+    case 'crm_send_nps':
+      return input.linkOnly
+        ? `Crear el enlace de la encuesta de satisfacción para ${input.client}`
+        : `Mandar la encuesta de satisfacción a ${input.client} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'a su contacto principal'}`;
     case 'whatsapp_reply':
       return `Responder por WhatsApp, como persona, en la conversación abierta: «${String(input.text ?? '').slice(0, 120)}»`;
+    case 'projects_create':
+      return input.fromDocument
+        ? `Abrir un proyecto desde ${input.fromDocument}${input.tasksFromLines ? ', con una tarea por línea' : ''}`
+        : `Abrir ${input.kind === 'proyecto' ? 'el proyecto' : 'la orden de servicio'} «${input.title}»${input.client ? ` para ${input.client}` : ''}${typeof input.budgetAmount === 'number' ? ` con presupuesto de costo de $${input.budgetAmount.toLocaleString('es-CO')}` : ''}`;
+    case 'projects_log_time':
+      return `Registrar ${input.hours} h${input.person ? ` de ${input.person}` : ''} en ${input.project}${input.date ? ` el ${input.date}` : ' hoy'}${input.billable === false ? ' (no cobrables)' : ''}`;
+    case 'projects_invoice':
+      return `Dejar en borrador la factura de ${input.milestone ? `el hito «${input.milestone}» de ` : typeof input.amount === 'number' ? `$${input.amount.toLocaleString('es-CO')} de ` : 'lo que falta de '}${input.project} — no se emite`;
+    case 'fleet_log_fuel':
+      return `Registrar el tanqueo de ${input.plate}: ${input.gallons} galones por $${Number(input.amount ?? 0).toLocaleString('es-CO')}${typeof input.odometerKm === 'number' ? ` a los ${input.odometerKm.toLocaleString('es-CO')} km` : ''}`;
+    case 'fleet_log_maintenance':
+      return `Registrar en ${input.plate}: «${String(input.description ?? '').slice(0, 120)}»${typeof input.cost === 'number' ? ` por $${input.cost.toLocaleString('es-CO')}` : ''}`;
+    case 'fleet_log_trip': {
+      const route = [
+        input.origin,
+        ...(Array.isArray(input.stops) ? input.stops : []),
+        input.destination,
+      ]
+        .filter(Boolean)
+        .join(' → ');
+      return `Registrar el recorrido ${route || 'sin ruta'}${input.plate ? ` en ${input.plate}` : ''}${input.date ? ` el ${input.date}` : ''}`;
+    }
     case 'inventory_move':
       return input.kind === 'ajuste'
         ? `Ajustar «${input.product}» a ${input.countedQty} contados${input.location ? ` en ${input.location}` : ''}`
@@ -574,6 +702,42 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       return `Aprobar y enviar la orden de compra ${input.label ?? input.purchaseOrderId}${input.supplierName ? ` a ${input.supplierName}` : ''}${typeof input.expectedTotal === 'number' ? ` por $${input.expectedTotal.toLocaleString('es-CO')}` : ''}${input.to ? ` (${input.to})` : ''}`;
     case 'purchasing_receive':
       return `Recibir ${Array.isArray(input.lines) && input.lines.length ? 'parte de la mercancía' : 'toda la mercancía pendiente'} de la orden ${input.purchaseOrderId}`;
+    case 'budget_set_line':
+      return `${Number(input.amount) > 0 ? `Fijar ${input.category} en $${Number(input.amount).toLocaleString('es-CO')}` : `Quitar ${input.category}`} del presupuesto ${input.month ? `del mes ${input.month}` : 'de cada mes'}${input.year ? ` de ${input.year}` : ''}`;
+    case 'board_generate':
+      return `Armar el informe para socios ${input.period ? `de ${input.period}` : 'del mes anterior'} — queda en borrador, no se manda`;
+    case 'board_send':
+      return `Mandar por correo el informe para socios ${input.report ? `(${input.report})` : 'del mes anterior'} ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'a los correos configurados'}`;
+    case 'close_mark_task':
+      return `${input.status === 'no_aplica' ? 'Marcar como no aplica' : input.status === 'pendiente' ? 'Volver a pendiente' : 'Dar por hecha'} la tarea «${input.task}» del cierre${input.period ? ` de ${input.period}` : ''}${input.evidence ? `: «${String(input.evidence).slice(0, 120)}»` : ''}`;
+    case 'close_close_period':
+      return input.action === 'reabrir'
+        ? `Reabrir el mes ${input.period ?? 'cerrado'}${input.reason ? `: «${String(input.reason).slice(0, 120)}»` : ''}`
+        : `Cerrar el mes ${input.period ?? 'que toca'} — bloquea los cambios de Cortex con fecha de ese mes`;
+    case 'accounting_write_purchase': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Causar ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : input.provider === 'quickbooks' ? 'QuickBooks' : 'el programa contable'} — queda en los libros de la empresa`;
+    }
+    case 'accounting_write_receipt': {
+      const n = Array.isArray(input.payments) ? input.payments.length : 0;
+      return `Registrar ${n === 1 ? 'un recibo de caja' : `${n} recibos de caja`} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : input.provider === 'quickbooks' ? 'QuickBooks' : 'el programa contable'} — queda en los libros de la empresa`;
+    }
+    case 'accounting_write_supplier_payment': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Registrar ${n === 1 ? 'un pago' : `${n} pagos`} a proveedores en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : input.provider === 'quickbooks' ? 'QuickBooks' : 'el programa contable'} — queda en los libros de la empresa`;
+    }
+    case 'contracts_draft':
+      return `Redactar un borrador de contrato (${String(input.template ?? 'plantilla')})${input.counterparty && typeof input.counterparty === 'object' && (input.counterparty as Record<string, unknown>).name ? ` con ${String((input.counterparty as Record<string, unknown>).name)}` : ''} — queda como borrador para revisión de un abogado; no se firma ni se envía`;
+    case 'contracts_extract_obligations':
+      return 'Leer el contrato y proponer sus obligaciones y fechas con su frase — ninguna se vigila hasta que alguien la confirme';
+    case 'compliance_mark':
+      return `Marcar «${input.item}» como ${input.status === 'cumplido' ? 'cumplido' : input.status === 'en_curso' ? 'en curso' : input.status === 'no_aplica' ? 'no aplica' : 'pendiente'}${input.evidenceNote ? `: «${String(input.evidenceNote).slice(0, 120)}»` : ''}`;
+    case 'compliance_pqrs_create':
+      return `Radicar ${input.kind === 'queja' ? 'una queja' : input.kind === 'reclamo' ? 'un reclamo' : input.kind === 'sugerencia' ? 'una sugerencia' : input.kind === 'felicitacion' ? 'una felicitación' : 'una petición'} de ${input.requesterName}: «${String(input.subject ?? '').slice(0, 100)}» (llegó por ${input.channel})`;
+    case 'compliance_pqrs_respond':
+      return `Guardar la respuesta de ${input.pqrs}${input.close ? ' y cerrarla' : ''} — no se envía; enviarla es otro paso`;
+    case 'compliance_case_update':
+      return `${input.id ? 'Actualizar' : 'Registrar o actualizar'} el proceso judicial ${input.title ? `«${input.title}»` : (input.radicado ?? '')}${input.nextHearingOn ? `, con la próxima diligencia el ${input.nextHearingOn}` : ''}`;
     case 'goals_set':
       // Sin la dirección («no pasar de» / «al menos»), que no viene en la
       // entrada: la pone el catálogo al guardar, y adivinarla aquí sería

@@ -78,9 +78,38 @@ type Auth = Awaited<ReturnType<typeof usePostgresAuthState>>;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export class WhatsappBridge {
+/** Shown on the Cortex screen; the same words Cortex stores (heartbeat route). */
+const PHONE_TAKEN_MESSAGE =
+  'Ese número ya está vinculado a otro espacio de trabajo en Cortex. Se desvinculó de aquí; vincula un número dedicado distinto.';
+
+/** Messages heard before Cortex confirmed this session, held rather than acted on. */
+const MAX_HELD_BEFORE_CONFIRMED = 200;
+
+/**
+ * ONE WORKSPACE'S CONNECTION (migration 0189).
+ *
+ * Before multi-tenancy this class was the whole process. It is now one of up
+ * to `WHATSAPP_MAX_SESSIONS` in it, started and stopped by `manager.ts`, and
+ * everything that made it safe is unchanged and per workspace: its own auth
+ * state, its own backoff, its own pairing state machine, its own allow-lists,
+ * outbox and rate of writing. Nothing here is shared with another session
+ * except the process — not a buffer, not a cache, not a socket. Every request
+ * to Cortex names this workspace and Cortex scopes the answer to it.
+ */
+export class WhatsappSession {
   private sock: WASocket | null = null;
   private readonly cortex: CortexClient;
+  private readonly log: typeof logger;
+  /** The current auth state, so an unlink can silence its pending writes. */
+  private auth: Auth | null = null;
+  /**
+   * Whether Cortex has accepted this socket's number since it opened (0189).
+   * Until then messages are held, not acted on: a number that turns out to be
+   * ANOTHER workspace's must not answer a single DM as this one.
+   */
+  private confirmed = false;
+  private held: Array<Parameters<typeof extractGroupMessage>[0]> = [];
+  private unlinking = false;
 
   private status: Status = 'disconnected';
   private lastError: string | null = null;
@@ -132,8 +161,13 @@ export class WhatsappBridge {
   private flushing = false;
   private timers: NodeJS.Timeout[] = [];
 
-  constructor(private readonly config: Config) {
-    this.cortex = new CortexClient(config);
+  constructor(
+    private readonly config: Config,
+    readonly organizationId: string,
+    cortex?: CortexClient,
+  ) {
+    this.cortex = cortex ?? new CortexClient(config, organizationId);
+    this.log = logger.child({ org: organizationId });
   }
 
   // -------------------------------------------------------------------------
@@ -141,6 +175,7 @@ export class WhatsappBridge {
   // -------------------------------------------------------------------------
 
   snapshot(): {
+    organizationId: string;
     status: Status;
     phoneNumber: string | null;
     hasQr: boolean;
@@ -152,6 +187,7 @@ export class WhatsappBridge {
     lastError: string | null;
   } {
     return {
+      organizationId: this.organizationId,
       status: this.status,
       phoneNumber: this.phoneNumber,
       hasQr: Boolean(this.qrDataUrl),
@@ -173,8 +209,19 @@ export class WhatsappBridge {
   // -------------------------------------------------------------------------
 
   async start(): Promise<void> {
+    // Stopped before the manager's staggered start came round.
+    if (this.stopping) return;
     this.timers.push(setInterval(() => void this.flushBuffer(), this.config.batchIntervalMs));
-    this.timers.push(setInterval(() => void this.cortex.flush(), this.config.ingestTickMs));
+    // The ingest tick is offset per session: fifty workspaces asking Cortex to
+    // fold conversations at the same second is a stampede on one function.
+    const offset = Math.floor(Math.random() * this.config.ingestTickMs);
+    this.timers.push(
+      setTimeout(() => {
+        if (this.stopping) return;
+        void this.cortex.flush();
+        this.timers.push(setInterval(() => void this.cortex.flush(), this.config.ingestTickMs));
+      }, offset),
+    );
     this.scheduleHeartbeat();
     // A paired session reconnects straight away. An unpaired one reads the
     // stored state, finds nothing, reports in and waits — `connect` decides.
@@ -183,7 +230,10 @@ export class WhatsappBridge {
 
   async stop(): Promise<void> {
     this.stopping = true;
-    for (const timer of this.timers) clearInterval(timer);
+    for (const timer of this.timers) {
+      clearInterval(timer);
+      clearTimeout(timer);
+    }
     this.timers = [];
     if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
     this.heartbeatTimer = null;
@@ -191,8 +241,13 @@ export class WhatsappBridge {
     // Anything heard in the last few seconds is still only in memory. Losing it
     // would be a hole in the archive that nothing later would notice.
     await this.flushBuffer();
+    // The auth store's last debounced writes belong to a live session; a stop is
+    // not a wipe, so they are pushed rather than dropped.
+    await this.auth?.flush().catch(() => undefined);
+    const sock = this.sock;
+    this.sock = null;
     try {
-      this.sock?.end(undefined);
+      sock?.end(undefined);
     } catch {
       // Already gone; nothing to do.
     }
@@ -221,7 +276,7 @@ export class WhatsappBridge {
   private scheduleReconnect(delayMs: number): void {
     if (this.stopping) return;
     this.clearReconnect();
-    logger.warn({ attempt: this.attempt, waitMs: delayMs }, 'reconnecting to WhatsApp');
+    this.log.warn({ attempt: this.attempt, waitMs: delayMs }, 'reconnecting to WhatsApp');
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect();
@@ -238,6 +293,7 @@ export class WhatsappBridge {
     let pairingPhone: string | null = null;
     try {
       auth = await usePostgresAuthState(this.cortex);
+      this.auth = auth;
       this.paired = auth.paired;
       const { version } = await fetchLatestBaileysVersion().catch(() => ({
         // A pinned fallback beats refusing to start: WhatsApp accepts slightly
@@ -278,7 +334,7 @@ export class WhatsappBridge {
       });
     } catch (err) {
       this.lastError = (err as Error).message;
-      logger.error({ err: this.lastError }, 'could not open the WhatsApp connection');
+      this.log.error({ err: this.lastError }, 'could not open the WhatsApp connection');
       this.connecting = false;
       this.attempt += 1;
       this.scheduleReconnect(backoffFor(this.attempt, this.config));
@@ -290,7 +346,7 @@ export class WhatsappBridge {
     if (!auth.paired) {
       this.status = 'pairing';
       this.lastError = null;
-      logger.info(
+      this.log.info(
         { mode: pairingPhone ? 'code' : 'qr' },
         'pairing requested from Cortex; opening a registration socket',
       );
@@ -352,7 +408,7 @@ export class WhatsappBridge {
     this.status = idleStatus(before);
     if (this.status === 'waiting') this.lastError = IDLE_HINT;
     if (before !== this.status || sock) {
-      logger.info('no pairing requested; staying off WhatsApp until somebody asks from Cortex');
+      this.log.info('no pairing requested; staying off WhatsApp until somebody asks from Cortex');
     }
     await this.heartbeat();
   }
@@ -380,12 +436,12 @@ export class WhatsappBridge {
       this.lastError = null;
       // The code itself is NOT logged: it is a short-lived credential, and the
       // Cortex screen is where the person who asked for it is looking.
-      logger.info('pairing code issued; it is on the Cortex screen');
+      this.log.info('pairing code issued; it is on the Cortex screen');
     } catch (err) {
       if (sock !== this.sock) return;
       this.lastError =
         'WhatsApp no entregó un código para ese número. Revisa que tenga el indicativo del país y que sea el del teléfono dedicado; mientras tanto puedes escanear el QR.';
-      logger.warn({ err: (err as Error).message }, 'could not get a pairing code');
+      this.log.warn({ err: (err as Error).message }, 'could not get a pairing code');
     }
     await this.heartbeat();
   }
@@ -403,7 +459,7 @@ export class WhatsappBridge {
         // anything else; the PNG is what the Cortex screen shows to somebody
         // who has no access to the logs at all.
         qrTerminal.generate(update.qr, { small: true });
-        logger.info('scan the QR above, or open Cortex → WhatsApp, to pair this number');
+        this.log.info('scan the QR above, or open Cortex → WhatsApp, to pair this number');
       }
       const rendered = await QRCode.toDataURL(update.qr, { margin: 1, width: 512 }).catch(
         () => null,
@@ -415,6 +471,7 @@ export class WhatsappBridge {
     }
 
     if (update.connection === 'open') {
+      this.confirmed = false;
       this.status = 'connected';
       this.paired = true;
       this.attempt = 0;
@@ -424,7 +481,7 @@ export class WhatsappBridge {
       this.request = NO_REQUEST;
       this.lastError = null;
       this.phoneNumber = this.sock?.user?.id?.split(':')[0]?.split('@')[0] ?? null;
-      logger.info({ phoneNumber: this.phoneNumber }, 'connected to WhatsApp');
+      this.log.info({ phoneNumber: this.phoneNumber }, 'connected to WhatsApp');
       await this.heartbeat();
       await this.publishGroups();
       return;
@@ -468,7 +525,7 @@ export class WhatsappBridge {
         this.paired = false;
         this.lastError =
           'WhatsApp cerró la sesión de este dispositivo. Hay que volver a vincular el número desde esta pantalla.';
-        logger.error(
+        this.log.error(
           'WhatsApp logged this device out. The stored credentials are dead and will NOT be retried; wiping them and waiting for somebody to ask for a new pairing.',
         );
         await this.cortex.wipeState();
@@ -512,6 +569,13 @@ export class WhatsappBridge {
     });
     if (!reply) return;
 
+    // «Desvincular», or this number is already another workspace's (0189).
+    // Nothing else in the reply is acted on: this socket is about to go.
+    if (reply.unlink === 'requested' || reply.unlink === 'phone_taken') {
+      void this.unlink(reply.unlink);
+      return;
+    }
+
     // The allow-list is refreshed on every heartbeat, so switching a group on
     // in Cortex takes effect within one beat rather than on the next deploy.
     this.allowed = new Map(
@@ -528,6 +592,15 @@ export class WhatsappBridge {
     // tanda tarda segundos a propósito y el latido no puede quedarse quieto.
     const outbox = sanitizeOutbox(reply.outbox);
     if (outbox.length > 0) void this.deliverOutbox(outbox);
+
+    // Cortex has seen this socket connected with its number and did not object:
+    // whatever arrived in the meantime can now be handled.
+    if (this.status === 'connected' && this.sock && !this.confirmed) {
+      this.confirmed = true;
+      const held = this.held;
+      this.held = [];
+      for (const message of held) void this.onMessage(message);
+    }
 
     this.request = {
       requested: reply.pairingRequested === true,
@@ -554,15 +627,81 @@ export class WhatsappBridge {
         void this.connect();
         return;
       case 'close':
-        logger.info('the pairing request lapsed; closing the registration socket');
+        this.log.info('the pairing request lapsed; closing the registration socket');
         void this.goIdle();
         return;
       case 'restart':
-        logger.info('the pairing mode changed; reopening the registration socket');
+        this.log.info('the pairing mode changed; reopening the registration socket');
         this.restartPairing();
         return;
       case 'none':
         return;
+    }
+  }
+
+  /**
+   * Log this device out of WhatsApp and forget the session (0189).
+   *
+   * `requested`: an admin pressed «Desvincular». `phone_taken`: the number that
+   * connected is already linked to ANOTHER workspace in Cortex, and one phone
+   * serves one workspace — the newcomer is the one that leaves.
+   *
+   * `sock.logout()` is what removes «Cortex» from the phone's list of linked
+   * devices; merely dropping the credentials would leave a ghost entry there.
+   * The socket is let go of BEFORE logging out, so its own `loggedOut` close is
+   * not mistaken for WhatsApp revoking the device.
+   */
+  private async unlink(reason: 'requested' | 'phone_taken'): Promise<void> {
+    if (this.unlinking) return;
+    this.unlinking = true;
+    try {
+      const sock = this.sock;
+      this.sock = null;
+      this.held = [];
+      this.buffer = [];
+      this.recent.clear();
+      this.allowed = new Map();
+      this.replyGroups = new Set();
+      await this.auth?.discard().catch(() => undefined);
+      if (sock) {
+        try {
+          await sock.logout();
+        } catch (err) {
+          // The device may already be gone from the phone; the wipe below is
+          // what matters to Cortex.
+          this.log.warn({ err: (err as Error).message }, 'logout did not complete cleanly');
+          try {
+            sock.end(undefined);
+          } catch {
+            // Already gone.
+          }
+        }
+      }
+      await this.cortex.wipeState(reason === 'requested' ? 'unlink' : 'phone_taken');
+      if (reason === 'phone_taken') {
+        this.log.warn(
+          'this number is already linked to another workspace in Cortex; logged out and wiped here',
+        );
+      } else {
+        this.log.info('unlinked from Cortex («Desvincular»); session logged out and wiped');
+      }
+      this.paired = false;
+      this.phoneNumber = null;
+      this.confirmed = false;
+      this.request = NO_REQUEST;
+      // A refused number stays visibly refused (`logged_out` keeps its reason
+      // through idle heartbeats, see `idleStatus`) until somebody pairs again;
+      // a requested unlink is simply back to waiting.
+      if (reason === 'phone_taken') {
+        this.status = 'logged_out';
+        this.lastError = PHONE_TAKEN_MESSAGE;
+      } else {
+        this.status = 'waiting';
+        this.lastError = null;
+      }
+      await this.goIdle();
+    } finally {
+      this.unlinking = false;
     }
   }
 
@@ -578,7 +717,7 @@ export class WhatsappBridge {
       }));
       if (groups.length > 0) await this.cortex.publishGroups(groups);
     } catch (err) {
-      logger.warn({ err: (err as Error).message }, 'could not list the groups');
+      this.log.warn({ err: (err as Error).message }, 'could not list the groups');
     }
   }
 
@@ -588,7 +727,14 @@ export class WhatsappBridge {
 
   private async onMessage(raw: Parameters<typeof extractGroupMessage>[0]): Promise<void> {
     const jid = raw.key?.remoteJid ?? '';
-    if (!jid) return;
+    if (!jid || this.unlinking) return;
+
+    if (!this.confirmed) {
+      // Bounded: a burst of offline deliveries must not grow without limit
+      // while Cortex is slow to answer one heartbeat.
+      if (this.held.length < MAX_HELD_BEFORE_CONFIRMED) this.held.push(raw);
+      return;
+    }
 
     if (jid.endsWith('@g.us')) {
       await this.onGroupMessage(raw);
@@ -733,7 +879,7 @@ export class WhatsappBridge {
     } catch (err) {
       // A message whose media cannot be fetched is still part of the
       // conversation and is still archived — as a marker, without its content.
-      logger.warn({ err: (err as Error).message, kind }, 'could not download media');
+      this.log.warn({ err: (err as Error).message, kind }, 'could not download media');
       return null;
     }
   }
@@ -751,7 +897,7 @@ export class WhatsappBridge {
         // conversation is not reassembled out of sequence later.
         this.buffer = [...batch, ...this.buffer];
       } else {
-        logger.info(
+        this.log.info(
           { stored: result.stored, ignored: result.ignored },
           'staged a batch of group messages',
         );
@@ -835,7 +981,7 @@ export class WhatsappBridge {
     } catch (err) {
       // Silence on failure. In a 1:1 an apology is right because somebody is
       // waiting on it; in a group it is one more message nobody wanted.
-      logger.error({ err: (err as Error).message }, 'could not answer a group mention');
+      this.log.error({ err: (err as Error).message }, 'could not answer a group mention');
     } finally {
       if (typing) clearInterval(typing);
     }
@@ -890,7 +1036,7 @@ export class WhatsappBridge {
       if (answer.delayMs) await sleep(Math.min(answer.delayMs, 6_000));
       await sock.sendMessage(jid, { text: answer.reply });
     } catch (err) {
-      logger.error({ err: (err as Error).message }, 'could not answer a direct message');
+      this.log.error({ err: (err as Error).message }, 'could not answer a direct message');
     } finally {
       if (typing) clearInterval(typing);
     }
@@ -922,7 +1068,7 @@ export class WhatsappBridge {
           await sock.sendMessage(item.jid, { text: item.text });
           ok = true;
         } catch (err) {
-          logger.error({ err: (err as Error).message }, 'could not deliver a person reply');
+          this.log.error({ err: (err as Error).message }, 'could not deliver a person reply');
         }
         await this.cortex.ackOutbox({ id: item.id, ok });
       }

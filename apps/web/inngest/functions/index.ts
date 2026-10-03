@@ -16,6 +16,7 @@ import { gmailBackfillUser, gmailSweepDispatch, gmailSweepUser } from './gmail-l
 import { goalsWatchDispatch, goalsWatchWorkspace } from './goals-watch';
 import { ingestDocument } from './ingest-document';
 import { learningPassDispatch, learningPassWorkspace } from './learning-pass';
+import { legalDispatch, legalExportRun, legalOrganizationPurge } from './legal-data';
 import { managementFollowUpDispatch, managementFollowUpWorkspace } from './management-follow-up';
 import {
   managementOperationReview,
@@ -89,8 +90,14 @@ export {
   workSyncDispatch,
   workSyncWorkspace,
   workAssigned,
+  legalDispatch,
+  legalExportRun,
+  legalOrganizationPurge,
 };
 export const functions = [
+  legalDispatch,
+  legalExportRun,
+  legalOrganizationPurge,
   clientsLinkDispatch,
   clientsLinkWorkspace,
   followThroughDispatch,

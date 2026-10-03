@@ -4,6 +4,8 @@ import { readLaunchPlan } from '@/lib/management/launch-store';
 import { readMissionProgress } from '@/lib/management/mission-progress-store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { Suspense } from 'react';
+import { ModulesQuestion } from './_components/ModulesQuestion';
 export const dynamic = 'force-dynamic';
 // The inline profile organizer has a 60-second model timeout.
 export const maxDuration = 90;
@@ -25,17 +27,23 @@ export default async function OnboardingPage({
     readMissionProgress(db, user.id),
   ]);
   return (
-    <CompanyLaunch
-      workspaceId={user.organization.id}
-      diagnostics={diagnostics}
-      name={user.organization.name}
-      steps={result.steps}
-      initialStep={step}
-      isAdmin={user.role === 'org_admin'}
-      profile={result.board?.profile ?? null}
-      people={result.board?.people ?? []}
-      readAt={result.readAt}
-      mission={mission}
-    />
+    <div className="flex flex-col gap-6">
+      {/* «¿Qué hace tu empresa?» (0186): qué módulos prender. */}
+      <Suspense fallback={null}>
+        <ModulesQuestion organizationId={user.organization.id} userId={user.id} />
+      </Suspense>
+      <CompanyLaunch
+        workspaceId={user.organization.id}
+        diagnostics={diagnostics}
+        name={user.organization.name}
+        steps={result.steps}
+        initialStep={step}
+        isAdmin={user.role === 'org_admin'}
+        profile={result.board?.profile ?? null}
+        people={result.board?.people ?? []}
+        readAt={result.readAt}
+        mission={mission}
+      />
+    </div>
   );
 }

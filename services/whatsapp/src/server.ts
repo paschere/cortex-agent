@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import type { Config } from './config';
 import { logger } from './logger';
-import type { WhatsappBridge } from './socket';
+import type { SessionManager } from './manager';
 
 /**
  * A very small HTTP surface, for two jobs and no others.
@@ -18,7 +18,9 @@ import type { WhatsappBridge } from './socket';
  *                screen normally shows this without anyone touching the
  *                service, and it is also printed in the logs. There is only a
  *                code while a pairing has been requested from the Cortex screen:
- *                an unpaired bridge stays off WhatsApp until somebody asks.
+ *                an unpaired session stays off WhatsApp until somebody asks.
+ *                In multi mode `?org=<workspace id>` says whose; single mode
+ *                defaults to its one workspace.
  *
  * Everything else is 404. This process is not an API — it holds a socket open.
  */
@@ -48,12 +50,20 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload);
 }
 
-export function startServer(bridge: WhatsappBridge, config: Config): Server {
+export function startServer(manager: SessionManager, config: Config): Server {
   const server = createServer((req, res) => {
-    const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const path = url.pathname;
 
     if (req.method === 'GET' && path === '/health') {
-      const snapshot = bridge.snapshot();
+      // Counts only. In multi mode this process holds many workspaces' numbers
+      // and an unauthenticated endpoint names none of them; single mode keeps
+      // the old per-session fields because that is what its operators read.
+      const single =
+        config.mode === 'single' && config.organizationId
+          ? manager.session(config.organizationId)?.snapshot()
+          : undefined;
+      const snapshot = { ...manager.snapshot(), ...(single ?? {}) };
       // 200 even when WhatsApp is disconnected. The container IS healthy — it
       // is reconnecting, which is its job. Failing the check here would have
       // Railway restart the process mid-backoff and reset the very backoff that
@@ -67,12 +77,14 @@ export function startServer(bridge: WhatsappBridge, config: Config): Server {
         json(res, 401, { error: 'Unauthorized' });
         return;
       }
-      const qr = bridge.currentQr();
+      const org = url.searchParams.get('org') ?? config.organizationId ?? '';
+      const session = org ? manager.session(org) : null;
+      const qr = session?.currentQr() ?? null;
       if (!qr) {
         json(res, 404, {
           error:
-            'There is no pairing code right now. Ask for one on Cortex → Integraciones → WhatsApp («Mostrar código QR»); the bridge only talks to WhatsApp while somebody is pairing.',
-          status: bridge.snapshot().status,
+            'There is no pairing code right now. Ask for one on Cortex → Integraciones → WhatsApp («Mostrar código QR»); a session only talks to WhatsApp while somebody is pairing. In multi mode pass ?org=<workspace id>.',
+          status: session?.snapshot().status ?? 'not_running',
         });
         return;
       }

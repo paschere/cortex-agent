@@ -1,3 +1,4 @@
+import { quickbooksWriter } from '../../close/writeback/quickbooks';
 import type {
   AccountingEntity,
   AccountingProvider,
@@ -23,6 +24,7 @@ import {
   quickbooksAppConfig,
   quickbooksSetupMissing,
 } from './quickbooks-client';
+import { quickbooksReports } from './reports-quickbooks';
 
 /**
  * QUICKBOOKS ONLINE (Intuit), con la misma forma que Siigo y Alegra.
@@ -404,6 +406,8 @@ export const quickbooksProvider: AccountingProvider = {
       revoke: async () => {
         await client?.revoke();
       },
+      reports: quickbooksReports(ready, homeCurrency),
+      writer: quickbooksWriter(ready),
       async listPage(entity, query, page) {
         const result = await ready().page<unknown>(
           TABLES[entity],

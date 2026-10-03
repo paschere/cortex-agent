@@ -42,6 +42,36 @@ export {
 } from './usage';
 export type { SeatUsage, UsageEventRow, WorkspacePlan, WorkspaceUsage } from './usage';
 export {
+  BILLING_STATUSES,
+  BILLING_SUBSCRIPTION_COLUMNS,
+  DEFAULT_TRIAL_DAYS,
+  PAST_DUE_DAYS,
+  RENEWAL_REMINDER_DAYS,
+  TRIAL_REMINDER_DAYS,
+  addBillingMonths,
+  applyApprovedPayment,
+  billingAccess,
+  cancelSubscription,
+  daysUntil,
+  fromBillingSubscription,
+  isReadOnly,
+  reminderDue,
+  resumeSubscription,
+  storedStatusFor,
+  toBillingSubscription,
+  trialSubscription,
+} from './subscription';
+export type {
+  BillingAccess,
+  BillingAccessLevel,
+  BillingReason,
+  BillingStatus,
+  BillingSubscription,
+  BillingSubscriptionRow,
+  ReminderKind,
+} from './subscription';
+export { readBillingAccess, readBillingSubscription } from './subscription-store';
+export {
   ONBOARDING_GOALS,
   ONBOARDING_STEPS,
   onboardingSteps,

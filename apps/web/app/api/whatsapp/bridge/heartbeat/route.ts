@@ -1,6 +1,7 @@
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { authenticateBridge } from '@/lib/whatsapp/bridge';
+import { authorizeBridgeSession } from '@/lib/whatsapp/bridge';
 import { pairingReply } from '@/lib/whatsapp/pairing';
+import { PHONE_TAKEN_ERROR } from '@/lib/whatsapp/wipe';
 import { type OutboxItem, claimOutbox } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -28,6 +29,14 @@ import { type NextRequest, NextResponse } from 'next/server';
  * WhatsApp until this reply says `pairingRequested` — an admin asked on the
  * Cortex screen within the last three minutes — and, for the code flow,
  * `pairingPhone`. The bridge reports back the QR or the 8-character code.
+ *
+ * SO DOES «DESVINCULAR», AND ONE NUMBER PER WORKSPACE (migration 0189). With
+ * one bridge serving many workspaces, the same phone could be paired from two
+ * of them. When a session reports `connected` with a number that is already
+ * another workspace's, nothing is stored, nothing is handed to it (no groups,
+ * no outbox, DMs off) and the reply says `unlink: 'phone_taken'`: the bridge
+ * logs that device out and wipes it. The workspace that had the number first
+ * keeps it. `unlink: 'requested'` is an admin's «Desvincular».
  */
 
 export const runtime = 'nodejs';
@@ -65,7 +74,7 @@ const CODE_TTL_MS = 60_000;
 const PAIRING_CODE = /^[A-Z0-9]{8}$/;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const auth = authenticateBridge(req);
+  const auth = await authorizeBridgeSession(req);
   if (!auth.ok) return auth.response;
 
   const body = (await req.json().catch(() => ({}))) as HeartbeatBody;
@@ -75,6 +84,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const status: Status = STATUSES.has(body.status as Status)
     ? (body.status as Status)
     : 'disconnected';
+  const reportedPhone =
+    typeof body.phoneNumber === 'string' && /^\d{8,15}$/.test(body.phoneNumber)
+      ? body.phoneNumber
+      : null;
+
+  // Un número, una empresa. Comprobado antes de escribir nada: una sesión con
+  // el número de otra empresa no deja rastro aquí salvo la explicación.
+  if (status === 'connected' && reportedPhone) {
+    const taken = await db.rpc('whatsapp_phone_taken', { p_phone: reportedPhone });
+    if (taken.error) {
+      logger.warn(`whatsapp-bridge: could not check the number — ${taken.error.message}`);
+    } else if (taken.data === true) {
+      return refusePhone(db, now);
+    }
+  }
 
   const row: Record<string, unknown> = {
     status,
@@ -82,7 +106,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     updated_at: now.toISOString(),
     last_error: body.error ?? null,
   };
-  if (body.phoneNumber !== undefined) row.phone_number = body.phoneNumber;
+  if (body.phoneNumber !== undefined) row.phone_number = reportedPhone;
   if (status === 'connected') {
     row.last_connected_at = now.toISOString();
     // A connected session has nothing to scan. Clearing it stops the pairing
@@ -110,11 +134,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  await db.from('whatsapp_sessions').upsert(row, { onConflict: 'organization_id' });
+  const written = await db.from('whatsapp_sessions').upsert(row, { onConflict: 'organization_id' });
+  // 23505 on the phone index: another workspace connected the same number
+  // between the check above and this write. Same answer as the check.
+  if (written.error?.code === '23505') return refusePhone(db, now);
+  if (written.error) {
+    logger.warn(`whatsapp-bridge: could not store the heartbeat — ${written.error.message}`);
+  }
 
   const sessionRead = await db
     .from('whatsapp_sessions')
-    .select('dm_enabled, pairing_requested_at, pairing_phone')
+    .select('dm_enabled, pairing_requested_at, pairing_phone, unlink_requested_at')
     .maybeSingle();
   // Checked by hand rather than thrown: this reply also carries the archive
   // allow-list, and a missing pairing column (a migration behind) must not stop
@@ -183,5 +213,46 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     dmEnabled: session?.dm_enabled !== false || customerEnabled,
     outbox,
     ...pairingReply(session, now),
+    // «Desvincular» (0189): the bridge logs the device out and wipes the session.
+    unlink: session?.unlink_requested_at ? 'requested' : null,
+  });
+}
+
+/**
+ * The number that just connected is another workspace's. Nothing it reported
+ * is kept; the reply hands it nothing to read or say and tells it to leave.
+ */
+async function refusePhone(
+  db: ReturnType<typeof getOrgScopedClient>,
+  now: Date,
+): Promise<NextResponse> {
+  logger.warn('whatsapp-bridge: a session connected with a number another workspace holds');
+  const saved = await db.from('whatsapp_sessions').upsert(
+    {
+      status: 'logged_out',
+      last_seen_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      last_error: PHONE_TAKEN_ERROR,
+      pairing_requested_at: null,
+      pairing_phone: null,
+      pairing_code: null,
+      pairing_code_expires_at: null,
+      pairing_qr: null,
+      pairing_qr_expires_at: null,
+    },
+    { onConflict: 'organization_id' },
+  );
+  if (saved.error) {
+    logger.warn(`whatsapp-bridge: could not record the refusal — ${saved.error.message}`);
+  }
+  return NextResponse.json({
+    ok: true,
+    archiveGroups: [],
+    replyGroups: [],
+    dmEnabled: false,
+    outbox: [],
+    pairingRequested: false,
+    pairingPhone: null,
+    unlink: 'phone_taken',
   });
 }

@@ -1,3 +1,5 @@
+import type { ModuleKey } from '@cortex/agent-tools/src/modules/catalog';
+
 /**
  * LAS PUERTAS DE ENTRADA DEL AUTOSERVICIO.
  *
@@ -97,13 +99,20 @@ export const SOURCES: SourceOption[] = [
 
 export type ProcessTemplate = {
   id: string;
-  area: 'Plata' | 'Ventas y clientes' | 'Operación' | 'Equipo' | 'Impuestos';
+  area: 'Plata' | 'Ventas y clientes' | 'Operación' | 'Equipo' | 'Impuestos' | 'Legal';
   title: string;
   body: string;
   needs: string;
   prompt: string;
   featured?: boolean;
+  /** El módulo del que es (0186): con ese módulo apagado, el proceso no se ofrece. */
+  module?: ModuleKey;
 };
+
+/** Los procesos que se ofrecen con estos módulos apagados. */
+export function templatesFor(modulesOff: readonly ModuleKey[] = []): ProcessTemplate[] {
+  return PROCESS_TEMPLATES.filter((t) => !t.module || !modulesOff.includes(t.module));
+}
 
 export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
@@ -130,15 +139,70 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'document_expirations',
     area: 'Operación',
+    module: 'doc_expirations',
     title: 'Documentos que vencen',
     body: 'SOAT, tecnomecánica, pólizas, licencias, permisos y contratos: Cortex les lee la fecha, le avisa a quien los renueva con tiempo y cierra el aviso cuando llega el documento renovado.',
     needs: 'Los documentos en el Cerebro (subidos, de Drive o del correo)',
     prompt:
       'Quiero que me avises antes de que se venzan los documentos de la empresa: SOAT y tecnomecánica de los vehículos, pólizas, licencias, permisos, habilitaciones, certificados y contratos. Dime cuáles ya tengo vigilados y cuáles leíste de mis documentos y esperan que confirme la fecha, con la frase de donde salió cada una, y pregúntame quién responde por cada tipo. Si todavía no has revisado lo que ya está en el Cerebro, mándame a Documentos que vencen para buscarlo (lo hago por tandas); si falta algún papel, dime cómo subirlo o regístralo cuando te dé la fecha.',
   },
+  // Contratos y cumplimiento (0195). Borradores para revisión de un abogado;
+  // umbrales y fechas inciertas salen «por confirmar». La Rama Judicial se
+  // consulta con un trámite aprendido y el CAPTCHA lo resuelve la persona.
+  {
+    id: 'contract_drafts',
+    area: 'Legal',
+    module: 'contracts',
+    title: 'Contratos desde plantillas',
+    body: 'Prestación de servicios, NDA, laborales, compraventa, arrendamiento, otrosí y cartas de terminación con los datos de tus clientes y proveedores, en PDF o Word, para que tu abogado los revise.',
+    needs: 'La ficha de la empresa (razón social, NIT, representante) y la contraparte',
+    prompt:
+      'Quiero redactar un contrato: dime qué plantillas tienes y, cuando elija una, pregúntame lo que necesites (contraparte, objeto, valor, fechas, aviso previo) y arma el borrador con contracts.draft. No inventes ningún dato: lo que no sepas déjalo como [COMPLETAR]. Recuérdame que es un borrador para revisión de un abogado.',
+  },
+  {
+    id: 'contract_obligations',
+    area: 'Legal',
+    module: 'contracts',
+    title: 'Obligaciones y avisos de mis contratos',
+    body: 'Sube los contratos firmados: Cortex lee quién debe qué y para cuándo, con la frase de cada obligación, y vigila el aviso previo de los que se renuevan solos.',
+    needs: 'Los contratos firmados en PDF o Word',
+    prompt:
+      'Quiero vigilar mis contratos firmados: dime cuáles tengo en Contratos y cuáles no tienen leídas sus obligaciones; para cada uno, propónme leerlas con contracts.extract_obligations y luego mándame a confirmarlas en /contratos. Dime también qué contratos están en su ventana de aviso previo.',
+  },
+  {
+    id: 'compliance_checklist',
+    area: 'Legal',
+    module: 'compliance',
+    title: 'Lista de cumplimiento legal y societario',
+    body: 'Asamblea ordinaria, libros, matrícula, RNBD de la SIC, política de datos, PQRS y si te aplica SAGRILAFT o PTEE, según el perfil de tu empresa.',
+    needs: 'Tipo de sociedad, ingresos y activos del año anterior, si atiendes consumidores',
+    prompt:
+      'Arma la lista de cumplimiento de la empresa: pregúntame el tipo de sociedad, si nos vigila alguna superintendencia, los ingresos y activos del año anterior, si atendemos consumidores y si manejamos datos personales, y mándame a /cumplimiento (pestaña Perfil) para guardarlo. Luego dime con compliance.status qué está pendiente y qué aplicabilidad está por confirmar con el oficial de cumplimiento.',
+  },
+  {
+    id: 'pqrs_inbox',
+    area: 'Legal',
+    module: 'compliance',
+    title: 'PQRS con radicado y plazo legal',
+    body: 'Un formulario público para tus clientes, radicado por año y el contador de días hábiles; Cortex te avisa antes de que se venza cada una.',
+    needs: 'Nada: el formulario se prende en Cumplimiento',
+    prompt:
+      'Quiero atender PQRS: explícame cómo prender el formulario público en /cumplimiento y, cuando me llegue un reclamo por correo o WhatsApp, radícalo con compliance.pqrs_create usando la fecha en que llegó. Avísame las que estén a 3 días hábiles de vencerse.',
+  },
+  {
+    id: 'rama_judicial',
+    area: 'Legal',
+    module: 'compliance',
+    title: 'Seguimiento de procesos judiciales',
+    body: 'Consulta tus procesos en la Consulta de Procesos de la Rama Judicial con un trámite aprendido y anota cada actuación y la próxima diligencia.',
+    needs: 'El radicado de 23 dígitos de cada proceso; enseñar el trámite una vez',
+    prompt:
+      'Quiero hacer seguimiento de los procesos judiciales de la empresa: dime cuáles tengo registrados en Cumplimiento; para consultarlos usa el trámite aprendido de la Consulta de Procesos de la Rama Judicial (si no existe, enséñamelo una vez en el navegador de Cortex). Si el portal pide CAPTCHA, lo resuelvo yo en la pestaña en vivo: tú nunca lo intentes. Con lo que traiga, propónme actualizar cada proceso con compliance.case_update y programa la revisión cada lunes.',
+  },
   {
     id: 'pipeline',
     area: 'Ventas y clientes',
+    module: 'crm',
     title: 'Clientes y oportunidades',
     body: 'Un tablero por etapas que se alimenta del correo y te recuerda a quién no le has escrito.',
     needs: 'Tu correo',
@@ -148,6 +212,7 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'quote_to_invoice',
     area: 'Ventas y clientes',
+    module: 'sales',
     title: 'Cotizar y facturar',
     body: 'Cotizaciones con tu marca e IVA bien calculado; el cliente las acepta desde un enlace y la factura electrónica sale por Siigo o Alegra con tu aprobación.',
     needs: 'Siigo o Alegra conectado para la factura electrónica (la cotización no lo necesita)',
@@ -157,11 +222,32 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'inventory',
     area: 'Operación',
+    module: 'inventory',
     title: 'Inventario con alertas',
     body: 'Existencias por bodega con costo promedio; cada mañana te dice qué bajó del mínimo y deja las órdenes de compra por proveedor listas para aprobar y enviar.',
     needs: 'Programa contable (Siigo, Alegra o QuickBooks) o una hoja de inventario',
     prompt:
       'Quiero alertas de inventario: dime qué productos están bajo el mínimo y qué tengo que comprar (usa el inventario de Cortex en /inventario; si está vacío, dime si lo traigo del programa contable conectado o de mi hoja de inventario, y qué columnas necesita: código, nombre, existencias, mínimo, cantidad a pedir, costo, proveedor y días de entrega). Prepárame las órdenes de compra por proveedor para aprobarlas, y que el piloto automático me las deje listas cada mañana.',
+  },
+  {
+    id: 'service_orders',
+    area: 'Operación',
+    module: 'service_orders',
+    title: 'Órdenes de servicio con margen',
+    body: 'Cada trabajo con sus tareas, horas, materiales y gastos; te avisa cuando se pasa del presupuesto y cuando algo terminado no se ha facturado.',
+    needs: 'Nada para empezar; una cotización o pedido en Ventas si ya lo tienes',
+    prompt:
+      'Quiero llevar mis órdenes de servicio con su rentabilidad: ábreme la primera (te digo el cliente, el trabajo, las horas y el presupuesto, o conviértela desde una cotización o pedido de Ventas) y dime cómo registra el equipo sus horas. Pregúntame el costo por hora de cada persona para que el margen salga bien, y que el piloto automático me avise cuando un proyecto se pase del presupuesto o quede terminado sin facturar.',
+  },
+  {
+    id: 'fleet',
+    area: 'Operación',
+    module: 'fleet',
+    title: 'Flota con mantenimiento y combustible',
+    body: 'Cada vehículo con SOAT, tecnomecánica y póliza al día, mantenimiento por km o por tiempo, rendimiento de combustible y costo por km.',
+    needs: 'Las placas, el kilometraje y quién maneja cada vehículo',
+    prompt:
+      'Quiero controlar la flota: registra mis vehículos (te doy las placas y, para el RUNT, el documento del dueño) y dime cómo completo en /flota el tipo, el combustible, el kilometraje, el conductor y el plan de mantenimiento; revisa en el RUNT el SOAT y la tecnomecánica y en el SIMIT los comparendos, y avísame cuando toque un mantenimiento o un tanqueo rinda raro. Dime cómo registro los tanqueos y los recorridos.',
   },
   {
     id: 'requests',
@@ -193,6 +279,7 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'team_follow_up',
     area: 'Equipo',
+    module: 'team',
     title: 'Seguimiento del equipo',
     body: 'Cada lunes, cómo le fue al trabajo del equipo; y un aviso cuando alguien se carga de más o se acumulan vencidos.',
     needs: 'El trabajo del equipo conectado (Gerencia, compromisos o una tabla con responsable)',
@@ -206,6 +293,7 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'tax_calendar',
     area: 'Impuestos',
+    module: 'taxes',
     title: 'Calendario de impuestos que avisa solo',
     body: 'Con el NIT y el RUT, Cortex arma las fechas del año (renta, IVA, retención, exógena, ICA, PILA) y le avisa al contador antes de cada una.',
     needs: 'El NIT y el RUT (si está en el Cerebro, lo leo)',
@@ -215,6 +303,7 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'dian_invoices',
     area: 'Impuestos',
+    module: 'taxes',
     title: 'Descargar facturas recibidas de la DIAN cada semana',
     body: 'Cada lunes trae del portal de la DIAN las facturas electrónicas que te emitieron y las deja en el Cerebro, listas para cuadrar con el IVA.',
     needs: 'Acceso al portal de la DIAN; enseñar el trámite una vez',
@@ -224,6 +313,7 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'dian_mailbox',
     area: 'Impuestos',
+    module: 'taxes',
     title: 'Revisar el buzón de la DIAN',
     body: 'Mira el buzón de notificaciones de la DIAN y te avisa si llegó un requerimiento, un emplazamiento o algo con plazo.',
     needs: 'Acceso al portal de la DIAN; enseñar el trámite una vez',
@@ -233,6 +323,7 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'dian_rut',
     area: 'Impuestos',
+    module: 'taxes',
     title: 'Sacar el RUT actualizado',
     body: 'Descarga la copia del RUT del portal de la DIAN, la guarda en el Cerebro y revisa si el perfil tributario sigue cuadrando.',
     needs: 'Acceso al portal de la DIAN; enseñar el trámite una vez',
@@ -242,6 +333,7 @@ export const PROCESS_TEMPLATES: ProcessTemplate[] = [
   {
     id: 'dian_account',
     area: 'Impuestos',
+    module: 'taxes',
     title: 'Consultar el estado de cuenta en la DIAN',
     body: 'Cada mes consulta las obligaciones pendientes y saldos a favor en la DIAN y te dice si algo no cuadra con lo marcado como pagado.',
     needs: 'Acceso al portal de la DIAN; enseñar el trámite una vez',

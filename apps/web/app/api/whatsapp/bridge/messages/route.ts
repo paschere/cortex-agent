@@ -1,5 +1,5 @@
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { authenticateBridge, decodeBase64 } from '@/lib/whatsapp/bridge';
+import { authorizeBridgeSession, decodeBase64 } from '@/lib/whatsapp/bridge';
 import { MAX_DOCUMENT_BYTES, MAX_VOICE_BYTES } from '@cortex/agent-tools';
 import {
   ingestGroupAttachment,
@@ -86,7 +86,7 @@ interface GroupRow {
 const MAX_TRANSCRIPTIONS_PER_BATCH = 25;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const auth = authenticateBridge(req);
+  const auth = await authorizeBridgeSession(req);
   if (!auth.ok) return auth.response;
 
   const body = (await req.json().catch(() => ({}))) as { messages?: IncomingMessage[] };

@@ -9,10 +9,12 @@ import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import {
   type AnyTool,
+  enabledModules,
   filterTools,
   getTool,
   listVisibleSpaces,
   runTool,
+  toolAllowedByModules,
   toolErrorDetail,
   toolErrorMessage,
 } from '@cortex/agent-tools';
@@ -278,6 +280,8 @@ async function buildCatalog(
 ): Promise<Map<string, CatalogEntry>> {
   const agents = await loadAllAgents(organizationId);
   const denied = userId ? await deniedToolPatterns(getOrgScopedClient(organizationId), userId) : [];
+  // Los módulos apagados de la empresa (0186) no se ofrecen; runTool igual los niega.
+  const modulesOn = await enabledModules(getOrgScopedClient(organizationId));
   // Cortex first: shared tools attribute to the super-agent (audit trail and
   // MCP conversations read as Cortex's work, matching the product story).
   const ordered = [...agents].sort((a, b) =>
@@ -287,6 +291,7 @@ async function buildCatalog(
   for (const agent of ordered) {
     for (const tool of filterTools(agent.allowed_tool_ids ?? [])) {
       if (denied.length > 0 && isToolDenied(tool.id, denied)) continue;
+      if (!toolAllowedByModules(tool.id, modulesOn)) continue;
       const name = toMcpName(tool.id);
       if (!catalog.has(name)) {
         catalog.set(name, { tool, agentId: agent.id, agentSlug: agent.slug });

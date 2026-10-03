@@ -2,6 +2,7 @@ import { CommandMenuProvider } from '@/components/nav/CommandMenuContext';
 import { MobileSidebarProvider } from '@/components/nav/MobileSidebarContext';
 import { Sidebar } from '@/components/nav/Sidebar';
 import { PanelHost, PanelProvider } from '@/components/panel/PanelHost';
+import { modulesOffFor } from '@/lib/modules/server';
 import { countNavSignals } from '@/lib/nav-signals';
 import type { SessionUser } from '@cortex/core';
 import type { ReactNode } from 'react';
@@ -50,11 +51,15 @@ export async function AppShell({
   /** El interior propio de cada layout. Ocupa la columna central. */
   children: ReactNode;
 }) {
-  const counts = await countNavSignals(user.organization.id, user.id);
+  // Los contadores y los módulos apagados (0186) son lecturas independientes.
+  const [counts, modulesOff] = await Promise.all([
+    countNavSignals(user.organization.id, user.id),
+    modulesOffFor(user.organization.id),
+  ]);
 
   return (
     <MobileSidebarProvider>
-      <CommandMenuProvider role={user.role}>
+      <CommandMenuProvider role={user.role} modulesOff={modulesOff}>
         <PanelProvider>
           <div className="cortex-workspace flex h-screen overflow-hidden bg-canvas print:h-auto print:overflow-visible">
             {/* El rail es hijo flex de esta fila. Un wrapper (`print:hidden`)
@@ -63,7 +68,12 @@ export async function AppShell({
                 del aside. `user.organization` baja al pie para que el
                 selector pinte el nombre con el HTML, no medio segundo
                 después. */}
-            <Sidebar role={user.role} counts={counts} organization={user.organization} />
+            <Sidebar
+              role={user.role}
+              counts={counts}
+              organization={user.organization}
+              modulesOff={modulesOff}
+            />
             {children}
             <PanelHost />
           </div>

@@ -85,3 +85,7 @@ export function signupCodeMatches(given: string | null | undefined, expected: st
 /** Lo que se le dice a quien no lo trae. Sin pistas sobre el código. */
 export const SIGNUP_CODE_ERROR =
   'Cortex está en acceso por invitación. Necesitas un código para crear la cuenta — pídeselo a quien te habló del producto.';
+
+/** Lo mismo con SIGNUP_MODE=request: dice dónde se pide el código. */
+export const SIGNUP_CODE_REQUEST_ERROR =
+  'Cortex está en acceso por invitación. Necesitas el código que te enviamos al aprobar tu solicitud — si todavía no lo tienes, pídelo en /acceso.';

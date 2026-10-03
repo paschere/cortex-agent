@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ActiveOrganization, OrgRole } from '@cortex/core';
 import { pool } from './auth';
+import { startTrialIfOpen } from './billing/trial';
 import { workspaceLanding } from './invite-landing';
 import { WORKSPACE_LIMIT } from './workspace-limits';
 
@@ -182,6 +183,9 @@ async function ensureInitialCompany(
       [orgId, workspaceName, slug, `company-member:${baUserId}`, baUserId],
     );
     if (rows[0]) {
+      // Registro abierto (0187): la empresa nace en prueba. No-op en los otros
+      // modos y nunca lanza; ver lib/billing/trial.ts.
+      await startTrialIfOpen(orgId);
       return {
         id: orgId,
         name: workspaceName,
@@ -460,6 +464,7 @@ export async function createAdditionalWorkspace(
       );
       if (!rows[0]) continue;
       await client.query('commit');
+      await startTrialIfOpen(orgId);
       return {
         ok: true,
         workspace: {

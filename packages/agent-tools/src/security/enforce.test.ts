@@ -19,8 +19,17 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
       inserts.push({ table, row });
       return Promise.resolve({ data: null, error: null });
     }),
-    // security_policies read: returns nothing -> loadPolicy falls back to defaults
-    select: vi.fn().mockResolvedValue({ data: null, error: null }),
+    // security_policies read: returns nothing -> loadPolicy falls back to defaults.
+    // company_modules (0186): la empresa tiene prendida la nómina, como la
+    // deja el backfill a quien ya la usaba — si no, la puerta del módulo
+    // pararía estas llamadas antes de la de seguridad, que es la que se prueba.
+    select: vi
+      .fn()
+      .mockResolvedValue(
+        table === 'company_modules'
+          ? { data: [{ module_key: 'payroll', enabled: true }], error: null }
+          : { data: null, error: null },
+      ),
   });
 
   const db = {

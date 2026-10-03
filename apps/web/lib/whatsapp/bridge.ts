@@ -1,5 +1,6 @@
 import 'server-only';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 import { NextResponse } from 'next/server';
 
@@ -36,10 +37,24 @@ import { NextResponse } from 'next/server';
 
 /** Header the bridge names its workspace in. */
 export const ORGANIZATION_HEADER = 'x-cortex-organization';
+/** `single` (WHATSAPP_ORGANIZATION_ID set) or `multi`. Absent: a pre-0189 bridge. */
+export const MODE_HEADER = 'x-cortex-bridge-mode';
+/** The bridge process, for the per-workspace lease (0189). */
+export const INSTANCE_HEADER = 'x-cortex-bridge-instance';
+
+export type BridgeMode = 'single' | 'multi';
 
 export interface BridgeCaller {
   organizationId: string;
+  /**
+   * `legacy` is a bridge from before 0189 that sends no mode: it is a
+   * single-workspace bridge by construction and is treated as one.
+   */
+  mode: BridgeMode | 'legacy';
+  instanceId: string | null;
 }
+
+const INSTANCE_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
 export type BridgeAuth = { ok: true; caller: BridgeCaller } | { ok: false; response: NextResponse };
 
@@ -64,28 +79,131 @@ function secretsMatch(presented: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-/**
- * Authenticate a request from the bridge and work out which workspace it is
- * acting for. Every bridge route starts with this and nothing else.
- */
-export function authenticateBridge(req: Request): BridgeAuth {
+function tokenProblem(req: Request): string | null {
   const expected = process.env.WHATSAPP_BRIDGE_TOKEN ?? '';
-  if (!expected) {
-    return { ok: false, response: unauthorized('WHATSAPP_BRIDGE_TOKEN is not set') };
-  }
-
+  if (!expected) return 'WHATSAPP_BRIDGE_TOKEN is not set';
   const header = req.headers.get('authorization') ?? '';
   const presented = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  if (!presented || !secretsMatch(presented, expected)) {
-    return { ok: false, response: unauthorized('bad or missing bearer token') };
-  }
+  if (!presented || !secretsMatch(presented, expected)) return 'bad or missing bearer token';
+  return null;
+}
+
+function modeOf(req: Request): BridgeMode | 'legacy' {
+  const mode = req.headers.get(MODE_HEADER)?.trim();
+  return mode === 'single' || mode === 'multi' ? mode : 'legacy';
+}
+
+function instanceOf(req: Request): string | null {
+  const id = req.headers.get(INSTANCE_HEADER)?.trim() ?? '';
+  return INSTANCE_ID.test(id) ? id : null;
+}
+
+/**
+ * Authenticate a request from the bridge and work out which workspace it is
+ * acting for. The token and the header only — see `authorizeBridgeSession` for
+ * the check every per-workspace route actually starts with.
+ */
+export function authenticateBridge(req: Request): BridgeAuth {
+  const problem = tokenProblem(req);
+  if (problem) return { ok: false, response: unauthorized(problem) };
 
   const organizationId = req.headers.get(ORGANIZATION_HEADER)?.trim() ?? '';
   if (!organizationId) {
     return { ok: false, response: unauthorized(`missing ${ORGANIZATION_HEADER}`) };
   }
 
-  return { ok: true, caller: { organizationId } };
+  return { ok: true, caller: { organizationId, mode: modeOf(req), instanceId: instanceOf(req) } };
+}
+
+/**
+ * The process-level door (0189): `/api/whatsapp/bridge/sessions`, which is
+ * about every workspace and so names none. Token, mode and instance id only.
+ */
+export function authenticateBridgeControl(
+  req: Request,
+):
+  | { ok: true; caller: { mode: BridgeMode; instanceId: string } }
+  | { ok: false; response: NextResponse } {
+  const problem = tokenProblem(req);
+  if (problem) return { ok: false, response: unauthorized(problem) };
+  const mode = modeOf(req);
+  const instanceId = instanceOf(req);
+  if (mode === 'legacy' || !instanceId) {
+    return { ok: false, response: unauthorized('a control request without mode or instance') };
+  }
+  return { ok: true, caller: { mode, instanceId } };
+}
+
+/**
+ * EVERY PER-WORKSPACE BRIDGE ROUTE STARTS HERE (0189).
+ *
+ * One process now serves many workspaces, so "the token is right" is no longer
+ * enough on its own: a multi-mode bridge only ever has a socket for a workspace
+ * that has a `whatsapp_sessions` row — created when an admin of THAT workspace
+ * asked to pair — and that row's lease, when held, names this process. A
+ * request for a workspace with no row, or one leased to another process, is a
+ * bug or a split brain, and it is refused before it can write a credential or
+ * archive a message.
+ *
+ * What this is NOT: protection against somebody holding the token. The token
+ * is operator infrastructure (see the top of this file) and can name any
+ * workspace; single and legacy bridges, which are pinned by the operator's own
+ * environment variable and create their row on first report, skip the row
+ * check exactly as before. The check is defence in depth for the multi path.
+ */
+export async function authorizeBridgeSession(req: Request): Promise<BridgeAuth> {
+  const auth = authenticateBridge(req);
+  if (!auth.ok || auth.caller.mode !== 'multi') return auth;
+
+  const row = await getOrgScopedClient(auth.caller.organizationId)
+    .from('whatsapp_sessions')
+    .select('organization_id, owner_instance, lease_expires_at')
+    .maybeSingle();
+  if (row.error) {
+    logger.error(`whatsapp-bridge: could not read the session row — ${row.error.message}`);
+    return {
+      ok: false,
+      response: NextResponse.json({ error: 'Session lookup failed' }, { status: 503 }),
+    };
+  }
+  if (!row.data) {
+    logger.warn('whatsapp-bridge: refused a request for a workspace with no session row');
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'No WhatsApp session for this workspace' },
+        { status: 404 },
+      ),
+    };
+  }
+  if (!leaseAllows(row.data, auth.caller.instanceId)) {
+    logger.warn('whatsapp-bridge: refused a request from a process that does not hold the lease');
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'This workspace is held by another bridge process' },
+        { status: 409 },
+      ),
+    };
+  }
+  return auth;
+}
+
+/**
+ * Whether `instanceId` may act for a session row: nobody holds it, it holds
+ * it, or the holder's lease has run out. Pure, for the tests.
+ */
+export function leaseAllows(
+  row: { owner_instance?: unknown; lease_expires_at?: unknown },
+  instanceId: string | null,
+  now: Date = new Date(),
+): boolean {
+  const owner = typeof row.owner_instance === 'string' ? row.owner_instance : null;
+  if (!owner) return true;
+  if (instanceId && owner === instanceId) return true;
+  const expires =
+    typeof row.lease_expires_at === 'string' ? Date.parse(row.lease_expires_at) : Number.NaN;
+  return !Number.isFinite(expires) || expires <= now.getTime();
 }
 
 /** Base64 back to bytes, refusing anything that is not base64. */

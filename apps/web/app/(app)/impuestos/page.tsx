@@ -10,6 +10,7 @@ import {
   bogotaToday,
   buildTaxCalendar,
   canMarkTaxObligations,
+  draftStatusByObligation,
   isCompanyManager,
   listDirectory,
   listTaxObligations,
@@ -86,6 +87,15 @@ export default async function TaxPage({
         documentTitles.set(d.id, d.title);
   }
 
+  // Borradores (0197): el estado del de cada obligación, para «Ver borrador».
+  const draftStatuses = await draftStatusByObligation(
+    db,
+    obligations.map((o) => o.id),
+  ).catch((err) => {
+    logger.error('tax: no se pudo leer el estado de los borradores', { err });
+    return undefined;
+  });
+
   const people: TaxPerson[] = directory.map((p) => ({ id: p.id, name: personLabel(p) }));
   const href = (path: string) => workspaceHref(user.organization.id, path);
   const engine = profile ? buildTaxCalendar(profile, year) : null;
@@ -107,6 +117,7 @@ export default async function TaxPage({
     suggestedNit: profile ? null : nitFromFacts(facts),
     documentTitles,
     href,
+    draftStatuses,
   });
 
   const links: TaxLinks = {
@@ -116,6 +127,8 @@ export default async function TaxPage({
     finance: href('/finance'),
     commitments: href('/commitments'),
     uploadApi: href('/api/kb/documents'),
+    certificates: href('/impuestos/certificados'),
+    exogena: href('/impuestos/exogena'),
   };
 
   return (

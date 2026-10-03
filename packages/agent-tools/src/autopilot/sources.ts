@@ -2,18 +2,30 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAccountingProvider } from '../accounting/providers/index';
 import { listAccountingConnections } from '../accounting/store';
 import { KIND_LABEL as ACTION_KIND_LABEL, type ActionKind } from '../actions/shape';
+import { budgetSnapshot } from '../budget/autopilot';
+import { closeSnapshot } from '../close/autopilot';
 import { addDays } from '../commitments/shape';
 import { listCommitments } from '../commitments/store';
+import { loadComplianceSnapshot } from '../compliance/autopilot';
+import { loadContractSnapshot } from '../contracts/autopilot';
+import { loadCrmSnapshot } from '../crm/autopilot';
 import { personLabel } from '../directory/line';
 import { listDirectory } from '../directory/store';
 import { loadExpirationSnapshot } from '../doc-expirations/autopilot';
+import { loadFleetSnapshot } from '../fleet/autopilot';
 import { loadReorderSnapshot } from '../inventory/autopilot';
 import { hasLedgerCash } from '../ledger/forecast-explain';
 import { runForecast } from '../ledger/plans';
+import { MODULE_KEYS, type ModuleKey } from '../modules/catalog';
+import { enabledModules } from '../modules/store';
 import { supplierInvoicesSnapshot } from '../payables/autopilot';
 import { bankReconciliation } from '../payments/bank/store';
 import { moneyAtRisk } from '../payments/risk';
 import { overdueReceivableInvoices } from '../payments/store';
+import { loadPayrollSnapshot } from '../payroll/autopilot';
+import { loadProjectsSnapshot } from '../projects/autopilot';
+import { loadSstSnapshot } from '../sst/autopilot';
+import { loadTaxDraftsSnapshot } from '../tax/autopilot-drafts';
 import { listTaxObligations, readTaxProfile } from '../tax/store';
 import { toolErrorMessage } from '../tool-error';
 import { lastDaysPeriod, loadTeamReport } from '../work/view-sources';
@@ -43,7 +55,16 @@ export type SourceKey =
   | 'aprobaciones'
   | 'caja'
   | 'impuestos'
-  | 'inventario';
+  | 'inventario'
+  | 'presupuesto'
+  | 'cierre'
+  | 'comercial'
+  | 'proyectos'
+  | 'flota'
+  | 'nomina'
+  | 'sst'
+  | 'contratos'
+  | 'cumplimiento';
 
 export const SOURCE_LABEL: Record<SourceKey, string> = {
   cartera: 'la cartera',
@@ -57,6 +78,15 @@ export const SOURCE_LABEL: Record<SourceKey, string> = {
   caja: 'la proyección de caja',
   impuestos: 'el calendario tributario',
   inventario: 'el inventario',
+  presupuesto: 'el presupuesto',
+  cierre: 'el cierre del mes',
+  comercial: 'el embudo comercial',
+  proyectos: 'los proyectos',
+  flota: 'la flota',
+  nomina: 'la nómina',
+  sst: 'el SG-SST',
+  contratos: 'los contratos',
+  cumplimiento: 'la lista de cumplimiento y las PQRS',
 };
 
 interface ContactRow {
@@ -246,7 +276,15 @@ export async function loadSnapshot(
 ): Promise<{ snapshot: AutopilotSnapshot; errors: Array<{ source: string; message: string }> }> {
   const { today, now } = opts;
   const errors: Array<{ source: string; message: string }> = [];
-  const attempt = async <T>(source: SourceKey, fn: () => Promise<T>): Promise<T | undefined> => {
+  // Los módulos apagados (0186) no se leen: su recolector tampoco corre.
+  const modulesOn = await enabledModules(db);
+  const modulesOff = MODULE_KEYS.filter((k) => !modulesOn.has(k));
+  const attempt = async <T>(
+    source: SourceKey,
+    fn: () => Promise<T>,
+    module?: ModuleKey,
+  ): Promise<T | undefined> => {
+    if (module && !modulesOn.has(module)) return undefined;
     try {
       return await fn();
     } catch (err) {
@@ -261,19 +299,48 @@ export async function loadSnapshot(
 
   // Fuera del Promise.all para no tocar su forma, pero en paralelo con él: una
   // lectura más, aislada como las demás. Sin perfil tributario, lista vacía.
-  const taxRead = attempt('impuestos', () => taxSnapshot(db, today, names));
+  const taxRead = attempt('impuestos', () => taxSnapshot(db, today, names), 'taxes');
+  // Borradores de declaraciones (0197): aparte y en paralelo, como el anterior.
+  const draftsRead = attempt('impuestos', () => loadTaxDraftsSnapshot(db, today, names), 'taxes');
   // Documentos que vencen (0184): igual, aparte y en paralelo.
-  const docsRead = attempt('vencimientos', () => loadExpirationSnapshot(db, today, names));
+  const docsRead = attempt(
+    'vencimientos',
+    () => loadExpirationSnapshot(db, today, names),
+    'doc_expirations',
+  );
   // Facturas de proveedor por aprobar (0181): igual, aparte y en paralelo.
-  const supplierRead = attempt('pagos', () => supplierInvoicesSnapshot(db));
+  const supplierRead = attempt('pagos', () => supplierInvoicesSnapshot(db), 'payables');
   // Lo que hay que reponer (0183): igual, aparte y en paralelo.
-  const reorderRead = attempt('inventario', () => loadReorderSnapshot(db, today));
+  const reorderRead = attempt('inventario', () => loadReorderSnapshot(db, today), 'inventory');
+  // Lo que se salió del presupuesto (0191): igual, aparte y en paralelo.
+  const budgetRead = attempt('presupuesto', () => budgetSnapshot(db, today), 'budget');
+  // La nómina y el SG-SST (0194): igual, aparte y en paralelo.
+  const payrollRead = attempt('nomina', () => loadPayrollSnapshot(db, today), 'payroll');
+  const sstRead = attempt('sst', () => loadSstSnapshot(db, today), 'sst');
+  // El cierre del mes anterior (0192), sólo del día 1 al 5: igual, aparte y en paralelo.
+  const closeRead = attempt('cierre', () => closeSnapshot(db, today), 'accounting_close');
+  // Negocios quietos y clientes en riesgo (0193): igual, aparte y en paralelo.
+  const crmRead = attempt('comercial', () => loadCrmSnapshot(db, today, names), 'crm');
+  // Proyectos y flota (0196): igual, aparte y en paralelo.
+  const projectsRead = attempt(
+    'proyectos',
+    () => loadProjectsSnapshot(db, today),
+    'service_orders',
+  );
+  const fleetRead = attempt('flota', () => loadFleetSnapshot(db, today), 'fleet');
+  // Contratos y cumplimiento (0195): igual, aparte y en paralelo.
+  const contractsRead = attempt('contratos', () => loadContractSnapshot(db, today), 'contracts');
+  const complianceRead = attempt(
+    'cumplimiento',
+    () => loadComplianceSnapshot(db, today, names),
+    'compliance',
+  );
   const [overdueInvoices, risk, recon, ledger, syncs, commitments, team, approvals, forecast] =
     await Promise.all([
       attempt('cartera', () => overdueWithContacts(db, today)),
       attempt('pagos', () => moneyAtRisk(db, { today })),
       attempt('banco', () => bankReconciliation(db, { limit: 300 })),
-      attempt('libro', () => uncategorized(db)),
+      attempt('libro', () => uncategorized(db), 'finance'),
       attempt('procesos', () => failingSyncs(db)),
       attempt('vencimientos', () =>
         listCommitments(db, {
@@ -283,17 +350,28 @@ export async function loadSnapshot(
           limit: 300,
         }),
       ),
-      attempt('equipo', () => loadTeamReport(db, lastDaysPeriod(today, 30), { today })),
+      attempt('equipo', () => loadTeamReport(db, lastDaysPeriod(today, 30), { today }), 'team'),
       attempt('aprobaciones', () => staleApprovals(db, now, names)),
-      attempt('caja', () => runForecast(db, { today })),
+      attempt('caja', () => runForecast(db, { today }), 'finance'),
     ]);
   const tax = await taxRead;
+  const taxDrafts = await draftsRead;
   const documentExpirations = await docsRead;
   const supplierInvoices = await supplierRead;
   const reorder = await reorderRead;
+  const budget = await budgetRead;
+  const payroll = await payrollRead;
+  const sst = await sstRead;
+  const close = await closeRead;
+  const crm = await crmRead;
+  const projects = await projectsRead;
+  const fleet = await fleetRead;
+  const contractNotices = await contractsRead;
+  const compliance = await complianceRead;
 
   const snapshot: AutopilotSnapshot = {
     today,
+    modulesOff,
     overdueInvoices,
     payments: risk
       ? {
@@ -333,11 +411,21 @@ export async function loadSnapshot(
       ownerName: c.owner_user_id ? (names.get(c.owner_user_id) ?? null) : null,
     })),
     taxObligations: tax,
+    taxDrafts,
     documentExpirations,
     signals: team?.report.signals,
     staleApprovals: approvals,
     supplierInvoices,
     reorder,
+    budget,
+    close,
+    crm,
+    projects,
+    fleet,
+    payroll,
+    sst,
+    contractNotices,
+    compliance,
     cash:
       forecast && hasLedgerCash(forecast.base)
         ? {

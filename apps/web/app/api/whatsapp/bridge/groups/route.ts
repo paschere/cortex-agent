@@ -1,5 +1,5 @@
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { authenticateBridge } from '@/lib/whatsapp/bridge';
+import { authorizeBridgeSession } from '@/lib/whatsapp/bridge';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -25,7 +25,7 @@ interface IncomingGroup {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const auth = authenticateBridge(req);
+  const auth = await authorizeBridgeSession(req);
   if (!auth.ok) return auth.response;
 
   const body = (await req.json().catch(() => ({}))) as { groups?: IncomingGroup[] };

@@ -1,4 +1,9 @@
-import type { ProviderToken, ProviderTokenStore } from '../types';
+import {
+  type ProviderToken,
+  type ProviderTokenStore,
+  ProviderUncertainError,
+  ProviderValidationError,
+} from '../types';
 import { backoffMs } from './common';
 
 /**
@@ -380,6 +385,74 @@ export class QuickBooksClient {
     }
   }
 
+  /**
+   * POST de una entidad (migración 0192: Bill, Payment, BillPayment). NO
+   * reintenta ante una falla de red ni un 5xx: el documento pudo quedar
+   * creado. La defensa es `requestid` (hasta 50 caracteres): Intuit devuelve la
+   * respuesta original si el mismo llega dos veces. Un 401 renueva el acceso
+   * una vez (no se procesó nada); un 429 espera y repite.
+   */
+  async post<T>(
+    path: string,
+    body: unknown,
+    opts: { requestId?: string; noun?: string } = {},
+  ): Promise<T> {
+    const noun = opts.noun ?? 'el documento';
+    const qs = new URLSearchParams({ minorversion: QUICKBOOKS_MINOR_VERSION });
+    const requestId = (opts.requestId ?? '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 50);
+    if (requestId) qs.set('requestid', requestId);
+    const url = `${this.opts.config.apiBase}/v3/company/${encodeURIComponent(this.opts.realmId)}${path}?${qs}`;
+    let attempt = 0;
+    let renewed = false;
+    let token = await this.accessToken();
+    for (;;) {
+      await this.pace();
+      this.requests += 1;
+      let res: Response;
+      try {
+        res = await this.doFetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(this.timeoutMs * 2),
+        });
+      } catch {
+        throw new ProviderUncertainError(
+          `La conexión con QuickBooks se cortó mientras se enviaba ${noun}: no se sabe si quedó creado. Revisa en QuickBooks antes de volver a intentarlo (si se reintenta desde Cortex, QuickBooks reconoce la misma llave y no lo duplica).`,
+        );
+      }
+      const text = await res.text();
+      let parsed: unknown = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = null;
+      }
+      if (res.ok) return parsed as T;
+      if (res.status === 401 && !renewed) {
+        renewed = true;
+        token = await this.accessToken(true);
+        continue;
+      }
+      if (res.status === 429 && attempt < this.maxRetries) {
+        attempt += 1;
+        await this.sleep(backoffMs(res.headers, attempt));
+        continue;
+      }
+      if (res.status === 400 || res.status === 422)
+        throw describeQuickbooksValidation(parsed, res.status, noun);
+      if (res.status >= 500)
+        throw new ProviderUncertainError(
+          `QuickBooks respondió con un error interno (${res.status}) al recibir ${noun}: no se sabe si quedó creado. Revisa en QuickBooks antes de volver a intentarlo.`,
+        );
+      throw describeFailure(res.status, faultCode(parsed), path);
+    }
+  }
+
   /** Una consulta del lenguaje de QuickBooks; devuelve la lista de la entidad. */
   async query<T>(entity: string, sql: string): Promise<T[]> {
     const body = await this.get<{ QueryResponse?: Record<string, unknown> } | null>(
@@ -452,4 +525,42 @@ export class QuickBooksClient {
       // Si Intuit no contesta, la llave igual se borra de Cortex.
     }
   }
+}
+
+/**
+ * Lo que QuickBooks dijo de un documento que no aceptó (0192). La respuesta es
+ * `{ Fault: { Error: [{ Message, Detail, code }], type: "ValidationFault" } }`;
+ * el detalle viene en inglés y se deja entre comillas.
+ */
+export function describeQuickbooksValidation(
+  body: unknown,
+  status: number,
+  noun = 'el documento',
+): ProviderValidationError {
+  const b = body as FaultBody | null;
+  const errors = b?.Fault?.Error ?? b?.fault?.error ?? [];
+  const details = errors.map((e) => {
+    const x = e as {
+      Message?: string;
+      Detail?: string;
+      code?: string;
+      message?: string;
+      detail?: string;
+    };
+    return `${x.code ?? ''}: ${x.Detail ?? x.detail ?? x.Message ?? x.message ?? ''}`.slice(0, 300);
+  });
+  const first = errors[0] as
+    | { Detail?: string; Message?: string; detail?: string; message?: string }
+    | undefined;
+  const said = (first?.Detail ?? first?.detail ?? first?.Message ?? first?.message ?? '').slice(
+    0,
+    240,
+  );
+  return new ProviderValidationError(
+    said
+      ? `QuickBooks no aceptó ${noun}: «${said}».`
+      : `QuickBooks no aceptó ${noun} (error ${status}) y no dijo por qué.`,
+    details,
+    status,
+  );
 }

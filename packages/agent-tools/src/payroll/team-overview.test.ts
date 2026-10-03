@@ -15,7 +15,16 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
       }),
     }),
   };
-  const db = { from: vi.fn().mockReturnValue(fromBuilder) };
+  // company_modules (0186): la nómina prendida, como la deja el backfill a
+  // quien ya usaba el servicio; si no, la puerta del módulo la pararía antes.
+  const modulesBuilder = {
+    select: vi
+      .fn()
+      .mockResolvedValue({ data: [{ module_key: 'payroll', enabled: true }], error: null }),
+  };
+  const db = {
+    from: vi.fn((table: string) => (table === 'company_modules' ? modulesBuilder : fromBuilder)),
+  };
 
   const logger = {
     info: vi.fn(),

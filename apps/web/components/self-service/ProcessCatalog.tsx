@@ -1,6 +1,7 @@
 'use client';
 
-import { PROCESS_TEMPLATES, type ProcessTemplate } from '@/lib/self-service/catalog';
+import { type ProcessTemplate, templatesFor } from '@/lib/self-service/catalog';
+import type { ModuleKey } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { Sparkles } from 'lucide-react';
 import Link from 'next/link';
@@ -14,10 +15,16 @@ import { useState } from 'react';
  * proceso es una conversación en la que Cortex pregunta lo justo, no un
  * formulario que hay que entender antes de empezar.
  */
-export function ProcessCatalog() {
+export function ProcessCatalog({
+  modulesOff,
+}: {
+  /** Módulos que la empresa apagó (0186): sus procesos no se ofrecen. */
+  modulesOff?: ModuleKey[];
+} = {}) {
   const [area, setArea] = useState<ProcessTemplate['area'] | 'Todos'>('Todos');
-  const areas = ['Todos', ...new Set(PROCESS_TEMPLATES.map((t) => t.area))] as const;
-  const shown = PROCESS_TEMPLATES.filter((t) => area === 'Todos' || t.area === area);
+  const templates = templatesFor(modulesOff);
+  const areas = ['Todos', ...new Set(templates.map((t) => t.area))] as const;
+  const shown = templates.filter((t) => area === 'Todos' || t.area === area);
 
   return (
     <div className="flex flex-col gap-5">

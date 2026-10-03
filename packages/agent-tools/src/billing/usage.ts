@@ -16,6 +16,7 @@ import {
   toPlan,
   usagePeriod,
 } from './plans';
+import { readBillingAccess } from './subscription-store';
 
 /**
  * Reading what a workspace has consumed, how many people it is billed for, and
@@ -348,12 +349,24 @@ export async function checkMeter(
 ): Promise<Entitlement> {
   try {
     const period = usagePeriod(at);
-    const workspacePlan = await readWorkspacePlan(db);
+    const [workspacePlan, billing] = await Promise.all([
+      readWorkspacePlan(db),
+      // Fails open like everything else here: an unreadable billing row is
+      // never a reason to stop a workspace (see subscription.ts).
+      readBillingAccess(db, at).catch(() => null),
+    ]);
     const [counters, seats] = await Promise.all([
       readCounters(db, period),
       readSeatBasis(db, workspacePlan.plan, workspacePlan.contractedSeats, period),
     ]);
-    return entitlementFor(workspacePlan.plan, meter, counters[meter], seats);
+    const entitlement = entitlementFor(workspacePlan.plan, meter, counters[meter], seats);
+    // Read-only grace (0187): the trial ended or the period went unpaid. Same
+    // rule as the quota — nothing in flight is cut, new work is not started —
+    // and for documents the same degrade: stored and readable, not embedded.
+    if (billing && billing.access.access === 'read_only') {
+      return { ...entitlement, state: 'blocked', blockedBy: 'billing' };
+    }
+    return entitlement;
   } catch {
     return entitlementFor(UNMETERED_PLAN, meter, 0, emptySeatBasis(UNMETERED_PLAN));
   }

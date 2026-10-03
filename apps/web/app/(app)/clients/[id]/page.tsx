@@ -1,4 +1,5 @@
 import { Client360 } from '@/components/clients/Client360';
+import { ClientOpportunitiesCard } from '@/components/crm/ClientOpportunitiesCard';
 import { SubjectExpirations } from '@/components/doc-expirations/SubjectExpirations';
 import { ClientSalesCard } from '@/components/sales/ClientSalesCard';
 import {
@@ -12,16 +13,22 @@ import {
 } from '@/lib/clients-shape';
 import { loadTeam } from '@/lib/clients/read';
 import { client360View } from '@/lib/clients/view360';
+import { clientOpportunityViews } from '@/lib/crm/views';
+import { companyModules } from '@/lib/modules/server';
 import { clientSalesSummary } from '@/lib/sales/view';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  CRM_RISK_LABEL,
   adaptExpiration,
   bogotaToday,
+  listCrmOpportunities,
+  listCrmStoredRisk,
   listExpirations,
   listLinks,
   listSalesDocuments,
   loadClient360,
+  loadCrmStages,
 } from '@cortex/agent-tools';
 import { notFound } from 'next/navigation';
 import { ClientAside } from '../_components/ClientAside';
@@ -58,7 +65,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   const db = getOrgScopedClient(user.organization.id);
   const today = bogotaToday();
 
-  const [hub, team, proposalRows, expiring, sales] = await Promise.all([
+  const crmOn = (await companyModules(user.organization.id)).has('crm');
+  const [hub, team, proposalRows, expiring, sales, crm] = await Promise.all([
     loadClient360(db, id, { today }),
     loadTeam(db).catch(() => []),
     listLinks(db, { clientId: id, state: 'suggested', limit: 100 }).catch(() => []),
@@ -69,6 +77,27 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     ),
     // Sus cotizaciones, pedidos y facturas de Cortex (0182). Si falla, «sin dato».
     listSalesDocuments(db, { clientId: id, limit: 50 }).catch(() => null),
+    // Sus negocios en el embudo (0193), si el módulo está prendido. Si falla, «sin dato».
+    crmOn
+      ? Promise.all([
+          listCrmOpportunities(db, { clientId: id, includeClosed: true, limit: 20 }),
+          loadCrmStages(db),
+          listCrmStoredRisk(db).catch(() => []),
+        ]).then(
+          ([opps, { stages }, risk]) => ({
+            items: clientOpportunityViews(
+              [...opps].sort(
+                (a, b) => Number(!!(a.won_at || a.lost_at)) - Number(!!(b.won_at || b.lost_at)),
+              ),
+              stages,
+              today,
+            ),
+            risk: risk.find((r) => r.client_id === id && r.level !== 'bajo')?.level ?? null,
+            error: null as string | null,
+          }),
+          () => ({ items: [], risk: null, error: 'No pude leer sus oportunidades.' }),
+        )
+      : Promise.resolve(null),
   ]);
   if (!hub) notFound();
 
@@ -115,6 +144,15 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       view={view}
       team={team}
       today={today}
+      opportunities={
+        crm ? (
+          <ClientOpportunitiesCard
+            items={crm.items}
+            error={crm.error}
+            riskLabel={crm.risk ? `${CRM_RISK_LABEL[crm.risk]} de perderse` : null}
+          />
+        ) : undefined
+      }
       sales={
         <ClientSalesCard
           clientId={hub.client.id}

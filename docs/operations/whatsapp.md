@@ -63,6 +63,11 @@ service on Railway, and everything it hears it POSTs to Cortex. The bridge holds
 no database credentials — every decision (which groups are archived, who a
 number belongs to, where a document lands) is made and enforced in Cortex.
 
+**One process, every workspace (migration 0189).** Each company links its OWN
+number from **Integraciones › WhatsApp**; nobody touches Railway for it. The
+single bridge process holds one Baileys socket per workspace that needs one and
+asks Cortex every 15 s which those are. See *Multi-workspace mode* below.
+
 **The session lives in Postgres, not on disk.** Baileys' default writes JSON
 files, and Railway's filesystem is wiped on every deploy — which would mean
 re-scanning the QR every time the service ships. That is the classic Baileys
@@ -95,9 +100,14 @@ Add it in Vercel as `WHATSAPP_BRIDGE_TOKEN` and redeploy. Until it is set, every
 That file already sets the Dockerfile path, the `/health` check and, critically,
 `numReplicas: 1`.
 
-> **Never scale this past one replica.** Two containers holding the same
-> WhatsApp session fight over it and WhatsApp will drop both. This is not a
-> service that scales horizontally; it is one phone.
+> **Keep it at one replica.** Two containers holding the same WhatsApp session
+> fight over it and WhatsApp drops both. Since 0189 every workspace's session is
+> *leased* to one process (`whatsapp_sessions.owner_instance` +
+> `lease_expires_at`), so the old and new containers overlapping during a deploy
+> no longer share a session, and a second replica would only take workspaces
+> nobody holds. That is the groundwork for sharding, not a tested scaling mode:
+> stay at one replica and raise `WHATSAPP_MAX_SESSIONS` / the container memory
+> first.
 
 ### 3. Variables on the Railway service
 
@@ -105,26 +115,33 @@ That file already sets the Dockerfile path, the `/health` check and, critically,
 |---|---|
 | `CORTEX_BASE_URL` | The public https origin of Cortex, e.g. `https://app.cortex.example` |
 | `WHATSAPP_BRIDGE_TOKEN` | **The same value** you put in Vercel |
-| `WHATSAPP_ORGANIZATION_ID` | The workspace id (`ba_organization.id`) this number belongs to |
+| `WHATSAPP_ORGANIZATION_ID` | **Leave it unset.** Unset = multi-workspace mode. Set = the old single-workspace bridge, pinned to that `ba_organization.id` |
 
 Optional tuning is listed in `.env.example`; the defaults are fine.
 
 ### 4. Run the migration
 
 ```bash
-pnpm db:push     # or apply infra/supabase/migrations/0068_whatsapp.sql
+pnpm db:push     # 0068, 0169, 0185 and 0189_whatsapp_multitenant.sql
 ```
 
 ### 5. Deploy
 
-Watch the logs. On a first boot you should see:
+**Order matters: Vercel first, then Railway.** The new bridge calls
+`/api/whatsapp/bridge/sessions`, which only exists once Cortex is deployed with
+0189 applied. (An old bridge against a new Cortex keeps working: it sends no
+mode header and is treated exactly as before.)
+
+Watch the logs. On a first boot in multi mode you should see:
 
 ```
-no stored session; waiting for somebody to ask for a pairing from Cortex
+multi mode: serving every workspace Cortex leases to this process
 ```
 
-and then nothing else from WhatsApp: an unpaired bridge only heartbeats to
-Cortex (every 10 s) until somebody asks to pair it. See below.
+and then nothing from WhatsApp until some workspace has a paired session or an
+admin asks to pair: a workspace with neither has no socket at all. Workspaces
+already paired come back one by one (`starting a WhatsApp session`, staggered
+750 ms apart) without re-pairing. See below.
 
 ---
 
@@ -184,7 +201,8 @@ admins only, scoped to the caller's workspace.
 both still need a request to be alive, because an idle bridge has no QR:
 
 - It is printed as ASCII in the service logs: `railway logs`.
-- `GET https://<the-railway-domain>/qr?token=<WHATSAPP_BRIDGE_TOKEN>` renders it
+- `GET https://<the-railway-domain>/qr?token=<WHATSAPP_BRIDGE_TOKEN>&org=<workspace id>` renders it
+  (`org` is needed in multi mode; single mode defaults to its workspace)
   as a page you can point a camera at.
 
 **You should only ever do this once.** If you find yourself pairing again after
@@ -193,9 +211,11 @@ token, because the bridge refuses to start with an empty session when it cannot
 read the stored one (precisely so a network blip does not silently discard a
 working pairing).
 
-### "El número está configurado para otro espacio de trabajo"
+### "El número está configurado para otro espacio de trabajo" (single mode only)
 
-The bridge reports into the workspace named by its `WHATSAPP_ORGANIZATION_ID`.
+Only shown when the bridge runs in single mode and no multi-workspace bridge is
+alive. In single mode the bridge reports into the workspace named by its
+`WHATSAPP_ORGANIZATION_ID`.
 If you open the screen in a different workspace, an admin sees this message
 with the current workspace's id and a copy button. To move the number here,
 set `WHATSAPP_ORGANIZATION_ID` on the Railway `whatsapp-bridge` service to that
@@ -211,6 +231,100 @@ which workspace, number or anything else about it.)
 | `WHATSAPP_PAIRING_RETRY_MS` | `3000` | Pause before the next QR window while a request is alive |
 | `WHATSAPP_PAIRING_MAX_BACKOFF_MS` | `30000` | Ceiling for unexpected failures while pairing |
 | `WHATSAPP_HEARTBEAT_MS` | `30000` | Heartbeat while connected |
+| `WHATSAPP_MAX_SESSIONS` | `50` | WhatsApp sockets one process may hold (multi mode) |
+| `WHATSAPP_RECONCILE_MS` | `15000` | How often the process asks Cortex which workspaces need a socket |
+| `WHATSAPP_LEASE_MS` | `60000` | How long a claim on a workspace lasts without renewal (forced ≥ 3× reconcile) |
+| `WHATSAPP_START_STAGGER_MS` | `750` | Pause between two session starts at boot |
+
+---
+
+## Multi-workspace mode (migration 0189)
+
+Each company links **its own number** from **Integraciones › WhatsApp**. No
+Railway variable changes, no redeploy, no admin of another company involved.
+
+### How it works
+
+- **Cortex is the source of truth.** Every 15 s the bridge calls
+  `POST /api/whatsapp/bridge/sessions` (`whatsapp_bridge_claim`). A workspace
+  needs a socket when its stored session is **paired** (`whatsapp_sessions.paired`,
+  generated from `creds.account`) — it has to stay connected to receive — or an
+  admin is **pairing right now** (the 3-minute request of 0169). Everybody else
+  has no socket: an unpaired number still never talks to WhatsApp unless a
+  person asked.
+- **Reconcile.** The bridge starts a session for each workspace on the list and
+  stops the ones that left it (`services/whatsapp/src/reconcile.ts`, pure and
+  tested). Each session has its own auth state, backoff, pairing state machine,
+  allow-lists, outbox and rate limits; nothing is shared but the process.
+- **Lease.** The list is a lease: `owner_instance` + `lease_expires_at` on
+  `whatsapp_sessions`, renewed by every reconcile. Another process can only take
+  a workspace after the lease expires, and the bridge hands every workspace back
+  on SIGTERM so the next container picks them up within one round. If Cortex is
+  unreachable the sockets stay up while the lease is certainly alive (~45 s),
+  then the process lets go of all of them rather than risk two clients on one
+  session. Process registry: `whatsapp_bridge_instances`.
+- **Per-workspace routing.** Every bridge → Cortex call carries
+  `x-cortex-organization` (that session's workspace), `x-cortex-bridge-mode` and
+  `x-cortex-bridge-instance`. In multi mode Cortex also checks that the
+  workspace has a `whatsapp_sessions` row and that the lease, if held, is this
+  process's — otherwise 404/409. Every read and write is through that
+  workspace's scoped client.
+- **Lazy and bounded.** Sessions start only when needed, at most
+  `WHATSAPP_MAX_SESSIONS` (default 50) per process, staggered at boot. Paired
+  idle sessions stay connected (they must, to receive). Past the cap the
+  remaining workspaces wait (logged as `waiting`) for capacity.
+
+### One number, one workspace
+
+A phone can be linked to **one** workspace. `whatsapp_sessions.phone_number` has
+a unique index, and:
+
+- «Vincular con mi número» with a number another workspace already has (or is
+  pairing by code right now) is refused on the spot: *Ese número ya está
+  vinculado a otro espacio de trabajo…*.
+- A QR pairing that connects a number another workspace already has is logged
+  out immediately (the device disappears from the phone), nothing it reported is
+  stored, it is handed no groups, no outbox and no DMs, and the screen says why.
+  The workspace that had the number first keeps it. Messages that arrive in the
+  instant between connecting and Cortex accepting the number are held, never
+  acted on, and dropped if it is refused.
+
+### «Desvincular»
+
+Admins see **Desvincular** on the connection panel once a number is linked. The
+process holding the session logs the device out (it leaves the phone's
+*Dispositivos vinculados*) and wipes that workspace's credentials and keys, and
+the number becomes free. If no live bridge holds the session, Cortex wipes it
+directly and tells the admin to remove «Cortex» from the phone by hand. Groups,
+their archive/reply choices and the people's numbers are kept.
+
+### Ban risk is per number
+
+Each workspace's number carries its own risk, and one being banned does not
+affect the others — but they share an IP (the Railway container) and a client
+identity string (`Cortex / Chrome`). Everything above about never writing first
+applies to every session. If a workspace's number is banned, only that
+workspace re-pairs.
+
+### Moving from single mode
+
+1. Deploy Cortex (Vercel) with 0189 applied.
+2. Redeploy `whatsapp-bridge` on Railway with the new code **still with**
+   `WHATSAPP_ORGANIZATION_ID` set: it behaves as before (one session, started
+   at boot, never stopped by Cortex) and now also claims that workspace's lease.
+3. Remove `WHATSAPP_ORGANIZATION_ID` and redeploy. The new container is multi
+   mode; the old one releases its lease on SIGTERM; the existing session is
+   picked up within ~15 s with no re-pairing. Every other workspace can now link
+   its own number.
+
+0189 also resolves a leftover of single mode: if moving the variable between
+workspaces left two rows with the same number, the most recently connected one
+keeps it and the others lose it with an explanation. If such a stale row still
+has live credentials, its device connects once, is refused as above and is
+logged out.
+
+To go back: set `WHATSAPP_ORGANIZATION_ID` again and redeploy; other workspaces
+then stop being served (their sessions stay stored).
 
 ---
 
@@ -424,9 +538,12 @@ Normal for an unpaired number: the service is up and waiting. An admin presses
 code never appears, check that the bridge is on a version with on-demand pairing
 (`services/whatsapp/src/pairing.ts`) — an older bridge ignores the request.
 
-### The screen says "WhatsApp cerró la sesión"
+### The screen says "La sesión se cerró"
 
-Somebody unlinked the device from the phone, or WhatsApp did. The stored
+The box under it says why. *Ese número ya está vinculado a otro espacio de
+trabajo…*: the number is another workspace's (see *One number, one workspace*);
+pair a different dedicated number. Otherwise somebody unlinked the device from
+the phone, or WhatsApp did. The stored
 credentials are dead; the bridge wipes them, deliberately does **not** retry
 (hammering a logged-out account is the fastest way to get flagged), and goes
 idle. Re-pair as above with either button. Your group choices and everything

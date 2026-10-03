@@ -115,6 +115,8 @@ export const WORK_HOURS = { start: 6, end: 22 };
  */
 const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   payroll: 'financial',
+  // SG-SST (0194): accidentes con nombre, exámenes médicos ocupacionales.
+  sst: 'pii',
   people: 'pii',
   gmail: 'pii',
   // Same mailbox, different vendor. It must carry the same sensitivity as gmail
@@ -146,6 +148,9 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   // registration, which takes the owner's cédula — is pinned to `pii` in
   // TOOL_OVERRIDES rather than dragging the whole family up with it.
   vehicles: 'internal',
+  // La flota (0196): kilometraje, tanqueos y mantenimientos de la empresa,
+  // de la misma familia que vehicles.
+  fleet: 'internal',
   cortex: 'internal',
   security: 'internal',
   web: 'public',
@@ -314,12 +319,31 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   },
   'sales.invoice_emit': { sensitivity: 'client', blastRadius: 'external_send' },
   'sales.list': { sensitivity: 'client', blastRadius: 'read' },
+  // Embudo comercial (0193). Leer el embudo y el riesgo es lectura de datos de
+  // clientes; crear, mover y anotar es escritura interna; la encuesta sale de
+  // la empresa (sin `to` va al contacto del cliente, que no está en el payload).
+  'crm.pipeline': { sensitivity: 'client', blastRadius: 'read' },
+  'crm.at_risk': { sensitivity: 'client', blastRadius: 'read' },
+  'crm.create_opportunity': { sensitivity: 'client', blastRadius: 'internal_write' },
+  'crm.update_opportunity': { sensitivity: 'client', blastRadius: 'internal_write' },
+  'crm.log_activity': { sensitivity: 'client', blastRadius: 'internal_write' },
+  'crm.send_nps': { sensitivity: 'client', blastRadius: 'external_send', deliversContent: true },
 
   // --- payroll: aggregates are the SAFE way to look at compensation ---------
   // Rollups (headcount by division, totals, projections) carry no per-person
   // figures, so they stay ordinary sensitive reads. Only the per-person roster
   // dump counts as bulk.
   'payroll.team_assignments': { sensitivity: 'pii', alwaysBulk: true },
+  // La nómina propia (0194). Ninguno de estos verbos está en WRITE_VERBS, así
+  // que sin estas filas se leerían como consultas. Aprobar la nómina no mueve
+  // plata (deja lo que hay que pagar en la caja proyectada), pero el piloto la
+  // trata como plata por su id (autopilot/policy.ts › effectiveEffect).
+  'payroll.register_novelty': { sensitivity: 'financial', blastRadius: 'internal_write' },
+  'payroll.approve_period': { sensitivity: 'financial', blastRadius: 'internal_write' },
+  'payroll.leave_request': { sensitivity: 'pii', blastRadius: 'internal_write' },
+  'payroll.leave_decide': { sensitivity: 'pii', blastRadius: 'internal_write' },
+  'sst.log_activity': { sensitivity: 'pii', blastRadius: 'internal_write' },
+  'sst.report_incident': { sensitivity: 'pii', blastRadius: 'internal_write' },
 
   // --- vehicles: only registration carries an identity document -------------
   // The owner's cédula (or passport, or NIT) is stored so RUNT will answer at
@@ -339,8 +363,34 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
     deliversContent: true,
     recipientsExplicit: true,
   },
+  // --- Impuestos (migración 0197) ---------------------------------------------
+  // Mandar certificados de retención es un correo a cada proveedor con un PDF
+  // de cifras de la empresa: salida externa, como una orden de compra.
+  'tax.certificates': {
+    sensitivity: 'client',
+    blastRadius: 'external_send',
+    deliversContent: true,
+    recipientsExplicit: true,
+  },
   // `receive` no está en WRITE_VERBS y escribe entradas al inventario.
   'purchasing.receive': { blastRadius: 'internal_write' },
+
+  // --- Proyectos (migración 0196) --------------------------------------------
+  // `invoice` no está en WRITE_VERBS y deja un pedido y una factura en borrador
+  // en Ventas: escritura interna (emitirla es sales.invoice_emit, aparte).
+  'projects.invoice': { blastRadius: 'internal_write' },
+
+  // --- Cierre contable (migración 0192) --------------------------------------
+  // Registrar en el programa contable (Siigo, Alegra, QuickBooks) es escribir
+  // en los libros legales de la empresa FUERA de Cortex: externo, como emitir
+  // la factura electrónica, y con confirmación obligatoria
+  // (mandatory-confirmation.ts). `mark` y `close` no están en WRITE_VERBS y
+  // escriben (la lista del cierre, el candado del mes).
+  'accounting.write_purchase': { sensitivity: 'client', blastRadius: 'external_send' },
+  'accounting.write_receipt': { sensitivity: 'client', blastRadius: 'external_send' },
+  'accounting.write_supplier_payment': { sensitivity: 'client', blastRadius: 'external_send' },
+  'close.mark_task': { blastRadius: 'internal_write' },
+  'close.close_period': { blastRadius: 'internal_write' },
 
   // --- the security tools themselves are read-only introspection ------------
   'security.review_action': { sensitivity: 'internal', blastRadius: 'read' },

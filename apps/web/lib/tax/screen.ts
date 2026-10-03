@@ -7,11 +7,13 @@ import type {
 } from '@/components/tax/types';
 import type { StatusTone } from '@/lib/status-chip';
 import {
+  type DraftStatus,
   OBLIGATION_KIND_LABEL,
   OBLIGATION_STATUS_LABEL,
   type TaxObligation,
   type TaxProfile,
   daysBetween,
+  draftTargetFor,
   isFulfilled,
   plural,
 } from '@cortex/agent-tools';
@@ -67,7 +69,11 @@ function whenText(o: TaxObligation, daysLeft: number): string {
 export function adaptObligation(
   o: TaxObligation,
   today: string,
-  opts: { documentTitles?: Map<string, string>; href?: (path: string) => string } = {},
+  opts: {
+    documentTitles?: Map<string, string>;
+    href?: (path: string) => string;
+    draftStatuses?: Map<string, DraftStatus>;
+  } = {},
 ): TaxObligationView {
   const daysLeft = daysBetween(today, o.dueDate);
   const href = opts.href ?? ((p: string) => p);
@@ -103,6 +109,8 @@ export function adaptObligation(
     statusNote: o.statusNote,
     evidenceHref: evidenceHref ?? null,
     evidenceLabel,
+    draftHref: draftTargetFor(o) ? href(`/impuestos/borrador/${o.id}`) : null,
+    draftStatus: opts.draftStatuses?.get(o.id) ?? null,
   };
 }
 
@@ -134,6 +142,12 @@ export function adaptProfile(p: TaxProfile, people: TaxPerson[]): TaxProfileView
     nominaElectronica: p.nominaElectronica,
     pila: p.pila,
     facturacionElectronica: p.facturacionElectronica,
+    impuestoPatrimonio: p.impuestoPatrimonio,
+    vinculadosExterior: p.vinculadosExterior,
+    rubLastChange: p.rubLastChange,
+    autorretencionRate: p.autorretencionRate,
+    simpleRate: p.simpleRate,
+    icaActivities: p.icaActivities,
     ownerUserId: p.ownerUserId,
     ownerName: p.ownerUserId ? (people.find((x) => x.id === p.ownerUserId)?.name ?? null) : null,
     noticeDays: p.noticeDays,
@@ -156,9 +170,14 @@ export function buildTaxScreen(input: {
   suggestedNit: string | null;
   documentTitles?: Map<string, string>;
   href?: (path: string) => string;
+  draftStatuses?: Map<string, DraftStatus>;
 }): TaxScreenData {
   const obligations = input.obligations.map((o) =>
-    adaptObligation(o, input.today, { documentTitles: input.documentTitles, href: input.href }),
+    adaptObligation(o, input.today, {
+      documentTitles: input.documentTitles,
+      href: input.href,
+      draftStatuses: input.draftStatuses,
+    }),
   );
   return {
     year: input.year,

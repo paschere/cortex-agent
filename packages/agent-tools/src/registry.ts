@@ -5,6 +5,7 @@ import {
   ValidationError,
 } from '@cortex/core';
 import { hashInput, writeAuditEvent } from './audit.js';
+import { ModuleDisabledError, disabledModuleForTool } from './modules/store.js';
 import { consumeToken } from './rate-limit.js';
 import { SAFE_ACTION_CATALOG } from './safe-actions/catalog.js';
 import {
@@ -127,6 +128,30 @@ export async function runTool<I, O>(
       metadata: { reason: 'validation', issues: parsed.error.flatten() },
     });
     throw new ValidationError(`Invalid input for ${tool.id}`, parsed.error.flatten());
+  }
+
+  // ---------------------------------------------------------------------------
+  // MÓDULO APAGADO (0186). Una empresa que apagó un módulo no lo ve en el menú
+  // ni en la lista de herramientas del turno, pero una llamada puede llegar
+  // igual (una rutina vieja, MCP, un flujo guardado). Se niega aquí, la única
+  // puerta por la que pasan todas, antes de clasificar nada: no es un riesgo
+  // que evaluar sino algo que la empresa decidió no tener. Sólo lee la base si
+  // la herramienta es de algún módulo, y la lectura se recuerda por turno.
+  // ---------------------------------------------------------------------------
+  const offModule = await disabledModuleForTool(ctx.db, tool.id);
+  if (offModule) {
+    await writeAuditEvent({
+      db: ctx.db,
+      userId: ctx.userId,
+      agentId: ctx.agentId,
+      conversationId: ctx.conversationId,
+      toolId: tool.id,
+      input,
+      status: 'error',
+      latencyMs: Math.round(performance.now() - t0),
+      metadata: { reason: 'module_disabled', module: offModule.key },
+    });
+    throw new ModuleDisabledError(offModule.key, offModule.label);
   }
 
   // ---------------------------------------------------------------------------

@@ -328,7 +328,13 @@ export class SiigoClient {
    * Un 400/422 sale como `ProviderValidationError` con el porqué en español;
    * una red cortada o un 5xx, como `ProviderUncertainError` («no sé si llegó»).
    */
-  async post<T>(path: string, body: unknown, opts: { idempotencyKey?: string } = {}): Promise<T> {
+  async post<T>(
+    path: string,
+    body: unknown,
+    opts: { idempotencyKey?: string; noun?: string } = {},
+  ): Promise<T> {
+    // 0192: el mismo POST escribe compras, recibos y comprobantes; `noun` dice qué.
+    const noun = opts.noun ?? 'la factura';
     const token = await this.authenticate();
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
@@ -352,7 +358,7 @@ export class SiigoClient {
         });
       } catch {
         throw new ProviderUncertainError(
-          'La conexión con Siigo se cortó mientras se enviaba la factura: no se sabe si quedó creada. Revisa en Siigo antes de volver a intentarlo (si se reintenta desde Cortex, Siigo reconoce la misma factura y no la duplica).',
+          `La conexión con Siigo se cortó mientras se enviaba ${noun}: no se sabe si quedó creada. Revisa en Siigo antes de volver a intentarlo (si se reintenta desde Cortex, Siigo reconoce la misma llave y no la duplica).`,
         );
       }
       const text = await res.text();
@@ -381,10 +387,10 @@ export class SiigoClient {
         continue;
       }
       if (res.status === 400 || res.status === 422 || res.status === 409)
-        throw describeSiigoValidation(parsed, res.status);
+        throw describeSiigoValidation(parsed, res.status, noun);
       if (res.status >= 500)
         throw new ProviderUncertainError(
-          `Siigo respondió con un error interno (${res.status}) al recibir la factura: no se sabe si quedó creada. Revisa en Siigo antes de volver a intentarlo.`,
+          `Siigo respondió con un error interno (${res.status}) al recibir ${noun}: no se sabe si quedó creada. Revisa en Siigo antes de volver a intentarlo.`,
         );
       throw describeFailure(res.status, errorCode(parsed), path);
     }
@@ -408,7 +414,11 @@ export class SiigoClient {
  * reconoce se deja el mensaje de Siigo entre comillas: mejor un mensaje en
  * inglés que uno inventado.
  */
-export function describeSiigoValidation(body: unknown, status: number): ProviderValidationError {
+export function describeSiigoValidation(
+  body: unknown,
+  status: number,
+  noun = 'la factura',
+): ProviderValidationError {
   const b = body as {
     Errors?: Array<{ Code?: string; Message?: string; Params?: string[] }>;
     errors?: Array<{ code?: string; message?: string; params?: string[] }>;
@@ -441,8 +451,8 @@ export function describeSiigoValidation(body: unknown, status: number): Provider
   const unique = [...new Set(reasons)];
   return new ProviderValidationError(
     unique.length
-      ? `Siigo no aceptó la factura: ${unique.join('; ')}.`
-      : `Siigo no aceptó la factura (error ${status}) y no dijo por qué.`,
+      ? `Siigo no aceptó ${noun}: ${unique.join('; ')}.`
+      : `Siigo no aceptó ${noun} (error ${status}) y no dijo por qué.`,
     raw.map((r) => `${r.code}: ${r.message}`.slice(0, 300)),
     status,
   );

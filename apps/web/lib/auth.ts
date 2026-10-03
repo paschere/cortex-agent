@@ -2,8 +2,14 @@ import { encryptToken } from '@cortex/core';
 import { betterAuth } from 'better-auth';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { Pool } from 'pg';
+import { signupMode } from './billing/config';
 import { sendEmail } from './email';
-import { SIGNUP_CODE_COOKIE, SIGNUP_CODE_ERROR, signupCodeMatches } from './signup-code';
+import {
+  SIGNUP_CODE_COOKIE,
+  SIGNUP_CODE_ERROR,
+  SIGNUP_CODE_REQUEST_ERROR,
+  signupCodeMatches,
+} from './signup-code';
 import { WORKSPACE_LIMIT } from './workspace-limits';
 
 /**
@@ -226,8 +232,16 @@ async function syncGoogleIntegration(account: {
  * El código nunca se registra en el diario, ni siquiera truncado.
  */
 async function assertMaySignUp(email: string): Promise<void> {
+  // SIGNUP_MODE (0187, lib/billing/config.ts). 'open' no tiene puerta: la
+  // empresa nace en prueba. 'invite' es exactamente lo de siempre: sin código
+  // compartido configurado, tampoco hay puerta. 'request' SIEMPRE tiene puerta,
+  // aunque no haya código compartido: el código es el personal que salió en el
+  // correo de aprobación.
+  const mode = signupMode();
+  if (mode === 'open') return;
   const expected = (process.env.SIGNUP_INVITE_CODE ?? '').trim();
-  if (!expected) return;
+  if (mode === 'invite' && !expected) return;
+  const refusal = mode === 'request' ? SIGNUP_CODE_REQUEST_ERROR : SIGNUP_CODE_ERROR;
 
   const address = email.trim().toLowerCase();
   try {
@@ -252,10 +266,34 @@ async function assertMaySignUp(email: string): Promise<void> {
   try {
     given = (await cookies()).get(SIGNUP_CODE_COOKIE)?.value ?? null;
   } catch {
-    throw new Error(SIGNUP_CODE_ERROR);
+    throw new Error(refusal);
   }
 
-  if (!signupCodeMatches(given, expected)) throw new Error(SIGNUP_CODE_ERROR);
+  if (expected && signupCodeMatches(given, expected)) return;
+
+  // 4. EL CÓDIGO PERSONAL de una solicitud aprobada en /overview/access. Un
+  //    solo uso: el gancho `after` lo marca usado. Import dinámico por el mismo
+  //    ciclo auth <-> pool que evita `ensurePersonalWorkspace`.
+  try {
+    const { accessCodeIsValid } = await import('./billing/access-requests');
+    if (await accessCodeIsValid(given)) return;
+  } catch (err) {
+    console.error('[auth] no se pudo comprobar el código de acceso', err);
+  }
+  throw new Error(refusal);
+}
+
+/** Marca usado el código personal con el que se creó la cuenta. Nunca lanza. */
+async function consumeAccessCode(userId: string): Promise<void> {
+  try {
+    const { cookies } = await import('next/headers');
+    const given = (await cookies()).get(SIGNUP_CODE_COOKIE)?.value ?? null;
+    if (!given) return;
+    const { markAccessCodeUsed } = await import('./billing/access-requests');
+    await markAccessCodeUsed(given, userId);
+  } catch (err) {
+    console.error('[auth] no se pudo marcar el código de acceso como usado', err);
+  }
 }
 
 export const auth = betterAuth({
@@ -422,6 +460,7 @@ export const auth = betterAuth({
            * peticiones a la vez, el índice único deja pasar un solo INSERT y las
            * demás leen lo que escribió la ganadora.
            */
+          await consumeAccessCode(user.id);
           // First account on a fresh deployment becomes the platform admin
           // (better-auth admin plugin role, distinct from public.users.role).
           await pool.query(

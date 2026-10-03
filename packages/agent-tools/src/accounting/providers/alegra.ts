@@ -1,4 +1,5 @@
 import { normalizeNit } from '../../clients/shape';
+import { alegraWriter } from '../../close/writeback/alegra';
 import type {
   AccountingEntity,
   AccountingProvider,
@@ -16,6 +17,7 @@ import { AlegraClient, alegraHasMore } from './alegra-client';
 import { amount, bogotaDay, clip, currencyCode, day, daysBefore, monthsAgo } from './common';
 import { alegraInvoicing } from './invoicing';
 import { alegraBillPage } from './purchases';
+import { alegraReports } from './reports-alegra';
 
 /**
  * ALEGRA (Colombia y el resto de Latinoamérica), con la misma forma que Siigo.
@@ -428,6 +430,13 @@ export const alegraProvider: AccountingProvider = {
         return { token: null };
       },
       invoicing: alegraInvoicing(client),
+      writer: alegraWriter(client),
+      reports: alegraReports({
+        email: credentials.email ?? '',
+        token: credentials.token ?? '',
+        fetch: runtime.fetch,
+        currency: companyCurrency,
+      }),
       listPurchases: async (since, page) =>
         alegraBillPage(client, since, page, await companyCurrency()),
       async listPage(entity, query, page) {

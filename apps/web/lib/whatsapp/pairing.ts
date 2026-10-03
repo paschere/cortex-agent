@@ -52,7 +52,9 @@ export type PairingCommand =
   /** La pantalla sigue abierta: que la petición viva un rato más. */
   | { mode: 'keepalive' }
   /** Ya no: que el puente vuelva a quedarse quieto. */
-  | { mode: 'cancel' };
+  | { mode: 'cancel' }
+  /** «Desvincular» (0189): cerrar el dispositivo en WhatsApp y borrar la sesión. */
+  | { mode: 'unlink' };
 
 export function parsePairingCommand(
   body: unknown,
@@ -65,6 +67,7 @@ export function parsePairingCommand(
     case 'qr':
     case 'keepalive':
     case 'cancel':
+    case 'unlink':
       return { ok: true, command: { mode: input.mode } };
     case 'code': {
       const phone = normalizePhone(typeof input.phone === 'string' ? input.phone : '');
@@ -121,4 +124,21 @@ export function pairingView(
     phone: requested ? phone : null,
     code,
   };
+}
+
+/**
+ * ¿Hay un puente que tenga esta sesión ahora mismo y entienda «Desvincular»?
+ * Sí cuando un proceso la tiene prestada (0189) y reportó hace poco. Entonces
+ * se le pide a él — es el único que puede sacar el dispositivo de la lista del
+ * teléfono —; si no, se borra aquí directamente.
+ */
+export function heldByLiveBridge(
+  row: { owner_instance?: unknown; lease_expires_at?: unknown; last_seen_at?: unknown },
+  now: Date = new Date(),
+  staleAfterMs = PAIRING_REQUEST_TTL_MS,
+): boolean {
+  if (typeof row.owner_instance !== 'string' || !row.owner_instance) return false;
+  const lease = typeof row.lease_expires_at === 'string' ? Date.parse(row.lease_expires_at) : 0;
+  const seen = typeof row.last_seen_at === 'string' ? Date.parse(row.last_seen_at) : 0;
+  return lease > now.getTime() && now.getTime() - seen < staleAfterMs;
 }

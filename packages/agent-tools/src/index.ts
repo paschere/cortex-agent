@@ -280,3 +280,67 @@ export * from './payables';
 // ./directory por módulo directo; expone `listProducts` (cotizaciones, 0182) y
 // `listOpenPurchaseOrders`/`markPurchaseOrderInvoiced` (cuentas por pagar, 0181).
 export * from './inventory';
+
+// Módulos por empresa (migración 0186): el interruptor de cada área. `runTool`
+// lo consulta por módulo directo; la app lo lee para el menú, las pantallas,
+// la selección de herramientas y el piloto.
+export * from './modules';
+
+// La ayuda de Cortex (migración 0190 para soporte; los artículos no van en la
+// base): Markdown de apps/web/content/ayuda, búsqueda en memoria y
+// `help.search` para contestar «¿cómo uso Cortex?». Lee ./modules por módulo
+// directo para esconder la ayuda de un módulo apagado.
+export * from './help';
+
+// Estados financieros, presupuesto, pronósticos e informe para socios
+// (migración 0191): estado de resultados de caja y balance (del programa
+// contable o aproximado) con indicadores trazables; presupuesto contra lo
+// real; pronóstico a 12 meses; y el informe mensual con su PDF y su enlace.
+// `statements.*`, `budget.*`, `forecast.*`, `board.*`. Leen de ./ledger,
+// ./accounting, ./inventory, ./payables, ./management y ./views por módulo
+// directo.
+export * from './statements';
+export * from './budget';
+export * from './forecast';
+export * from './board';
+
+// SG-SST (migración 0194): estándares mínimos de la Resolución 0312, plan
+// anual, actividades con evidencia y accidentes con sus plazos (`sst.*`). La
+// nómina propia de la misma migración vive en ./payroll, junto al servicio
+// aparte que ya estaba.
+export * from './sst';
+
+// Embudo comercial (migración 0193): oportunidades por etapa con pronóstico
+// ponderado, actividades, reglas que siguen a las cotizaciones de ./sales,
+// riesgo de perder clientes (lee ./clients por módulo directo), análisis
+// comercial y encuestas NPS. `crm.*`; `crmWeightedForecast` es la lectura
+// para quien pronostica ventas.
+export * from './crm';
+
+// Órdenes de servicio y proyectos (migración 0196): tareas (el registro de
+// trabajo con `project_id`), horas, costos, hitos de facturación y margen.
+// `projects.*`. Lee de ./sales, ./inventory, ./ledger, ./clients y ./work por
+// módulo directo; expone `createProjectFromOpportunity` para el embudo (0193)
+// y `setLaborRate` para nómina (0194).
+export * from './projects';
+
+// Flota y rutas (migración 0196): los vehículos de la empresa con
+// mantenimiento, tanqueos, recorridos y costo por km. `fleet.*`; las placas,
+// el RUNT y el SIMIT siguen en ./vehicles.
+export * from './fleet';
+
+// Cierre contable (migración 0192): registrar en el programa contable (causar
+// compras, recibos de caja y pagos a proveedores, siempre con vista previa y
+// aprobación) y la lista guiada del cierre del mes con su candado.
+// `close.*` y `accounting.write_*`. Lee de ./accounting, ./payables,
+// ./payments, ./ledger, ./tax e ./inventory por módulo directo.
+export * from './close';
+
+// Contratos y cumplimiento (migración 0195): borradores desde plantillas para
+// revisión de un abogado, obligaciones leídas con su frase, aviso previo
+// vigilado (`contracts.*`); la lista societaria y legal por perfil, PQRS con
+// plazo en días hábiles y procesos judiciales (`compliance.*`). Leen de
+// ./commitments, ./doc-expirations, ./documents, ./company, ./tax y
+// ./management por módulo directo.
+export * from './contracts';
+export * from './compliance';

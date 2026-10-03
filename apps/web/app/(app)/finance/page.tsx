@@ -8,7 +8,15 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { workspaceHref } from '@/lib/workspace-context';
 import { bogotaToday, listTaxObligations, spanishDay } from '@cortex/agent-tools';
-import { ArrowRight, ChevronDown, FileSearch, Landmark } from 'lucide-react';
+import {
+  ArrowRight,
+  ChevronDown,
+  FileBarChart,
+  FileSearch,
+  FileText,
+  Landmark,
+  Target,
+} from 'lucide-react';
 import Link from 'next/link';
 import { SourceClassification } from './SourceClassification';
 import {
@@ -136,6 +144,43 @@ export default async function FinancePage({
             </span>
             <ArrowRight className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
           </Link>
+          {/* Estados, presupuesto e informe para socios (0191). */}
+          <nav aria-label="Estados y presupuesto" className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                path: '/estados',
+                icon: FileBarChart,
+                title: 'Estados financieros',
+                body: 'Resultados contra el año anterior, balance e indicadores.',
+              },
+              {
+                path: '/presupuesto',
+                icon: Target,
+                title: 'Presupuesto',
+                body: 'Lo presupuestado contra lo real y el pronóstico a 12 meses.',
+              },
+              {
+                path: '/informe-socios',
+                icon: FileText,
+                title: 'Informe para socios',
+                body: 'El informe mensual de gerencia, con PDF y enlace.',
+              },
+            ].map((item) => (
+              <Link
+                key={item.path}
+                href={href(item.path)}
+                className="flex items-start gap-3 rounded-card border border-border bg-surface px-4 py-3 shadow-card transition-colors hover:bg-surface-2"
+              >
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary">
+                  <item.icon className="h-4 w-4" aria-hidden />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-extrabold text-ink">{item.title}</span>
+                  <span className="block text-xs text-ink-muted">{item.body}</span>
+                </span>
+              </Link>
+            ))}
+          </nav>
           <details
             id="documentos"
             className="group scroll-mt-6 rounded-card border border-border bg-surface shadow-card"

@@ -378,6 +378,12 @@ export interface Entitlement {
   ratio: number | null;
   /** What the product does about it if this meter runs out. */
   policy: LimitPolicy;
+  /**
+   * Set only when the refusal comes from BILLING, not from the count: the
+   * workspace is in read-only grace (trial over or unpaid, migration 0187).
+   * Callers use it to say «paga para seguir» instead of «se acabó el cupo».
+   */
+  blockedBy?: 'billing';
 }
 
 /**

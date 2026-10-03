@@ -2,7 +2,7 @@ import { runChatTurn } from '@/app/api/chat-app/google/turn';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { readWaitingNotice } from '@/lib/waiting';
 import { briefingLetter, waitingQuestion, whatsappBriefingGate } from '@/lib/waiting-shape';
-import { authenticateBridge } from '@/lib/whatsapp/bridge';
+import { authorizeBridgeSession } from '@/lib/whatsapp/bridge';
 import { answerCustomer } from '@/lib/whatsapp/customer';
 import { humanDelayMs, toWhatsappText } from '@/lib/whatsapp/format';
 import {
@@ -84,7 +84,7 @@ const CUSTOMER_BROKEN_REPLY =
   'Gracias por escribirnos. No pude procesar tu mensaje en este momento; escríbenos de nuevo en unos minutos.';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const auth = authenticateBridge(req);
+  const auth = await authorizeBridgeSession(req);
   if (!auth.ok) return auth.response;
 
   const body = (await req.json().catch(() => ({}))) as IncomingDm;

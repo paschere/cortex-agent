@@ -1,6 +1,7 @@
 import { ProcessesPanel } from '@/app/(app)/dashboard/_components/ProcessesPanel';
 import { ProcessCatalog } from '@/components/self-service/ProcessCatalog';
 import { PageHeader } from '@/components/ui/page-header';
+import { modulesOffFor } from '@/lib/modules/server';
 import { requireSession } from '@/lib/session';
 import { Sparkles } from 'lucide-react';
 import { Suspense } from 'react';
@@ -18,6 +19,8 @@ export const metadata = { title: 'Procesos · Cortex' };
  */
 export default async function ProcessesPage() {
   const user = await requireSession();
+  // Los procesos de un módulo apagado (0186) no se ofrecen.
+  const modulesOff = await modulesOffFor(user.organization.id);
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 pb-10">
       {/* La misma cabecera que el resto de pantallas: Procesos es una puerta
@@ -38,7 +41,7 @@ export default async function ProcessesPage() {
         <h2 id="listos" className="text-lg font-extrabold tracking-tight text-ink">
           Listos para activar
         </h2>
-        <ProcessCatalog />
+        <ProcessCatalog modulesOff={modulesOff} />
       </section>
     </div>
   );

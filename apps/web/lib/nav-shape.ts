@@ -1,3 +1,4 @@
+import { type ModuleKey, moduleForRoute } from '@cortex/agent-tools/src/modules/catalog';
 import {
   AlarmClock,
   BadgeCheck,
@@ -9,8 +10,11 @@ import {
   CalendarClock,
   Database,
   FileBarChart,
+  FileSignature,
+  FolderKanban,
   Globe,
   HandCoins,
+  Handshake,
   Home,
   Hourglass,
   IdCard,
@@ -18,6 +22,7 @@ import {
   Landmark,
   LayoutDashboard,
   LayoutPanelTop,
+  LifeBuoy,
   MessageCircle,
   MessageSquare,
   MoreHorizontal,
@@ -26,6 +31,7 @@ import {
   Plug,
   Radar,
   Receipt,
+  Scale,
   ScrollText,
   Send,
   Settings,
@@ -33,6 +39,7 @@ import {
   Sparkles,
   Table2,
   Target,
+  Truck,
   Users,
   UsersRound,
   Wallet,
@@ -93,8 +100,9 @@ import {
  * `browser-shape.ts` ya siguen.
  *
  * Los iconos entran porque son componentes sin estado y `panels/shape.ts` ya los
- * importa por lo mismo. Nada de aquí toca la base de datos ni
- * `@cortex/agent-tools`.
+ * importa por lo mismo. Nada de aquí toca la base de datos ni el barril de
+ * `@cortex/agent-tools`: el catálogo de módulos (0186) entra por su ruta
+ * directa porque es sólo datos, igual que `ledger/forecast-shared`.
  *
  * ===========================================================================
  * LO QUE NO ESTÁ EN EL RAIL, Y CÓMO SE LLEGA
@@ -252,7 +260,22 @@ export const SECTIONS: NavSection[] = [
       // Cotizaciones → pedidos → facturas electrónicas (0182): lo que se le vende
       // a cada cliente, al lado del cliente.
       { href: '/ventas', label: 'Ventas', icon: Receipt },
+      // El embudo comercial (0193): los negocios que vienen, el seguimiento, los
+      // clientes que se están yendo y las encuestas.
+      { href: '/comercial', label: 'Embudo comercial', icon: Handshake },
       { href: '/trackers', label: 'Tablas', icon: Table2 },
+    ],
+  },
+  {
+    // Órdenes de servicio y proyectos (0196): el trabajo que se le hace a cada
+    // cliente, con sus horas, costos y margen; y la flota que lo lleva. Sección
+    // propia: las dos son de módulos que muchas empresas tienen apagados, y
+    // apagadas no dejan el encabezado colgando.
+    id: 'operations',
+    label: 'Operación',
+    items: [
+      { href: '/proyectos', label: 'Proyectos', icon: FolderKanban },
+      { href: '/flota', label: 'Flota', icon: Truck },
     ],
   },
   {
@@ -266,6 +289,10 @@ export const SECTIONS: NavSection[] = [
       { href: '/inventario', label: 'Inventario y compras', icon: Package },
       // El calendario tributario (0180): las fechas con la DIAN, el ICA y la PILA.
       { href: '/impuestos', label: 'Impuestos', icon: Landmark },
+      // Estados financieros, presupuesto e informe para socios (0191).
+      { href: '/estados', label: 'Estados financieros', icon: FileBarChart },
+      { href: '/presupuesto', label: 'Presupuesto', icon: Target },
+      { href: '/informe-socios', label: 'Informe para socios', icon: ScrollText },
     ],
   },
   {
@@ -292,6 +319,16 @@ export const SECTIONS: NavSection[] = [
     ],
   },
   {
+    // Contratos y cumplimiento (0195): los papeles con obligaciones y la lista
+    // societaria y legal, con las PQRS y los procesos judiciales.
+    id: 'legal',
+    label: 'Legal',
+    items: [
+      { href: '/contratos', label: 'Contratos', icon: FileSignature },
+      { href: '/cumplimiento', label: 'Cumplimiento', icon: Scale },
+    ],
+  },
+  {
     // Leer, no actuar. Todo lo de aquí responde una pregunta sobre un periodo.
     id: 'review',
     label: 'Cómo vamos',
@@ -304,6 +341,9 @@ export const SECTIONS: NavSection[] = [
       // de quien reparte el trabajo; quien no ve al equipo cae en «Mi semana».
       { href: '/team', label: 'Equipo', icon: UsersRound },
       { href: '/team/yo', label: 'Mi semana', icon: CalendarCheck },
+      // Nómina con vacaciones y permisos, y SG-SST (0194): la gente de la empresa.
+      { href: '/nomina', label: 'Nómina', icon: Wallet },
+      { href: '/sst', label: 'SG-SST', icon: ShieldCheck },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
       { href: '/prospects', label: 'Prospectos', icon: Radar },
     ],
@@ -376,6 +416,10 @@ export const ALL_ICON: NavIcon = MoreHorizontal;
 export const FOOTER: NavItem[] = [
   { href: '/plan', label: 'Plan y consumo', icon: Receipt },
   { href: '/settings', label: 'Ajustes', icon: Settings },
+  // El centro de ayuda (y «Escribir a soporte»). Al pie, junto a Ajustes: es
+  // a donde se va cuando algo no se entiende, en cualquier pantalla. La ayuda
+  // de la pantalla abierta está además en el «?» de la barra de arriba.
+  { href: '/ayuda', label: 'Ayuda', icon: LifeBuoy },
 ];
 
 /** Destinos que podrían haber subido al bloque fijo. El rail ya no los sube. */
@@ -388,6 +432,28 @@ export const QUICK_CANDIDATES: NavItem[] = SECTIONS.flatMap((section) => section
  * rail dibuja siempre `[]`.
  */
 export const DEFAULT_QUICK: string[] = [];
+
+// ===========================================================================
+// MÓDULOS APAGADOS (0186)
+// ===========================================================================
+// Una empresa que apagó un módulo no ve sus pantallas en ningún menú. La lista
+// llega del servidor (una lectura en el shell) como arreglo de claves, que es
+// lo que se puede pasar a un componente cliente. Vacía = nada se esconde, que
+// es lo que dibuja `everyDestination` para la prueba de cobertura.
+
+/** ¿Este destino se ve con estos módulos apagados? Lo que no es de ningún módulo, siempre. */
+export function routeVisible(href: string, modulesOff: readonly ModuleKey[] = []): boolean {
+  if (modulesOff.length === 0) return true;
+  const m = moduleForRoute(href.split('?')[0] ?? href);
+  return !m || !modulesOff.includes(m.key);
+}
+
+function visibleItems<T extends { href: string }>(
+  items: readonly T[],
+  modulesOff: readonly ModuleKey[],
+): T[] {
+  return items.filter((item) => routeVisible(item.href, modulesOff));
+}
 
 /** El rail entero, ya resuelto: lo que el componente sólo tiene que dibujar. */
 export interface Rail {
@@ -419,21 +485,29 @@ export interface Rail {
  * pocos clics y el bloque dejaría de poder aprenderse — que es justo lo que este
  * rail intenta comprar.
  */
-export function buildRail(quick: string[], admin: boolean): Rail {
+export function buildRail(
+  quick: string[],
+  admin: boolean,
+  /** Módulos que la empresa apagó (0186): sus pantallas no salen. */
+  modulesOff: readonly ModuleKey[] = [],
+): Rail {
   const chosen = new Set(quick);
   const rest = SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter((item) => !chosen.has(item.href)),
+    items: visibleItems(section.items, modulesOff).filter((item) => !chosen.has(item.href)),
   })).filter((section) => section.items.length > 0);
 
   return {
-    pinned: PINNED,
+    pinned: visibleItems(PINNED, modulesOff),
     waiting: WAITING_ITEMS,
-    quick: QUICK_CANDIDATES.filter((item) => chosen.has(item.href)),
+    quick: visibleItems(QUICK_CANDIDATES, modulesOff).filter((item) => chosen.has(item.href)),
     rest,
     restCount: rest.reduce((n, section) => n + section.items.length, 0),
-    company: { ...COMPANY, items: COMPANY.items.filter((i) => !i.adminOnly || admin) },
-    footer: FOOTER,
+    company: {
+      ...COMPANY,
+      items: visibleItems(COMPANY.items, modulesOff).filter((i) => !i.adminOnly || admin),
+    },
+    footer: visibleItems(FOOTER, modulesOff),
   };
 }
 
@@ -473,23 +547,37 @@ export const DATA: NavItem = { href: '/integrations', label: 'Datos', icon: Data
 export function primaryNav({
   admin,
   founder,
+  modulesOff = [],
 }: {
   /** Admin de la organización: Equipo abre cómo va el trabajo de todo el equipo. */
   admin: boolean;
   /** Fundador de una empresa: también ve a todo el equipo. */
   founder: boolean;
+  /** Módulos que la empresa apagó (0186): sus puertas no salen. */
+  modulesOff?: readonly ModuleKey[];
 }): PrimaryItem[] {
   // Todos tienen Equipo: quien reparte el trabajo ve al equipo entero (/team,
   // con «Personas y accesos» en su cabecera); los demás, «Mi semana».
-  const team = admin || founder ? '/team' : '/team/yo';
-  return [
-    { ...HOME, icon: Home, match: ['/dashboard'] },
-    { ...CHAT, match: ['/chat'] },
-    { ...PROCESSES, match: ['/procesos'] },
-    { ...VIEWS, match: ['/views'] },
-    { ...DATA, match: ['/integrations', '/trackers', '/feed', '/kb'] },
-    { href: team, label: 'Equipo', icon: Users, match: ['/admin', '/team'] },
-  ];
+  // Con el módulo Equipo apagado, quien administra sigue teniendo la puerta a
+  // las personas y sus accesos; a los demás se les va.
+  const team = modulesOff.includes('team')
+    ? admin
+      ? '/admin/users'
+      : '/team/yo'
+    : admin || founder
+      ? '/team'
+      : '/team/yo';
+  return visibleItems<PrimaryItem>(
+    [
+      { ...HOME, icon: Home, match: ['/dashboard'] },
+      { ...CHAT, match: ['/chat'] },
+      { ...PROCESSES, match: ['/procesos'] },
+      { ...VIEWS, match: ['/views'] },
+      { ...DATA, match: ['/integrations', '/trackers', '/feed', '/kb'] },
+      { href: team, label: 'Equipo', icon: Users, match: ['/admin', '/team'] },
+    ],
+    modulesOff,
+  );
 }
 
 /** ¿Esta dirección enciende esta puerta? `/chat/global` es la consola multiempresa, no el chat. */
@@ -532,10 +620,13 @@ function pick(hrefs: string[]): NavItem[] {
 export function moreGroups({
   admin,
   founder,
+  modulesOff = [],
 }: {
   admin: boolean;
   /** Dueño de al menos una empresa: ve el centro de mando de todas. */
   founder: boolean;
+  /** Módulos que la empresa apagó (0186): sus pantallas no salen. */
+  modulesOff?: readonly ModuleKey[];
 }): MoreGroup[] {
   const groups: MoreGroup[] = [
     {
@@ -579,5 +670,7 @@ export function moreGroups({
       ]),
     });
   }
-  return groups.filter((g) => g.items.length > 0);
+  return groups
+    .map((g) => ({ ...g, items: visibleItems(g.items, modulesOff) }))
+    .filter((g) => g.items.length > 0);
 }

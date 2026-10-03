@@ -3,6 +3,7 @@
 import { primaryActive, primaryNav } from '@/lib/nav-shape';
 import { recordVisit } from '@/lib/nav-usage';
 import { workspaceHref } from '@/lib/workspace-context';
+import type { ModuleKey } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { Menu } from 'lucide-react';
 import Link from 'next/link';
@@ -23,10 +24,16 @@ import { useMobileSidebar } from './MobileSidebarContext';
  * El relleno inferior respeta la barra de inicio del iPhone instalado.
  */
 
-// Las cuatro primeras puertas de `primaryNav`, que no dependen del rol.
-const TABS = primaryNav({ admin: false, founder: false }).slice(0, 4);
-
-export function MobileTabBar({ organizationId }: { organizationId?: string }) {
+export function MobileTabBar({
+  organizationId,
+  modulesOff,
+}: {
+  organizationId?: string;
+  /** Módulos que la empresa apagó (0186): sus puertas no salen. */
+  modulesOff?: ModuleKey[];
+}) {
+  // Las cuatro primeras puertas de `primaryNav`, que no dependen del rol.
+  const TABS = primaryNav({ admin: false, founder: false, modulesOff }).slice(0, 4);
   const path = usePathname();
   const mobile = useMobileSidebar();
   return (

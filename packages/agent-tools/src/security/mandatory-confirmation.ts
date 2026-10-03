@@ -17,6 +17,12 @@ export function mandatoryHumanConfirmation(toolId: string): boolean {
       'sales.invoice_emit',
       // Decir «sí se le debe» a un proveedor (0181): siempre una persona.
       'payables.approve',
+      // Escribir en el programa contable y cerrar el mes (0192): los libros
+      // legales de la empresa; siempre una persona, nunca un mandato.
+      'accounting.write_purchase',
+      'accounting.write_receipt',
+      'accounting.write_supplier_payment',
+      'close.close_period',
     ].includes(toolId)
   );
 }

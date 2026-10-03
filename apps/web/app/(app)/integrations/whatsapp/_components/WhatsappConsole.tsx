@@ -56,6 +56,10 @@ interface Connection {
   dmEnabled: boolean;
   /** False when the bridge has never reported for this workspace. */
   reported: boolean;
+  /** The stored session belongs to a device WhatsApp accepted (0189). */
+  paired: boolean;
+  /** «Desvincular» was asked and the bridge has not done it yet. */
+  unlinking: boolean;
   /** The pairing somebody asked for, while it is alive (lib/whatsapp/pairing.ts). */
   pairing: {
     requested: boolean;
@@ -65,7 +69,11 @@ interface Connection {
   };
 }
 
-type PairingInput = { mode: 'qr' } | { mode: 'code'; phone: string } | { mode: 'cancel' };
+type PairingInput =
+  | { mode: 'qr' }
+  | { mode: 'code'; phone: string }
+  | { mode: 'cancel' }
+  | { mode: 'unlink' };
 
 interface Group {
   id: string;
@@ -126,8 +134,14 @@ interface Status {
   unlinkedNumbers: UnlinkedNumber[];
   /** The bridge reports, but for another workspace. Admins only. */
   bridgeElsewhere: boolean;
-  /** This workspace's id, for WHATSAPP_ORGANIZATION_ID. Admins only. */
+  /** This workspace's id, for WHATSAPP_ORGANIZATION_ID (single mode). Admins only. */
   workspaceId: string | null;
+  /**
+   * 'multi': one bridge serves every workspace and each links its own number.
+   * 'single': a bridge pinned to one workspace by WHATSAPP_ORGANIZATION_ID.
+   * 'unknown': no bridge process says (down, or older than 0189).
+   */
+  service: 'multi' | 'single' | 'unknown';
 }
 
 /**
@@ -332,32 +346,37 @@ function ConnectionPanel({
   connection,
   isAdmin,
   busy,
+  service,
   onPair,
 }: {
   connection: Connection;
   isAdmin: boolean;
   busy: boolean;
+  service: Status['service'];
   onPair: (input: PairingInput) => void;
 }) {
   const { status, bridgeAlive, pairing } = connection;
   const [phone, setPhone] = useState(connection.phoneNumber ? `+${connection.phoneNumber}` : '');
   const [askingNumber, setAskingNumber] = useState(false);
+  const [confirmingUnlink, setConfirmingUnlink] = useState(false);
 
   // The bridge going quiet is a different problem from WhatsApp dropping the
   // session, and both are different from "nobody has asked to pair yet", so
   // none of them is ever shown as one "disconnected".
-  const state = !bridgeAlive
-    ? ('offline' as const)
-    : status === 'connected'
-      ? ('connected' as const)
-      : pairing.requested
-        ? ('pairing' as const)
-        : status === 'logged_out'
-          ? ('logged_out' as const)
-          : status === 'disconnected'
-            ? ('down' as const)
-            : // 'waiting', or 'pairing' left over from a request that just lapsed.
-              ('waiting' as const);
+  const state = connection.unlinking
+    ? ('unlinking' as const)
+    : !bridgeAlive
+      ? ('offline' as const)
+      : status === 'connected'
+        ? ('connected' as const)
+        : pairing.requested
+          ? ('pairing' as const)
+          : status === 'logged_out'
+            ? ('logged_out' as const)
+            : status === 'disconnected'
+              ? ('down' as const)
+              : // 'waiting', or 'pairing' left over from a request that just lapsed.
+                ('waiting' as const);
 
   const COPY = {
     connected: {
@@ -389,8 +408,14 @@ function ConnectionPanel({
     logged_out: {
       tone: 'rose' as const,
       icon: <AlertTriangle className="h-4 w-4" />,
-      title: 'WhatsApp cerró la sesión',
-      line: 'El dispositivo fue desvinculado desde el teléfono o por WhatsApp. Hay que volver a vincularlo; nada de lo ya archivado se pierde.',
+      title: 'La sesión se cerró',
+      line: 'Este espacio ya no tiene el número vinculado (abajo dice por qué). Hay que vincular uno de nuevo; nada de lo ya archivado se pierde.',
+    },
+    unlinking: {
+      tone: 'amber' as const,
+      icon: <Loader2 className="h-4 w-4 animate-spin" />,
+      title: 'Desvinculando',
+      line: 'Cerrando el dispositivo en WhatsApp y borrando la sesión de este espacio. Toma unos segundos.',
     },
     down: {
       tone: 'amber' as const,
@@ -402,15 +427,27 @@ function ConnectionPanel({
       tone: 'rose' as const,
       icon: <AlertTriangle className="h-4 w-4" />,
       title: 'El servicio no está reportando',
-      line: 'Nadie ha dado señales en los últimos minutos. Revisa el servicio de WhatsApp en Railway: mientras esté caído no entra nada nuevo, pero no se pierde lo que ya estaba.',
+      line:
+        service === 'multi'
+          ? 'El número de este espacio no ha dado señales en los últimos minutos. Reintenta solo; si sigue así, revisa el servicio de WhatsApp en Railway. No se pierde lo que ya estaba.'
+          : 'Nadie ha dado señales en los últimos minutos. Revisa el servicio de WhatsApp en Railway: mientras esté caído no entra nada nuevo, pero no se pierde lo que ya estaba.',
     },
   }[state];
 
   // The idle hint the bridge sends says the same as the copy above, in other
   // words; showing both is noise. Real errors still show.
   const showError =
-    connection.lastError && state !== 'connected' && state !== 'waiting' && state !== 'offline';
+    connection.lastError &&
+    state !== 'connected' &&
+    state !== 'waiting' &&
+    state !== 'offline' &&
+    state !== 'unlinking';
   const canPair = isAdmin && (state === 'waiting' || state === 'logged_out' || state === 'pairing');
+  // «Desvincular»: con un número emparejado (en línea o reconectando). Cierra el
+  // dispositivo en WhatsApp y borra la sesión de ESTE espacio; los grupos
+  // elegidos y los números de personas se quedan.
+  const canUnlink =
+    isAdmin && (connection.paired || status === 'connected') && state !== 'unlinking';
 
   return (
     <Panel>
@@ -551,11 +588,44 @@ function ConnectionPanel({
         </div>
       )}
 
+      {canUnlink && (
+        <div className="border-t border-border px-5 py-3.5">
+          {confirmingUnlink ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="w-full text-xs leading-relaxed text-ink-muted">
+                Cortex deja de leer los grupos y de contestar por este número, y «Cortex» sale de
+                Dispositivos vinculados en el teléfono. Lo ya archivado, los grupos elegidos y los
+                números del equipo se quedan. ¿Desvincular?
+              </p>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setConfirmingUnlink(false);
+                  onPair({ mode: 'unlink' });
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Sí, desvincular
+              </Button>
+              <Button variant="ghost" disabled={busy} onClick={() => setConfirmingUnlink(false)}>
+                No
+              </Button>
+            </div>
+          ) : (
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirmingUnlink(true)}>
+              <Trash2 className="h-3.5 w-3.5" />
+              Desvincular
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="border-t border-border px-5 py-3">
         <p className="text-xs leading-relaxed text-ink-faint">
           Usa un <b className="font-semibold text-ink-muted">número dedicado de la empresa</b>,
           nunca el personal de alguien. Este es un cliente no oficial y WhatsApp puede bloquear el
-          número.
+          número. Cada espacio de trabajo vincula el suyo, y un número sirve a un solo espacio.
         </p>
       </div>
     </Panel>
@@ -1250,13 +1320,17 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
 
       <SetupChecklist facts={facts} />
 
-      {!data.connection.reported && data.bridgeElsewhere && data.workspaceId ? (
+      {data.service !== 'multi' &&
+      !data.connection.reported &&
+      data.bridgeElsewhere &&
+      data.workspaceId ? (
         <ElsewherePanel workspaceId={data.workspaceId} />
       ) : (
         <ConnectionPanel
           connection={data.connection}
           isAdmin={isAdmin && data.isAdmin}
           busy={busy}
+          service={data.service}
           onPair={(input) => pair.mutate(input)}
         />
       )}

@@ -1,4 +1,5 @@
 import { CortexSignature } from '@/components/ui/cortex-signature';
+import { landingCta, signupMode, trialDays } from '@/lib/billing/config';
 import { ArrowUpRight, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -21,30 +22,43 @@ import {
  * para que se pueda revisar frase por frase contra el producto.
  */
 
-/** El botón principal, honesto sobre la invitación. Lo usan el héroe y el cierre. */
+/**
+ * El botón principal, honesto sobre cómo se entra hoy. Lo usan el héroe y el
+ * cierre. Sigue a SIGNUP_MODE (lib/billing/config.ts): «Crear mi espacio» con
+ * invitación o registro abierto, «Pide tu acceso» con solicitudes.
+ */
+/** Las tarjetas de la landing, al código del plan que se prueba. */
+const TRIAL_PLAN_BY_NAME: Record<string, string> = { Equipo: 'team', Empresa: 'business' };
+
+function currentCta() {
+  return landingCta(signupMode(), ACCESS_REQUEST_HREF, trialDays());
+}
+
 export function PrimaryActions({ secondary }: { secondary: ReactNode }) {
+  const cta = currentCta();
+  const external = /^(https?:|mailto:)/.test(cta.href);
   return (
     <>
       <div className="cosmos-actions">
-        {ACCESS_REQUEST_HREF ? (
-          <a href={ACCESS_REQUEST_HREF} className="cosmos-button">
-            Pide tu acceso <ArrowUpRight size={18} aria-hidden="true" />
+        {external ? (
+          <a href={cta.href} className="cosmos-button">
+            {cta.label} <ArrowUpRight size={18} aria-hidden="true" />
           </a>
         ) : (
-          <Link href="/signup" className="cosmos-button">
-            Crear mi espacio <ArrowUpRight size={18} aria-hidden="true" />
+          <Link href={cta.href} className="cosmos-button">
+            {cta.label} <ArrowUpRight size={18} aria-hidden="true" />
           </Link>
         )}
         {secondary}
       </div>
       <p className="cosmos-access">
-        {ACCESS_REQUEST_HREF ? (
+        {cta.note}
+        {cta.noteLink ? (
           <>
-            ¿Ya tienes tu código de invitación? <Link href="/signup">Crea tu espacio</Link>.
+            {' '}
+            <Link href={cta.noteLink.href}>{cta.noteLink.label}</Link>.
           </>
-        ) : (
-          'Acceso por invitación: necesitas tu código. Sin tarjeta.'
-        )}
+        ) : null}
       </p>
     </>
   );
@@ -207,8 +221,9 @@ export function Plans() {
           </h2>
         </div>
         <p>
-          Hoy el acceso es por invitación y sin tarjeta. Todavía no cobramos dentro de Cortex: el
-          plan se acuerda contigo y lo activamos.
+          {signupMode() === 'open'
+            ? `Prueba gratis ${trialDays()} días, sin tarjeta. Después eliges el plan y lo pagas desde Cortex.`
+            : 'Hoy el acceso es por invitación y sin tarjeta. Todavía no cobramos dentro de Cortex: el plan se acuerda contigo y lo activamos.'}
         </p>
       </div>
       <div className="plans">
@@ -241,9 +256,21 @@ export function Plans() {
               <a href={ACCESS_REQUEST_HREF} className="plan__cta">
                 Hablemos <ArrowUpRight size={15} aria-hidden="true" />
               </a>
-            ) : (
+            ) : plan.featured ? (
+              // Gerente se acuerda en una conversación: nunca «probar».
               <Link href="/signup" className="plan__cta">
                 Crear mi espacio <ArrowUpRight size={15} aria-hidden="true" />
+              </Link>
+            ) : (
+              <Link
+                href={
+                  signupMode() === 'open' && TRIAL_PLAN_BY_NAME[plan.name]
+                    ? `/signup?plan=${TRIAL_PLAN_BY_NAME[plan.name]}`
+                    : currentCta().planCta.href
+                }
+                className="plan__cta"
+              >
+                {currentCta().planCta.label} <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
             )}
           </article>

@@ -65,6 +65,13 @@ export interface RemoteAuthState {
   saveCreds: () => Promise<void>;
   /** Push anything still buffered. Called on shutdown. */
   flush: () => Promise<void>;
+  /**
+   * Drop anything still buffered WITHOUT pushing it, and push nothing ever
+   * again. Called before the session is wiped («Desvincular», a number that is
+   * another workspace's): a debounced write landing after the wipe would bring
+   * the forgotten credentials back.
+   */
+  discard: () => Promise<void>;
   /** True when this boot started from a stored session rather than from zero. */
   restored: boolean;
   /**
@@ -100,6 +107,9 @@ function decode<T>(value: unknown): T {
 }
 
 export async function usePostgresAuthState(cortex: CortexClient): Promise<RemoteAuthState> {
+  // Every line about this session names its workspace: one process now holds
+  // many, and "could not persist" is useless without saying whose.
+  const log = logger.child({ org: cortex.organizationId });
   const remote = await cortex.loadState();
   if (!remote) {
     // Starting from zero here would silently discard a perfectly good session
@@ -113,7 +123,7 @@ export async function usePostgresAuthState(cortex: CortexClient): Promise<Remote
   const stored = remote.creds ? decode<AuthenticationCreds>(remote.creds) : null;
   const paired = isPaired(stored);
   if (stored && !paired) {
-    logger.warn(
+    log.warn(
       'the stored session is a pairing that never finished; starting from a fresh one instead of reusing it',
     );
   }
@@ -132,7 +142,7 @@ export async function usePostgresAuthState(cortex: CortexClient): Promise<Remote
     }
   }
 
-  logger.info(
+  log.info(
     {
       restored,
       keyTypes: Object.keys(cache).length,
@@ -149,8 +159,10 @@ export async function usePostgresAuthState(cortex: CortexClient): Promise<Remote
   let credsDirty = false;
   let timer: NodeJS.Timeout | null = null;
   let inFlight: Promise<void> = Promise.resolve();
+  let discarded = false;
 
   async function push(): Promise<void> {
+    if (discarded) return;
     const set = pending;
     const sendCreds = credsDirty;
     pending = {};
@@ -164,13 +176,13 @@ export async function usePostgresAuthState(cortex: CortexClient): Promise<Remote
   }
 
   function schedule(): void {
-    if (timer) return;
+    if (timer || discarded) return;
     timer = setTimeout(() => {
       timer = null;
       // Serialised: two overlapping writes could otherwise land out of order
       // and leave the stored store one revision behind memory.
       inFlight = inFlight.then(push).catch((err: unknown) => {
-        logger.error({ err: (err as Error).message }, 'could not persist session state');
+        log.error({ err: (err as Error).message }, 'could not persist session state');
       });
     }, FLUSH_DEBOUNCE_MS);
   }
@@ -237,6 +249,18 @@ export async function usePostgresAuthState(cortex: CortexClient): Promise<Remote
       }
       await inFlight;
       await push();
+    },
+    async discard(): Promise<void> {
+      discarded = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      pending = {};
+      credsDirty = false;
+      // A write already on the wire finishes before the caller wipes, so the
+      // wipe is the last word.
+      await inFlight.catch(() => undefined);
     },
   };
 }

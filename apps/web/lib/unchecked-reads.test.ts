@@ -52,7 +52,7 @@ import { describe, expect, it } from 'vitest';
  */
 const BASELINE = new Map<string, number>([
   ['lib/errands/repository.ts', 8],
-  ['app/api/whatsapp/status/route.ts', 6],
+  ['app/api/whatsapp/status/route.ts', 5],
   // 4 → 0 el 2026-10-02: «Datos y conexiones» lee por lib/sources/read.ts, que
   // mira el error de cada lectura y dice cuál falló en vez de pintar «nada».
   ['lib/guided-setup/store.ts', 5],
@@ -110,7 +110,7 @@ const BASELINE = new Map<string, number>([
   ['app/(app)/prospects/page.tsx', 1],
   ['app/(app)/schedules/[id]/page.tsx', 1],
   ['app/(app)/schedules/page.tsx', 1],
-  ['app/(auth)/signup/page.tsx', 1],
+  ['app/(auth)/signup/SignupForm.tsx', 1],
   ['app/(chat)/chat/[conversationId]/page.tsx', 1],
   ['app/(chat)/chat/actions.ts', 1],
   ['app/api/admin/_lib/audit-filters.ts', 1],

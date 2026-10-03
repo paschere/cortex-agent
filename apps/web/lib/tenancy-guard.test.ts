@@ -63,12 +63,32 @@ const ALLOWED = new Map<string, string>([
     'The same posture as the presentation link, on purpose: a shared report is opened from WhatsApp or Outlook where no Cortex cookie exists, so the token is the credential. The row it finds carries its own workspace; nothing widens from there.',
   ],
   [
+    'lib/board/public.ts',
+    'A partners report link (/informe/<token>, migration 0191) is opened by partners or board members with no Cortex account, so the token is the credential — the same posture as a shared view. It is used for exactly two reads: the report row by token and its workspace name. The PDF, the logo and the password attempt go through getOrgScopedClient(report.organization_id).',
+  ],
+  [
+    'lib/compliance/public.ts',
+    'The public PQRS form (/pqrs/<token>, migration 0195) is opened by a customer with no Cortex account, so the token is the credential — the same posture as a quote link. It is used for exactly two reads: the compliance profile by token (only when the form is enabled) and its workspace name. The PQRS is filed through getOrgScopedClient(profile.organization_id).',
+  ],
+  [
     'lib/sales/public.ts',
     'A quote link (/cotizacion/<token>, migration 0182) is opened by the client, who has no Cortex account, so the token is the credential — the same posture as a shared view. It is used for exactly two reads: the quote row by token and its workspace name. The lines, the brand, the logo and the acceptance are read and written through getOrgScopedClient(row.organization_id).',
   ],
   [
+    'lib/crm/public.ts',
+    'A satisfaction survey link (/encuesta/<token>, migration 0193) is opened by the client, who has no Cortex account, so the token is the credential — the same posture as a quote link. It is used for exactly two reads: the survey row by token and its workspace name. Recording the answer, the follow-up task and the notice go through getOrgScopedClient(row.organization_id).',
+  ],
+  [
+    'lib/support/operator-store.ts',
+    'The platform support inbox (migration 0190): the people who operate Cortex read every company’s tickets on purpose. Every exported function starts with requireSupportOperator() — platform admin (ba_user.role) or SUPPORT_OPERATORS — so a server action called on its own cannot skip the gate, and a reply is stamped with the organization of the ticket it answers, never another.',
+  ],
+  [
     'lib/views/public.ts',
     'A shared view (/v/<token>) is opened by people with no Cortex account, so the token is the credential — the same posture as the report link. It is used for exactly two reads: the view row by token and its workspace name. Every row the view then shows is read through getOrgScopedClient(view.organization_id).',
+  ],
+  [
+    'inngest/functions/legal-data.ts',
+    'Cron (0188). "Which data exports expired" and "which company deletions finished their 30-day grace" span the install and there is no session behind a cron; the raw handle runs two SELECTs of ids and nothing else. Each id rides on its own call or event, and the export and the purge name the organization in every statement (lib/legal/export-run.ts, lib/legal/purge-run.ts).',
   ],
   [
     'inngest/functions/turn-context-purge.ts',
@@ -203,12 +223,28 @@ const ALLOWED = new Map<string, string>([
     'whatsapp_links is keyed by the phone number install-wide, so "already linked somewhere else" is invisible to a scoped read and would surface as a constraint error instead of an explanation. One read, for that message only; the write is scoped.',
   ],
   [
+    'app/api/whatsapp/pairing/route.test.ts',
+    'Test-only mock of the raw client for the WhatsApp bridge sessions route (0189); it fakes the claim/release functions and never reaches a database.',
+  ],
+  [
+    'app/api/whatsapp/bridge/sessions/route.ts',
+    'The multi-workspace WhatsApp bridge asks which workspaces need a socket in this process (0189). Like a cron dispatcher it is about every workspace at once and has none to scope to; it only calls whatsapp_bridge_claim / whatsapp_bridge_release, which return workspace ids and a paired flag — never credentials or content. Everything the bridge does next goes through the per-workspace routes and their scoped clients.',
+  ],
+  [
     'app/api/whatsapp/status/route.ts',
-    'The bridge reports into the workspace named by its WHATSAPP_ORGANIZATION_ID. When that is another workspace, this one has no session row and a scoped read can only say "not reporting". One unscoped existence check — admins only, only when there is no row here — turns into a yes/no that tells the admin to change the variable; no id, number or timestamp of the other workspace leaves the route.',
+    'Single mode only (0189): a bridge pinned by WHATSAPP_ORGANIZATION_ID reports into that workspace, so another one has no session row and a scoped read can only say "not reporting". One unscoped existence check — admins only, only when there is no row here and no multi-workspace bridge is alive — turns into a yes/no that tells the admin to change the variable; no id, number or timestamp of the other workspace leaves the route.',
   ],
   [
     'app/api/meetings/live/voice-answer/route.ts',
     'The meet-bot posts here with a service token and an organization id, no session. Resolving that org to a directory user (the owner) is what the raw client is for; the turn itself then runs on a handle scoped to that workspace.',
+  ],
+  [
+    'lib/billing/webhook.ts',
+    'A payment gateway event (Wompi) arrives with no session and no workspace, only the payment reference Cortex signed. One read of billing_payments.organization_id by that unique reference, after the signature is verified; everything else runs on a handle scoped to that workspace.',
+  ],
+  [
+    'lib/billing/renewals.ts',
+    'Daily billing cron. Lists only the organization_id of workspaces that have a billing row; each one is then read, reminded and updated through its own scoped handle.',
   ],
 ]);
 

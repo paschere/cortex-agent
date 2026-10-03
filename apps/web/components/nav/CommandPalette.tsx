@@ -1,7 +1,9 @@
 'use client';
 
 import { MODULE } from '@/lib/browser-shape';
+import { routeVisible } from '@/lib/nav-shape';
 import { workspaceHref } from '@/lib/workspace-context';
+import type { ModuleKey } from '@cortex/agent-tools';
 import type { Role } from '@cortex/core';
 import { Command } from 'cmdk';
 import { useRouter } from 'next/navigation';
@@ -10,6 +12,8 @@ interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
   role?: Role;
+  /** Módulos que la empresa apagó (0186): sus pantallas no se ofrecen. */
+  modulesOff?: ModuleKey[];
 }
 
 interface Entry {
@@ -268,6 +272,12 @@ const SECTIONS: Section[] = [
         keywords: 'ajustes preferencias zona horaria settings memoria perfil',
       },
       {
+        href: '/settings/modulos',
+        label: 'Módulos',
+        note: 'Qué áreas de Cortex usa la empresa: prender y apagar',
+        keywords: 'modulos activar desactivar prender apagar inventario nomina flota funciones',
+      },
+      {
         href: '/plan',
         label: 'Plan y consumo',
         note: 'Qué incluye tu plan y cuánto llevas usado este mes',
@@ -361,14 +371,16 @@ const SECTIONS: Section[] = [
   },
 ];
 
-export function CommandPalette({ open, onClose, role }: CommandPaletteProps) {
+export function CommandPalette({ open, onClose, role, modulesOff = [] }: CommandPaletteProps) {
   const router = useRouter();
   if (!open) return null;
 
   // The admin screens are server-gated (app/(app)/admin/layout.tsx returns
   // notFound for anyone else), so this is not a permission check — it is there
   // so the palette does not offer five destinations that answer with a 404.
-  const sections = SECTIONS.filter((s) => !s.adminOnly || role === 'org_admin');
+  const sections = SECTIONS.filter((s) => !s.adminOnly || role === 'org_admin')
+    .map((s) => ({ ...s, entries: s.entries.filter((e) => routeVisible(e.href, modulesOff)) }))
+    .filter((s) => s.entries.length > 0);
 
   const go = (href: string) => {
     const workspaceId = new URL(window.location.href).searchParams.get('workspace');

@@ -1,4 +1,5 @@
 import { normalizeNit } from '../../clients/shape';
+import { siigoWriter } from '../../close/writeback/siigo';
 import type {
   AccountingEntity,
   AccountingProvider,
@@ -14,6 +15,7 @@ import type {
 } from '../types';
 import { siigoInvoicing } from './invoicing';
 import { siigoPurchasePage } from './purchases';
+import { siigoReports } from './reports-siigo';
 import { SiigoClient, hasMorePages } from './siigo-client';
 
 /**
@@ -405,6 +407,8 @@ export const siigoProvider: AccountingProvider = {
       verify: () => client.verify(),
       invoicing: siigoInvoicing(client),
       listPurchases: (since, page) => siigoPurchasePage(client, since, page),
+      reports: siigoReports(client, { fetch: runtime.fetch }),
+      writer: siigoWriter(client),
       async listPage(entity, query, page) {
         const result = await client.page<unknown>(PATHS[entity], query, page);
         const records = result.results

@@ -192,7 +192,9 @@ export class AlegraClient {
    * deja la factura marcada para revisar en Alegra antes de repetir. Sólo un
    * 429 (rechazado antes de procesar) espera y repite.
    */
-  async post<T>(path: string, body: unknown): Promise<T> {
+  async post<T>(path: string, body: unknown, opts: { noun?: string } = {}): Promise<T> {
+    // 0192: el mismo POST escribe compras y pagos; `noun` dice qué.
+    const noun = opts.noun ?? 'la factura';
     let attempt = 0;
     for (;;) {
       await this.pace();
@@ -211,7 +213,7 @@ export class AlegraClient {
         });
       } catch {
         throw new ProviderUncertainError(
-          'La conexión con Alegra se cortó mientras se enviaba la factura: no se sabe si quedó creada. Búscala en Alegra antes de volver a intentarlo.',
+          `La conexión con Alegra se cortó mientras se enviaba ${noun}: no se sabe si quedó creada. Búscala en Alegra antes de volver a intentarlo.`,
         );
       }
       const text = await res.text();
@@ -228,10 +230,10 @@ export class AlegraClient {
         continue;
       }
       if (res.status === 400 || res.status === 422 || res.status === 409)
-        throw describeAlegraValidation(parsed, res.status);
+        throw describeAlegraValidation(parsed, res.status, noun);
       if (res.status >= 500)
         throw new ProviderUncertainError(
-          `Alegra respondió con un error interno (${res.status}) al recibir la factura: no se sabe si quedó creada. Búscala en Alegra antes de volver a intentarlo.`,
+          `Alegra respondió con un error interno (${res.status}) al recibir ${noun}: no se sabe si quedó creada. Búscala en Alegra antes de volver a intentarlo.`,
         );
       throw describeFailure(res.status, path);
     }
@@ -273,7 +275,11 @@ export class AlegraClient {
  * `{ code, message }` (a veces dentro de `error`), y el mensaje ya viene en
  * español; se completa con una pista cuando el código es de los conocidos.
  */
-export function describeAlegraValidation(body: unknown, status: number): ProviderValidationError {
+export function describeAlegraValidation(
+  body: unknown,
+  status: number,
+  noun = 'la factura',
+): ProviderValidationError {
   const b = (body ?? {}) as {
     code?: number | string;
     message?: string;
@@ -293,8 +299,8 @@ export function describeAlegraValidation(body: unknown, status: number): Provide
           : '';
   return new ProviderValidationError(
     message
-      ? `Alegra no aceptó la factura: «${message}».${hint}`
-      : `Alegra no aceptó la factura (error ${code || status}) y no dijo por qué.`,
+      ? `Alegra no aceptó ${noun}: «${message}».${hint}`
+      : `Alegra no aceptó ${noun} (error ${code || status}) y no dijo por qué.`,
     [`${code}: ${message}`],
     status,
   );

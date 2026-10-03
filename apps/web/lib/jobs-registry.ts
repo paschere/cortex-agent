@@ -36,6 +36,7 @@ import {
   autopilotRemindJob,
   autopilotWorkspaceJob,
 } from '@/inngest/functions/autopilot';
+import { billingRenewalsJob } from '@/inngest/functions/billing-renewals';
 import { clientsLinkDispatchJob, clientsLinkWorkspaceJob } from '@/inngest/functions/clients-link';
 import {
   commitmentsWatchDispatchJob,
@@ -63,6 +64,11 @@ import {
   learningPassDispatchJob,
   learningPassWorkspaceJob,
 } from '@/inngest/functions/learning-pass';
+import {
+  legalDispatchJob,
+  legalExportRunJob,
+  legalOrganizationPurgeJob,
+} from '@/inngest/functions/legal-data';
 import {
   managementFollowUpDispatchJob,
   managementFollowUpWorkspaceJob,
@@ -119,6 +125,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'management/follow-up.workspace': managementFollowUpWorkspaceJob,
   'goals/watch.dispatch': goalsWatchDispatchJob,
   'reports/weekly.dispatch': weeklyReportDispatchJob,
+  // Cobro (0187): estado efectivo y recordatorios, una vez al día.
+  'billing/renewals': billingRenewalsJob,
   'work/sync.dispatch': workSyncDispatchJob,
   'clients/link-dispatch': clientsLinkDispatchJob,
   'follow-through/dispatch': followThroughDispatchJob,
@@ -156,4 +164,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'dev/task.intake': devTaskIntakeJob,
   'dev/task.queued': devTaskRunJob,
   'dev/task.status': devTaskStatusJob,
+  // Derechos del titular (0188): exportar, purgar y el barrido diario.
+  'legal/dispatch': legalDispatchJob,
+  'legal/export.run': legalExportRunJob,
+  'legal/organization.purge': legalOrganizationPurgeJob,
 };

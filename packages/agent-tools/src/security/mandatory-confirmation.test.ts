@@ -12,6 +12,10 @@ describe('non-delegable company actions', () => {
       'payments.import_bank_statement',
       'payables.approve',
       'sales.invoice_emit',
+      'accounting.write_purchase',
+      'accounting.write_receipt',
+      'accounting.write_supplier_payment',
+      'close.close_period',
     ])
       expect(mandatoryHumanConfirmation(id)).toBe(true);
   });

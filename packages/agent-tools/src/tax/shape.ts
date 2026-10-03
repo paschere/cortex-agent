@@ -33,6 +33,20 @@ export const ICA_CITY_LABEL: Record<IcaCity, string> = {
   otra: 'Otra ciudad',
 };
 
+export interface IcaActivityProfile {
+  /** Código CIIU o de la actividad en el municipio. */
+  code: string;
+  label: string;
+  /** Tarifa por mil (11,04 = 11,04 ‰). */
+  ratePerMil: number;
+}
+
+export const icaActivitySchema = z.object({
+  code: z.string().trim().min(1).max(12),
+  label: z.string().trim().min(1).max(120),
+  ratePerMil: z.number().min(0).max(100),
+});
+
 export interface TaxProfile {
   /** Sólo dígitos, sin dígito de verificación. */
   nit: string;
@@ -50,6 +64,18 @@ export interface TaxProfile {
   nominaElectronica: boolean;
   pila: boolean;
   facturacionElectronica: boolean;
+  /** Declara impuesto al patrimonio (lo decide el contador; 0197). */
+  impuestoPatrimonio: boolean;
+  /** Operaciones con vinculados del exterior: precios de transferencia (0197). */
+  vinculadosExterior: boolean;
+  /** Último cambio de socios o beneficiarios finales (RUB), `YYYY-MM-DD` (0197). */
+  rubLastChange: string | null;
+  /** Tarifa de autorretención especial de renta, en % (según el CIIU). */
+  autorretencionRate: number | null;
+  /** Tarifa SIMPLE consolidada, en % (art. 908 ET, según el grupo). */
+  simpleRate: number | null;
+  /** Actividades de ICA con su tarifa por mil. */
+  icaActivities: IcaActivityProfile[];
   /** Quién responde por los impuestos (contador o responsable). */
   ownerUserId: string | null;
   /** Días de aviso antes de cada fecha. */
@@ -84,6 +110,40 @@ export const taxProfileInputSchema = z.object({
   nominaElectronica: z.boolean().default(false),
   pila: z.boolean().default(false).describe('Paga seguridad social de empleados (PILA).'),
   facturacionElectronica: z.boolean().default(false),
+  impuestoPatrimonio: z
+    .boolean()
+    .default(false)
+    .describe('Declara impuesto al patrimonio (confírmalo con el contador).'),
+  vinculadosExterior: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Tiene operaciones con vinculados del exterior o zonas francas (precios de transferencia).',
+    ),
+  rubLastChange: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish()
+    .describe('Fecha del último cambio de socios o beneficiarios finales (para el RUB).'),
+  autorretencionRate: z
+    .number()
+    .min(0)
+    .max(10)
+    .nullish()
+    .describe(
+      'Tarifa de autorretención especial de renta en %, según el CIIU (la da el contador).',
+    ),
+  simpleRate: z
+    .number()
+    .min(0)
+    .max(20)
+    .nullish()
+    .describe('Tarifa SIMPLE consolidada en % (art. 908 ET), si está en el Régimen Simple.'),
+  icaActivities: z
+    .array(icaActivitySchema)
+    .max(10)
+    .default([])
+    .describe('Actividades de ICA con su tarifa por mil.'),
   ownerUserId: z
     .string()
     .uuid()
@@ -158,6 +218,9 @@ export const OBLIGATION_KINDS = [
   'camara_comercio',
   'nomina_electronica',
   'pila',
+  'patrimonio',
+  'rub',
+  'precios_transferencia',
 ] as const;
 export type ObligationKind = (typeof OBLIGATION_KINDS)[number];
 
@@ -173,6 +236,9 @@ export const OBLIGATION_KIND_LABEL: Record<ObligationKind, string> = {
   camara_comercio: 'Renovación de la matrícula mercantil',
   nomina_electronica: 'Nómina electrónica',
   pila: 'Seguridad social (PILA)',
+  patrimonio: 'Impuesto al patrimonio',
+  rub: 'Registro de beneficiarios finales (RUB)',
+  precios_transferencia: 'Precios de transferencia',
 };
 
 export const OBLIGATION_STATUSES = ['pendiente', 'presentada', 'pagada', 'no_aplica'] as const;

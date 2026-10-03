@@ -9,7 +9,8 @@ import './auth-experience.css';
 
 export function AuthExperience({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const signup = pathname === '/signup';
+  // /acceso («Pide tu acceso», 0187) es la otra puerta de entrada: misma escena.
+  const signup = pathname === '/signup' || pathname === '/acceso';
   if (pathname !== '/login' && !signup) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4 py-8">

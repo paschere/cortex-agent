@@ -1,5 +1,6 @@
 'use client';
 
+import type { ModuleKey } from '@cortex/agent-tools';
 import type { Role } from '@cortex/core';
 import { type ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
@@ -28,10 +29,13 @@ const CommandMenuContext = createContext<CommandMenuContextValue | null>(null);
 export function CommandMenuProvider({
   children,
   role,
+  modulesOff,
 }: {
   children: ReactNode;
   /** Only so the palette can leave out the admin screens a non-admin would 404 on. */
   role?: Role;
+  /** Módulos que la empresa apagó (0186): la paleta no ofrece sus pantallas. */
+  modulesOff?: ModuleKey[];
 }) {
   const [open, setOpen] = useState(false);
   const hotkeys = useMemo(
@@ -49,7 +53,7 @@ export function CommandMenuProvider({
   return (
     <CommandMenuContext.Provider value={value}>
       {children}
-      <CommandPalette open={open} onClose={close} role={role} />
+      <CommandPalette open={open} onClose={close} role={role} modulesOff={modulesOff} />
     </CommandMenuContext.Provider>
   );
 }

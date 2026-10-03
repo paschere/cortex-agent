@@ -92,6 +92,8 @@ export const JOBS: JobSpec[] = [
   { name: 'management/follow-up.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'goals/watch.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'reports/weekly.dispatch', cron: '0 12 * * 1', retryLimit: 1, concurrency: 1 },
+  // Cobro (0187): 13:00 UTC = 8:00 en Bogotá, para que el recordatorio llegue en horario.
+  { name: 'billing/renewals', cron: '0 13 * * *', retryLimit: 1, concurrency: 1 },
   // El registro de trabajo (0174): 06:45 de Bogotá todos los días, después de
   // que los compromisos refrescan su estado. Ver apps/web/inngest/functions/work-sync.ts.
   { name: 'work/sync.dispatch', cron: '45 11 * * *', retryLimit: 1, concurrency: 1 },
@@ -165,6 +167,17 @@ export const JOBS: JobSpec[] = [
   { name: 'dev/task.intake', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.queued', retryLimit: 0, concurrency: 2, singletonKeyFrom: 'taskId' },
   { name: 'dev/task.status', retryLimit: 1, concurrency: 5 },
+  // Derechos del titular (0188). El barrido diario (04:30 Bogotá) vence los ZIP
+  // de exportación viejos y reparte las purgas cuya gracia venció. La purga
+  // tiene 0 reintentos: borra, y un estado a medias lo decide una persona.
+  { name: 'legal/dispatch', cron: '30 9 * * *', retryLimit: 1, concurrency: 1 },
+  { name: 'legal/export.run', retryLimit: 1, concurrency: 1, singletonKeyFrom: 'exportId' },
+  {
+    name: 'legal/organization.purge',
+    retryLimit: 0,
+    concurrency: 1,
+    singletonKeyFrom: 'deletionId',
+  },
 ];
 
 /**

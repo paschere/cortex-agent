@@ -19,13 +19,32 @@ function required(name: string): string {
         `[cortex-whatsapp] ${name} is not set, so this service cannot start.`,
         '  CORTEX_BASE_URL          the public https origin of Cortex',
         '  WHATSAPP_BRIDGE_TOKEN    the shared secret, same value as in Cortex',
-        '  WHATSAPP_ORGANIZATION_ID the workspace this WhatsApp number belongs to',
+        '  WHATSAPP_ORGANIZATION_ID optional: pins the bridge to ONE workspace (single mode)',
         '',
       ].join('\n'),
     );
     process.exit(1);
   }
   return value;
+}
+
+function optional(name: string): string | null {
+  const value = process.env[name]?.trim();
+  return value ? value : null;
+}
+
+/**
+ * Who this process is, for the lease in Cortex (migration 0189). Stable for the
+ * life of the process and different between two containers that overlap during
+ * a deploy — which is exactly the moment two of them must not both hold the same
+ * WhatsApp session. Railway's replica id when there is one; otherwise host, pid
+ * and a random tail.
+ */
+function instanceId(): string {
+  const explicit = optional('WHATSAPP_INSTANCE_ID') ?? optional('RAILWAY_REPLICA_ID');
+  const host = process.env.HOSTNAME ?? 'bridge';
+  const raw = explicit ?? `${host}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  return raw.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 128);
 }
 
 function number(name: string, fallback: number): number {
@@ -35,10 +54,36 @@ function number(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/**
+ * `single`: WHATSAPP_ORGANIZATION_ID is set and this process serves that one
+ * workspace, exactly as before multi-tenancy — one session, started at boot,
+ * never stopped by Cortex. `multi`: Cortex says which workspaces need a socket
+ * and this process reconciles towards that list (see `reconcile.ts`).
+ */
+export type BridgeMode = 'single' | 'multi';
+
 export interface Config {
   cortexBaseUrl: string;
   bridgeToken: string;
-  organizationId: string;
+  /** Set only in single mode. */
+  organizationId: string | null;
+  mode: BridgeMode;
+  /** This process, for the per-workspace lease in Cortex. */
+  instanceId: string;
+  /**
+   * Ceiling on WhatsApp sockets in this process. Each paired session holds a
+   * socket, its signal key store and a few buffers in memory — a few MB — so
+   * 50 fits comfortably in a small Railway container. Past it, workspaces wait
+   * for a second process (the lease lets one take them) instead of this one
+   * running out of memory with every number on it.
+   */
+  maxSessions: number;
+  /** How often the list of workspaces is read back from Cortex. */
+  reconcileMs: number;
+  /** How long a claim on a workspace lasts without being renewed. */
+  leaseMs: number;
+  /** Pause between two session starts, so a boot does not load 50 key stores at once. */
+  startStaggerMs: number;
   port: number;
   /** Buffer flush: whichever comes first. */
   batchIntervalMs: number;
@@ -76,10 +121,19 @@ export interface Config {
 }
 
 export function loadConfig(): Config {
+  const organizationId = optional('WHATSAPP_ORGANIZATION_ID');
+  const reconcileMs = number('WHATSAPP_RECONCILE_MS', 15_000);
   return {
     cortexBaseUrl: required('CORTEX_BASE_URL').replace(/\/+$/, ''),
     bridgeToken: required('WHATSAPP_BRIDGE_TOKEN'),
-    organizationId: required('WHATSAPP_ORGANIZATION_ID'),
+    organizationId,
+    mode: organizationId ? 'single' : 'multi',
+    instanceId: instanceId(),
+    maxSessions: Math.floor(number('WHATSAPP_MAX_SESSIONS', 50)),
+    reconcileMs,
+    // At least three reconcile periods: one missed beat must not lose a lease.
+    leaseMs: Math.max(number('WHATSAPP_LEASE_MS', 60_000), reconcileMs * 3),
+    startStaggerMs: number('WHATSAPP_START_STAGGER_MS', 750),
     port: number('PORT', 3200),
     batchIntervalMs: number('WHATSAPP_BATCH_INTERVAL_MS', 30_000),
     batchSize: number('WHATSAPP_BATCH_SIZE', 50),

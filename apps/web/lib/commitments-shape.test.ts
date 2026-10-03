@@ -71,8 +71,10 @@ describe('the CHECK constraint in Postgres', () => {
     // inline in the `create table`, where the name is implicit.
     const named =
       /constraint\s+commitments_kind_check[\s\S]*?check\s*\(\s*kind\s+in\s*\(([\s\S]*?)\)\s*\)/i;
+    // `create table public.commitments (` exactamente: otra tabla que sólo
+    // REFERENCIA public.commitments (contract_events, 0195) no cuenta.
     const inline =
-      /create table[^;]*?public\.commitments[\s\S]*?check\s*\(\s*kind\s+in\s*\(([\s\S]*?)\)\s*\)/i;
+      /create table\s+(?:if not exists\s+)?public\.commitments\s*\([\s\S]*?check\s*\(\s*kind\s+in\s*\(([\s\S]*?)\)\s*\)/i;
 
     let listed: string | undefined;
     for (const text of texts) {

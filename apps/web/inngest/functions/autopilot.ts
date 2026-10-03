@@ -3,7 +3,7 @@ import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { notify } from '@/lib/notifications/notify';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
-import { bogotaHour, bogotaToday, runAutopilot } from '@cortex/agent-tools';
+import { bogotaHour, bogotaToday, isModuleEnabled, runAutopilot } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
 /**
@@ -74,6 +74,10 @@ export const autopilotWorkspaceJob: JobHandler = async ({ event, step }) => {
   // decidiendo por el día en que se repartió.
   const day = (event.data.day as string | undefined) ?? bogotaToday();
   return step.run('run', async () => {
+    // Con el módulo apagado (0186) el piloto no corre, aunque su configuración
+    // siga encendida: apagar el módulo no le borra los ajustes a nadie.
+    if (!(await isModuleEnabled(getOrgScopedClient(organizationId), 'autopilot')))
+      return { organizationId, day, skipped: 'módulo del piloto apagado' };
     const deps = await autopilotRunDeps(organizationId, day);
     if (!deps) return { organizationId, day, skipped: 'este espacio no tiene agente' };
     const result = await runAutopilot(deps);

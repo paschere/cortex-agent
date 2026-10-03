@@ -1,6 +1,11 @@
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { PAIRING_REQUEST_TTL_MS, parsePairingCommand } from '@/lib/whatsapp/pairing';
+import {
+  PAIRING_REQUEST_TTL_MS,
+  heldByLiveBridge,
+  parsePairingCommand,
+} from '@/lib/whatsapp/pairing';
+import { wipeWhatsappSession } from '@/lib/whatsapp/wipe';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -19,6 +24,14 @@ import { type NextRequest, NextResponse } from 'next/server';
  *   { mode: 'keepalive' }           — la pantalla sigue abierta; renueva una
  *                                     petición VIVA, nunca revive una vencida.
  *   { mode: 'cancel' }              — ya no.
+ *   { mode: 'unlink' }              — «Desvincular» (0189): el puente cierra el
+ *                                     dispositivo en WhatsApp y borra la sesión;
+ *                                     sin puente vivo, se borra aquí.
+ *
+ * CADA EMPRESA VINCULA EL SUYO (0189). Ya no hace falta que el puente haya
+ * «reportado» para esta empresa: pedir vincular crea la fila, y el puente
+ * multiempresa abre una conexión para ella en la siguiente vuelta (≤ 15 s).
+ * Un número que ya es de OTRA empresa se rechaza con una explicación.
  *
  * SOLO ADMINISTRADORES. Vincular decide qué teléfono es «el número de la
  * empresa» — el que lee los grupos y contesta con las herramientas de cada
@@ -83,6 +96,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   }
 
+  if (command.mode === 'unlink') return unlink(db, session.id, now);
+
   const current = await db
     .from('whatsapp_sessions')
     .select('status, pairing_phone, last_seen_at')
@@ -95,18 +110,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // No row means the bridge has never reported for THIS workspace. Writing one
-  // here would only hide that — the screen explains it instead (see /status).
-  if (!current.data) {
-    return NextResponse.json(
-      {
-        error:
-          'El servicio de WhatsApp todavía no ha reportado para este espacio de trabajo, así que no hay a quién pedirle el código.',
-      },
-      { status: 409 },
-    );
-  }
-  if (current.data.status === 'connected') {
+  if (current.data?.status === 'connected') {
     return NextResponse.json(
       { error: 'El número ya está vinculado y en línea. No hace falta volver a vincularlo.' },
       { status: 409 },
@@ -114,6 +118,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const phone = command.mode === 'code' ? command.phone : null;
+
+  // Un número, una empresa. Dicho ahora, antes de que alguien escriba un código
+  // en el teléfono para un vínculo que se va a deshacer solo.
+  if (phone) {
+    const taken = await db.rpc('whatsapp_phone_taken', { p_phone: phone });
+    if (taken.error) {
+      logger.error(`whatsapp: could not check the number — ${taken.error.message}`);
+      return NextResponse.json({ error: 'No se pudo revisar el número.' }, { status: 500 });
+    }
+    if (taken.data === true) {
+      return NextResponse.json(
+        {
+          error:
+            'Ese número ya está vinculado a otro espacio de trabajo en Cortex. Un número atiende a una sola empresa: usa otro número dedicado.',
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const row: Record<string, unknown> = {
     pairing_requested_at: now.toISOString(),
     pairing_phone: phone,
@@ -121,12 +145,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   };
   // A code belongs to the number it was issued for. Switching mode or number
   // retires the one on screen at once instead of leaving a dead code to type.
-  if ((current.data.pairing_phone as string | null) !== phone) {
+  if (((current.data?.pairing_phone as string | null) ?? null) !== phone) {
     row.pairing_code = null;
     row.pairing_code_expires_at = null;
   }
 
-  const saved = await db.from('whatsapp_sessions').update(row);
+  // Sin fila, ésta es la primera vez que la empresa vincula: se crea aquí, y el
+  // puente multiempresa la recoge en su siguiente vuelta.
+  const saved = current.data
+    ? await db.from('whatsapp_sessions').update(row)
+    : await db
+        .from('whatsapp_sessions')
+        .upsert({ ...row, status: 'waiting' }, { onConflict: 'organization_id' });
   if (saved.error) {
     logger.error(`whatsapp: could not store a pairing request — ${saved.error.message}`);
     return NextResponse.json({ error: 'No se pudo pedir el código.' }, { status: 500 });
@@ -139,5 +169,61 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       command.mode === 'code'
         ? 'Pidiendo el código a WhatsApp. Aparece aquí en unos segundos.'
         : 'Pidiendo el código QR. Aparece aquí en unos segundos.',
+  });
+}
+
+/**
+ * «Desvincular». Si un puente tiene la sesión ahora, se le pide a él: sólo él
+ * puede cerrar el dispositivo en WhatsApp para que «Cortex» desaparezca de la
+ * lista del teléfono. Si no hay puente que la tenga, se borra aquí — y se dice
+ * que en el teléfono queda una entrada que conviene quitar a mano.
+ */
+async function unlink(
+  db: ReturnType<typeof getOrgScopedClient>,
+  actorId: string,
+  now: Date,
+): Promise<NextResponse> {
+  const current = await db
+    .from('whatsapp_sessions')
+    .select('status, paired, owner_instance, lease_expires_at, last_seen_at')
+    .maybeSingle();
+  if (current.error) {
+    logger.error(`whatsapp: could not read the session to unlink — ${current.error.message}`);
+    return NextResponse.json({ error: 'No se pudo leer el estado de WhatsApp.' }, { status: 500 });
+  }
+  if (!current.data) {
+    return NextResponse.json({ ok: true, note: 'No había ningún número vinculado.' });
+  }
+
+  if (heldByLiveBridge(current.data, now)) {
+    const asked = await db.from('whatsapp_sessions').update({
+      unlink_requested_at: now.toISOString(),
+      pairing_requested_at: null,
+      pairing_phone: null,
+      updated_at: now.toISOString(),
+    });
+    if (asked.error) {
+      logger.error(`whatsapp: could not request an unlink — ${asked.error.message}`);
+      return NextResponse.json({ error: 'No se pudo desvincular.' }, { status: 500 });
+    }
+    logger.info(`whatsapp: unlink requested by ${actorId}`);
+    return NextResponse.json({
+      ok: true,
+      note: 'Desvinculando. En unos segundos el número sale de Cortex y del teléfono.',
+    });
+  }
+
+  const wiped = await wipeWhatsappSession(db, 'unlink', now);
+  if (wiped.error) {
+    logger.error(`whatsapp: could not wipe the session — ${wiped.error}`);
+    return NextResponse.json({ error: 'No se pudo desvincular.' }, { status: 500 });
+  }
+  logger.info(`whatsapp: session wiped by ${actorId} (no live bridge held it)`);
+  return NextResponse.json({
+    ok: true,
+    note:
+      current.data.paired === true
+        ? 'Listo, la sesión se borró de Cortex. En el teléfono, quita también «Cortex» de Dispositivos vinculados.'
+        : 'Listo, no queda ningún número vinculado.',
   });
 }

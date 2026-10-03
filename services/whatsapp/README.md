@@ -27,7 +27,9 @@ socket.
 |---|---|
 | `src/config.ts` | Everything it needs, read once and validated loudly |
 | `src/auth-state.ts` | The session, in Postgres instead of on disk — the piece that stops re-pairing on every deploy |
-| `src/socket.ts` | The connection: reconnect policy, group filtering, the DM path, and what the account will and will not do |
+| `src/manager.ts` | One process, many workspaces: starts and stops one session per workspace Cortex leases to it (0189) |
+| `src/reconcile.ts` | Desired vs running → start/stop, and the lease rules, as pure tested functions |
+| `src/socket.ts` | One workspace's connection: reconnect policy, group filtering, the DM path, «Desvincular», and what the account will and will not do |
 | `src/pairing.ts` | When an unpaired bridge talks to WhatsApp — only while somebody asks from Cortex — as pure, tested functions |
 | `src/extract.ts` | A Baileys protobuf into the flat shape Cortex stores |
 | `src/cortex.ts` | The only way it reaches anything that persists |
@@ -38,7 +40,8 @@ socket.
 ```bash
 export CORTEX_BASE_URL=http://localhost:3000
 export WHATSAPP_BRIDGE_TOKEN=$(openssl rand -base64 32)   # same value in .env.local
-export WHATSAPP_ORGANIZATION_ID=<ba_organization.id>
+# Unset = multi-workspace mode (each workspace links its own number).
+# export WHATSAPP_ORGANIZATION_ID=<ba_organization.id>   # single mode
 pnpm --filter @cortex/whatsapp-bridge dev
 ```
 

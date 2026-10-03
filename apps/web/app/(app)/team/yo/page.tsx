@@ -1,11 +1,21 @@
+import { MyPayrollCard } from '@/components/payroll/MyPayrollCard';
+import { MyTimesheet } from '@/components/projects/MyTimesheet';
 import { MyWeek } from '@/components/team/MyWeek';
+import { companyModules } from '@/lib/modules/server';
+import { timesheetView } from '@/lib/projects/views';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { readPersonHistory, readTeamReport, teamHrefs, teamViewer } from '@/lib/team/read';
 import { buildPersonScreen } from '@/lib/team/screen';
 import { markableTrackers, periodFor, readPeriodKey } from '@/lib/team/shape';
-import { bogotaToday, resolveStepFor } from '@cortex/agent-tools';
+import {
+  bogotaToday,
+  listServiceProjects,
+  projectPersonTimesheet,
+  resolveStepFor,
+} from '@cortex/agent-tools';
 import { notFound } from 'next/navigation';
+import { logTimeAction } from '../../proyectos/actions';
 import { TEAM_ACTIONS } from '../team-actions';
 
 export const dynamic = 'force-dynamic';
@@ -68,12 +78,43 @@ export default async function MyWeekPage({
     viewer.seesAll || (viewer.visibleIds?.size ?? 0) > 1
       ? hrefs.team({ periodo: periodKey, tipo: null })
       : null;
+  // Mis horas de la semana (0196), sólo con el módulo de proyectos prendido.
+  const timesheet = (await companyModules(user.organization.id)).has('service_orders')
+    ? await Promise.all([
+        projectPersonTimesheet(db, user.id, today),
+        listServiceProjects(db, { statuses: ['abierto', 'en_curso', 'en_pausa', 'terminado'] }),
+      ])
+    : null;
   return (
-    <MyWeek
-      screen={withResolve}
-      actions={TEAM_ACTIONS}
-      askHref={hrefs.chat(ASK_PROMPT)}
-      teamHref={teamHref}
-    />
+    <>
+      <MyWeek
+        screen={withResolve}
+        actions={TEAM_ACTIONS}
+        askHref={hrefs.chat(ASK_PROMPT)}
+        teamHref={teamHref}
+      />
+      {/* 0194: su último pago y su saldo de vacaciones, sólo suyos. */}
+      <MyPayrollCard organizationId={user.organization.id} userId={user.id} />
+      {timesheet && (
+        <MyTimesheet
+          week={timesheetView(
+            timesheet[0],
+            timesheet[0].rows.map((r) => ({
+              key: r.projectId,
+              label: timesheet[0].projects[r.projectId]
+                ? `${timesheet[0].projects[r.projectId]?.code} · ${timesheet[0].projects[r.projectId]?.title}`
+                : 'Proyecto',
+              href: `/proyectos/${r.projectId}`,
+              days: r.days,
+              total: r.total,
+            })),
+            { today, hrefFor: () => '/team/yo' },
+          )}
+          projects={timesheet[1].map((p) => ({ id: p.id, label: `${p.code} · ${p.title}` }))}
+          today={today}
+          logTime={logTimeAction}
+        />
+      )}
+    </>
   );
 }

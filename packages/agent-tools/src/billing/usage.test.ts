@@ -633,3 +633,52 @@ describe('seats', () => {
     expect(seats.full).toBe(false);
   });
 });
+
+describe('read-only grace (0187) stops new work, and only for its own workspace', () => {
+  const lapsed = {
+    organization_id: ACME,
+    plan_code: 'team',
+    status: 'trialing',
+    trial_ends_at: new Date(NOW.getTime() - 86_400_000).toISOString(),
+    current_period_start: null,
+    current_period_end: null,
+    cancel_at_period_end: false,
+    canceled_at: null,
+    provider: null,
+    last_reminder_key: null,
+  };
+
+  it('refuses a new answer when the trial ended unpaid, and says it was billing', async () => {
+    const tables = { ...fixture(), billing_subscriptions: [lapsed] };
+    const e = await checkMeter(scoped(tables, ACME), 'answers', NOW);
+    expect(isRefused(e)).toBe(true);
+    expect(e.blockedBy).toBe('billing');
+  });
+
+  it('documents degrade instead of being refused', async () => {
+    const tables = { ...fixture(), billing_subscriptions: [lapsed] };
+    const e = await checkMeter(scoped(tables, ACME), 'documents', NOW);
+    expect(isRefused(e)).toBe(false);
+    expect(isDegraded(e)).toBe(true);
+  });
+
+  it("another workspace's lapsed trial never blocks this one", async () => {
+    const tables = {
+      ...fixture(),
+      billing_subscriptions: [{ ...lapsed, organization_id: GLOBEX }],
+    };
+    const e = await checkMeter(scoped(tables, ACME), 'answers', NOW);
+    expect(isRefused(e)).toBe(false);
+    expect(e.blockedBy).toBeUndefined();
+  });
+
+  it('a running trial changes nothing', async () => {
+    const running = {
+      ...lapsed,
+      trial_ends_at: new Date(NOW.getTime() + 5 * 86_400_000).toISOString(),
+    };
+    const tables = { ...fixture(), billing_subscriptions: [running] };
+    const e = await checkMeter(scoped(tables, ACME), 'answers', NOW);
+    expect(isRefused(e)).toBe(false);
+  });
+});

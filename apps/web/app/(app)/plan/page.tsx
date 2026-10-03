@@ -1,6 +1,9 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel, PanelHead } from '@/components/ui/panel';
 import { Field } from '@/components/ui/provenance';
+import { type BillingAccessView, PAYMENT_STATUS_LABEL } from '@/lib/billing/billing-shape';
+import { CHECKOUT_UNAVAILABLE, checkoutAvailable, reconcileReturn } from '@/lib/billing/checkout';
+import { isPurchasable, listPayments } from '@/lib/billing/ledger';
 import {
   METER_LABEL,
   METER_STATE_LABEL,
@@ -22,11 +25,14 @@ import {
   listPlans,
   listUsageEvents,
   meteringSince,
+  readBillingAccess,
   readWorkspaceUsage,
 } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { Check, Gauge, Receipt, Users } from 'lucide-react';
 import Link from 'next/link';
+import { BillingPanel } from './_components/BillingPanel';
+import { CheckoutButton } from './_components/CheckoutButton';
 import { PlanInterest } from './_components/PlanInterest';
 
 export const dynamic = 'force-dynamic';
@@ -142,7 +148,7 @@ function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
 export default async function PlanPage({
   searchParams,
 }: {
-  searchParams: Promise<{ meter?: string }>;
+  searchParams: Promise<{ meter?: string; pago?: string; id?: string }>;
 }) {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
@@ -150,12 +156,29 @@ export default async function PlanPage({
   const params = await searchParams;
   const openMeter: MeterId = params.meter === 'documents' ? 'documents' : 'answers';
 
+  // De vuelta de la pasarela (?pago=<referencia>&id=<transacción>): se consulta
+  // la transacción y se aplica por el mismo camino idempotente que el aviso,
+  // ANTES de leer el estado, para que la pantalla ya diga «al día».
+  const returning =
+    typeof params.pago === 'string' && typeof params.id === 'string'
+      ? await reconcileReturn(user.organization.id, params.pago, params.id)
+      : null;
+
   const usage = await readWorkspaceUsage(db, user.organization.id);
-  const [plans, ledger, since] = await Promise.all([
+  const [plans, ledger, since, billing, payments] = await Promise.all([
     listPlans(db),
     listUsageEvents(db, { meter: openMeter, period: usage.period, limit: 60 }),
     meteringSince(db),
+    readBillingAccess(db).catch(() => null),
+    listPayments(db).catch(() => null),
   ]);
+  const checkoutReady = checkoutAvailable();
+  const billingView = billing ? (billing.access as BillingAccessView) : null;
+  const subscription = billing?.subscription ?? null;
+  const returnedPayment =
+    typeof params.pago === 'string'
+      ? ((payments ?? []).find((p) => p.reference === params.pago) ?? null)
+      : null;
 
   const { plan, seats } = usage;
   // Invitar y ver los pendientes es de quien administra el espacio; ver la
@@ -256,8 +279,9 @@ export default async function PlanPage({
 
           {(plan.priceCopPerSeat > 0 || plan.retainerCop != null) && (
             <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-              Todavía no cobramos dentro de Cortex: esta es la cuenta del mes tal como la
-              calculamos, no un cargo.
+              {checkoutReady && isPurchasable(plan)
+                ? 'Esta es la cuenta del mes tal como la calculamos; la pagas aquí con PSE, tarjeta, Nequi o Bancolombia.'
+                : 'Todavía no cobramos dentro de Cortex: esta es la cuenta del mes tal como la calculamos, no un cargo.'}
               {plan.retainerCop != null
                 ? ' Gerente se activa en una conversación, no sumando asientos.'
                 : ' Cuando entre alguien nuevo, esta cifra sube sola y aquí lo ves.'}
@@ -272,6 +296,43 @@ export default async function PlanPage({
           )}
         </div>
       </Panel>
+
+      {returnedPayment && (
+        <output
+          className={clsx(
+            'block rounded-sm border px-3 py-2.5 text-sm',
+            returnedPayment.status === 'approved'
+              ? 'border-emerald/20 bg-emerald-soft text-ink'
+              : returnedPayment.status === 'pending'
+                ? 'border-border bg-surface-2 text-ink-muted'
+                : 'border-rose/20 bg-rose-soft text-rose',
+          )}
+        >
+          {returnedPayment.status === 'approved'
+            ? `Pago recibido: ${cop(returnedPayment.amount_cop)}. El plan quedó al día.`
+            : returnedPayment.status === 'pending'
+              ? returning === 'unverified'
+                ? 'Todavía no tenemos la confirmación de la pasarela. Cuando llegue, el plan se activa solo; no hace falta pagar otra vez.'
+                : 'El pago está en proceso. Cuando la pasarela lo confirme, el plan se activa solo.'
+              : `El pago quedó ${PAYMENT_STATUS_LABEL[returnedPayment.status]?.toLowerCase() ?? returnedPayment.status}. No se cobró nada; puedes intentarlo otra vez.`}
+        </output>
+      )}
+
+      {/* ---------------------------------------------------------------- */}
+      {(subscription || (payments && payments.length > 0) || isPurchasable(plan)) && (
+        <BillingPanel
+          view={billingView}
+          planName={plan.name}
+          planCode={plan.code}
+          purchasable={isPurchasable(plan)}
+          checkoutReady={checkoutReady}
+          canManage={canManageTeam}
+          hasSubscription={subscription !== null}
+          canceling={billingView?.reason === 'canceling'}
+          payments={payments}
+          amountCop={seats.chargeCop}
+        />
+      )}
 
       {/* ---------------------------------------------------------------- */}
       <Panel>
@@ -419,8 +480,9 @@ export default async function PlanPage({
             {/* Said plainly rather than hidden behind a checkout that does not
                 exist. See the billing note in agent-tools/src/billing/plans.ts. */}
             <p className="text-xs leading-relaxed text-ink-muted">
-              Todavía no cobramos dentro del producto. Dinos cuál necesitas y lo activamos; queda
-              anotado con tu nombre y la fecha.
+              {checkoutReady
+                ? 'Los planes por persona se pagan aquí y quedan activos al confirmarse el pago. Cambiar de plan empieza un mes nuevo desde hoy, sin prorrateo. Gerente y Enterprise se acuerdan en una conversación.'
+                : `${CHECKOUT_UNAVAILABLE} Dinos cuál necesitas y queda anotado con tu nombre y la fecha.`}
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {others.map((other) => (
@@ -463,7 +525,15 @@ export default async function PlanPage({
                             )} al mes como mínimo`
                           : 'Sin tope de personas'}
                   </div>
-                  <PlanInterest planCode={other.code} planName={other.name} />
+                  {checkoutReady && canManageTeam && isPurchasable(other) ? (
+                    <CheckoutButton
+                      planCode={other.code}
+                      label={`Pagar ${other.name}`}
+                      variant="outline"
+                    />
+                  ) : (
+                    <PlanInterest planCode={other.code} planName={other.name} />
+                  )}
                 </div>
               ))}
             </div>
@@ -471,7 +541,7 @@ export default async function PlanPage({
         </Panel>
       )}
 
-      {usage.status !== 'active' && (
+      {usage.status !== 'active' && !subscription && (
         <p className="text-xs text-rose">
           Tu suscripción está marcada como{' '}
           {usage.status === 'past_due' ? 'pendiente de pago' : 'cancelada'}. Avísale al equipo de

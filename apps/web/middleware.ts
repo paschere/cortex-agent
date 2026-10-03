@@ -101,11 +101,44 @@ const PUBLIC_PATHS = [
   // detrás de la sesión.
   '/cotizacion',
   '/api/sales/public',
+  // Encuestas de satisfacción (migración 0193): la página por token donde el
+  // cliente califica de 0 a 10 y su endpoint para responder. Cada uno valida
+  // el token (lib/crm/public.ts); el resto de /comercial y /api/crm sigue
+  // detrás de la sesión.
+  '/encuesta',
+  '/api/crm/public',
+  // Informe para socios compartido (migración 0191): la página por token, su
+  // PDF, su logo y el desbloqueo con contraseña. Cada uno valida el token (y la
+  // cookie de desbloqueo cuando el informe la pide); ver lib/board/public.ts.
+  // El resto de /informe-socios y /api/board sigue detrás de la sesión.
+  '/informe',
+  '/api/board/public',
   // La hoja de estilos de informes y gráficas (app/report.css/route.ts): la
   // carga el layout raíz en TODAS las páginas, también las públicas — una
   // vista compartida o la landing la pedían sin cookie y rebotaban a /login.
   // Es CSS, sin datos.
   '/report.css',
+  // Los textos legales (0188): política de tratamiento de datos (Ley 1581),
+  // privacidad, términos y cookies. Tienen que leerse ANTES de tener cuenta —
+  // la casilla del registro los enlaza — y son públicos por naturaleza. Sólo
+  // las páginas: /api/legal sigue detrás de la sesión.
+  '/privacidad',
+  '/terminos',
+  '/cookies',
+  '/tratamiento-de-datos',
+  // Cobro (migración 0187). Wompi avisa sin cookie: la ruta verifica la firma
+  // SHA256 con WOMPI_EVENTS_SECRET y rechaza todo lo que no la trae. SÓLO el
+  // aviso es público; el checkout y /plan siguen detrás de la sesión.
+  '/api/billing/wompi/webhook',
+  // «Pide tu acceso» (SIGNUP_MODE=request): la página pública y el endpoint
+  // que la guarda. El endpoint responde 404 en cualquier otro modo.
+  '/acceso',
+  '/api/access-requests',
+  // El formulario público de PQRS (migración 0195): la página por token y su
+  // endpoint para radicar. El token ES la credencial (lib/compliance/public.ts);
+  // el resto de /cumplimiento y de /api/pqrs sigue detrás de la sesión.
+  '/pqrs',
+  '/api/pqrs/public',
 ];
 
 interface SessionPayload {

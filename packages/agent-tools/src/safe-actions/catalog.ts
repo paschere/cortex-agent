@@ -399,6 +399,8 @@ const salesInvoiceEmit: AnySafeActionPolicy = {
 
 export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> = {
   'sales.quote_create': salesQuoteCreate,
+  // Una encuesta NPS al mismo cliente en un día es un doble envío (0193).
+  'crm.send_nps': { windowMs: 24 * 60 * 60_000, noun: 'la encuesta' },
   'sales.quote_send': salesQuoteSend,
   'sales.invoice_emit': salesInvoiceEmit,
   'gmail.send_message': gmailSendMessage as unknown as AnySafeActionPolicy,

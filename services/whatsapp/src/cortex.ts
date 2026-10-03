@@ -1,5 +1,6 @@
 import type { Config } from './config';
 import { logger } from './logger';
+import type { ClaimReply } from './reconcile';
 
 /**
  * The only way this process reaches anything that persists.
@@ -40,6 +41,13 @@ export interface HeartbeatReply {
   /** E.164 digits to request a pairing CODE for; null/absent means show a QR. */
   pairingPhone?: string | null;
   /**
+   * Log this device out and forget the session (migration 0189). Sent when an
+   * admin pressed «Desvincular», and when the number that just connected is
+   * already linked to ANOTHER workspace — one phone serves one workspace.
+   * Optional: absent means keep going.
+   */
+  unlink?: 'requested' | 'phone_taken' | null;
+  /**
    * Replies a PERSON wrote from Cortex into an open customer-service
    * conversation (0185) — the client wrote within the last 24 h. Optional: an
    * older Cortex does not send it. Filtered again by `sanitizeOutbox`.
@@ -68,40 +76,107 @@ export interface OutboundMessage {
   mediaBase64: string | null;
 }
 
-export class CortexClient {
-  constructor(private readonly config: Config) {}
+/** Headers every bridge request carries, whichever workspace it is for. */
+export const MODE_HEADER = 'x-cortex-bridge-mode';
+export const INSTANCE_HEADER = 'x-cortex-bridge-instance';
+export const ORGANIZATION_HEADER = 'x-cortex-organization';
 
-  private async call<T>(
-    path: string,
-    init: { method: string; body?: unknown; timeoutMs?: number },
-  ): Promise<T | null> {
-    const url = `${this.config.cortexBaseUrl}${path}`;
-    // Every call is bounded. A hung request to Cortex must not stall the event
-    // loop that is also holding the WhatsApp socket open.
-    const signal = AbortSignal.timeout(init.timeoutMs ?? 30_000);
+async function callCortex<T>(
+  config: Config,
+  path: string,
+  init: {
+    method: string;
+    body?: unknown;
+    timeoutMs?: number;
+    organizationId?: string;
+    query?: string;
+  },
+): Promise<T | null> {
+  const url = `${config.cortexBaseUrl}${path}${init.query ?? ''}`;
+  // Every call is bounded. A hung request to Cortex must not stall the event
+  // loop that is also holding the WhatsApp sockets open.
+  const signal = AbortSignal.timeout(init.timeoutMs ?? 30_000);
 
-    try {
-      const response = await fetch(url, {
-        method: init.method,
-        headers: {
-          authorization: `Bearer ${this.config.bridgeToken}`,
-          'x-cortex-organization': this.config.organizationId,
-          ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
-        },
-        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-        signal,
-      });
+  try {
+    const response = await fetch(url, {
+      method: init.method,
+      headers: {
+        authorization: `Bearer ${config.bridgeToken}`,
+        [MODE_HEADER]: config.mode,
+        [INSTANCE_HEADER]: config.instanceId,
+        ...(init.organizationId ? { [ORGANIZATION_HEADER]: init.organizationId } : {}),
+        ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      signal,
+    });
 
-      if (!response.ok) {
-        // The body can echo a message, so only the status travels to the log.
-        logger.error({ path, status: response.status }, 'cortex refused a request');
-        return null;
-      }
-      return (await response.json()) as T;
-    } catch (err) {
-      logger.error({ path, err: (err as Error).message }, 'could not reach cortex');
+    if (!response.ok) {
+      // The body can echo a message, so only the status travels to the log.
+      logger.error(
+        { path, status: response.status, org: init.organizationId },
+        'cortex refused a request',
+      );
       return null;
     }
+    return (await response.json()) as T;
+  } catch (err) {
+    logger.error(
+      { path, err: (err as Error).message, org: init.organizationId },
+      'could not reach cortex',
+    );
+    return null;
+  }
+}
+
+/**
+ * The process-level conversation with Cortex: which workspaces need a socket
+ * here, and the lease that says this process — and no other — holds them.
+ * Carries no workspace header: it is about all of them.
+ */
+export class CortexControl {
+  constructor(private readonly config: Config) {}
+
+  claim(body: { running: string[] }): Promise<ClaimReply | null> {
+    return callCortex<ClaimReply>(this.config, '/api/whatsapp/bridge/sessions', {
+      method: 'POST',
+      body: {
+        action: 'claim',
+        mode: this.config.mode,
+        maxSessions: this.config.maxSessions,
+        leaseMs: this.config.leaseMs,
+        organizationId: this.config.organizationId,
+        running: body.running,
+      },
+      timeoutMs: 20_000,
+    });
+  }
+
+  /** Shutdown: give every workspace back so the next process can take it at once. */
+  release(): Promise<unknown> {
+    return callCortex(this.config, '/api/whatsapp/bridge/sessions', {
+      method: 'POST',
+      body: { action: 'release' },
+      timeoutMs: 10_000,
+    });
+  }
+}
+
+/**
+ * One workspace's conversation with Cortex. Every request names that
+ * workspace, so a session can only ever read and write its own state.
+ */
+export class CortexClient {
+  constructor(
+    private readonly config: Config,
+    readonly organizationId: string,
+  ) {}
+
+  private call<T>(
+    path: string,
+    init: { method: string; body?: unknown; timeoutMs?: number; query?: string },
+  ): Promise<T | null> {
+    return callCortex<T>(this.config, path, { ...init, organizationId: this.organizationId });
   }
 
   /** Boot: the paired identity and every signal key, in one read. */
@@ -121,9 +196,16 @@ export class CortexClient {
     return this.call('/api/whatsapp/bridge/state', { method: 'POST', body });
   }
 
-  /** Called only when WhatsApp says the device was logged out. */
-  wipeState(): Promise<unknown> {
-    return this.call('/api/whatsapp/bridge/state', { method: 'DELETE' });
+  /**
+   * Forget the session. `logged_out`: WhatsApp revoked the device. `unlink`: an
+   * admin pressed «Desvincular». `phone_taken`: the number is another
+   * workspace's. Cortex words the screen differently for each.
+   */
+  wipeState(reason: 'logged_out' | 'unlink' | 'phone_taken' = 'logged_out'): Promise<unknown> {
+    return this.call('/api/whatsapp/bridge/state', {
+      method: 'DELETE',
+      query: `?reason=${reason}`,
+    });
   }
 
   heartbeat(body: {

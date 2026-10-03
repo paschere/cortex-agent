@@ -21,6 +21,17 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
   // Trámites web (migration 0087). The note has to say the two things that
   // make this different from every other write on the list: it happens on a
   // system nobody here administers, and with the company's own login.
+  // La nómina propia y el SG-SST (0194). Los salarios no salen de la empresa.
+  'payroll.register_novelty':
+    'Agrega una novedad a la nómina de esa persona (horas extra, incapacidad, licencia, bono…). Cambia lo que se le liquida en el periodo; se puede anular en Nómina mientras el periodo no esté aprobado.',
+  'payroll.approve_period':
+    'Aprueba la nómina liquidada: el neto y la PILA entran a la caja proyectada y queda el aviso del día de pago. No paga nada; después de aprobada ya no se vuelve a liquidar.',
+  'payroll.leave_decide':
+    'Le responde a la persona su solicitud de ausencia. Si la apruebas, entra a la nómina del periodo y descuenta del saldo de vacaciones.',
+  'sst.log_activity':
+    'Deja la actividad en el registro del SG-SST (y su aviso si es futura). Es evidencia ante una visita de MinTrabajo o la ARL.',
+  'sst.report_incident':
+    'Registra el accidente o incidente y crea los avisos de FURAT (2 días hábiles) e investigación (15 días). No le reporta nada a la ARL: eso se hace en su portal.',
   'browser.submit_flow':
     'Entra al portal con la credencial de la empresa y radica o envía lo que diga el trámite. Pasa en el sistema de un tercero: desde acá no se puede deshacer ni cancelar.',
   'hubspot.create_contact':
@@ -64,7 +75,8 @@ const FAMILY_SYSTEM: Record<string, string> = {
   schedule: 'el programador de rutinas desatendidas',
   pipeline: 'la biblioteca de procedimientos compartida',
   presentations: 'la biblioteca de presentaciones para cliente',
-  payroll: 'el servicio de nómina',
+  payroll: 'la nómina de la empresa',
+  sst: 'el registro del SG-SST de la empresa',
   kb: 'el cerebro, la memoria compartida',
   vehicles: 'el registro de vehículos y, a través de él, el RUNT y el SIMIT',
   browser: 'un portal de un tercero, con la credencial de la empresa',

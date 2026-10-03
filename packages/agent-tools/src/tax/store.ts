@@ -31,7 +31,7 @@ import {
 // ---------------------------------------------------------------------------
 
 export const TAX_PROFILE_COLUMNS =
-  'nit, dv, person_type, gran_contribuyente, regimen_simple, iva_periodicity, agente_retencion, ica_city, ica_periodicity, exogena, activos_exterior, camara_comercio, nomina_electronica, pila, facturacion_electronica, owner_user_id, notice_days, source, source_document_id, updated_by, updated_at';
+  'nit, dv, person_type, gran_contribuyente, regimen_simple, iva_periodicity, agente_retencion, ica_city, ica_periodicity, exogena, activos_exterior, camara_comercio, nomina_electronica, pila, facturacion_electronica, impuesto_patrimonio, vinculados_exterior, rub_last_change, autorretencion_rate, simple_rate, ica_activities, owner_user_id, notice_days, source, source_document_id, updated_by, updated_at';
 
 interface ProfileRow {
   nit: string;
@@ -49,12 +49,24 @@ interface ProfileRow {
   nomina_electronica: boolean;
   pila: boolean;
   facturacion_electronica: boolean;
+  impuesto_patrimonio?: boolean | null;
+  vinculados_exterior?: boolean | null;
+  rub_last_change?: string | null;
+  autorretencion_rate?: number | string | null;
+  simple_rate?: number | string | null;
+  ica_activities?: TaxProfile['icaActivities'] | null;
   owner_user_id: string | null;
   notice_days: number;
   source: 'manual' | 'rut';
   source_document_id: string | null;
   updated_by: string | null;
   updated_at: string | null;
+}
+
+function numOrNull(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function rowToProfile(row: ProfileRow): TaxProfile {
@@ -74,6 +86,12 @@ export function rowToProfile(row: ProfileRow): TaxProfile {
     nominaElectronica: row.nomina_electronica,
     pila: row.pila,
     facturacionElectronica: row.facturacion_electronica,
+    impuestoPatrimonio: Boolean(row.impuesto_patrimonio),
+    vinculadosExterior: Boolean(row.vinculados_exterior),
+    rubLastChange: row.rub_last_change ?? null,
+    autorretencionRate: numOrNull(row.autorretencion_rate),
+    simpleRate: numOrNull(row.simple_rate),
+    icaActivities: Array.isArray(row.ica_activities) ? row.ica_activities : [],
     ownerUserId: row.owner_user_id,
     noticeDays: row.notice_days,
     source: row.source,
@@ -133,6 +151,13 @@ export function normalizeProfileInput(
     nominaElectronica: p.nominaElectronica,
     pila: p.pila,
     facturacionElectronica: p.facturacionElectronica,
+    impuestoPatrimonio: p.impuestoPatrimonio,
+    vinculadosExterior: p.vinculadosExterior,
+    rubLastChange: p.rubLastChange ?? null,
+    autorretencionRate: p.autorretencionRate ?? null,
+    // La tarifa SIMPLE sólo tiene sentido en el Régimen Simple.
+    simpleRate: p.regimenSimple ? (p.simpleRate ?? null) : null,
+    icaActivities: icaCity ? p.icaActivities : [],
     ownerUserId: p.ownerUserId ?? null,
     noticeDays: p.noticeDays,
     source: p.source,
@@ -179,6 +204,12 @@ export async function saveTaxProfile(
         nomina_electronica: p.nominaElectronica,
         pila: p.pila,
         facturacion_electronica: p.facturacionElectronica,
+        impuesto_patrimonio: p.impuestoPatrimonio,
+        vinculados_exterior: p.vinculadosExterior,
+        rub_last_change: p.rubLastChange,
+        autorretencion_rate: p.autorretencionRate,
+        simple_rate: p.simpleRate,
+        ica_activities: p.icaActivities,
         owner_user_id: p.ownerUserId,
         notice_days: p.noticeDays,
         source: p.source,

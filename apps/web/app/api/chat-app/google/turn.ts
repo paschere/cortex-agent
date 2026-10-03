@@ -10,6 +10,7 @@ import { chatModel } from '@cortex/agent-tools';
 import {
   type RiskLevel,
   classify,
+  enabledModules,
   familyOf,
   filterTools,
   findMemoryEcho,
@@ -17,6 +18,7 @@ import {
   maxLevel,
   runTool,
   selectToolsForTurn,
+  toolAllowedByModules,
   toolErrorDetail,
   toolErrorMessage,
 } from '@cortex/agent-tools';
@@ -409,9 +411,14 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
   }
 
   // --- tools: agent allow-list minus the user's team deny-list --------------
-  const denied = await deniedToolPatterns(db, req.userId);
+  const [denied, modulesOn] = await Promise.all([
+    deniedToolPatterns(db, req.userId),
+    enabledModules(db),
+  ]);
   const granted = filterTools(agent.allowedTools)
     .filter((t) => denied.length === 0 || !isToolDenied(t.id, denied))
+    // Lo de un módulo que la empresa apagó (0186) no se ofrece.
+    .filter((t) => toolAllowedByModules(t.id, modulesOn))
     // The surface's own ceiling, last, so it can only ever subtract from what
     // the person was already allowed.
     .filter((t) => (req.toolFilter ? req.toolFilter(t.id) : true));

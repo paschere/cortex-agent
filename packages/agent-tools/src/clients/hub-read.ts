@@ -51,7 +51,7 @@ const SCAN = 5000;
 // Lecturas compartidas
 // ---------------------------------------------------------------------------
 
-async function readAccountingInvoices(
+export async function readAccountingInvoices(
   db: SupabaseClient,
   opts: { clientId?: string; since: string },
 ): Promise<AccountingInvoiceIn[]> {
@@ -77,7 +77,7 @@ async function readAccountingInvoices(
   return [...byId.values()];
 }
 
-async function readDocumentInvoices(
+export async function readDocumentInvoices(
   db: SupabaseClient,
   opts: { clientId?: string },
 ): Promise<DocumentInvoiceIn[]> {
@@ -95,7 +95,10 @@ async function readDocumentInvoices(
   return (data ?? []) as DocumentInvoiceIn[];
 }
 
-async function readPayments(db: SupabaseClient, opts: { clientId?: string }): Promise<PaymentIn[]> {
+export async function readPayments(
+  db: SupabaseClient,
+  opts: { clientId?: string },
+): Promise<PaymentIn[]> {
   let q = db
     .from('payments')
     .select('id, client_id, extraction_id, invoice_number, amount, currency, paid_on, kind')
@@ -107,7 +110,7 @@ async function readPayments(db: SupabaseClient, opts: { clientId?: string }): Pr
   return (data ?? []) as PaymentIn[];
 }
 
-async function readLedger(
+export async function readLedger(
   db: SupabaseClient,
   opts: { clientId?: string; since: string },
 ): Promise<LedgerIn[]> {
@@ -130,7 +133,10 @@ async function readLedger(
 }
 
 /** Los momentos de contacto: correo, reunión, WhatsApp, nota, cobro enviado. */
-async function readContacts(db: SupabaseClient, opts: { clientId?: string }): Promise<ContactIn[]> {
+export async function readContacts(
+  db: SupabaseClient,
+  opts: { clientId?: string },
+): Promise<ContactIn[]> {
   const base = (table: string, cols: string) => {
     const q = db.from(table).select(cols);
     return opts.clientId ? q.eq('client_id', opts.clientId) : q.not('client_id', 'is', null);

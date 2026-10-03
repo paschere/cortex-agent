@@ -104,6 +104,12 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   sales_quote_send: 'Mandar la cotización al cliente',
   sales_invoice_emit: 'Emitir la factura electrónica',
   sales_list: 'Ver cotizaciones, pedidos y facturas',
+  crm_pipeline: 'Ver el embudo comercial',
+  crm_create_opportunity: 'Abrir una oportunidad de venta',
+  crm_update_opportunity: 'Mover o actualizar una oportunidad',
+  crm_log_activity: 'Anotar una actividad comercial',
+  crm_at_risk: 'Ver los clientes en riesgo de perderse',
+  crm_send_nps: 'Mandar la encuesta de satisfacción',
   web_search: 'Buscar en internet',
   web_scrape: 'Abrir página web',
   browser_list_flows: 'Ver los trámites aprendidos',
@@ -177,6 +183,16 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   payroll_payroll_stats: 'Ver cuánto cuesta la nómina',
   payroll_client_report: 'Ver el costo de la cuenta del cliente',
   payroll_cost_projection: 'Proyectar el costo del equipo',
+  payroll_period_summary: 'Ver cómo va la nómina del periodo',
+  payroll_register_novelty: 'Registrar una novedad de nómina',
+  payroll_approve_period: 'Aprobar la nómina',
+  payroll_payslip: 'Ver el desprendible de pago',
+  payroll_leave_request: 'Pedir vacaciones o un permiso',
+  payroll_leave_status: 'Ver el saldo de vacaciones',
+  payroll_leave_decide: 'Aprobar o rechazar una ausencia',
+  sst_status: 'Ver cómo va el SG-SST',
+  sst_log_activity: 'Registrar una actividad del SG-SST',
+  sst_report_incident: 'Reportar un accidente de trabajo',
   web_news: 'Buscar noticias',
   presentations_pick_candidate: 'Elegir de quién es la presentación',
   presentations_create_pdf: 'Armar la presentación en PDF',
@@ -211,6 +227,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   documents_confirm: 'Confirmar lo que se leyó del documento',
   documents_reject: 'Descartar la lectura del documento',
   documents_expiring: 'Ver los documentos que vencen',
+  help_search: 'Buscar en la ayuda de Cortex',
   documents_track_expiration: 'Registrar un documento que vence',
   documents_confirm_expiration: 'Confirmar el vencimiento leído del documento',
   documents_correction_stats: 'Ver qué campos siempre hay que corregir',
@@ -250,15 +267,52 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   autopilot_status: 'Ver lo que hizo el piloto',
   autopilot_configure: 'Configurar el piloto automático',
   autopilot_remind: 'Recordarle algo a un compañero',
+  modules_list: 'Ver los módulos prendidos',
+  modules_set: 'Prender o apagar un módulo',
   inventory_stock: 'Ver el inventario',
   inventory_move: 'Registrar un movimiento de inventario',
   inventory_reorder: 'Ver qué hay que pedir',
   purchasing_create_po: 'Crear órdenes de compra',
   purchasing_send_po: 'Aprobar y enviar una orden de compra',
   purchasing_receive: 'Recibir la mercancía de una orden de compra',
+  // Proyectos y flota (0196).
+  projects_create: 'Abrir una orden de servicio o proyecto',
+  projects_status: 'Ver cómo van los proyectos',
+  projects_log_time: 'Registrar horas en un proyecto',
+  projects_profitability: 'Ver la rentabilidad de los proyectos',
+  projects_invoice: 'Dejar en borrador la factura de un proyecto',
+  fleet_status: 'Ver la flota',
+  fleet_log_fuel: 'Registrar un tanqueo',
+  fleet_log_maintenance: 'Registrar un mantenimiento',
+  fleet_log_trip: 'Registrar un recorrido',
   tax_calendar: 'Ver el calendario de impuestos',
   tax_configure: 'Configurar el perfil tributario',
   tax_mark: 'Marcar un impuesto presentado o pagado',
+  tax_draft: 'Armar el borrador de una declaración',
+  tax_certificates: 'Mandar certificados de retención',
+  tax_exogena_export: 'Preparar la exógena',
+  statements_get: 'Ver los estados financieros',
+  budget_get: 'Ver el presupuesto contra lo real',
+  budget_set_line: 'Fijar una línea del presupuesto',
+  forecast_pnl: 'Pronosticar ventas y resultados',
+  board_generate: 'Armar el informe para socios',
+  board_send: 'Mandar el informe para socios',
+  contracts_draft: 'Redactar un borrador de contrato',
+  contracts_list: 'Ver los contratos',
+  contracts_obligations: 'Ver las obligaciones de los contratos',
+  contracts_extract_obligations: 'Leer las obligaciones de un contrato',
+  compliance_status: 'Ver cómo va el cumplimiento',
+  compliance_mark: 'Marcar una obligación de cumplimiento',
+  compliance_pqrs_create: 'Radicar una PQRS',
+  compliance_pqrs_respond: 'Guardar la respuesta de una PQRS',
+  compliance_case_update: 'Actualizar un proceso judicial',
+  // Cierre contable (0192).
+  close_status: 'Ver cómo va el cierre del mes',
+  close_mark_task: 'Marcar una tarea del cierre',
+  close_close_period: 'Cerrar el mes',
+  accounting_write_purchase: 'Causar facturas de compra en el programa contable',
+  accounting_write_receipt: 'Registrar recibos de caja en el programa contable',
+  accounting_write_supplier_payment: 'Registrar pagos a proveedores en el programa contable',
   goals_offer_metrics: 'Ver qué se puede medir aquí',
   goals_list: 'Ver las metas y cómo van',
   goals_measure: 'Medir cómo vamos este período',
@@ -399,6 +453,22 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
       return `Rechazar ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor: «${String(input.reason ?? '').slice(0, 120)}»`;
     }
+    case 'tax_certificates': {
+      const kind =
+        input.kind === 'iva' ? 'IVA' : input.kind === 'ica' ? 'ICA' : 'retención en la fuente';
+      const n = Array.isArray(input.suppliers) ? input.suppliers.length : 0;
+      return `Mandar por correo los certificados de ${kind} ${input.period ? `del bimestre ${input.period} de ${input.year}` : `de ${input.year}`} ${n ? `a ${n === 1 ? 'un proveedor' : `${n} proveedores`}` : 'a todos los proveedores con retención y correo'}`;
+    }
+    case 'payroll_register_novelty':
+      return `Registrar ${String(input.kind ?? 'una novedad').replace(/_/g, ' ')} en la nómina de ${input.person} desde el ${input.date}${input.dateTo ? ` hasta el ${input.dateTo}` : ''}`;
+    case 'payroll_approve_period':
+      return `Aprobar la nómina ${input.label ? `de ${input.label}` : 'liquidada más reciente'} — no paga nada; el pago se hace desde el banco`;
+    case 'payroll_leave_decide':
+      return `${input.decision === 'rechazada' ? 'Rechazar' : 'Aprobar'} la solicitud de ausencia${input.person ? ` de ${input.person}` : ''}${input.decision === 'rechazada' && input.note ? `: «${String(input.note).slice(0, 120)}»` : ''}`;
+    case 'sst_log_activity':
+      return `Registrar en el SG-SST ${String(input.kind ?? 'una actividad').replace(/_/g, ' ')}${input.title ? ` «${input.title}»` : ''} del ${input.date}`;
+    case 'sst_report_incident':
+      return `Reportar ${input.kind === 'incidente' ? 'un incidente' : input.kind === 'enfermedad_laboral' ? 'una enfermedad laboral' : 'un accidente de trabajo'} del ${input.occurredOn} y crear los avisos de FURAT e investigación`;
     case 'payables_schedule': {
       const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
       return `Programar el pago de ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor ${input.date ? `para el ${input.date}` : 'el día que sugiere la caja'}`;
@@ -409,8 +479,40 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       return `Mandar la cotización ${input.quote} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'al correo del cliente'}`;
     case 'sales_invoice_emit':
       return `Emitir la factura electrónica de ${input.document} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : 'el programa contable'} — sale con su CUFE a la DIAN`;
+    case 'crm_create_opportunity':
+      return `Abrir la oportunidad «${input.title}» con ${input.client}${typeof input.value === 'number' ? ` por $${input.value.toLocaleString('es-CO')}` : ''}${input.stage ? ` en ${input.stage}` : ''}`;
+    case 'crm_update_opportunity':
+      return `Actualizar la oportunidad «${input.opportunity}»${input.stage ? `: pasarla a ${input.stage}` : ''}${input.lostReasonKind ? ` (perdida por ${input.lostReasonKind})` : ''}${typeof input.value === 'number' ? `, valor $${input.value.toLocaleString('es-CO')}` : ''}`;
+    case 'crm_log_activity':
+      return `Anotar ${input.kind === 'task' ? 'la tarea' : 'la actividad'} «${String(input.title ?? '').slice(0, 120)}»${input.opportunity ? ` en «${input.opportunity}»` : input.client ? ` de ${input.client}` : ''}${input.kind === 'task' && input.dueOn ? ` para el ${input.dueOn}` : ''}`;
+    case 'crm_send_nps':
+      return input.linkOnly
+        ? `Crear el enlace de la encuesta de satisfacción para ${input.client}`
+        : `Mandar la encuesta de satisfacción a ${input.client} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'a su contacto principal'}`;
     case 'whatsapp_reply':
       return `Responder por WhatsApp, como persona, en la conversación abierta: «${String(input.text ?? '').slice(0, 120)}»`;
+    case 'projects_create':
+      return input.fromDocument
+        ? `Abrir un proyecto desde ${input.fromDocument}${input.tasksFromLines ? ', con una tarea por línea' : ''}`
+        : `Abrir ${input.kind === 'proyecto' ? 'el proyecto' : 'la orden de servicio'} «${input.title}»${input.client ? ` para ${input.client}` : ''}${typeof input.budgetAmount === 'number' ? ` con presupuesto de costo de $${input.budgetAmount.toLocaleString('es-CO')}` : ''}`;
+    case 'projects_log_time':
+      return `Registrar ${input.hours} h${input.person ? ` de ${input.person}` : ''} en ${input.project}${input.date ? ` el ${input.date}` : ' hoy'}${input.billable === false ? ' (no cobrables)' : ''}`;
+    case 'projects_invoice':
+      return `Dejar en borrador la factura de ${input.milestone ? `el hito «${input.milestone}» de ` : typeof input.amount === 'number' ? `$${input.amount.toLocaleString('es-CO')} de ` : 'lo que falta de '}${input.project} — no se emite`;
+    case 'fleet_log_fuel':
+      return `Registrar el tanqueo de ${input.plate}: ${input.gallons} galones por $${Number(input.amount ?? 0).toLocaleString('es-CO')}${typeof input.odometerKm === 'number' ? ` a los ${input.odometerKm.toLocaleString('es-CO')} km` : ''}`;
+    case 'fleet_log_maintenance':
+      return `Registrar en ${input.plate}: «${String(input.description ?? '').slice(0, 120)}»${typeof input.cost === 'number' ? ` por $${input.cost.toLocaleString('es-CO')}` : ''}`;
+    case 'fleet_log_trip': {
+      const route = [
+        input.origin,
+        ...(Array.isArray(input.stops) ? input.stops : []),
+        input.destination,
+      ]
+        .filter(Boolean)
+        .join(' → ');
+      return `Registrar el recorrido ${route || 'sin ruta'}${input.plate ? ` en ${input.plate}` : ''}${input.date ? ` el ${input.date}` : ''}`;
+    }
     case 'inventory_move':
       return input.kind === 'ajuste'
         ? `Ajustar «${input.product}» a ${input.countedQty} contados${input.location ? ` en ${input.location}` : ''}`
@@ -423,6 +525,42 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       return `Aprobar y enviar la orden de compra ${input.label ?? input.purchaseOrderId}${input.supplierName ? ` a ${input.supplierName}` : ''}${typeof input.expectedTotal === 'number' ? ` por $${input.expectedTotal.toLocaleString('es-CO')}` : ''}${input.to ? ` (${input.to})` : ''}`;
     case 'purchasing_receive':
       return `Recibir ${Array.isArray(input.lines) && input.lines.length ? 'parte de la mercancía' : 'toda la mercancía pendiente'} de la orden ${input.purchaseOrderId}`;
+    case 'budget_set_line':
+      return `${Number(input.amount) > 0 ? `Fijar ${input.category} en $${Number(input.amount).toLocaleString('es-CO')}` : `Quitar ${input.category}`} del presupuesto ${input.month ? `del mes ${input.month}` : 'de cada mes'}${input.year ? ` de ${input.year}` : ''}`;
+    case 'board_generate':
+      return `Armar el informe para socios ${input.period ? `de ${input.period}` : 'del mes anterior'} — queda en borrador, no se manda`;
+    case 'board_send':
+      return `Mandar por correo el informe para socios ${input.report ? `(${input.report})` : 'del mes anterior'} ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'a los correos configurados'}`;
+    case 'close_mark_task':
+      return `${input.status === 'no_aplica' ? 'Marcar como no aplica' : input.status === 'pendiente' ? 'Volver a pendiente' : 'Dar por hecha'} la tarea «${input.task}» del cierre${input.period ? ` de ${input.period}` : ''}${input.evidence ? `: «${String(input.evidence).slice(0, 120)}»` : ''}`;
+    case 'close_close_period':
+      return input.action === 'reabrir'
+        ? `Reabrir el mes ${input.period ?? 'cerrado'}${input.reason ? `: «${String(input.reason).slice(0, 120)}»` : ''}`
+        : `Cerrar el mes ${input.period ?? 'que toca'} — bloquea los cambios de Cortex con fecha de ese mes`;
+    case 'accounting_write_purchase': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Causar ${n === 1 ? 'una factura' : `${n} facturas`} de proveedor en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : input.provider === 'quickbooks' ? 'QuickBooks' : 'el programa contable'} — queda en los libros de la empresa`;
+    }
+    case 'accounting_write_receipt': {
+      const n = Array.isArray(input.payments) ? input.payments.length : 0;
+      return `Registrar ${n === 1 ? 'un recibo de caja' : `${n} recibos de caja`} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : input.provider === 'quickbooks' ? 'QuickBooks' : 'el programa contable'} — queda en los libros de la empresa`;
+    }
+    case 'accounting_write_supplier_payment': {
+      const n = Array.isArray(input.invoices) ? input.invoices.length : 0;
+      return `Registrar ${n === 1 ? 'un pago' : `${n} pagos`} a proveedores en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : input.provider === 'quickbooks' ? 'QuickBooks' : 'el programa contable'} — queda en los libros de la empresa`;
+    }
+    case 'contracts_draft':
+      return `Redactar un borrador de contrato (${String(input.template ?? 'plantilla')})${input.counterparty && typeof input.counterparty === 'object' && (input.counterparty as Record<string, unknown>).name ? ` con ${String((input.counterparty as Record<string, unknown>).name)}` : ''} — queda como borrador para revisión de un abogado; no se firma ni se envía`;
+    case 'contracts_extract_obligations':
+      return 'Leer el contrato y proponer sus obligaciones y fechas con su frase — ninguna se vigila hasta que alguien la confirme';
+    case 'compliance_mark':
+      return `Marcar «${input.item}» como ${input.status === 'cumplido' ? 'cumplido' : input.status === 'en_curso' ? 'en curso' : input.status === 'no_aplica' ? 'no aplica' : 'pendiente'}${input.evidenceNote ? `: «${String(input.evidenceNote).slice(0, 120)}»` : ''}`;
+    case 'compliance_pqrs_create':
+      return `Radicar ${input.kind === 'queja' ? 'una queja' : input.kind === 'reclamo' ? 'un reclamo' : input.kind === 'sugerencia' ? 'una sugerencia' : input.kind === 'felicitacion' ? 'una felicitación' : 'una petición'} de ${input.requesterName}: «${String(input.subject ?? '').slice(0, 100)}» (llegó por ${input.channel})`;
+    case 'compliance_pqrs_respond':
+      return `Guardar la respuesta de ${input.pqrs}${input.close ? ' y cerrarla' : ''} — no se envía; enviarla es otro paso`;
+    case 'compliance_case_update':
+      return `${input.id ? 'Actualizar' : 'Registrar o actualizar'} el proceso judicial ${input.title ? `«${input.title}»` : (input.radicado ?? '')}${input.nextHearingOn ? `, con la próxima diligencia el ${input.nextHearingOn}` : ''}`;
     case 'goals_set':
       return `Fijar la meta «${input.label || input.metricKey}» — objetivo ${input.targetValue}, ${
         input.cadence === 'week' ? 'semanal' : 'mensual'

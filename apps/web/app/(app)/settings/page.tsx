@@ -12,6 +12,7 @@ import {
   rowToPreferences,
 } from '@cortex/agent-tools';
 import {
+  Boxes,
   Brain,
   Building2,
   ChevronRight,
@@ -63,6 +64,7 @@ const SECTIONS: NavSection[] = [
   { id: 'correo', label: 'Tu correo' },
   { id: 'resumen', label: 'Resumen diario' },
   { id: 'cerebro', label: 'Tu cerebro' },
+  { id: 'privacidad', label: 'Privacidad y datos' },
 ];
 
 /** Cómo se llama cada papel en la empresa, en español y sin jerga de sistema. */
@@ -307,7 +309,58 @@ export default async function SettingsPage() {
                 Google, Microsoft, WhatsApp, HubSpot y los demás sistemas de los que saca
                 información — y quién conectó cada uno.
               </RowLink>
+
+              {/* Módulos (0186): qué áreas de Cortex usa la empresa. */}
+              <RowLink
+                href={workspaceHref(user.organization.id, '/settings/modulos')}
+                icon={<Boxes className="h-4 w-4" />}
+                title="Módulos de la empresa"
+              >
+                Prende lo que la empresa usa —inventario, nómina, flota, piloto automático— y apaga
+                lo que no. Lo apagado sale del menú y del chat sin borrar datos.
+              </RowLink>
             </div>
+          </section>
+
+          {/* ---- 5. Los derechos del titular (Ley 1581, migración 0188) ---- */}
+          <section id="privacidad" className="scroll-mt-6">
+            <SectionHead
+              icon={<ShieldCheck className="h-4 w-4" />}
+              title="Privacidad y datos"
+              blurb="Descarga o borra tus datos, revisa tus autorizaciones y haz consultas o reclamos."
+            />
+            <RowLink
+              href={workspaceHref(user.organization.id, '/settings/privacidad')}
+              icon={<ShieldCheck className="h-4 w-4" />}
+              title="Privacidad y datos"
+            >
+              Descargar mis datos o los de la empresa, eliminar mi usuario o la cuenta de la
+              empresa, y consultas y reclamos con su plazo legal.
+            </RowLink>
+            <p className="mt-3 text-xs text-ink-faint">
+              <a
+                href="/privacidad"
+                target="_blank"
+                rel="noreferrer"
+                className="mr-3 hover:underline"
+              >
+                Privacidad
+              </a>
+              <a
+                href="/tratamiento-de-datos"
+                target="_blank"
+                rel="noreferrer"
+                className="mr-3 hover:underline"
+              >
+                Tratamiento de datos
+              </a>
+              <a href="/terminos" target="_blank" rel="noreferrer" className="mr-3 hover:underline">
+                Términos
+              </a>
+              <a href="/cookies" target="_blank" rel="noreferrer" className="hover:underline">
+                Cookies
+              </a>
+            </p>
           </section>
         </div>
       </div>

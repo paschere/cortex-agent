@@ -29,6 +29,12 @@ const EMPTY: TaxProfileFormInput = {
   nominaElectronica: false,
   pila: false,
   facturacionElectronica: false,
+  impuestoPatrimonio: false,
+  vinculadosExterior: false,
+  rubLastChange: null,
+  autorretencionRate: null,
+  simpleRate: null,
+  icaActivities: [],
   ownerUserId: null,
   noticeDays: 7,
   source: 'manual',
@@ -43,7 +49,9 @@ type Flag =
   | 'camaraComercio'
   | 'nominaElectronica'
   | 'pila'
-  | 'facturacionElectronica';
+  | 'facturacionElectronica'
+  | 'impuestoPatrimonio'
+  | 'vinculadosExterior';
 
 const FLAGS: Array<{ key: Flag; label: string; hint: string }> = [
   { key: 'granContribuyente', label: 'Gran contribuyente', hint: 'Responsabilidad 13 del RUT' },
@@ -63,7 +71,25 @@ const FLAGS: Array<{ key: Flag; label: string; hint: string }> = [
     label: 'Factura electrónicamente',
     hint: 'Sin fecha de calendario',
   },
+  {
+    key: 'impuestoPatrimonio',
+    label: 'Impuesto al patrimonio',
+    hint: 'Personas naturales con 72.000 UVT o más · confirma con tu contador',
+  },
+  {
+    key: 'vinculadosExterior',
+    label: 'Vinculados del exterior',
+    hint: 'Precios de transferencia si pasa los topes · confirma',
+  },
 ];
+
+/** «1,2» o «1.2» → 1.2; vacío → null. */
+function pct(value: string): number | null {
+  const t = value.trim().replace(',', '.');
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
 
 const ICA_PERIODS: Record<string, Array<{ value: 'bimestral' | 'anual'; label: string }>> = {
   bogota: [
@@ -115,7 +141,10 @@ export function ProfileForm({
         e.preventDefault();
         setNote(null);
         start(async () => {
-          const r = await actions.saveProfile(form);
+          const r = await actions.saveProfile({
+            ...form,
+            icaActivities: form.icaActivities.filter((a) => a.code.trim() && a.label.trim()),
+          });
           setNote({ ok: r.ok, text: r.note });
           if (r.ok) onDone?.();
         });
@@ -270,6 +299,124 @@ export function ProfileForm({
           </select>
         </label>
       </div>
+
+      <fieldset className="space-y-3 rounded-sm border border-border px-4 py-3">
+        <legend className="field-label px-1 text-ink-faint">
+          Para los borradores (lo dicta tu contador)
+        </legend>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className="block">
+            <span className="field-label text-ink-faint">Autorretención especial (%)</span>
+            <input
+              className={`${fieldClass} tabular mt-1 font-mono`}
+              defaultValue={form.autorretencionRate ?? ''}
+              onChange={(e) => set('autorretencionRate', pct(e.target.value))}
+              placeholder="Según el CIIU"
+              inputMode="decimal"
+            />
+          </label>
+          <label className="block">
+            <span className="field-label text-ink-faint">Tarifa SIMPLE (%)</span>
+            <input
+              className={`${fieldClass} tabular mt-1 font-mono`}
+              defaultValue={form.simpleRate ?? ''}
+              disabled={!form.regimenSimple}
+              onChange={(e) => set('simpleRate', pct(e.target.value))}
+              placeholder={form.regimenSimple ? 'Art. 908 ET' : 'Sólo en el Simple'}
+              inputMode="decimal"
+            />
+          </label>
+          <label className="block">
+            <span className="field-label text-ink-faint">Último cambio de socios (RUB)</span>
+            <input
+              type="date"
+              className={`${fieldClass} tabular mt-1 font-mono`}
+              value={form.rubLastChange ?? ''}
+              onChange={(e) => set('rubLastChange', e.target.value || null)}
+            />
+          </label>
+        </div>
+        {form.icaCity && (
+          <div>
+            <p className="field-label text-ink-faint">Actividades de ICA y su tarifa por mil</p>
+            <ul className="mt-1 space-y-2">
+              {form.icaActivities.map((a, i) => (
+                <li
+                  key={`${i}-${a.code}`}
+                  className="grid grid-cols-[5rem_minmax(0,1fr)_6rem_auto] gap-2"
+                >
+                  <input
+                    className={`${fieldClass} tabular font-mono`}
+                    value={a.code}
+                    aria-label="Código de la actividad"
+                    onChange={(e) =>
+                      set(
+                        'icaActivities',
+                        form.icaActivities.map((x, j) =>
+                          j === i ? { ...x, code: e.target.value.slice(0, 12) } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    className={fieldClass}
+                    value={a.label}
+                    aria-label="Actividad"
+                    onChange={(e) =>
+                      set(
+                        'icaActivities',
+                        form.icaActivities.map((x, j) =>
+                          j === i ? { ...x, label: e.target.value.slice(0, 120) } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    className={`${fieldClass} tabular font-mono`}
+                    defaultValue={a.ratePerMil}
+                    aria-label="Tarifa por mil"
+                    inputMode="decimal"
+                    onChange={(e) =>
+                      set(
+                        'icaActivities',
+                        form.icaActivities.map((x, j) =>
+                          j === i ? { ...x, ratePerMil: pct(e.target.value) ?? 0 } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className={clsx(pillLink, 'min-h-8 px-3')}
+                    onClick={() =>
+                      set(
+                        'icaActivities',
+                        form.icaActivities.filter((_, j) => j !== i),
+                      )
+                    }
+                  >
+                    Quitar
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {form.icaActivities.length < 10 && (
+              <button
+                type="button"
+                className={clsx(pillLink, 'mt-2 min-h-8 px-3')}
+                onClick={() =>
+                  set('icaActivities', [
+                    ...form.icaActivities,
+                    { code: '', label: '', ratePerMil: 0 },
+                  ])
+                }
+              >
+                Agregar actividad
+              </button>
+            )}
+          </div>
+        )}
+      </fieldset>
 
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
         <label className="block">

@@ -138,6 +138,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   whatsapp_messages: tenant(),
   whatsapp_ingest_windows: tenant(),
   whatsapp_group_replies: tenant(),
+  // 0189: los procesos del puente (id, modo, techo, última señal). Ninguna
+  // fila es de una empresa: dice qué proceso existe, no a quién sirve.
+  whatsapp_bridge_instances: shared(
+    'Bridge processes (id, mode, session cap, last heartbeat). No workspace data; which workspace a process holds lives on whatsapp_sessions.owner_instance.',
+  ),
   // 0185: atención a clientes. Tenant las tres, en el sentido más delicado:
   // cada conversación es de UN cliente de UNA empresa, y una fila ajena aquí
   // sería el saldo de un cliente contado al de otra empresa.
@@ -399,6 +404,32 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // ajena aquí sería avisarle a una empresa del vencimiento de otra.
   document_expirations: tenant(),
   document_expiration_scans: tenant(),
+  // --- Contratos y cumplimiento (migración 0195) -----------------------------
+  // Los contratos de UNA empresa con sus obligaciones y su línea de tiempo,
+  // sus plantillas propias, su perfil de cumplimiento (con el token del
+  // formulario público de PQRS), su lista de cumplimiento, sus PQRS y sus
+  // procesos judiciales. Tenant todas: una fila ajena aquí sería el contrato
+  // laboral, el reclamo de un consumidor o la demanda de otra empresa.
+  contract_templates: tenant(),
+  contracts: tenant(),
+  contract_obligations: tenant(),
+  contract_events: tenant(),
+  compliance_profiles: tenant(),
+  compliance_items: tenant(),
+  pqrs: tenant(),
+  legal_cases: tenant(),
+  legal_case_actions: tenant(),
+  // --- Ayuda y soporte (migración 0190) --------------------------------------
+  // Lo que una empresa le escribió a soporte y su voto en la ayuda. Tenant: un
+  // filtro perdido le enseñaría a una empresa el problema que contó otra. La
+  // bandeja de operación lee todas a propósito, con su propia puerta.
+  support_tickets: tenant(),
+  support_ticket_messages: tenant(),
+  help_feedback: tenant(),
+  // --- Módulos por empresa (migración 0186) ----------------------------------
+  // Qué áreas de Cortex prendió o apagó cada empresa. Tenant: un filtro que
+  // faltara le apagaría a una empresa el módulo que apagó otra.
+  company_modules: tenant(),
 
   // --- Pagos (migration 0098) -----------------------------------------------
   // Lo que dice cada fuente sobre un pago, y lo que creemos a partir de todas
@@ -516,6 +547,19 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   sales_document_events: tenant(),
   sales_sequences: tenant(),
 
+  // --- Embudo comercial (migración 0193) -------------------------------------
+  // Oportunidades, actividades, el embudo, el riesgo de perder cada cliente y
+  // las encuestas de satisfacción. Tenant todas: son negocios, clientes y
+  // opiniones de UNA empresa. La encuesta pública se busca por token sin
+  // alcance en un solo sitio (apps/web/lib/crm/public.ts) y lo demás se lee
+  // con el espacio de esa fila.
+  crm_pipelines: tenant(),
+  crm_opportunities: tenant(),
+  crm_activities: tenant(),
+  crm_client_risk: tenant(),
+  nps_surveys: tenant(),
+  nps_responses: tenant(),
+
   // --- Registro de trabajo (migración 0174) ----------------------------------
   // Quién tiene que hacer qué, quién lo hizo y cuándo. Tenant las tres, en el
   // sentido más delicado del producto: estas filas hablan de PERSONAS del
@@ -552,12 +596,32 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   payable_invoices: tenant(),
   payable_intake_log: tenant(),
 
+  // --- Nómina, vacaciones y SG-SST (migración 0194) --------------------------
+  // Empleados con su salario, novedades, liquidaciones, desprendibles,
+  // ausencias y el SG-SST con sus accidentes. Tenant todas: una fila ajena
+  // sería el sueldo, la incapacidad o el accidente de alguien de otra empresa.
+  payroll_settings: tenant(),
+  employees: tenant(),
+  payroll_periods: tenant(),
+  payroll_novelties: tenant(),
+  payroll_payslips: tenant(),
+  payroll_items: tenant(),
+  leave_requests: tenant(),
+  sst_settings: tenant(),
+  sst_plan: tenant(),
+  sst_activities: tenant(),
+  sst_incidents: tenant(),
+
   // --- Calendario tributario (migración 0180) --------------------------------
   // El perfil tributario (NIT, casillas del RUT) y cada fecha del año que sale
   // de él. Tenant las dos: el NIT y las fechas de una empresa en otra serían
   // avisos de impuestos ajenos, con el nombre de su contador.
   tax_profiles: tenant(),
   tax_obligations: tenant(),
+  // Borradores de declaraciones y certificados de retención (migración 0197):
+  // cifras de ventas, compras y retenciones de UNA empresa con sus terceros.
+  tax_drafts: tenant(),
+  tax_withholding_certificates: tenant(),
 
   // --- Inventario y compras (migración 0183) ---------------------------------
   // El catálogo, las bodegas, el libro de existencias (y su vista, que lleva
@@ -570,6 +634,44 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   stock_levels: tenant(),
   purchase_orders: tenant(),
   purchase_order_lines: tenant(),
+
+  // --- Estados financieros, presupuesto e informe para socios (0191) ---------
+  // La clasificación de gastos, la copia de lo que dijo el programa contable,
+  // el presupuesto con sus celdas y el informe mensual con su enlace. Tenant
+  // todas: una fila ajena sería el resultado, la deuda o el informe de otra
+  // empresa en la pantalla (o en el correo a los socios) de ésta.
+  statement_settings: tenant(),
+  accounting_report_snapshots: tenant(),
+  budgets: tenant(),
+  budget_lines: tenant(),
+  board_report_settings: tenant(),
+  board_reports: tenant(),
+
+  // --- Órdenes de servicio y proyectos · flota y rutas (0196) ---------------
+  // Proyectos con sus horas, tarifas, costos e hitos de facturación; el plan
+  // de mantenimiento, lo hecho, los tanqueos y los recorridos de la flota.
+  // Tenant todas: una fila ajena sería el margen, las horas de la gente o los
+  // vehículos de otra empresa. Las tareas son `work_items` (ya tenant).
+  projects: tenant(),
+  project_rates: tenant(),
+  time_entries: tenant(),
+  project_costs: tenant(),
+  project_milestones: tenant(),
+  maintenance_plans: tenant(),
+  maintenance_events: tenant(),
+  fuel_logs: tenant(),
+  trips: tenant(),
+
+  // --- Registrar en el programa contable y cerrar el mes (0192) --------------
+  // El plan de cuentas que Cortex usa para escribir, cada escritura en el
+  // programa (compras, recibos, pagos a proveedor), el cierre de cada mes con
+  // su lista y su bitácora. Tenant todas: una fila ajena sería una partida
+  // escrita en el programa contable de otra empresa, o su mes cerrado.
+  accounting_account_map: tenant(),
+  accounting_writebacks: tenant(),
+  close_periods: tenant(),
+  close_tasks: tenant(),
+  close_events: tenant(),
 
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first
@@ -585,6 +687,14 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   usage_events: tenant(),
   usage_counters: tenant(),
   organization_onboarding: tenant(),
+  // Cobro dentro del producto (migración 0187): prueba, período pagado, pagos y
+  // avisos de la pasarela. Tenant: lo que una empresa pagó y si está en mora no
+  // es de nadie más. `access_requests` NO está aquí a propósito: es global (la
+  // persona todavía no tiene empresa) y se lee sólo por el `pool` desde la
+  // consola de operadores, como `company_groups`.
+  billing_subscriptions: tenant(),
+  billing_payments: tenant(),
+  billing_events: tenant(),
 
   // --- Per-person pricing (migration 0086) ----------------------------------
   // The most people a workspace held at once in a billing period. Tenant for the
@@ -606,7 +716,23 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   evaluation_runs: tenant(),
   evaluation_case_results: derived('evaluation_runs', 'run_id'),
 
+  // --- Derechos del titular (migración 0188) --------------------------------
+  // «Descargar todos los datos» y «eliminar la cuenta de la empresa». Tenant
+  // las dos. `organization_deletions` no tiene llave foránea a la empresa a
+  // propósito (es el acta del borrado y lo sobrevive), y la purga la salta.
+  data_exports: tenant(),
+  organization_deletions: tenant(),
+
   // --- Not tenant data ------------------------------------------------------
+  // La autorización de tratamiento de datos (Ley 1581) y las consultas y
+  // reclamos del titular (0188). De la PERSONA, como ba_two_factor: quien está
+  // en dos empresas autoriza una vez, y se leen siempre por el id de la sesión.
+  legal_consents: shared(
+    'Proof of a person’s data-processing authorization (Ley 1581): keyed by ba_user, read only by the signed-in account’s own id; the optional organization_id only records where it was given.',
+  ),
+  legal_requests: shared(
+    'A data subject’s own consultas y reclamos (Ley 1581 arts. 14-15): keyed by ba_user, read only by the signed-in account’s own id, and kept after the account is deleted as proof of attention.',
+  ),
   // The price list. Product content, identical for every workspace, exactly
   // like `tool_embeddings`: four rows that only a migration changes, and no
   // workspace ever writes here. Scoping it by workspace would mean a copy of
@@ -680,10 +806,19 @@ export function tenancyOf(table: string): TableTenancy {
 export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
+  // Migración 0189: el puente de WhatsApp multiempresa. claim/release reparten
+  // sesiones entre procesos (devuelven ids de espacio y un booleano, nunca
+  // contenido); phone_taken dice sí/no sobre un número de OTRA empresa.
+  whatsapp_bridge_claim: 'maintenance',
+  whatsapp_bridge_release: 'maintenance',
+  whatsapp_phone_taken: 'organization',
   activation_commit_run: 'organization',
   // Migración 0156: gastar el intento de contraseña bajo candado, y limpiarlo.
   custom_view_reserve_unlock: 'organization',
   custom_view_clear_unlocks: 'organization',
+  // Migración 0191: lo mismo para el enlace del informe para socios.
+  board_report_reserve_unlock: 'organization',
+  board_report_clear_unlocks: 'organization',
   // Migración 0182: el siguiente consecutivo de cotización, pedido o factura.
   sales_next_number: 'organization',
   activation_automation_claim: 'organization',

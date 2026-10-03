@@ -113,6 +113,14 @@ export const BASE_FAMILIES: readonly string[] = [
    * fijo; el fallo que evita es silencioso y no lo ve nadie.
    */
   'attachments',
+  /**
+   * `help.search`, una sola herramienta: «¿cómo conecto Siigo?», «¿dónde subo
+   * el extracto?». La pregunta nombra el TEMA (Siigo, extracto) y el ranking
+   * trae la familia del tema, no la de la ayuda — y sin ella el modelo contesta
+   * cómo funciona el producto de memoria. Es una definición corta y fija en el
+   * prefijo del caché.
+   */
+  'help',
 ];
 
 export type SelectionReason =

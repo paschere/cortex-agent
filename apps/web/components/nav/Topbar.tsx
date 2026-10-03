@@ -1,4 +1,5 @@
 'use client';
+import { HelpButton } from '@/components/help/HelpPanel';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { CortexSignature } from '@/components/ui/cortex-signature';
 import { buildRail } from '@/lib/nav-shape';
@@ -51,6 +52,8 @@ export function Topbar({ email }: { email?: string }) {
           <span className="hidden flex-1 text-left font-medium sm:inline">Buscar en Cortex</span>
           <kbd className="hidden font-sans text-micro font-semibold md:inline">⌘K</kbd>
         </button>
+        {/* La ayuda de la pantalla abierta (y «Pregúntale a Cortex»). */}
+        <HelpButton />
         <NotificationBell />
         <span
           title={email}

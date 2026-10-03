@@ -1,5 +1,5 @@
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { authenticateBridge } from '@/lib/whatsapp/bridge';
+import { authorizeBridgeSession } from '@/lib/whatsapp/bridge';
 import { ackOutbox } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const auth = authenticateBridge(req);
+  const auth = await authorizeBridgeSession(req);
   if (!auth.ok) return auth.response;
 
   const body = (await req.json().catch(() => ({}))) as { id?: string; ok?: boolean };

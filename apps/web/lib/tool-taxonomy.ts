@@ -81,6 +81,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'amber',
     icon: 'Handshake',
   },
+  crm: {
+    name: 'Embudo comercial',
+    blurb:
+      'Los negocios por etapa con su valor, probabilidad y cierre esperado; el pronóstico ponderado por mes; la etapa que se mueve sola con la cotización; el seguimiento de lo quieto; los clientes que se están yendo, con la evidencia; y la encuesta de satisfacción con su tarea cuando alguien califica mal.',
+    tone: 'amber',
+    icon: 'Handshake',
+  },
   payments: {
     name: 'Pagos y cartera',
     blurb:
@@ -147,7 +154,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   payroll: {
     name: 'Nómina',
     blurb:
-      'El servicio aparte de nómina: lo que se pagó de verdad, gastos, costo por cliente y proyecciones.',
+      'La nómina liquidada en Cortex con la ley colombiana (novedades, desprendibles, vacaciones y permisos, aprobación) y el servicio aparte de nómina: lo que se pagó, gastos, costo por cliente y proyecciones.',
     tone: 'rose',
     icon: 'Wallet',
   },
@@ -195,12 +202,75 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'sky',
     icon: 'Target',
   },
+  modules: {
+    name: 'Módulos',
+    blurb:
+      'Qué áreas de Cortex tiene prendidas la empresa —finanzas, ventas, inventario, nómina, flota, piloto y las demás— y prenderlas o apagarlas. Apagar un módulo lo saca del menú y de las herramientas sin borrar datos.',
+    tone: 'primary',
+    icon: 'Boxes',
+  },
   autopilot: {
     name: 'Piloto automático',
     blurb:
       'Lo que Cortex hace solo cada mañana: arma el plan del día de la empresa, hace lo rutinario que tiene permitido (atar pagos que casan sin duda, categorizar el libro, reintentar sincronizaciones, recordar vencimientos) y deja la lista corta de lo que necesita tu decisión. Nunca mueve plata.',
     tone: 'primary',
     icon: 'Workflow',
+  },
+  statements: {
+    name: 'Estados financieros',
+    blurb:
+      'Estado de resultados de caja con el año anterior al lado, balance general (del programa contable o aproximado, diciendo qué le falta) e indicadores con su fórmula: márgenes, liquidez, endeudamiento, días de cartera, inventario y proveedores, punto de equilibrio.',
+    tone: 'emerald',
+    icon: 'BarChart3',
+  },
+  budget: {
+    name: 'Presupuesto',
+    blurb:
+      'El presupuesto del año por categoría y mes, contra lo real con semáforo, y lo que se salió avisado por el piloto.',
+    tone: 'emerald',
+    icon: 'Target',
+  },
+  forecast: {
+    name: 'Pronósticos',
+    blurb:
+      'Ventas y resultados de los próximos 12 meses con estacionalidad o al ritmo reciente, qué clientes los sostienen, la demanda por producto y escenarios, con sus supuestos en palabras.',
+    tone: 'emerald',
+    icon: 'TrendingUp',
+  },
+  close: {
+    name: 'Cierre del mes',
+    blurb:
+      'La lista guiada del cierre de cada mes, que se revisa sola contra los datos (extractos hasta fin de mes, abonos sin factura, facturas de proveedor sin aprobar o sin causar, recibos sin registrar, movimientos sin categoría, nómina, impuestos, inventario), y el candado del mes cerrado. Con el programa contable conectado, Cortex causa las compras y registra recibos y pagos en Siigo, Alegra o QuickBooks, siempre con vista previa y tu aprobación.',
+    tone: 'emerald',
+    icon: 'Receipt',
+  },
+  contracts: {
+    name: 'Contratos',
+    blurb:
+      'Borradores de contrato desde plantillas (prestación de servicios, NDA, laborales, compraventa, arrendamiento, otrosí, terminación) para revisión de un abogado, las obligaciones de cada contrato firmado con su frase y el aviso previo vigilado. No es asesoría legal.',
+    tone: 'primary',
+    icon: 'FileText',
+  },
+  compliance: {
+    name: 'Cumplimiento',
+    blurb:
+      'La lista societaria y legal de la empresa según su perfil (asamblea, libros, matrícula, RNBD, política de datos, SAGRILAFT/PTEE), las PQRS con su plazo en días hábiles y los procesos judiciales. Lo que depende de un umbral sale «por confirmar».',
+    tone: 'rose',
+    icon: 'ShieldCheck',
+  },
+  board: {
+    name: 'Informe para socios',
+    blurb:
+      'El informe mensual de gerencia armado solo con los datos (resultados, presupuesto, caja, cartera, indicadores, hitos, riesgos), con PDF de marca, enlace con contraseña y envío con tu aprobación.',
+    tone: 'primary',
+    icon: 'FileText',
+  },
+  sst: {
+    name: 'SG-SST',
+    blurb:
+      'Seguridad y salud en el trabajo: el cumplimiento de los estándares mínimos, las capacitaciones, exámenes, inspecciones y simulacros, y los accidentes con sus plazos de FURAT e investigación.',
+    tone: 'emerald',
+    icon: 'ShieldCheck',
   },
   tax: {
     name: 'Impuestos',
@@ -342,6 +412,20 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'primary',
     icon: 'SquareKanban',
   },
+  projects: {
+    name: 'Proyectos y órdenes de servicio',
+    blurb:
+      'El trabajo que se hace para cada cliente, de la cotización a la factura: tareas en el registro de trabajo, horas por persona con su costo, materiales que salen del inventario, gastos y subcontratos, hitos de facturación y el margen de cada uno contra lo presupuestado. Avisa lo que se pasa del presupuesto, lo atrasado y lo terminado sin facturar.',
+    tone: 'primary',
+    icon: 'SquareKanban',
+  },
+  fleet: {
+    name: 'Flota y rutas',
+    blurb:
+      'Los vehículos de la empresa con su conductor, kilometraje y documentos (SOAT, tecnomecánica, póliza), el mantenimiento que toca por km o por tiempo, los tanqueos con su rendimiento y el consumo raro, los recorridos con sus paradas y lo que cuesta cada km.',
+    tone: 'emerald',
+    icon: 'Car',
+  },
   vehicles: {
     name: 'Vehículos',
     blurb:
@@ -374,6 +458,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     blurb: 'Consulta de solo lectura sobre las decisiones de la barrera y sus eventos recientes.',
     tone: 'rose',
     icon: 'ShieldCheck',
+  },
+  help: {
+    name: 'Ayuda de Cortex',
+    blurb:
+      'Cómo se usa Cortex, con los mismos artículos de /ayuda: «¿cómo conecto Siigo?», «¿dónde subo el extracto?». Contesta con los pasos y el enlace, nunca de memoria.',
+    tone: 'primary',
+    icon: 'BookOpen',
   },
   cortex: {
     name: 'Cortex',
@@ -580,6 +671,9 @@ const FAMILY_GROUP: Record<string, string> = {
   hubspot: 'clients',
   growth: 'clients',
   sales: 'clients',
+  // Con los clientes: el embudo es lo que viene con cada uno, y el riesgo de
+  // perderlo es una pregunta sobre el cliente, no sobre la plata.
+  crm: 'clients',
   presentations: 'clients',
   payments: 'billing',
   accounting: 'billing',
@@ -592,6 +686,17 @@ const FAMILY_GROUP: Record<string, string> = {
   // Con la plata: un impuesto es una fecha y un pago, y quien pregunta por la
   // retención es quien pregunta por la caja.
   tax: 'billing',
+  // Con la plata: los estados, el presupuesto, el pronóstico y el informe a
+  // socios son la misma conversación que la caja y la cartera.
+  statements: 'billing',
+  budget: 'billing',
+  // Con la plata: cerrar el mes es cuadrar la caja, la cartera y lo por pagar.
+  close: 'billing',
+  forecast: 'billing',
+  board: 'billing',
+  // Con la empresa: contratos y cumplimiento son cómo está parada legalmente.
+  contracts: 'company',
+  compliance: 'company',
   // Con los pagos y no con «Documentos y memoria»: lo que lee este módulo no es
   // documentación, son cifras con un papel detrás. La cartera se calcula
   // restándole los pagos a las facturas que salieron de aquí, así que separar
@@ -623,6 +728,9 @@ const FAMILY_GROUP: Record<string, string> = {
   github: 'eng',
   linear: 'eng',
   payroll: 'money',
+  // Con los vencimientos: el SG-SST es sobre todo plazos (FURAT, investigación,
+  // actividades del plan) y la evidencia de que se cumplieron.
+  sst: 'vehicles',
   goals: 'goals',
   management: 'goals',
   // Con Gerencia: el registro de trabajo es la otra mitad de «¿cómo va la
@@ -634,6 +742,12 @@ const FAMILY_GROUP: Record<string, string> = {
   // aconsejó y si sirvió.
   recommendations: 'goals',
   vehicles: 'vehicles',
+  // La flota (0196) es la otra mitad de los vehículos: el mismo carro, visto
+  // desde el taller, la bomba y la ruta en vez de desde el RUNT.
+  fleet: 'vehicles',
+  // Con los clientes: una orden de servicio es trabajo para un cliente que
+  // sale de una cotización y termina en una factura.
+  projects: 'clients',
   // Sits with the fleet rather than with automation: a SOAT that lapses is a
   // truck off the road, and the person who cares about one cares about the
   // other. The watcher being automatic is an implementation detail to them.
@@ -648,7 +762,11 @@ const FAMILY_GROUP: Record<string, string> = {
   errands: 'auto',
   company: 'company',
   directory: 'company',
+  // Con la empresa: cómo está montada, qué áreas usa.
+  modules: 'company',
   cortex: 'company',
+  // Con Cortex mismo: es cómo se usa el producto, no un dato de la empresa.
+  help: 'company',
   web: 'external',
   security: 'control',
   // Con seguridad y no con «Escribir y responder», donde está `actions`: lo que
@@ -764,7 +882,24 @@ export const FAMILY_CREDENTIALS: Record<string, CredentialRequirement> = {
 };
 
 /** Overrides for single tools whose family requirement does not apply to them. */
-export const TOOL_CREDENTIALS: Record<string, CredentialRequirement> = {
+export const TOOL_CREDENTIALS: Record<string, CredentialRequirement | null> = {
+  // La nómina que se liquida en Cortex (0194) vive en la base de la empresa:
+  // no depende del servicio aparte de nómina que pide la familia `payroll`.
+  'payroll.period_summary': null,
+  'payroll.register_novelty': null,
+  'payroll.approve_period': null,
+  'payroll.payslip': null,
+  'payroll.leave_request': null,
+  'payroll.leave_status': null,
+  'payroll.leave_decide': null,
+  // El planeador de rutas (0196) calcula los km con Google si hay llave; sin
+  // ella los km se escriben a mano, así que degrada, no bloquea.
+  'fleet.log_trip': {
+    vars: ['GOOGLE_MAPS_API_KEY'],
+    label: 'el proveedor de rutas (Google Maps)',
+    blocking: false,
+    effect: 'Sin él, los km de un recorrido se escriben a mano.',
+  },
   // web.scrape falls back to Jina when Firecrawl is absent, so only the search
   // half of the family actually depends on a key.
   'web.search': {
@@ -776,7 +911,8 @@ export const TOOL_CREDENTIALS: Record<string, CredentialRequirement> = {
 };
 
 export function credentialRequirement(toolId: string): CredentialRequirement | null {
-  return TOOL_CREDENTIALS[toolId] ?? FAMILY_CREDENTIALS[familyOf(toolId)] ?? null;
+  if (toolId in TOOL_CREDENTIALS) return TOOL_CREDENTIALS[toolId] ?? null;
+  return FAMILY_CREDENTIALS[familyOf(toolId)] ?? null;
 }
 
 // ---------------------------------------------------------------------------

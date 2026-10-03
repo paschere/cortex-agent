@@ -11,9 +11,11 @@ import { buildCompanyFactsBlock } from '@/lib/system-prompt';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { chatModel } from '@cortex/agent-tools';
 import {
+  enabledModules,
   filterTools,
   getTool,
   runTool,
+  toolAllowedByModules,
   toolErrorDetail,
   toolErrorMessage,
 } from '@cortex/agent-tools';
@@ -144,7 +146,8 @@ async function executeToolJob(job: JobRow, idempotencyScope: string): Promise<Ex
     const output =
       (job.tool_id === 'management.daily_brief' ||
         job.tool_id === 'views.refresh_summary' ||
-        job.tool_id === 'views.weekly_review') &&
+        job.tool_id === 'views.weekly_review' ||
+        job.tool_id === 'board.generate') &&
       typeof (result as { report?: unknown })?.report === 'string'
         ? (result as { report: string }).report
         : JSON.stringify(result, null, 2);
@@ -184,7 +187,11 @@ async function executeAgentJob(job: JobRow, idempotencyScope: string): Promise<E
   // Acciones seguras de repetir (0168): un reintento de ESTA ejecución no
   // repite el envío; la ejecución de mañana es otra y sí corre.
   ctx.idempotencyScope = idempotencyScope;
-  const allowed = filterTools(agent.allowed_tool_ids as string[]);
+  // Lo de un módulo que la empresa apagó (0186) no se le ofrece a la rutina.
+  const modulesOn = await enabledModules(ctx.db);
+  const allowed = filterTools(agent.allowed_tool_ids as string[]).filter((t) =>
+    toolAllowedByModules(t.id, modulesOn),
+  );
 
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
     allowed.map((t) => [

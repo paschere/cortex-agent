@@ -56,6 +56,7 @@ import {
   signedAmount,
 } from '../payments/shape';
 import { listPayments, num, overdueReceivableInvoices } from '../payments/store';
+import { estadosSource, presupuestoSource } from '../statements/view-sources';
 import type { TrackerField } from '../trackers/schema';
 import { equipoSource, trabajoSource } from '../work/view-sources';
 import { type ViewRow, todayIn } from './compute';
@@ -1751,6 +1752,9 @@ export const PLATFORM_SOURCES: ReadonlyMap<string, PlatformSource> = new Map(
     // de quién ve el trabajo de quién.
     trabajoSource,
     equipoSource,
+    // Estados financieros y presupuesto (0191): statements/view-sources.ts.
+    estadosSource,
+    presupuestoSource,
   ].map((s) => [s.id, s]),
 );
 

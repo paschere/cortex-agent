@@ -15,6 +15,7 @@ import {
   CalendarClock,
   Download,
   ExternalLink,
+  FileText,
   Landmark,
   Paperclip,
   Pencil,
@@ -23,6 +24,7 @@ import {
 import Link from 'next/link';
 import { useMemo, useState, useTransition } from 'react';
 import { ProfileForm } from './ProfileForm';
+import { TaxTabs } from './TaxTabs';
 import { obligationsCsv } from './export';
 import type {
   TaxActions,
@@ -179,6 +181,17 @@ export function TaxHome({
           ) : undefined
         }
       />
+
+      {data.profile && links.certificates && links.exogena && (
+        <TaxTabs
+          active="calendario"
+          links={{
+            calendario: links.self,
+            certificados: links.certificates,
+            exogena: links.exogena,
+          }}
+        />
+      )}
 
       {!data.profile ? (
         <Panel className="p-5 sm:p-7">
@@ -432,6 +445,12 @@ function ProfileSummary({ data }: { data: TaxScreenData }) {
     p.nominaElectronica && 'Nómina electrónica',
     p.pila && 'PILA',
     p.facturacionElectronica && 'Facturación electrónica',
+    p.impuestoPatrimonio && 'Impuesto al patrimonio',
+    p.vinculadosExterior && 'Vinculados del exterior',
+    p.autorretencionRate != null &&
+      `Autorretención ${String(p.autorretencionRate).replace('.', ',')} %`,
+    p.simpleRate != null && `Tarifa SIMPLE ${String(p.simpleRate).replace('.', ',')} %`,
+    ...p.icaActivities.map((a) => `ICA ${a.code}: ${String(a.ratePerMil).replace('.', ',')} ‰`),
     p.icaCity && `ICA ${cityLabel(p.icaCity)}${p.icaPeriodicity ? ` ${p.icaPeriodicity}` : ''}`,
   ].filter(Boolean) as string[];
   return (
@@ -548,6 +567,19 @@ function ObligationRow({
               <Paperclip className="h-3.5 w-3.5" aria-hidden />
               {o.evidenceLabel ?? 'Evidencia'}
             </a>
+          )}
+          {o.draftHref && (
+            <Link
+              href={o.draftHref}
+              className="inline-flex min-h-8 items-center gap-1 rounded-pill px-2.5 text-xs font-semibold text-primary-ink hover:bg-primary-soft"
+            >
+              <FileText className="h-3.5 w-3.5" aria-hidden />
+              {o.draftStatus === 'revisado'
+                ? 'Borrador revisado'
+                : o.draftStatus === 'presentado'
+                  ? 'Borrador presentado'
+                  : 'Ver borrador'}
+            </Link>
           )}
           {canMark && (
             <button

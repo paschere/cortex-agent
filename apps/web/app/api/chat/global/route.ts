@@ -24,10 +24,12 @@ import { createToolCallRepair } from '@/lib/tool-call-repair';
 import {
   chatModel,
   checkMeter,
+  enabledModules,
   filterTools,
   getTool,
   isRefused,
   runTool,
+  toolAllowedByModules,
 } from '@cortex/agent-tools';
 import { streamText, tool } from 'ai';
 import { headers } from 'next/headers';
@@ -146,8 +148,12 @@ export async function POST(req: NextRequest) {
                   failClosed: true,
                 });
                 const terms = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+                const modulesOn = await enabledModules(context.db);
                 const available = filterTools(context.agent.allowedTools).filter(
-                  (def) => isGlobalActionTool(def) && !isToolDenied(def.id, denied),
+                  (def) =>
+                    isGlobalActionTool(def) &&
+                    !isToolDenied(def.id, denied) &&
+                    toolAllowedByModules(def.id, modulesOn),
                 );
                 const ranked = available
                   .map((def) => ({

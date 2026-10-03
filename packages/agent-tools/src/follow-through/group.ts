@@ -181,6 +181,13 @@ const TOOL_NOUN: Record<string, [string, string]> = {
   'work.assign': ['reasignación', 'reasignaciones'],
   'payments.register': ['pago por registrar', 'pagos por registrar'],
   'payables.approve': ['factura de proveedor por aprobar', 'facturas de proveedor por aprobar'],
+  // Cierre contable (0192): la cola de «causar» y «registrar» se aprueba en lote.
+  'accounting.write_purchase': ['factura por causar', 'facturas por causar'],
+  'accounting.write_receipt': ['recibo de caja por registrar', 'recibos de caja por registrar'],
+  'accounting.write_supplier_payment': [
+    'pago a proveedor por registrar',
+    'pagos a proveedores por registrar',
+  ],
 };
 
 /** «6 cobros de cartera», «2 correos», «3 acciones parecidas». */

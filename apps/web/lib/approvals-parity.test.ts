@@ -99,9 +99,44 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
   // Cuentas por pagar (0181).
   { toolId: 'payables.record', input: { number: 'FEPA-451', supplierName: 'Papelería El Cóndor' } },
   { toolId: 'payables.approve', input: { invoices: ['FEPA-451'] } },
+  { toolId: 'tax.certificates', input: { kind: 'renta', year: 2025 } },
+  {
+    toolId: 'tax.certificates',
+    input: { kind: 'iva', year: 2026, period: 4, suppliers: ['900555666'] },
+  },
   { toolId: 'payables.approve', input: { invoices: ['a', 'b', 'c'] } },
   { toolId: 'payables.reject', input: { invoices: ['a', 'b'], reason: 'Doble cobro' } },
   { toolId: 'payables.schedule', input: { invoices: ['a'] } },
+  // Nómina y SG-SST (0194).
+  {
+    toolId: 'payroll.register_novelty',
+    input: {
+      person: 'Ana Ruiz',
+      kind: 'incapacidad_general',
+      date: '2026-09-10',
+      dateTo: '2026-09-14',
+    },
+  },
+  {
+    toolId: 'payroll.register_novelty',
+    input: { person: 'Ana Ruiz', kind: 'hora_extra_nocturna', date: '2026-09-10' },
+  },
+  { toolId: 'payroll.approve_period', input: { label: 'septiembre 2026' } },
+  { toolId: 'payroll.approve_period', input: {} },
+  {
+    toolId: 'payroll.leave_decide',
+    input: { requestId: 'r1', decision: 'aprobada', person: 'Ana Ruiz' },
+  },
+  {
+    toolId: 'payroll.leave_decide',
+    input: { requestId: 'r1', decision: 'rechazada', note: 'Cierre de mes' },
+  },
+  {
+    toolId: 'sst.log_activity',
+    input: { kind: 'simulacro', title: 'Evacuación', date: '2026-10-20' },
+  },
+  { toolId: 'sst.report_incident', input: { kind: 'accidente', occurredOn: '2026-10-09' } },
+  { toolId: 'sst.report_incident', input: { kind: 'incidente', occurredOn: '2026-10-09' } },
   { toolId: 'payables.schedule', input: { invoices: ['a', 'b'], date: '2026-10-14' } },
   {
     toolId: 'goals.set',
@@ -133,6 +168,57 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
     },
   },
   { toolId: 'purchasing.receive', input: { purchaseOrderId: 'OC-0007' } },
+  { toolId: 'budget.set_line', input: { category: 'arriendo', amount: 2_500_000, year: 2026 } },
+  { toolId: 'budget.set_line', input: { category: 'mercadeo', amount: 0, month: 3 } },
+  { toolId: 'board.generate', input: { period: '2026-09' } },
+  { toolId: 'board.send', input: { to: ['socio@demo.co'] } },
+  // Contratos y cumplimiento (0195).
+  {
+    toolId: 'contracts.draft',
+    input: { template: 'confidencialidad', counterparty: { kind: 'cliente', name: 'Coltrans' } },
+  },
+  { toolId: 'contracts.extract_obligations', input: { contractId: 'x' } },
+  {
+    toolId: 'compliance.mark',
+    input: { item: 'asamblea_ordinaria', status: 'cumplido', evidenceNote: 'Acta 12' },
+  },
+  {
+    toolId: 'compliance.pqrs_create',
+    input: {
+      kind: 'reclamo',
+      requesterName: 'Ana Ruiz',
+      subject: 'Cobro doble',
+      channel: 'correo',
+    },
+  },
+  { toolId: 'compliance.pqrs_respond', input: { pqrs: 'PQRS-2026-000012', close: true } },
+  {
+    toolId: 'compliance.case_update',
+    input: { radicado: '05001310300120240012300', nextHearingOn: '2026-11-04' },
+  },
+  // Cierre contable (0192).
+  {
+    toolId: 'close.mark_task',
+    input: {
+      period: '2026-09',
+      task: 'conciliacion',
+      status: 'hecha',
+      evidence: 'Préstamo del socio',
+    },
+  },
+  { toolId: 'close.mark_task', input: { task: 'depreciacion', status: 'no_aplica' } },
+  { toolId: 'close.close_period', input: { period: '2026-09' } },
+  {
+    toolId: 'close.close_period',
+    input: { period: '2026-09', action: 'reabrir', reason: 'Faltó un gasto' },
+  },
+  { toolId: 'accounting.write_purchase', input: { invoices: ['FEPA-451'], provider: 'siigo' } },
+  { toolId: 'accounting.write_purchase', input: { invoices: ['a', 'b'] } },
+  { toolId: 'accounting.write_receipt', input: { payments: ['a'], provider: 'alegra' } },
+  {
+    toolId: 'accounting.write_supplier_payment',
+    input: { invoices: ['a', 'b', 'c'], provider: 'quickbooks' },
+  },
   { toolId: 'slack.post_message', input: { channel: '#general', text: 'hola' } },
   // Ventas (0182).
   {
@@ -143,9 +229,52 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
   { toolId: 'sales.quote_send', input: { quote: 'COT-12' } },
   { toolId: 'sales.invoice_emit', input: { document: 'PED-3', provider: 'siigo' } },
   { toolId: 'sales.invoice_emit', input: { document: 'COT-12' } },
+  // Embudo comercial (0193).
+  {
+    toolId: 'crm.create_opportunity',
+    input: { client: 'Nexa', title: 'Fletes Cali', value: 40_000_000, stage: 'Negociación' },
+  },
+  { toolId: 'crm.create_opportunity', input: { client: 'Coltrans', title: 'Soporte' } },
+  {
+    toolId: 'crm.update_opportunity',
+    input: { opportunity: 'Fletes Cali', stage: 'Perdida', lostReasonKind: 'precio' },
+  },
+  { toolId: 'crm.update_opportunity', input: { opportunity: 'Fletes Cali', value: 12_000_000 } },
+  {
+    toolId: 'crm.log_activity',
+    input: { opportunity: 'Fletes Cali', kind: 'task', title: 'Llamar', dueOn: '2026-10-08' },
+  },
+  { toolId: 'crm.log_activity', input: { client: 'Nexa', kind: 'call', title: 'Pidió descuento' } },
+  { toolId: 'crm.send_nps', input: { client: 'Nexa', to: ['compras@nexa.co'] } },
+  { toolId: 'crm.send_nps', input: { client: 'Nexa', linkOnly: true } },
   {
     toolId: 'whatsapp.reply',
     input: { conversationId: '00000000-0000-4000-8000-000000000001', text: 'Ya te reviso.' },
+  },
+  // Proyectos y flota (0196).
+  {
+    toolId: 'projects.create',
+    input: { title: 'Mantenimiento montacargas', client: 'Nexa', budgetAmount: 6_000_000 },
+  },
+  { toolId: 'projects.create', input: { fromDocument: 'COT-12', tasksFromLines: true } },
+  { toolId: 'projects.log_time', input: { project: 'OS-0007', hours: 6, person: 'Andrés' } },
+  {
+    toolId: 'projects.log_time',
+    input: { project: 'OS-0007', hours: 2, date: '2026-10-01', billable: false },
+  },
+  { toolId: 'projects.invoice', input: { project: 'OS-0007', milestone: 'Anticipo' } },
+  { toolId: 'projects.invoice', input: { project: 'PRY-0002' } },
+  {
+    toolId: 'fleet.log_fuel',
+    input: { plate: 'NQR123', gallons: 18, amount: 290_000, odometerKm: 84_320 },
+  },
+  {
+    toolId: 'fleet.log_maintenance',
+    input: { plate: 'FRT482', description: 'Cambio de aceite', cost: 380_000 },
+  },
+  {
+    toolId: 'fleet.log_trip',
+    input: { plate: 'NQR123', origin: 'Bogotá', stops: ['Fusagasugá'], destination: 'Girardot' },
   },
 ];
 
