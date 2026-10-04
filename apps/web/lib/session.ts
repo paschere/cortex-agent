@@ -25,7 +25,24 @@ import { WORKSPACE_NAME_COOKIE } from './workspace-cookie';
 export async function requireSession(): Promise<SessionUser> {
   const requestHeaders = await headers();
   const session = await auth.api.getSession({ headers: requestHeaders });
-  if (!session?.user) throw new UnauthorizedError();
+  /**
+   * UNA PÁGINA NO SE CAE POR UNA SESIÓN VENCIDA O UN ENLACE DE OTRA CUENTA.
+   *
+   * El middleware sólo mira si HAY cookie; una cookie vencida o revocada llega
+   * hasta aquí, y el `UnauthorizedError` que sirve a las rutas /api (401) en una
+   * página se pintaba como «Application error» con un número. En páginas
+   * (`x-cortex-page`, puesto por el middleware) se redirige: sin sesión, a
+   * entrar y volver; con un `?workspace=` que no es de esta cuenta, a una
+   * pantalla que lo explica. Las rutas /api siguen recibiendo el error.
+   */
+  const pagePath =
+    requestHeaders.get('x-cortex-page') === '1'
+      ? (requestHeaders.get('x-cortex-request-path') ?? '/')
+      : null;
+  if (!session?.user) {
+    if (pagePath) redirect(`/login?next=${encodeURIComponent(pagePath)}`);
+    throw new UnauthorizedError();
+  }
 
   // SaaS default: open signup, so an unset OR empty ALLOWED_EMAIL_DOMAIN must
   // let everyone through. `?? 'Cortex.com'` did the opposite twice over: unset
@@ -75,7 +92,10 @@ export async function requireSession(): Promise<SessionUser> {
   if (resolution.kind === 'pending-invitation') {
     redirect(`/accept-invitation/${resolution.invitationId}`);
   }
-  if (resolution.kind === 'forbidden-workspace') throw new UnauthorizedError();
+  if (resolution.kind === 'forbidden-workspace') {
+    if (pagePath) redirect(`/espacio-no-disponible?next=${encodeURIComponent(pagePath)}`);
+    throw new UnauthorizedError();
+  }
   const organization = resolution.workspace;
   const canonical = canonicalWorkspaceLocation(requestHeaders, organization.id);
   if (canonical) redirect(canonical);

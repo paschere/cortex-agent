@@ -5,6 +5,7 @@ const GLOBAL_PATHS = new Set([
   '/overview',
   '/chat/global',
   '/notifications',
+  '/espacio-no-disponible',
   '/api/organizations',
   '/api/organizations/active',
   '/api/chat/global',
