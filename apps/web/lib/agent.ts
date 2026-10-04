@@ -52,6 +52,18 @@ export function buildToolContext(opts: {
     // sitio que la ata, así que el día que la cola cambie de implementación no
     // hay ninguna herramienta que enterarse.
     enqueueJob,
+    // Invitar a alguien (`team.invite`): la misma función que la pantalla
+    // «Personas», con su tope de asientos. Import dinámico porque arrastra
+    // better-auth y la conexión a la base, que ninguna otra herramienta pide, y
+    // este archivo lo importan decenas de rutas y pruebas. Ver ToolContext.
+    inviteTeamMember: async (input) => {
+      const { inviteForActor } = await import('./team/invite-for-actor');
+      return inviteForActor({
+        organizationId: opts.organizationId,
+        actorDirectoryId: opts.userId,
+        ...input,
+      });
+    },
     signal: opts.signal,
   };
 }

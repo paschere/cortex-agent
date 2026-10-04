@@ -494,6 +494,8 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // escriben en las filas de su espacio.
   row_lookups: tenant(),
   row_lookup_state: tenant(),
+  // Mensaje, cargo y equipo que lleva una invitación hasta que se acepta (0199).
+  invitation_details: tenant(),
   // 0164: una carpeta de Drive que llena una tabla, y su libro de archivos.
   // Tenant las dos: el libro guarda lo que se leyó de documentos de la empresa.
   drive_folder_syncs: tenant(),

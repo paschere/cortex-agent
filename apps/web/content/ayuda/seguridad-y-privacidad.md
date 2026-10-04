@@ -46,7 +46,9 @@ Cortex trabaja con datos sensibles de tu empresa, así que cada cosa tiene un du
 
 **¿Entro a Seguridad o Auditoría y me dice que no tengo acceso?** Esas pantallas son solo para quien administra la empresa. La pantalla te dice a quién pedirle el acceso.
 
-**¿Cómo activo la verificación en dos pasos?** Todavía no hay una opción para activarla desde Ajustes. Si la necesitas para tu empresa, escríbele al equipo de Cortex.
+**¿Cómo activo la verificación en dos pasos?** Entra a [Seguridad de tu cuenta](/settings/seguridad), toca **Activar**, confirma tu contraseña, agrega la clave en tu app de autenticación y escribe el código de 6 dígitos. Al terminar te muestra tus **códigos de respaldo**: guárdalos, no se vuelven a mostrar. Si eres fundador de la empresa, conviene que la actives.
+
+**¿Dónde cierro mi cuenta en otros dispositivos?** En la misma pantalla, en **Sesiones abiertas**: **Cerrar** una sesión o **Cerrar todas las demás**.
 
 **¿Quiero cambiar una política de seguridad?** Las políticas se muestran tal como están guardadas y no se editan desde la pantalla. Pídeselo al equipo de Cortex o usa el enlace **cuéntaselo a Cortex** al final de **Políticas activas**; el cambio toma efecto en la siguiente acción.
 
@@ -56,6 +58,7 @@ Cortex trabaja con datos sensibles de tu empresa, así que cada cosa tiene un du
 
 ## Relacionado
 
+- [Roles y cofundadores](/ayuda/roles-y-cofundadores)
 - [Aprobaciones y acciones seguras](/ayuda/aprobaciones-y-acciones-seguras)
 - [Bandeja de archivos y Cerebro: cuál es cuál](/ayuda/bandeja-vs-cerebro)
 - [Piloto automático y permisos «Sin preguntar»](/ayuda/piloto-automatico)

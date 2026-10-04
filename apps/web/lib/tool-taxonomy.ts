@@ -279,6 +279,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'amber',
     icon: 'Receipt',
   },
+  team: {
+    name: 'Invitar al equipo',
+    blurb:
+      'Invitar a una persona a la empresa por correo —como miembro o administradora, con cargo, equipo y un mensaje—, siempre con tu confirmación y respetando el tope de asientos del plan. Sólo quien administra la empresa.',
+    tone: 'sky',
+    icon: 'Users',
+  },
   work: {
     name: 'Registro de trabajo',
     blurb:
@@ -736,6 +743,8 @@ const FAMILY_GROUP: Record<string, string> = {
   // Con Gerencia: el registro de trabajo es la otra mitad de «¿cómo va la
   // empresa?» — quién está cargado, qué se venció, qué se cerró a tiempo.
   work: 'goals',
+  // Con la empresa: invitar es decidir quién entra a ella.
+  team: 'company',
   // Con Gerencia: el piloto es Cortex haciendo de gerente cada mañana.
   autopilot: 'goals',
   // Con metas y Gerencia: es la otra mitad de «¿cómo va la empresa?» — qué se

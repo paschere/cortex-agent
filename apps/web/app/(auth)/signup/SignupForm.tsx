@@ -105,15 +105,37 @@ export interface SignupFormProps {
    * lo que se guarda del consentimiento son de quien llena la ranura.
    */
   consent?: ReactNode;
+  /**
+   * La invitación que trae esta persona, ya leída en el servidor (ver page.tsx).
+   * Con ella el correo va puesto y fijo, y se esconden la empresa, el código y el
+   * plan: quien entra invitado no crea una empresa ni necesita código — la
+   * invitación es una credencial más fuerte que ambos, y entra a la empresa que
+   * la invitó (lib/auth.ts, `assertMaySignUp`).
+   */
+  invite?: {
+    email: string;
+    organizationName: string;
+    inviterName: string;
+    /** `/login?next=…` hacia esta misma invitación, armado en el servidor (nada de `window` en el render). */
+    loginHref: string;
+  } | null;
 }
 
-export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }: SignupFormProps) {
+export function SignupForm({
+  mode,
+  needsCode: needsCodeProp,
+  trialDays,
+  defaultPlan,
+  consent,
+  invite = null,
+}: SignupFormProps) {
+  const needsCode = needsCodeProp && !invite;
   const formRef = useRef<HTMLFormElement>(null);
   const [plan, setPlan] = useState<TrialPlanCode>(defaultPlan);
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [code, setCode] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(invite?.email ?? '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState<'google' | 'email' | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -128,7 +150,7 @@ export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }:
       setErr('Escribe el código de invitación antes de continuar con Google.');
       return;
     }
-    if (mode === 'open' && !company.trim()) {
+    if (mode === 'open' && !invite && !company.trim()) {
       setErr('Escribe el nombre de tu empresa antes de continuar con Google.');
       return;
     }
@@ -144,7 +166,7 @@ export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }:
     setErr(null);
     rememberCompany(company);
     if (needsCode) rememberSignupCode(code);
-    if (mode === 'open') rememberPlan(plan);
+    if (mode === 'open' && !invite) rememberPlan(plan);
     try {
       await authClient.signIn.social({ provider: 'google', callbackURL: nextUrl() });
     } catch (e) {
@@ -164,7 +186,7 @@ export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }:
     setErr(null);
     rememberCompany(company);
     if (needsCode) rememberSignupCode(code);
-    if (mode === 'open') rememberPlan(plan);
+    if (mode === 'open' && !invite) rememberPlan(plan);
     const { error } = await authClient.signUp.email({
       name,
       email,
@@ -188,7 +210,8 @@ export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }:
     // Resend and the same code shows the inbox screen again.
     const { data: session } = await authClient.getSession();
     if (session?.user) {
-      window.location.href = '/';
+      // A donde iba (la invitación, si vino de una), no siempre a la raíz.
+      window.location.href = nextUrl();
       return;
     }
     setDone(true);
@@ -231,12 +254,21 @@ export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }:
       <AuthBody>
         <AuthTitle
           hint={
-            mode === 'open'
-              ? `Sin tarjeta. Tu empresa empieza con ${trialDays} días de prueba con todo incluido; después eliges si sigues.`
-              : 'Sin tarjeta. Con tu código de invitación creas el espacio de tu empresa y después invitas a tu equipo tú mismo.'
+            invite ? (
+              <>
+                {invite.inviterName} te invitó a{' '}
+                <span className="font-semibold text-ink">{invite.organizationName}</span>. Crea tu
+                cuenta con el correo de la invitación y entras directo, sin código ni empresa que
+                crear.
+              </>
+            ) : mode === 'open' ? (
+              `Sin tarjeta. Tu empresa empieza con ${trialDays} días de prueba con todo incluido; después eliges si sigues.`
+            ) : (
+              'Sin tarjeta. Con tu código de invitación creas el espacio de tu empresa y después invitas a tu equipo tú mismo.'
+            )
           }
         >
-          Crea tu cuenta
+          {invite ? `Crea tu cuenta para entrar a ${invite.organizationName}` : 'Crea tu cuenta'}
         </AuthTitle>
 
         <form ref={formRef} onSubmit={signUpEmail} className="space-y-3">
@@ -254,15 +286,17 @@ export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }:
               between somebody and the product they have not tried yet is a
               field that loses signups. Left blank, the workspace gets their
               name and can be renamed later. */}
-          <AuthField
-            label="Empresa"
-            type="text"
-            required={mode === 'open'}
-            autoComplete="organization"
-            placeholder="Transportes del Valle"
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-          />
+          {!invite && (
+            <AuthField
+              label="Empresa"
+              type="text"
+              required={mode === 'open'}
+              autoComplete="organization"
+              placeholder="Transportes del Valle"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+            />
+          )}
           {/* Obligatorio mientras el acceso sea por invitación. Va DESPUÉS de la
               empresa y antes del correo a propósito: quien tiene el código lo
               tiene a mano y lo pega sin pensar, y quien no lo tiene se entera
@@ -281,7 +315,7 @@ export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }:
           )}
           {/* Registro abierto: la prueba es de un plan, y se elige aquí. Se
               puede cambiar después en Plan y consumo sin perder nada. */}
-          {mode === 'open' && (
+          {mode === 'open' && !invite && (
             <fieldset className="space-y-1.5">
               <legend className="mb-1.5 text-xs font-semibold text-ink-muted">
                 Plan para tu prueba de {trialDays} días
@@ -319,7 +353,21 @@ export function SignupForm({ mode, needsCode, trialDays, defaultPlan, consent }:
             placeholder="tu@empresa.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            // Con invitación el correo es el de la invitación y no se cambia:
+            // `ba_invitation` está atada a esa dirección, y con otra la cuenta
+            // se crearía pero no podría aceptarla.
+            readOnly={Boolean(invite)}
+            aria-describedby={invite ? 'invite-email-hint' : undefined}
           />
+          {invite && (
+            <p id="invite-email-hint" className="-mt-1.5 text-xs text-ink-faint">
+              ¿No eres tú?{' '}
+              <Link href={invite.loginHref} className="font-semibold text-primary hover:underline">
+                Entra con otra cuenta
+              </Link>{' '}
+              o pídele a {invite.inviterName} que te invite con tu correo.
+            </p>
+          )}
           <AuthField
             label="Contraseña"
             mono

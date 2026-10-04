@@ -1,6 +1,6 @@
 import { button, calloutBox, divider, fineprint, keyValueTable, lede, statRow } from './components';
 import { type RenderedEmail, appBaseUrl, renderEmail } from './layout';
-import { escapeHtml, FONT_STACK, palette } from './theme';
+import { FONT_STACK, escapeHtml, palette } from './theme';
 
 /**
  * El parte semanal, como correo.

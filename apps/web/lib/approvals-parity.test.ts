@@ -247,6 +247,11 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
   { toolId: 'crm.log_activity', input: { client: 'Nexa', kind: 'call', title: 'Pidió descuento' } },
   { toolId: 'crm.send_nps', input: { client: 'Nexa', to: ['compras@nexa.co'] } },
   { toolId: 'crm.send_nps', input: { client: 'Nexa', linkOnly: true } },
+  { toolId: 'team.invite', input: { email: 'ana@x.co', role: 'admin' } },
+  {
+    toolId: 'team.invite',
+    input: { email: 'luis@x.co', role: 'member', position: 'Analista de cartera', team: 'Cartera' },
+  },
   {
     toolId: 'whatsapp.reply',
     input: { conversationId: '00000000-0000-4000-8000-000000000001', text: 'Ya te reviso.' },

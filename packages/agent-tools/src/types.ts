@@ -102,6 +102,30 @@ export interface ToolContext {
    */
   enqueueJob?: (name: string, data: Record<string, unknown>) => Promise<boolean>;
   /**
+   * Invitar a una persona a ESTA empresa, sin saber cómo se invita.
+   *
+   * Invitar es de better-auth y del tope de asientos del plan, y ambos viven en
+   * la aplicación (`apps/web/lib/team/invite-flow.ts`); este paquete no puede
+   * importarlos, y una segunda implementación aquí se desviaría de la de la
+   * pantalla «Personas». Es la misma razón de `enqueueJob`. `buildToolContext`
+   * la ata.
+   *
+   * OPCIONAL, y sólo existe donde hay una persona con sesión detrás (el chat
+   * web): better-auth firma la invitación con la sesión de quien invita. Una
+   * rutina, el runtime MCP o un test no la traen, y `team.invite` lo dice en vez
+   * de fingir. Nunca lanza por «no se pudo»: devuelve el estado y la frase.
+   */
+  inviteTeamMember?: (input: {
+    email: string;
+    role: 'member' | 'admin';
+    message?: string | null;
+    position?: string | null;
+    teamId?: string | null;
+  }) => Promise<{
+    status: 'sent' | 'already_member' | 'already_invited' | 'no_seats' | 'invalid' | 'failed';
+    message: string;
+  }>;
+  /**
    * El alcance de idempotencia de esta ejecución, cuando lo hay (migración
    * 0168). Lo pone quien sabe que una ejecución es UNA: una rutina programada
    * usa `routine:<id>:<hora programada>`, de modo que el reintento de ese paso

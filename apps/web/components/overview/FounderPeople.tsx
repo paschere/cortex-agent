@@ -125,7 +125,7 @@ function InvitePanel({ companies }: { companies: Array<{ id: string; name: strin
           </h2>
           <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
             {single
-              ? 'Le llega un enlace que dura 48 horas. Ocupa un asiento mientras está pendiente.'
+              ? 'Le llega un enlace que dura 7 días. Ocupa un asiento mientras está pendiente.'
               : 'Una sola invitación por empresa elegida. Cada una respeta su plan y sus asientos.'}
           </p>
         </div>

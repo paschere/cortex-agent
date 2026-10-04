@@ -68,7 +68,7 @@ export interface PendingInvitation {
   id: string;
   email: string;
   role: InvitationRole;
-  /** Cuándo caduca el enlace. Duran 48h — `invitationExpiresIn` en lib/auth.ts. */
+  /** Cuándo caduca el enlace. Duran 7 días — `invitationExpiresIn` en lib/auth.ts (antes 48 h). */
   expiresAt: string;
   /**
    * Ya pasó la fecha. Sigue en la lista a propósito: better-auth no borra ni

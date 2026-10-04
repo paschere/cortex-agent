@@ -248,6 +248,10 @@ export * from './management';
 // de ./management, ./commitments, ./trackers y ./approvals, que son sus
 // fuentes, y de ./views, donde expone `cortex.trabajo` y `cortex.equipo`.
 export * from './work';
+
+// Invitar gente a la empresa desde el chat (`team.invite`). La invitación en sí
+// la hace la aplicación, por `ToolContext.inviteTeamMember`.
+export * from './team';
 // `previousPeriod`: en la raíz manda el de metas (ver work/index.ts).
 export { previousPeriod } from './goals';
 

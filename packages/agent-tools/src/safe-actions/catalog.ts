@@ -401,6 +401,18 @@ export const SAFE_ACTION_CATALOG: Readonly<Record<string, AnySafeActionPolicy>> 
   'sales.quote_create': salesQuoteCreate,
   // Una encuesta NPS al mismo cliente en un día es un doble envío (0193).
   'crm.send_nps': { windowMs: 24 * 60 * 60_000, noun: 'la encuesta' },
+  // La misma invitación al mismo correo dentro de diez minutos es un doble clic
+  // o un reintento del modelo, no una segunda invitación. La clave es correo y
+  // rol: cambiar el mensaje o el cargo no la vuelve otra. Reenviarla de verdad
+  // se hace desde «Personas».
+  'team.invite': {
+    windowMs: 10 * 60_000,
+    key: (input: { email?: string; role?: string }) => ({
+      email: String(input.email ?? '').toLowerCase(),
+      role: input.role ?? 'member',
+    }),
+    noun: 'la invitación',
+  } as unknown as AnySafeActionPolicy,
   'sales.quote_send': salesQuoteSend,
   'sales.invoice_emit': salesInvoiceEmit,
   'gmail.send_message': gmailSendMessage as unknown as AnySafeActionPolicy,

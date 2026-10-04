@@ -428,6 +428,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'crm.at_risk': '¿Qué clientes se nos están yendo?',
   'crm.send_nps': 'Mándale la encuesta de satisfacción a ',
 
+  'team.invite': 'Invita a la empresa a ',
+
   'schedule.create': 'Todos los lunes a las 8 de la mañana, ',
   'schedule.list': 'Muéstrame mis rutinas programadas',
   'schedule.update': 'Pausa la rutina ',

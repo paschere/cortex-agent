@@ -21,6 +21,13 @@ const PUBLIC_PATHS = [
   '/forgot-password',
   '/reset-password',
   '/two-factor',
+  // El enlace del correo de invitación. Quien lo abre muchas veces NO tiene
+  // cuenta todavía, y la página tiene que decirle quién lo invitó y dejarle
+  // crearla con el correo ya puesto; con la sesión obligatoria rebotaba a /login
+  // sin explicar nada. La página lee la invitación por su id (aleatorio, que es
+  // la credencial; ver lib/team/invitation-landing.ts) y aceptar o rechazar va
+  // por /api/invitations/<id>/respond, que SÍ exige sesión.
+  '/accept-invitation',
   '/api/auth',
   '/_next',
   '/favicon.ico',

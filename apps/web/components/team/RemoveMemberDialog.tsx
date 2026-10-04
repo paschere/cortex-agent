@@ -25,6 +25,9 @@ export function RemoveMemberDialog({
   onDone,
   compact = false,
   disabled = false,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
 }: {
   personLabel: string;
   companyName: string;
@@ -32,8 +35,20 @@ export function RemoveMemberDialog({
   onDone?: () => void;
   compact?: boolean;
   disabled?: boolean;
+  /**
+   * Controlado desde fuera: el menú de cada fila de «Personas» abre este
+   * diálogo desde un ítem, sin botón propio (`hideTrigger`).
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [innerOpen, setInnerOpen] = useState(false);
+  const open = controlledOpen ?? innerOpen;
+  const setOpen = (next: boolean) => {
+    setInnerOpen(next);
+    onOpenChange?.(next);
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,21 +79,23 @@ export function RemoveMemberDialog({
         if (!next) setError(null);
       }}
     >
-      <Dialog.Trigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          aria-label={`Retirar a ${personLabel} de ${companyName}`}
-          title="Retirar de la empresa"
-          className={clsx(
-            'inline-flex min-h-8 items-center gap-1.5 rounded-pill text-xs font-semibold text-ink-muted transition-colors hover:bg-rose-soft hover:text-rose focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 disabled:cursor-not-allowed disabled:opacity-40',
-            compact ? 'w-8 justify-center' : 'px-2.5',
-          )}
-        >
-          <UserMinus className="h-3.5 w-3.5" aria-hidden />
-          {!compact && 'Retirar'}
-        </button>
-      </Dialog.Trigger>
+      {!hideTrigger && (
+        <Dialog.Trigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            aria-label={`Retirar a ${personLabel} de ${companyName}`}
+            title="Retirar de la empresa"
+            className={clsx(
+              'inline-flex min-h-8 items-center gap-1.5 rounded-pill text-xs font-semibold text-ink-muted transition-colors hover:bg-rose-soft hover:text-rose focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 disabled:cursor-not-allowed disabled:opacity-40',
+              compact ? 'w-8 justify-center' : 'px-2.5',
+            )}
+          >
+            <UserMinus className="h-3.5 w-3.5" aria-hidden />
+            {!compact && 'Retirar'}
+          </button>
+        </Dialog.Trigger>
+      )}
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[min(520px,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-card border border-border bg-surface shadow-pop outline-none">

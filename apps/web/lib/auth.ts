@@ -10,6 +10,9 @@ import {
   SIGNUP_CODE_REQUEST_ERROR,
   signupCodeMatches,
 } from './signup-code';
+import { currentInvitationMessage } from './team/invitation-context';
+import { renderInvitationEmail } from './team/invitation-email';
+import { INVITATION_TTL_SECONDS } from './team/invitation-roles';
 import { WORKSPACE_LIMIT } from './workspace-limits';
 
 /**
@@ -208,7 +211,7 @@ async function syncGoogleIntegration(account: {
  *   2. QUIEN YA FUE INVITADO NO NECESITA CÓDIGO, y esta excepción es la mitad de
  *      la funcionalidad. Una invitación de `ba_invitation` es estrictamente más
  *      fuerte que el código: nombra a la persona, nombra el espacio, la firmó
- *      alguien con permiso y caduca a las 48 horas. Exigirle además el código
+ *      alguien con permiso y caduca a los siete días. Exigirle además el código
  *      compartido rompería el flujo entero de «invita a tu equipo» — que es
  *      justo lo que se acaba de construir — y obligaría a quien invita a mandar
  *      dos cosas por dos canales para que entre una persona.
@@ -382,13 +385,27 @@ export const auth = betterAuth({
         return Number(rows[0]?.count ?? 0) >= WORKSPACE_LIMIT;
       },
       membershipLimit: 100,
-      invitationExpiresIn: 60 * 60 * 48, // 48 hours
+      // Siete días (antes 48 h): una invitación casi siempre cae en un buzón que
+      // se abre el lunes. Cada reenvío renueva el plazo completo.
+      invitationExpiresIn: INVITATION_TTL_SECONDS,
       sendInvitationEmail: async (data) => {
         const inviteUrl = `${baseURL}/accept-invitation/${data.id}`;
+        // En español y con marca (lib/team/invitation-email.ts). El mensaje
+        // personal llega por el contexto asíncrono porque este gancho corre
+        // antes de que exista el id al que se guardaría; ver invitation-context.
+        const mail = renderInvitationEmail({
+          inviterName: data.inviter.user.name || data.inviter.user.email,
+          organizationName: data.organization.name,
+          role: data.role,
+          url: inviteUrl,
+          expiresAt: data.invitation?.expiresAt,
+          message: currentInvitationMessage(),
+        });
         const result = await sendEmail({
           to: data.email,
-          subject: `You've been invited to ${data.organization.name} on Cortex`,
-          text: `${data.inviter.user.name || data.inviter.user.email} invited you to join "${data.organization.name}" on Cortex.\n\nAccept the invitation:\n\n${inviteUrl}\n\nThis invitation expires in 48 hours.`,
+          subject: mail.subject,
+          text: mail.text,
+          html: mail.html,
         });
         if (!result.sent)
           console.info(`[auth:dev] invitation link for ${data.email}: ${inviteUrl}`);

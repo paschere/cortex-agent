@@ -110,6 +110,11 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   crm_log_activity: 'Anotar una actividad comercial',
   crm_at_risk: 'Ver los clientes en riesgo de perderse',
   crm_send_nps: 'Mandar la encuesta de satisfacción',
+  team_invite: 'Invitar a alguien a la empresa',
+  team_founder_promote: 'Nombrar a un cofundador',
+  team_founder_transfer: 'Pasar la propiedad de la empresa',
+  team_founder_step_down: 'Dejar de ser fundador',
+  team_leave_company: 'Salir de la empresa',
   web_search: 'Buscar en internet',
   web_scrape: 'Abrir página web',
   browser_list_flows: 'Ver los trámites aprendidos',
@@ -492,6 +497,8 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       return input.linkOnly
         ? `Crear el enlace de la encuesta de satisfacción para ${input.client}`
         : `Mandar la encuesta de satisfacción a ${input.client} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'a su contacto principal'}`;
+    case 'team_invite':
+      return `Invitar a ${input.email} a la empresa como ${input.role === 'admin' ? 'administrador' : 'miembro'}${input.position ? ` (${String(input.position).slice(0, 80)})` : ''}${input.team ? ` en el equipo ${String(input.team).slice(0, 80)}` : ''} — le llega un correo con el enlace`;
     case 'whatsapp_reply':
       return `Responder por WhatsApp, como persona, en la conversación abierta: «${String(input.text ?? '').slice(0, 120)}»`;
     case 'projects_create':

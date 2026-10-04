@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   type MembershipChangeInput,
   type MembershipRow,
+  confirmationMatches,
+  decideInvitationRole,
+  decideLeave,
+  decidePromoteToOwner,
   decideRemoval,
   decideRoleChange,
+  decideStepDown,
+  decideTransfer,
   directoryRoleFor,
   groupPeople,
   healthOf,
@@ -257,5 +263,139 @@ describe('la señal de salud', () => {
     expect(healthOf({ ...ok, meterState: 'blocked' }).label).toBe('Sin respuestas');
     expect(healthOf({ ...ok, failedRuns7d: 1, seatsFull: true }).label).toBe('Rutinas con fallos');
     expect(healthOf({ ...ok, seatsFull: true }).tone).toBe('amber');
+  });
+});
+
+describe('hacer cofundador', () => {
+  const promote = (over: Partial<MembershipChangeInput> = {}) =>
+    decidePromoteToOwner({ ...base, ...over });
+
+  it('un fundador asciende a un miembro o a un administrador', () => {
+    expect(promote().ok).toBe(true);
+    expect(promote({ targetRole: 'admin' }).ok).toBe(true);
+  });
+
+  it('un administrador NO puede nombrar fundadores, ni a otro ni a sí mismo', () => {
+    expect(promote({ actorRole: 'admin' })).toEqual({ ok: false, reason: 'not_owner' });
+    expect(promote({ actorRole: 'admin', actorIsTarget: true })).toEqual({
+      ok: false,
+      reason: 'not_owner',
+    });
+  });
+
+  it('nadie se nombra a sí mismo y no se nombra dos veces a quien ya lo es', () => {
+    expect(promote({ actorIsTarget: true })).toEqual({ ok: false, reason: 'self' });
+    expect(promote({ targetRole: 'owner' })).toEqual({ ok: false, reason: 'already_owner' });
+  });
+
+  it('un espacio personal no tiene cofundadores', () => {
+    expect(promote({ workspaceKind: 'personal' })).toEqual({ ok: false, reason: 'personal' });
+  });
+});
+
+describe('transferir la propiedad', () => {
+  const transfer = (over: Partial<Parameters<typeof decideTransfer>[0]> = {}) =>
+    decideTransfer({ ...base, stepDown: true, ...over });
+
+  it('asciende a la otra persona y baja a quien actúa', () => {
+    expect(transfer()).toEqual({ ok: true, promoteTarget: true, demoteActor: true });
+  });
+
+  it('sin soltar, es compartir: los dos quedan fundadores', () => {
+    expect(transfer({ stepDown: false })).toEqual({
+      ok: true,
+      promoteTarget: true,
+      demoteActor: false,
+    });
+  });
+
+  it('con un cofundador ya existente, sólo falta soltar; y sin soltar no hay nada que hacer', () => {
+    expect(transfer({ targetRole: 'owner', ownerCount: 2 })).toEqual({
+      ok: true,
+      promoteTarget: false,
+      demoteActor: true,
+    });
+    expect(transfer({ targetRole: 'owner', ownerCount: 2, stepDown: false })).toEqual({
+      ok: false,
+      reason: 'already_owner',
+    });
+  });
+
+  it('sólo un fundador transfiere y nunca a sí mismo', () => {
+    expect(transfer({ actorRole: 'admin' })).toEqual({ ok: false, reason: 'not_owner' });
+    expect(transfer({ actorIsTarget: true })).toEqual({ ok: false, reason: 'self' });
+  });
+
+  it('en ningún caso posible deja a la empresa sin fundador', () => {
+    for (const ownerCount of [1, 2, 3]) {
+      for (const targetRole of ['member', 'admin', 'owner'] as const) {
+        for (const stepDown of [true, false]) {
+          const result = transfer({ ownerCount, targetRole, stepDown });
+          if (!result.ok) continue;
+          const after = ownerCount + (result.promoteTarget ? 1 : 0) - (result.demoteActor ? 1 : 0);
+          expect(after).toBeGreaterThanOrEqual(1);
+        }
+      }
+    }
+  });
+});
+
+describe('dejar de ser fundador y dejar la empresa', () => {
+  it('soltar la propiedad exige que quede otro fundador', () => {
+    expect(decideStepDown({ ...base, ownerCount: 1 })).toEqual({ ok: false, reason: 'last_owner' });
+    expect(decideStepDown({ ...base, ownerCount: 2 }).ok).toBe(true);
+  });
+
+  it('sólo un fundador puede dejar de serlo', () => {
+    expect(decideStepDown({ ...base, actorRole: 'admin', ownerCount: 2 })).toEqual({
+      ok: false,
+      reason: 'not_owner',
+    });
+  });
+
+  it('cualquier miembro puede dejar la empresa, aunque no administre', () => {
+    expect(decideLeave({ ...base, actorRole: 'member' }).ok).toBe(true);
+    expect(decideLeave({ ...base, actorRole: 'admin' }).ok).toBe(true);
+  });
+
+  it('el último fundador no puede irse; con otro fundador, sí', () => {
+    expect(decideLeave({ ...base, ownerCount: 1 })).toEqual({ ok: false, reason: 'last_owner' });
+    expect(decideLeave({ ...base, ownerCount: 2 }).ok).toBe(true);
+  });
+
+  it('en un espacio personal no hay de dónde salir', () => {
+    expect(decideLeave({ ...base, workspaceKind: 'personal' })).toEqual({
+      ok: false,
+      reason: 'personal',
+    });
+  });
+});
+
+describe('invitar con un rol', () => {
+  const invite = (actorRole: 'owner' | 'admin' | 'member', role: 'owner' | 'admin' | 'member') =>
+    decideInvitationRole({ workspaceKind: 'company', actorRole, role });
+
+  it('un administrador invita miembros y administradores, no cofundadores', () => {
+    expect(invite('admin', 'member').ok).toBe(true);
+    expect(invite('admin', 'admin').ok).toBe(true);
+    expect(invite('admin', 'owner')).toEqual({ ok: false, reason: 'not_owner' });
+  });
+
+  it('un fundador invita cualquier rol y un miembro ninguno', () => {
+    expect(invite('owner', 'owner').ok).toBe(true);
+    expect(invite('member', 'member')).toEqual({ ok: false, reason: 'not_manager' });
+  });
+});
+
+describe('la confirmación escrita', () => {
+  it('acepta el nombre de la persona o el de la empresa, sin tildes ni mayúsculas', () => {
+    expect(confirmationMatches('  maría  pérez ', ['María Pérez', 'Acme SAS'])).toBe(true);
+    expect(confirmationMatches('acme sas', ['María Pérez', 'Acme SAS'])).toBe(true);
+    expect(confirmationMatches('maria perez', ['María Pérez'])).toBe(true);
+  });
+
+  it('lo vacío o distinto no confirma', () => {
+    expect(confirmationMatches('', ['', null])).toBe(false);
+    expect(confirmationMatches('Acme', ['Acme SAS'])).toBe(false);
   });
 });

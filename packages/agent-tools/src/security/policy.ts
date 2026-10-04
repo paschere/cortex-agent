@@ -328,6 +328,9 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   'crm.update_opportunity': { sensitivity: 'client', blastRadius: 'internal_write' },
   'crm.log_activity': { sensitivity: 'client', blastRadius: 'internal_write' },
   'crm.send_nps': { sensitivity: 'client', blastRadius: 'external_send', deliversContent: true },
+  // Invitar manda un correo a alguien de afuera y le abre una puerta a la
+  // empresa; el contenido es una invitación, no datos de la empresa.
+  'team.invite': { sensitivity: 'internal', blastRadius: 'external_send' },
 
   // --- payroll: aggregates are the SAFE way to look at compensation ---------
   // Rollups (headcount by division, totals, projections) carry no per-person

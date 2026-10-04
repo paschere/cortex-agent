@@ -23,6 +23,9 @@ export function mandatoryHumanConfirmation(toolId: string): boolean {
       'accounting.write_receipt',
       'accounting.write_supplier_payment',
       'close.close_period',
+      // Invitar le abre una puerta a la empresa a alguien de afuera (y a un
+      // administrador, más): siempre una persona, nunca un mandato.
+      'team.invite',
     ].includes(toolId)
   );
 }

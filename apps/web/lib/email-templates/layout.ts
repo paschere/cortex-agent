@@ -1,4 +1,4 @@
-import { FONT_STACK, CORTEX_ICON_PATH, escapeHtml, palette, safeHref } from './theme';
+import { CORTEX_ICON_PATH, FONT_STACK, escapeHtml, palette, safeHref } from './theme';
 
 /**
  * The shell every automated Cortex email is poured into.
@@ -47,6 +47,12 @@ export interface RenderEmailOptions {
   pillHtml?: string;
   /** One line explaining why this person received the email. Plain text. */
   footerNote?: string;
+  /**
+   * Idioma del cascarón (atributo `lang` y la línea «Enviado por Cortex»).
+   * Los correos por defecto siguen en inglés; los que van a gente de Colombia
+   * (la invitación, por ejemplo) piden `'es'`.
+   */
+  locale?: 'en' | 'es';
 }
 
 /** Keeps the body copy out of the inbox preview after the preheader. */
@@ -80,12 +86,15 @@ export function renderEmail(opts: RenderEmailOptions): string {
         ].join('')
       : '';
 
+  const es = opts.locale === 'es';
   const footer = [
     `<tr><td style="padding:18px 4px 0;">`,
     `<p style="margin:0 0 6px;font-family:${FONT_STACK};font-size:12.5px;line-height:1.55;color:${palette.faint};">`,
     home
-      ? `Sent by Cortex · <a href="${home}" style="color:${palette.primary};text-decoration:underline;">Open Cortex</a>`
-      : 'Sent by Cortex',
+      ? `${es ? 'Enviado por Cortex' : 'Sent by Cortex'} · <a href="${home}" style="color:${palette.primary};text-decoration:underline;">${es ? 'Abrir Cortex' : 'Open Cortex'}</a>`
+      : es
+        ? 'Enviado por Cortex'
+        : 'Sent by Cortex',
     '</p>',
     opts.footerNote
       ? `<p style="margin:0;font-family:${FONT_STACK};font-size:12.5px;line-height:1.55;color:${palette.faint};">${escapeHtml(opts.footerNote)}</p>`
@@ -94,7 +103,7 @@ export function renderEmail(opts: RenderEmailOptions): string {
   ].join('');
 
   return `<!doctype html>
-<html lang="en" style="color-scheme:light;supported-color-schemes:light;">
+<html lang="${es ? 'es' : 'en'}" style="color-scheme:light;supported-color-schemes:light;">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />

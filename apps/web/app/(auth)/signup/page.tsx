@@ -6,6 +6,9 @@ import {
   trialDays,
   trialPlanCode,
 } from '@/lib/billing/config';
+import { safeNextPath } from '@/lib/invite-landing';
+import { readInvitationLanding } from '@/lib/team/invitation-landing';
+import { invitationIdFromNext, landingState } from '@/lib/team/invitation-landing-shape';
 import { SignupForm } from './SignupForm';
 
 export const dynamic = 'force-dynamic';
@@ -24,12 +27,34 @@ export const dynamic = 'force-dynamic';
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string }>;
+  searchParams: Promise<{ plan?: string; next?: string }>;
 }) {
-  const { plan } = await searchParams;
+  const { plan, next } = await searchParams;
   const mode = signupMode();
+
+  /**
+   * ¿VIENE DE UNA INVITACIÓN? El correo se busca AQUÍ, en el servidor, a partir
+   * del id que ya trae el destino (`?next=/accept-invitation/<id>`), y no se
+   * pasa como `?email=`: una dirección en la URL queda en el historial, en los
+   * registros del proxy y en el `Referer`, y cualquiera podría armar un enlace
+   * que precargue un correo ajeno. Sólo una invitación viva y pendiente
+   * precarga algo; cualquier otro caso es el registro de siempre.
+   */
+  const invitationId = invitationIdFromNext(safeNextPath(next));
+  const invitation = invitationId ? await readInvitationLanding(invitationId) : null;
+  const invite =
+    invitation && landingState(invitation) === 'valid'
+      ? {
+          email: invitation.email,
+          organizationName: invitation.organizationName,
+          inviterName: invitation.inviterName,
+          loginHref: `/login?next=${encodeURIComponent(`/accept-invitation/${invitation.id}`)}`,
+        }
+      : null;
+
   return (
     <SignupForm
+      invite={invite}
       mode={mode}
       needsCode={signupNeedsCode(mode, Boolean((process.env.SIGNUP_INVITE_CODE ?? '').trim()))}
       trialDays={trialDays()}

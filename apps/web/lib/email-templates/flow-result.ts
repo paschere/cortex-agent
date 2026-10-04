@@ -110,7 +110,11 @@ export function renderFlowResultEmail(input: FlowResultEmailInput): RenderedEmai
       ]
     : [
         lede(opener),
-        calloutBox({ title: 'Qué pasó', html: `<p style="margin:0">${escapeHtml(errorText)}</p>`, tone: 'danger' }),
+        calloutBox({
+          title: 'Qué pasó',
+          html: `<p style="margin:0">${escapeHtml(errorText)}</p>`,
+          tone: 'danger',
+        }),
         statRow(stats),
         fineprint(
           'Si hoy hace falta, toca hacerlo a mano. En la pantalla del trámite queda el paso exacto en el que se quedó.',
@@ -121,7 +125,10 @@ export function renderFlowResultEmail(input: FlowResultEmailInput): RenderedEmai
     title: what,
     preheader: input.ok ? opener : `No salió: ${errorText}`,
     eyebrow: 'Trámite',
-    pillHtml: statusPill({ label: input.ok ? 'Listo' : 'No salió', tone: input.ok ? 'success' : 'danger' }),
+    pillHtml: statusPill({
+      label: input.ok ? 'Listo' : 'No salió',
+      tone: input.ok ? 'success' : 'danger',
+    }),
     bodyHtml: body.filter(Boolean).join('\n'),
     footerNote: base ? `Lo puedes revisar en ${base}/browser` : undefined,
   });

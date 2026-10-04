@@ -1,20 +1,18 @@
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { normalizeMembershipRole } from '@/lib/founder-rules';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { listCompanyMembers } from '@/lib/team/membership-admin';
+import { ROLES_INFO, roleKeyOf } from '@/lib/team/role-matrix';
+import { initials } from '@/lib/team/shape';
 import { ShieldBan, UserMinus, UserPlus, Users2, UsersRound } from 'lucide-react';
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 
 const FIELD =
   'rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50';
-
-const ROLE_LABEL: Record<string, string> = {
-  org_admin: 'Administra la empresa',
-  team_admin: 'Lidera un equipo',
-  member: 'Miembro',
-};
 
 interface Team {
   id: string;
@@ -77,13 +75,26 @@ export default async function TeamsPage() {
   const user = await requireSession();
   const sb = getOrgScopedClient(user.organization.id);
 
-  const [{ data: teamsData }, { data: membersData }, { data: usersData }, { data: permsData }] =
-    await Promise.all([
-      sb.from('teams').select('id, name').order('name'),
-      sb.from('team_members').select('team_id, user_id'),
-      sb.from('users').select('id, name, email, role').order('email'),
-      sb.from('team_tool_permissions').select('team_id').eq('allowed', false),
-    ]);
+  const [
+    { data: teamsData },
+    { data: membersData },
+    { data: usersData },
+    { data: permsData },
+    memberships,
+  ] = await Promise.all([
+    sb.from('teams').select('id, name').order('name'),
+    sb.from('team_members').select('team_id, user_id'),
+    sb.from('users').select('id, name, email, role').order('email'),
+    sb.from('team_tool_permissions').select('team_id').eq('allowed', false),
+    // El rol de verdad (cofundador, administrador…) sale de la membresía, no
+    // sólo del directorio: el mismo rótulo que ve quien abre «Personas».
+    listCompanyMembers([user.organization.id]),
+  ]);
+  const membershipByEmail = new Map(memberships.map((row) => [row.email.toLowerCase(), row]));
+  const roleOf = (u: WorkspaceUser) => {
+    const membership = membershipByEmail.get(u.email.toLowerCase());
+    return ROLES_INFO[roleKeyOf(normalizeMembershipRole(membership?.role ?? 'member'), u.role)];
+  };
 
   const teams: Team[] = (teamsData ?? []) as Team[];
   const members: TeamMember[] = (membersData ?? []) as TeamMember[];
@@ -95,7 +106,7 @@ export default async function TeamsPage() {
   const membersByTeam = members.reduce<Record<string, WorkspaceUser[]>>((acc, m) => {
     const u = usersById.get(m.user_id);
     if (!u) return acc;
-    (acc[m.team_id] ??= []).push(u);
+    acc[m.team_id] = [...(acc[m.team_id] ?? []), u];
     return acc;
   }, {});
 
@@ -110,6 +121,15 @@ export default async function TeamsPage() {
         title="Equipos"
         subtitle={`${teams.length} equipo${teams.length === 1 ? '' : 's'} en la organización. Estar en un equipo es lo que define a qué herramientas llega cada persona.`}
         icon={<UsersRound className="h-5 w-5" />}
+        actions={
+          <Link
+            href="/admin/users"
+            className="inline-flex min-h-10 items-center gap-2 rounded-pill border border-border-strong bg-surface px-4 py-2 text-sm font-bold text-ink transition-colors hover:border-ink-faint/40 hover:bg-surface-2"
+          >
+            <Users2 className="h-4 w-4" aria-hidden />
+            Personas y roles
+          </Link>
+        }
       />
 
       <div className="space-y-4">
@@ -184,6 +204,12 @@ export default async function TeamsPage() {
                           key={u.id}
                           className="-mx-2 flex items-center gap-3 rounded-sm px-2 py-2 transition-colors duration-150 hover:bg-surface-2"
                         >
+                          <span
+                            aria-hidden
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-primary-soft text-micro font-bold text-primary-ink"
+                          >
+                            {initials(u.name || u.email)}
+                          </span>
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-semibold text-ink">
                               {u.name || u.email}
@@ -194,8 +220,10 @@ export default async function TeamsPage() {
                               </div>
                             )}
                           </div>
-                          <span className="shrink-0 rounded-pill border border-border bg-surface px-2 py-0.5 text-micro font-semibold text-ink-muted">
-                            {ROLE_LABEL[u.role] ?? u.role}
+                          <span
+                            className={`shrink-0 rounded-pill border px-2 py-0.5 text-micro font-semibold ${roleOf(u).chip}`}
+                          >
+                            {roleOf(u).label}
                           </span>
                           <form action={removeTeamMember} className="shrink-0">
                             <input type="hidden" name="teamId" value={team.id} />

@@ -33,7 +33,11 @@ import type { OrgRole, Role } from '@cortex/core';
 
 /** Lo que hay que escribir en cada tabla para que un rol del directorio persista. */
 export interface MembershipTarget {
-  /** `ba_member.role`. Nunca `owner`: la transferencia de propiedad es otro flujo. */
+  /**
+   * `ba_member.role`. Nunca `owner`: dar la propiedad no es un rol más del
+   * desplegable sino su propio flujo (`decidePromoteToOwner` / `decideTransfer`,
+   * más abajo), con confirmación fuerte y aviso a los demás fundadores.
+   */
   membershipRole: 'admin' | 'member';
   /** `public.users.role`, tal como lo dejará `resolveSessionDirectory`. */
   directoryRole: Role;
@@ -64,7 +68,9 @@ export type MembershipRefusal =
   | 'owner_protected'
   | 'last_owner'
   | 'self'
-  | 'unchanged';
+  | 'unchanged'
+  | 'not_owner'
+  | 'already_owner';
 
 /** La frase que ve quien pulsó. Una por motivo, sin detalles de la librería. */
 export const REFUSAL_MESSAGE: Record<MembershipRefusal, string> = {
@@ -74,6 +80,8 @@ export const REFUSAL_MESSAGE: Record<MembershipRefusal, string> = {
   last_owner: 'La empresa se quedaría sin fundador. Nombra otro antes de hacer este cambio.',
   self: 'No puedes cambiar tu propio rol desde aquí.',
   unchanged: 'Esa persona ya tiene ese rol.',
+  not_owner: 'Solo un fundador puede hacer este cambio.',
+  already_owner: 'Esa persona ya es fundadora.',
 };
 
 export interface MembershipChangeInput {
@@ -138,6 +146,135 @@ export function decideRemoval(input: MembershipChangeInput): Decision {
     return { ok: false, reason: 'last_owner' };
   }
   return { ok: true };
+}
+
+/* ---------------------------------------------------------------------------
+ * Compartir y soltar la propiedad
+ * ---------------------------------------------------------------------------
+ * Cuatro movimientos que cambian QUIÉN ES FUNDADOR. Comparten una invariante
+ * que no se negocia: tras cualquiera de ellos queda al menos un `owner`. Se
+ * decide aquí, sobre filas leídas en el servidor en esa misma llamada, y
+ * better-auth lo vuelve a imponer por su cuenta como segunda línea.
+ *
+ * El orden de escritura en `transfer` (primero ascender al otro, después bajar
+ * a quien actúa) existe por esa invariante: si el segundo paso falla, la
+ * empresa queda con DOS fundadores, que es un estado seguro; al revés quedaría
+ * con cero.
+ */
+
+/** Hacer cofundador a alguien. Sólo un fundador, nunca uno mismo, nunca a quien ya lo es. */
+export function decidePromoteToOwner(
+  input: Pick<
+    MembershipChangeInput,
+    'workspaceKind' | 'actorRole' | 'actorIsTarget' | 'targetRole'
+  >,
+): Decision {
+  if (input.workspaceKind === 'personal') return { ok: false, reason: 'personal' };
+  if (input.actorRole !== 'owner') return { ok: false, reason: 'not_owner' };
+  if (input.actorIsTarget) return { ok: false, reason: 'self' };
+  if (input.targetRole === 'owner') return { ok: false, reason: 'already_owner' };
+  return { ok: true };
+}
+
+export type TransferDecision =
+  | { ok: true; promoteTarget: boolean; demoteActor: boolean }
+  | { ok: false; reason: MembershipRefusal };
+
+/**
+ * Pasar la propiedad: la otra persona queda como fundadora y, si `stepDown`,
+ * quien actúa baja a administrador. Si la otra persona YA es fundadora sólo se
+ * hace la mitad que falta (soltar), y eso exige `stepDown`: «transferir» a un
+ * cofundador sin soltar no cambia nada.
+ */
+export function decideTransfer(
+  input: Pick<
+    MembershipChangeInput,
+    'workspaceKind' | 'actorRole' | 'actorIsTarget' | 'targetRole'
+  > & {
+    ownerCount: number;
+    stepDown: boolean;
+  },
+): TransferDecision {
+  if (input.workspaceKind === 'personal') return { ok: false, reason: 'personal' };
+  if (input.actorRole !== 'owner') return { ok: false, reason: 'not_owner' };
+  if (input.actorIsTarget) return { ok: false, reason: 'self' };
+  const promoteTarget = input.targetRole !== 'owner';
+  if (!promoteTarget && !input.stepDown) return { ok: false, reason: 'already_owner' };
+  const after = input.ownerCount + (promoteTarget ? 1 : 0) - (input.stepDown ? 1 : 0);
+  // Inalcanzable con filas coherentes (quien actúa es fundador, así que
+  // ownerCount ≥ 1 y, si baja, el otro ya es o pasa a ser fundador). Se deja
+  // porque es la única línea que impide dejar a una empresa sin dueño si
+  // algún día alguien reordena los pasos de arriba.
+  if (after < 1) return { ok: false, reason: 'last_owner' };
+  return { ok: true, promoteTarget, demoteActor: input.stepDown };
+}
+
+/** Dejar de ser fundador (queda como administrador). Exige que quede otro fundador. */
+export function decideStepDown(
+  input: Pick<MembershipChangeInput, 'workspaceKind' | 'actorRole' | 'ownerCount'>,
+): Decision {
+  if (input.workspaceKind === 'personal') return { ok: false, reason: 'personal' };
+  if (input.actorRole !== 'owner') return { ok: false, reason: 'not_owner' };
+  if (input.ownerCount <= 1) return { ok: false, reason: 'last_owner' };
+  return { ok: true };
+}
+
+/**
+ * Dejar la empresa, cualquiera sea el rol. `decideRemoval` no sirve para esto:
+ * exige administrar, y un miembro raso tiene derecho a irse.
+ */
+export function decideLeave(
+  input: Pick<MembershipChangeInput, 'workspaceKind' | 'actorRole' | 'ownerCount'>,
+): Decision {
+  if (input.workspaceKind === 'personal') return { ok: false, reason: 'personal' };
+  if (input.actorRole === 'owner' && input.ownerCount <= 1) {
+    return { ok: false, reason: 'last_owner' };
+  }
+  return { ok: true };
+}
+
+/**
+ * ¿Puede quien invita ofrecer este rol? Invitar a `owner` es hacer cofundador
+ * a alguien que aún no está: lo mismo que `decidePromoteToOwner`, así que sólo
+ * un fundador. Admin y miembro los ofrece quien administra.
+ */
+export function decideInvitationRole(input: {
+  workspaceKind: 'personal' | 'company';
+  actorRole: OrgRole;
+  role: OrgRole;
+}): Decision {
+  if (input.workspaceKind === 'personal') return { ok: false, reason: 'personal' };
+  if (input.actorRole !== 'owner' && input.actorRole !== 'admin') {
+    return { ok: false, reason: 'not_manager' };
+  }
+  if (input.role === 'owner' && input.actorRole !== 'owner') {
+    return { ok: false, reason: 'not_owner' };
+  }
+  return { ok: true };
+}
+
+/**
+ * La doble confirmación de los movimientos de propiedad: escribir el nombre de
+ * la persona o el de la empresa. Sin distinguir mayúsculas, tildes ni espacios
+ * de más; vacío nunca coincide.
+ */
+export function confirmationMatches(
+  typed: string,
+  accepted: ReadonlyArray<string | null>,
+): boolean {
+  const wanted = foldText(typed);
+  if (wanted.length === 0) return false;
+  return accepted.some((candidate) => candidate && foldText(candidate) === wanted);
+}
+
+/** Minúsculas, sin tildes y sin espacios de más: para comparar lo que escribe una persona. */
+export function foldText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase('es');
 }
 
 /**

@@ -86,6 +86,25 @@ export async function listCompanyMembers(
   return rows;
 }
 
+/**
+ * Quién tiene la verificación en dos pasos activa, por correo, en una empresa.
+ *
+ * Lo lee «Personas» sólo para los fundadores: es información de seguridad de
+ * otras cuentas y no hay motivo para enseñársela a quien no responde por ella.
+ * `ba_user` es `shared`, así que el filtro por empresa va aquí, con un id que
+ * ya validó el servidor.
+ */
+export async function listTwoFactorStatus(organizationId: string): Promise<Map<string, boolean>> {
+  const { rows } = await pool.query<{ email: string; enabled: boolean }>(
+    `select lower(b.email) as email, coalesce(b."twoFactorEnabled", false) as enabled
+       from public.ba_member m
+       join public.ba_user b on b.id = m."userId"
+      where m."organizationId" = $1`,
+    [organizationId],
+  );
+  return new Map(rows.map((row) => [row.email, row.enabled]));
+}
+
 export interface CompanyInvitation {
   id: string;
   organizationId: string;

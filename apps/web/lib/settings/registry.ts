@@ -315,7 +315,7 @@ export const SETTINGS_REGISTRY: readonly SettingsEntry[] = [
     group: 'cuenta',
     title: 'Seguridad de tu cuenta',
     description:
-      'Verificación en dos pasos y cierre de sesiones abiertas. Próximamente: todavía no se pueden manejar desde Cortex.',
+      'Activa la verificación en dos pasos, mira dónde está abierta tu cuenta y cierra las sesiones que no reconozcas.',
     keywords: [
       '2fa',
       'dos pasos',
@@ -327,7 +327,7 @@ export const SETTINGS_REGISTRY: readonly SettingsEntry[] = [
       'seguridad',
       'autenticador',
     ],
-    soon: true,
+    href: '/settings/seguridad',
     icon: 'lock',
   },
   {
@@ -432,6 +432,9 @@ export const SETTINGS_REGISTRY: readonly SettingsEntry[] = [
       'administrador',
       'quitar',
       'miembros',
+      'cofundador',
+      'fundador',
+      'propiedad',
     ],
     href: '/admin/users',
     access: 'admin',

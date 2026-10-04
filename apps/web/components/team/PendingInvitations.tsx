@@ -1,8 +1,10 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { expiryCountdown, invitationRoleLabel } from '@/lib/team/invitation-roles';
+import { Check, Copy, MessageCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 
 /**
  * Quién está invitado y todavía no ha entrado.
@@ -17,13 +19,24 @@ import { useState, useTransition } from 'react';
  * LAS VENCIDAS SE QUEDAN EN LA LISTA. better-auth ni las borra ni les cambia el
  * estado: siguen `pending` para siempre. Esconderlas dejaría el asiento ocupado
  * por una fila invisible, que es justo el agujero de arriba con otra cara. Se
- * marcan «vencida» y se pueden cancelar.
+ * marcan «vencida» y se pueden cancelar o reenviar.
  *
- * Props puras y ninguna llamada a la base, igual que `InviteTeam`: la pantalla
- * que la pinta ya resolvió el espacio, el texto de la caducidad viene redactado
- * desde allí, y cancelar entra como una acción de servidor pasada por prop. Un
- * componente que fuera a buscar él mismo la acción a `app/(app)/admin/users/`
- * volvería a atarse a una ruta, que es de lo que acabamos de sacar a `InviteTeam`.
+ * ===========================================================================
+ * LO QUE SE AGREGÓ: QUIÉN INVITÓ, EL ENLACE Y UN REENVÍO QUE NO PIERDE NADA
+ * ===========================================================================
+ *   - Quién invitó, el cargo, el equipo y cuánto falta para que venza (en vivo).
+ *   - COPIAR EL ENLACE: el correo se pierde (spam, dirección equivocada) y casi
+ *     siempre la persona está a un mensaje de WhatsApp de distancia. El enlace
+ *     es el mismo del correo y abre la página pública de la invitación.
+ *   - REENVIAR llama a `POST /api/team/invitations/<id>/resend`, que renueva el
+ *     plazo si está viva y, si está vencida, la cancela y crea una nueva
+ *     conservando cargo, equipo y mensaje. Antes eso eran dos llamadas hechas
+ *     desde aquí, y un fallo a medias dejaba la fila vieja ocupando asiento.
+ *
+ * Los datos de arriba (quién invitó, cargo…) no vienen en las props —la pantalla
+ * que pinta esto entrega lo básico— sino de `GET /api/team/invitations`, que se
+ * vuelve a pedir cuando cambia la lista. Si esa lectura falla, la fila se pinta
+ * igual con lo básico: es información extra, nunca una condición.
  */
 
 export interface PendingInvitationView {
@@ -37,11 +50,13 @@ export interface PendingInvitationView {
   expiresTitle: string;
 }
 
-const ROLE_LABEL: Record<PendingInvitationView['role'], string> = {
-  owner: 'Dueño del espacio',
-  admin: 'Administra',
-  member: 'Miembro',
-};
+interface Extra {
+  expiresAt: string;
+  inviterName: string | null;
+  position: string | null;
+  teamName: string | null;
+  hasMessage: boolean;
+}
 
 export function PendingInvitations({
   invitations,
@@ -55,7 +70,56 @@ export function PendingInvitations({
   const [, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [resent, setResent] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [extras, setExtras] = useState<Record<string, Extra>>({});
+  const [now, setNow] = useState(() => new Date());
+
+  // La firma de la lista: cambia cuando se envía, reenvía o cancela algo, y es lo
+  // que dispara volver a pedir los datos extra.
+  const signature = useMemo(() => invitations.map((i) => i.id).join(','), [invitations]);
+
+  const loadExtras = useCallback(async () => {
+    try {
+      const res = await fetch('/api/team/invitations');
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        invitations?: Array<{
+          id: string;
+          expiresAt: string;
+          inviterName: string | null;
+          position: string | null;
+          teamName: string | null;
+          message: string | null;
+        }>;
+      };
+      const next: Record<string, Extra> = {};
+      for (const row of data.invitations ?? []) {
+        next[row.id] = {
+          expiresAt: row.expiresAt,
+          inviterName: row.inviterName,
+          position: row.position,
+          teamName: row.teamName,
+          hasMessage: Boolean(row.message),
+        };
+      }
+      setExtras(next);
+    } catch {
+      /* Sin los extras la lista se pinta igual con lo básico. */
+    }
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `signature` es el disparador a propósito.
+  useEffect(() => {
+    if (invitations.length > 0) void loadExtras();
+  }, [signature, loadExtras]);
+
+  // La cuenta regresiva se refresca cada minuto: «vence en 5 h» no puede
+  // quedarse en 5 h con la pestaña abierta toda la tarde.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   /**
    * La acción de servidor es la que aísla por espacio; aquí sólo se pinta lo que
@@ -66,7 +130,7 @@ export function PendingInvitations({
   async function cancel(id: string) {
     setBusy(id);
     setError(null);
-    setResent(null);
+    setNotice(null);
     try {
       const result = await cancelInvitation(id);
       if (!result.ok) setError(result.error ?? 'No se pudo cancelar la invitación.');
@@ -78,48 +142,50 @@ export function PendingInvitations({
     }
   }
 
-  /**
-   * Reenviar es invitar otra vez al mismo correo, y la ruta ya sabe hacerlo:
-   * `createInvitation` con `resend: true` refresca la fila que ya existe y manda
-   * el correo de nuevo, sin duplicarla.
-   *
-   * SALVO SI ESTÁ VENCIDA, y ese es el motivo de las dos llamadas. better-auth
-   * busca la pendiente que va a refrescar descartando las caducadas, así que
-   * sobre una vencida no refresca nada: INSERTA una fila nueva y deja la vieja
-   * ahí, pendiente y contando asiento para siempre. Por eso la vencida se cancela
-   * antes. Cancelar primero además libera el asiento, así que la comprobación de
-   * plan de la ruta no rebota un reenvío por un cupo que la propia fila ocupaba.
-   */
   async function resend(invitation: PendingInvitationView) {
     if (invitation.role === 'owner') return;
     setBusy(invitation.id);
     setError(null);
-    setResent(null);
+    setNotice(null);
     try {
-      if (invitation.expired) {
-        const canceled = await cancelInvitation(invitation.id);
-        if (!canceled.ok) {
-          setError(canceled.error ?? 'No se pudo reenviar la invitación.');
-          return;
-        }
-      }
-      const res = await fetch('/api/team/invite', {
+      const res = await fetch(`/api/team/invitations/${encodeURIComponent(invitation.id)}/resend`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: invitation.email, role: invitation.role }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         setError(data.error ?? 'No se pudo reenviar la invitación.');
         return;
       }
-      setResent(invitation.email);
+      setNotice(`Le volvimos a escribir a ${invitation.email}. El enlace nuevo dura siete días.`);
       startTransition(() => router.refresh());
+      void loadExtras();
     } catch {
       setError('No se pudo reenviar la invitación. Revisa tu conexión.');
     } finally {
       setBusy(null);
     }
+  }
+
+  /** El enlace del correo, para mandarlo por donde la persona sí mire. */
+  function linkFor(id: string): string {
+    return `${window.location.origin}/accept-invitation/${id}`;
+  }
+
+  async function copyLink(id: string) {
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(linkFor(id));
+      setCopied(id);
+      setTimeout(() => setCopied((current) => (current === id ? null : current)), 2500);
+    } catch {
+      // Sin permiso de portapapeles (iframe, http): se muestra para copiarlo a mano.
+      window.prompt('Copia este enlace:', linkFor(id));
+    }
+  }
+
+  function whatsappHref(invitation: PendingInvitationView): string {
+    const text = `Te invité a Cortex como ${invitationRoleLabel(invitation.role).toLowerCase()}. Entra con este enlace: ${linkFor(invitation.id)}`;
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
   }
 
   if (invitations.length === 0) {
@@ -134,55 +200,101 @@ export function PendingInvitations({
   return (
     <div>
       <ul className="divide-y divide-border">
-        {invitations.map((invitation) => (
-          <li
-            key={invitation.id}
-            className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 text-xs"
-          >
-            <span className="min-w-0 flex-1 truncate font-mono text-ink">{invitation.email}</span>
-            <span className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 text-micro font-semibold text-ink-muted">
-              {ROLE_LABEL[invitation.role]}
-            </span>
-            <span
-              className={`tabular whitespace-nowrap ${
-                invitation.expired ? 'font-semibold text-rose' : 'text-ink-faint'
-              }`}
-              title={invitation.expiresTitle}
-            >
-              {invitation.expiresLabel}
-            </span>
-            <span className="flex items-center gap-1.5">
-              {invitation.role !== 'owner' && (
+        {invitations.map((invitation) => {
+          const extra = extras[invitation.id];
+          // Con la fecha exacta (de la lectura extra) la cuenta regresiva corre en
+          // vivo; sin ella vale la frase que redactó la pantalla.
+          const expired = extra
+            ? new Date(extra.expiresAt).getTime() <= now.getTime()
+            : invitation.expired;
+          const label = extra ? expiryCountdown(extra.expiresAt, now) : invitation.expiresLabel;
+          return (
+            <li key={invitation.id} className="px-5 py-3 text-xs">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span className="min-w-0 flex-1 truncate font-mono text-ink">
+                  {invitation.email}
+                </span>
+                <span className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 text-micro font-semibold text-ink-muted">
+                  {invitationRoleLabel(invitation.role)}
+                </span>
+                <span
+                  className={`tabular whitespace-nowrap ${
+                    expired ? 'font-semibold text-rose' : 'text-ink-faint'
+                  }`}
+                  title={invitation.expiresTitle}
+                >
+                  {label}
+                </span>
+              </div>
+
+              {(extra?.inviterName || extra?.position || extra?.teamName || extra?.hasMessage) && (
+                <p className="mt-1 text-micro text-ink-faint">
+                  {[
+                    extra.inviterName ? `Invitó ${extra.inviterName}` : null,
+                    extra.position,
+                    extra.teamName ? `equipo ${extra.teamName}` : null,
+                    extra.hasMessage ? 'con mensaje personal' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
+
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {invitation.role !== 'owner' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="px-2.5 py-1 text-micro"
+                    disabled={busy !== null}
+                    onClick={() => resend(invitation)}
+                  >
+                    {busy === invitation.id ? 'Enviando…' : 'Reenviar'}
+                  </Button>
+                )}
+                {!expired && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-1.5 px-2.5 py-1 text-micro"
+                      disabled={busy !== null}
+                      onClick={() => copyLink(invitation.id)}
+                    >
+                      {copied === invitation.id ? (
+                        <Check className="h-3 w-3 text-emerald" aria-hidden />
+                      ) : (
+                        <Copy className="h-3 w-3" aria-hidden />
+                      )}
+                      {copied === invitation.id ? 'Enlace copiado' : 'Copiar enlace'}
+                    </Button>
+                    <a
+                      href={whatsappHref(invitation)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-pill px-2.5 py-1 text-micro font-bold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                    >
+                      <MessageCircle className="h-3 w-3" aria-hidden />
+                      WhatsApp
+                    </a>
+                  </>
+                )}
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   className="px-2.5 py-1 text-micro"
                   disabled={busy !== null}
-                  onClick={() => resend(invitation)}
+                  onClick={() => cancel(invitation.id)}
                 >
-                  {busy === invitation.id ? 'Enviando…' : 'Reenviar'}
+                  Cancelar
                 </Button>
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                className="px-2.5 py-1 text-micro"
-                disabled={busy !== null}
-                onClick={() => cancel(invitation.id)}
-              >
-                Cancelar
-              </Button>
-            </span>
-          </li>
-        ))}
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
-      {resent && (
-        <p className="px-5 pt-2.5 text-xs text-emerald">
-          Le volvimos a escribir a <span className="font-mono">{resent}</span>. El enlace nuevo dura
-          48 horas.
-        </p>
-      )}
+      {notice && <p className="px-5 pt-2.5 text-xs text-emerald">{notice}</p>}
       {error && <p className="px-5 pt-2.5 text-xs leading-relaxed text-rose">{error}</p>}
 
       <p className="px-5 pb-4 pt-2.5 text-micro leading-relaxed text-ink-faint">

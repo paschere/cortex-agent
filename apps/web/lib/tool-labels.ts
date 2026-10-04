@@ -5,6 +5,10 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     label: 'Preparar una decisión para revisión',
     icon: 'ClipboardList',
   },
+  team_founder_promote: { label: 'Nombrar a un cofundador', icon: 'Shield' },
+  team_founder_transfer: { label: 'Pasar la propiedad de la empresa', icon: 'Shield' },
+  team_founder_step_down: { label: 'Dejar de ser fundador', icon: 'Shield' },
+  team_leave_company: { label: 'Salir de la empresa', icon: 'Shield' },
   security_report_refusal: { label: 'Registrar una acción rechazada', icon: 'Shield' },
   security_get_action_policy: { label: 'Consultar los permisos de acción', icon: 'Shield' },
   security_set_action_policy: { label: 'Configurar los permisos de acción', icon: 'Shield' },
@@ -73,6 +77,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   crm_log_activity: { label: 'Anotar una actividad comercial', icon: 'PhoneCall' },
   crm_at_risk: { label: 'Ver los clientes en riesgo de perderse', icon: 'TrendingDown' },
   crm_send_nps: { label: 'Mandar la encuesta de satisfacción', icon: 'MessageSquareHeart' },
+  team_invite: { label: 'Invitar a alguien a la empresa', icon: 'UserPlus' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },
   management_brief: { label: 'Revisar la gerencia de la empresa', icon: 'Briefcase' },
@@ -675,6 +680,8 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       return input.linkOnly
         ? `Crear el enlace de la encuesta de satisfacción para ${input.client}`
         : `Mandar la encuesta de satisfacción a ${input.client} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'a su contacto principal'}`;
+    case 'team_invite':
+      return `Invitar a ${input.email} a la empresa como ${input.role === 'admin' ? 'administrador' : 'miembro'}${input.position ? ` (${String(input.position).slice(0, 80)})` : ''}${input.team ? ` en el equipo ${String(input.team).slice(0, 80)}` : ''} — le llega un correo con el enlace`;
     case 'whatsapp_reply':
       return `Responder por WhatsApp, como persona, en la conversación abierta: «${String(input.text ?? '').slice(0, 120)}»`;
     case 'projects_create':
