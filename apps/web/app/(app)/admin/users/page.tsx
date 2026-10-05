@@ -286,6 +286,8 @@ export default async function UsersPage() {
             perSeatAnswers={plan.perSeat.answers}
             priceCopPerSeat={plan.priceCopPerSeat}
             canInvite={user.role === 'org_admin'}
+            isOwner={actorIsOwner && user.organization.kind !== 'personal'}
+            stepUp={{ requirement: stepUp.requirement }}
           />
         </div>
 

@@ -59,6 +59,17 @@ export const INVITABLE_ROLES: ReadonlyArray<{
   { value: 'admin', label: LABEL.admin, blurb: BLURB.admin },
 ];
 
+/**
+ * Invitar directo como cofundador. Aparte de `INVITABLE_ROLES` porque sólo se le
+ * ofrece a un fundador, va de a una persona por vez y pide confirmar que eres tú
+ * (la ruta lo exige igual; esto es sólo lo que se pinta).
+ */
+export const COFOUNDER_ROLE = {
+  value: 'owner' as const,
+  label: LABEL.owner,
+  blurb: BLURB.owner,
+};
+
 const DAY_MS = 24 * 60 * 60_000;
 const HOUR_MS = 60 * 60_000;
 

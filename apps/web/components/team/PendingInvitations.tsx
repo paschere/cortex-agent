@@ -2,9 +2,9 @@
 
 import { Button } from '@/components/ui/button';
 import { expiryCountdown, invitationRoleLabel } from '@/lib/team/invitation-roles';
-import { Check, Copy, MessageCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { InviteLink } from './InviteTeam';
 
 /**
  * Quién está invitado y todavía no ha entrado.
@@ -166,28 +166,6 @@ export function PendingInvitations({
     }
   }
 
-  /** El enlace del correo, para mandarlo por donde la persona sí mire. */
-  function linkFor(id: string): string {
-    return `${window.location.origin}/accept-invitation/${id}`;
-  }
-
-  async function copyLink(id: string) {
-    setError(null);
-    try {
-      await navigator.clipboard.writeText(linkFor(id));
-      setCopied(id);
-      setTimeout(() => setCopied((current) => (current === id ? null : current)), 2500);
-    } catch {
-      // Sin permiso de portapapeles (iframe, http): se muestra para copiarlo a mano.
-      window.prompt('Copia este enlace:', linkFor(id));
-    }
-  }
-
-  function whatsappHref(invitation: PendingInvitationView): string {
-    const text = `Te invité a Cortex como ${invitationRoleLabel(invitation.role).toLowerCase()}. Entra con este enlace: ${linkFor(invitation.id)}`;
-    return `https://wa.me/?text=${encodeURIComponent(text)}`;
-  }
-
   if (invitations.length === 0) {
     return (
       <p className="px-5 pb-5 pt-3 text-xs leading-relaxed text-ink-muted">
@@ -240,6 +218,23 @@ export function PendingInvitations({
                 </p>
               )}
 
+              {!expired && (
+                <div className="mt-2 flex">
+                  <InviteLink
+                    id={invitation.id}
+                    roleLabel={invitationRoleLabel(invitation.role)}
+                    copied={copied === invitation.id}
+                    onCopied={() => {
+                      setCopied(invitation.id);
+                      setTimeout(
+                        () => setCopied((current) => (current === invitation.id ? null : current)),
+                        2500,
+                      );
+                    }}
+                  />
+                </div>
+              )}
+
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {invitation.role !== 'owner' && (
                   <Button
@@ -251,33 +246,6 @@ export function PendingInvitations({
                   >
                     {busy === invitation.id ? 'Enviando…' : 'Reenviar'}
                   </Button>
-                )}
-                {!expired && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="gap-1.5 px-2.5 py-1 text-micro"
-                      disabled={busy !== null}
-                      onClick={() => copyLink(invitation.id)}
-                    >
-                      {copied === invitation.id ? (
-                        <Check className="h-3 w-3 text-emerald" aria-hidden />
-                      ) : (
-                        <Copy className="h-3 w-3" aria-hidden />
-                      )}
-                      {copied === invitation.id ? 'Enlace copiado' : 'Copiar enlace'}
-                    </Button>
-                    <a
-                      href={whatsappHref(invitation)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex min-h-8 items-center gap-1.5 rounded-pill px-2.5 py-1 text-micro font-bold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
-                    >
-                      <MessageCircle className="h-3 w-3" aria-hidden />
-                      WhatsApp
-                    </a>
-                  </>
                 )}
                 <Button
                   type="button"

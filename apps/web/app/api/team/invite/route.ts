@@ -1,6 +1,9 @@
+import { normalizeMembershipRole } from '@/lib/founder-rules';
+import { inviteCofounder } from '@/lib/team/founder-admin';
 import { MAX_INVITES_PER_REQUEST, parseEmailList } from '@/lib/team/invitation-input';
 import { inviteEmails, teamBelongsToOrganization } from '@/lib/team/invite-flow';
 import { requireInviter } from '@/lib/team/invite-guard';
+import { verifyStepUp } from '@/lib/team/step-up';
 import { headers } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -53,10 +56,13 @@ const Body = z
       .array(z.string().max(320))
       .max(MAX_INVITES_PER_REQUEST * 4)
       .optional(),
-    role: z.enum(['member', 'admin']).default('member'),
+    role: z.enum(['member', 'admin', 'owner']).default('member'),
     message: z.string().max(600).optional(),
     position: z.string().max(80).optional(),
     teamId: z.string().max(64).nullish(),
+    // Sólo para `owner`: confirmar que eres tú (ver lib/team/step-up.ts).
+    password: z.string().max(512).optional(),
+    code: z.string().max(16).optional(),
   })
   .refine((body) => body.email || (body.emails && body.emails.length > 0), {
     message: 'Escribe al menos un correo.',
@@ -95,14 +101,74 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const results = await inviteEmails({
-    organizationId: user.organization.id,
-    emails: list.valid,
-    role: body.role,
-    details: { message: body.message, position: body.position, teamId: body.teamId },
-    requestHeaders: await headers(),
-    inviterAccountId: accountId,
-  });
+  const requestHeaders = await headers();
+  const send = (emails: string[]) =>
+    inviteEmails({
+      organizationId: user.organization.id,
+      emails,
+      role: body.role,
+      details: { message: body.message, position: body.position, teamId: body.teamId },
+      requestHeaders,
+      inviterAccountId: accountId,
+    });
+
+  /**
+   * INVITAR COMO COFUNDADOR: EL MISMO PODER QUE «HACER COFUNDADOR».
+   *
+   * Quien acepte entra como dueño de la empresa, así que se piden las mismas
+   * tres cosas que al nombrar a alguien de adentro: que quien invita sea
+   * fundador (leído de `ba_member` en esta petición, no de lo que mandó el
+   * navegador), que confirme que es él (contraseña o código de 2 pasos), y una
+   * sola persona por vez. Queda en la auditoría y se avisa a los fundadores.
+   */
+  if (body.role === 'owner') {
+    if (normalizeMembershipRole(user.organization.role) !== 'owner') {
+      return NextResponse.json(
+        { error: 'Solo un fundador puede invitar a un cofundador.' },
+        { status: 403 },
+      );
+    }
+    if (list.valid.length !== 1 || list.invalid.length > 0) {
+      return NextResponse.json(
+        { error: 'Invita a los cofundadores de a uno, con un correo válido.' },
+        { status: 400 },
+      );
+    }
+    const step = await verifyStepUp({
+      accountId,
+      requestHeaders,
+      credential: { password: body.password, code: body.code },
+    });
+    if (!step.ok) {
+      return NextResponse.json(
+        { error: step.message, requirement: step.requirement },
+        { status: 403 },
+      );
+    }
+  }
+
+  const results =
+    body.role === 'owner'
+      ? [
+          await inviteCofounder(
+            {
+              organizationId: user.organization.id,
+              organizationName: user.organization.name,
+              workspaceKind: user.organization.kind === 'personal' ? 'personal' : 'company',
+              actorAccountId: accountId,
+              actorUserId: user.id,
+              requestHeaders,
+            },
+            list.valid[0] as string,
+            async () =>
+              (await send(list.valid))[0] ?? {
+                email: list.valid[0] as string,
+                status: 'failed' as const,
+                message: 'No se pudo enviar la invitación.',
+              },
+          ),
+        ]
+      : await send(list.valid);
   // Los que no parecían correo no llegaron a `inviteEmails`: se informan igual.
   for (const bad of list.invalid) {
     results.push({ email: bad, status: 'invalid', message: 'Ese correo no parece válido.' });

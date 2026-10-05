@@ -148,7 +148,8 @@ function statusFor(result: { reason?: string; message: string }): InviteStatus {
 export async function inviteEmails(input: {
   organizationId: string;
   emails: readonly string[];
-  role: 'member' | 'admin';
+  /** `owner` sólo llega aquí desde la ruta, después de comprobar fundador y re-autenticación. */
+  role: 'member' | 'admin' | 'owner';
   details?: InviteDetails;
   requestHeaders: Headers;
   inviterAccountId?: string | null;
@@ -266,11 +267,14 @@ export async function resendInvitation(input: {
       message: 'Esa invitación ya no está pendiente. Recarga la pantalla.',
     };
   }
+  // Reenviar una vencida es crear otra, y dar la propiedad pide confirmar que
+  // eres tú: la de cofundador se cancela y se vuelve a invitar, con ese paso.
   if (current.role === 'owner') {
     return {
       email: current.email,
       status: 'failed',
-      message: 'Las invitaciones de cofundador se reenvían desde la consola del fundador.',
+      message:
+        'Una invitación de cofundador no se reenvía: compártele el enlace, o cancélala e invítalo de nuevo.',
     };
   }
 

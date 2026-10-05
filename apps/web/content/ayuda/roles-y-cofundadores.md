@@ -32,6 +32,16 @@ Para hacer cofundador a alguien:
 5. Confirma que eres tú: si tienes la **verificación en dos pasos**, escribe el código de tu app; si no, tu contraseña. Si tu cuenta entra solo con Google, basta con que tu sesión tenga menos de 10 minutos.
 6. Cortex avisa por correo a todos los fundadores y deja el cambio en la [Auditoría](/admin/audit).
 
+Para invitar como cofundador a alguien que **todavía no está** en la empresa:
+
+1. En [Personas](/admin/users), en **Invitar a alguien**, escribe **un solo** correo.
+2. Elige el rol **Cofundador** (solo lo ve un cofundador).
+3. Confirma que eres tú (código de tu app, contraseña, o sesión reciente si entras con Google) y toca **Invitar como cofundador**.
+4. Debajo aparece el **enlace de la invitación**: cópialo o mándalo por **WhatsApp** si no quieres depender del correo. Solo lo acepta la cuenta de ese correo, y vence en siete días.
+5. Cuando acepte, entra como cofundador. Los demás fundadores reciben un aviso y queda en la auditoría.
+
+Una invitación de cofundador no se reenvía: si venció, cancélala e invita de nuevo.
+
 ## Qué hace Cortex y qué haces tú
 
 **Cortex:**

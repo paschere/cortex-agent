@@ -351,3 +351,40 @@ export async function leaveCompany(scope: FounderScope): Promise<MembershipActio
   }
   return { ok: true, status: 200, message: `Saliste de ${scope.organizationName}.` };
 }
+
+/* ---------------------------------------------------------------------------
+ * Invitar directo como cofundador
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Invitar a alguien que todavía no está en la empresa como cofundador.
+ *
+ * Es el mismo poder que «hacer cofundador», concedido por adelantado: quien
+ * acepte el enlace entra como `owner`. Por eso pasa por la misma auditoría
+ * (`team_founder_promote`, con `via: 'invitation'`) y el mismo aviso a los
+ * fundadores. La re-autenticación y el «sólo un fundador» los comprueba la ruta
+ * antes de llamar; `invite` es la invitación de siempre (asientos incluidos).
+ */
+export async function inviteCofounder<T extends { status: string; message: string }>(
+  scope: FounderScope,
+  email: string,
+  invite: () => Promise<T>,
+): Promise<T> {
+  const started = performance.now();
+  const { actor, ownerCount } = await snapshot(scope, null);
+  const detail = { via: 'invitation', targetEmail: email, ownersBefore: ownerCount };
+  await audit(scope, 'promote', 'attempted', started, detail);
+  const result = await invite();
+  await audit(scope, 'promote', result.status === 'sent' ? 'ok' : 'error', started, {
+    ...detail,
+    outcome: result.status,
+  });
+  if (result.status === 'sent') {
+    await notifyFounders(
+      scope,
+      `Invitación de cofundador en ${scope.organizationName}`,
+      `${actor ? label(actor) : 'Un fundador'} invitó a ${email} como cofundador de ${scope.organizationName}. Cuando acepte, podrá hacer todo lo que hace un administrador y, además, nombrar o retirar a otros cofundadores y borrar la empresa.\n\nSi no reconoces esta invitación, cancélala en Personas.`,
+    );
+  }
+  return result;
+}

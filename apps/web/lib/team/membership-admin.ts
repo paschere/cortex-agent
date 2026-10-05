@@ -183,7 +183,8 @@ export async function memberIdForDirectoryUser(
 export async function inviteToCompany(input: {
   organizationId: string;
   email: string;
-  role: 'member' | 'admin';
+  /** `owner` sólo desde POST /api/team/invite, tras comprobar fundador y re-autenticación. */
+  role: 'member' | 'admin' | 'owner';
   requestHeaders: Headers;
 }): Promise<MembershipActionResult & { id?: string | null }> {
   const db = getOrgScopedClient(input.organizationId);

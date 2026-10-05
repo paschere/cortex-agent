@@ -11,8 +11,14 @@ import {
   looksLikeEmail,
   parseEmailList,
 } from '@/lib/team/invitation-input';
-import { INVITABLE_ROLES, INVITATION_TTL_DAYS } from '@/lib/team/invitation-roles';
-import { X } from 'lucide-react';
+import {
+  COFOUNDER_ROLE,
+  INVITABLE_ROLES,
+  INVITATION_TTL_DAYS,
+  invitationRoleLabel,
+} from '@/lib/team/invitation-roles';
+import { STEP_UP_COPY, type StepUpRequirement } from '@/lib/team/step-up-rules';
+import { Check, Copy, Crown, MessageCircle, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition } from 'react';
 
@@ -76,19 +82,30 @@ export function InviteTeam({
   perSeatAnswers,
   priceCopPerSeat,
   canInvite,
+  isOwner = false,
+  stepUp,
 }: {
   seatsUsed: number;
   seatsMaximum: number | null;
   perSeatAnswers: number | null;
   priceCopPerSeat: number;
   canInvite: boolean;
+  /** Fundador: puede invitar directo como cofundador. */
+  isOwner?: boolean;
+  /** Qué factor pide confirmar que eres tú (sólo cuenta para cofundador). */
+  stepUp?: { requirement: StepUpRequirement };
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   const [chips, setChips] = useState<Chip[]>([]);
   const [draft, setDraft] = useState('');
-  const [role, setRole] = useState<'member' | 'admin'>('member');
+  const [role, setRole] = useState<'member' | 'admin' | 'owner'>('member');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [factor, setFactor] = useState<StepUpRequirement | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [sentRole, setSentRole] = useState<'member' | 'admin' | 'owner'>('member');
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState('');
   const [teamId, setTeamId] = useState('');
@@ -190,18 +207,27 @@ export function InviteTeam({
           message: message.trim() || undefined,
           position: position.trim() || undefined,
           teamId: teamId || undefined,
+          password: role === 'owner' && activeFactor === 'password' ? password : undefined,
+          code: role === 'owner' && activeFactor === 'totp' ? code : undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
+        requirement?: StepUpRequirement;
         results?: InviteEmailResult[];
       };
       const outcome = data.results;
       if (!res.ok || !outcome) {
+        // El servidor puede pedir otro factor del que se pintó; se muestra ése.
+        if (data.requirement) setFactor(data.requirement);
         setErr(data.error ?? 'No se pudo enviar las invitaciones.');
         return;
       }
       setResults(outcome);
+      setSentRole(role);
+      setPassword('');
+      setCode('');
+      if (role === 'owner') setRole('member');
       const done = new Set(
         outcome
           .filter(
@@ -234,6 +260,15 @@ export function InviteTeam({
 
   const total = validChips.length + (looksLikeEmail(draft.trim()) ? 1 : 0);
   const full = seatsLeft === 0;
+  const roleOptions = isOwner ? [...INVITABLE_ROLES, COFOUNDER_ROLE] : INVITABLE_ROLES;
+  const activeFactor = factor ?? stepUp?.requirement ?? 'password';
+  const cofounder = role === 'owner';
+  const cofounderBlocked =
+    cofounder &&
+    (total !== 1 ||
+      activeFactor === 'sign_in_again' ||
+      (activeFactor === 'password' && !password) ||
+      (activeFactor === 'totp' && !/^\d{6}$/.test(code.replace(/\s+/g, ''))));
 
   return (
     <form onSubmit={invite} className="space-y-4">
@@ -306,8 +341,8 @@ export function InviteTeam({
 
       <fieldset>
         <legend className="field-label mb-1.5">Rol</legend>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {INVITABLE_ROLES.map((option) => (
+        <div className={`grid gap-2 ${isOwner ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+          {roleOptions.map((option) => (
             <label
               key={option.value}
               className={`flex cursor-pointer items-start gap-2.5 rounded-sm border px-3 py-2.5 transition-colors ${
@@ -334,6 +369,51 @@ export function InviteTeam({
           ))}
         </div>
       </fieldset>
+
+      {cofounder && (
+        <div className="space-y-3 rounded-sm border border-amber/40 bg-amber-soft p-3.5">
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-ink">
+            <Crown className="mt-0.5 h-4 w-4 shrink-0 text-amber" aria-hidden />
+            <span>
+              Quien acepte entra como <strong>dueño de la empresa</strong>: ve y cambia todo, maneja
+              el plan y los pagos, nombra o retira cofundadores y puede borrar la empresa. Invita de
+              a una persona, y sólo a alguien de total confianza. Los demás fundadores reciben un
+              aviso.
+            </span>
+          </p>
+          {total > 1 && (
+            <p className="text-xs font-semibold text-rose">
+              Para cofundador, deja un solo correo en el campo.
+            </p>
+          )}
+          <div>
+            <p className="mb-1.5 text-xs text-ink-muted">{STEP_UP_COPY[activeFactor]}</p>
+            {activeFactor === 'password' && (
+              <Input
+                type="password"
+                autoComplete="current-password"
+                aria-label="Tu contraseña"
+                placeholder="Tu contraseña"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            )}
+            {activeFactor === 'totp' && (
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                aria-label="Código de 6 dígitos"
+                placeholder="123 456"
+                maxLength={7}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="tabular max-w-[160px]"
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       <div>
         <button
@@ -412,14 +492,23 @@ export function InviteTeam({
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="submit"
-          disabled={state === 'sending' || total === 0 || full || tooMany || invalidChips > 0}
+          disabled={
+            state === 'sending' ||
+            total === 0 ||
+            full ||
+            tooMany ||
+            invalidChips > 0 ||
+            cofounderBlocked
+          }
           className="py-2"
         >
           {state === 'sending'
             ? 'Enviando…'
-            : total > 1
-              ? `Enviar ${total} invitaciones`
-              : 'Enviar invitación'}
+            : cofounder
+              ? 'Invitar como cofundador'
+              : total > 1
+                ? `Enviar ${total} invitaciones`
+                : 'Enviar invitación'}
         </Button>
         {overSeats && seatsLeft !== null && (
           <span className="text-xs text-amber">
@@ -476,11 +565,92 @@ export function InviteTeam({
               {result.status !== 'sent' && (
                 <span className="basis-full text-ink-muted">{result.message}</span>
               )}
+              {result.status === 'sent' && result.id && (
+                <InviteLink
+                  id={result.id}
+                  roleLabel={invitationRoleLabel(sentRole)}
+                  copied={copied === result.id}
+                  onCopied={() => {
+                    setCopied(result.id ?? null);
+                    setTimeout(() => setCopied(null), 2500);
+                  }}
+                />
+              )}
             </li>
           ))}
         </ul>
       )}
       {err && <p className="text-xs leading-relaxed text-rose">{err}</p>}
     </form>
+  );
+}
+
+/**
+ * El enlace de una invitación a la vista, para mandarlo por donde la persona sí
+ * mira (WhatsApp, un chat) y no depender de que el correo llegue. Es el mismo
+ * enlace del correo: nominal, vence y sólo lo acepta la cuenta de ese correo.
+ */
+export function InviteLink({
+  id,
+  roleLabel,
+  copied,
+  onCopied,
+}: {
+  id: string;
+  roleLabel: string;
+  copied: boolean;
+  onCopied: () => void;
+}) {
+  const link =
+    typeof window === 'undefined'
+      ? `/accept-invitation/${id}`
+      : `${window.location.origin}/accept-invitation/${id}`;
+  const whatsapp = `https://wa.me/?text=${encodeURIComponent(
+    `Te invité a Cortex como ${roleLabel.toLowerCase()}. Entra con este enlace: ${link}`,
+  )}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      onCopied();
+    } catch {
+      // Sin permiso de portapapeles: el campo queda seleccionado para copiarlo a mano.
+      (document.getElementById(`invite-link-${id}`) as HTMLInputElement | null)?.select();
+    }
+  }
+
+  return (
+    <div className="flex basis-full flex-wrap items-center gap-1.5">
+      <input
+        id={`invite-link-${id}`}
+        readOnly
+        value={link}
+        aria-label="Enlace de la invitación"
+        onFocus={(e) => e.currentTarget.select()}
+        className="min-w-0 flex-1 rounded-sm border border-border bg-surface-2 px-2.5 py-1.5 font-mono text-micro text-ink-muted outline-none focus:border-primary"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        className="gap-1.5 px-2.5 py-1 text-micro"
+        onClick={copy}
+      >
+        {copied ? (
+          <Check className="h-3 w-3 text-emerald" aria-hidden />
+        ) : (
+          <Copy className="h-3 w-3" aria-hidden />
+        )}
+        {copied ? 'Copiado' : 'Copiar'}
+      </Button>
+      <a
+        href={whatsapp}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex min-h-8 items-center gap-1.5 rounded-pill px-2.5 py-1 text-micro font-bold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+      >
+        <MessageCircle className="h-3 w-3" aria-hidden />
+        WhatsApp
+      </a>
+    </div>
   );
 }
