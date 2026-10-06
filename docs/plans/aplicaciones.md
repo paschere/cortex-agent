@@ -20,7 +20,7 @@ Una **Aplicación** es un conjunto de pantallas con menú, usuarios y roles prop
 - **Supervisor.** Pantalla «Por aprobar» (aprobar/rechazar) y «Duplicados». Ve todo.
 - **Gerencia.** «Tablero» (métricas, embudo, metas) y exportar.
 - **Automatizaciones:**
-  - guía marcada Duplicado → aviso al supervisor por WhatsApp o correo;
+  - guía marcada Duplicado → aviso al supervisor por notificación push o correo;
   - rechazo → aviso al operario;
   - resumen diario a gerencia.
 
@@ -46,7 +46,6 @@ Se reutiliza:
   - crear tabla desde hoja o carpeta (`CreateTableDialog`).
 - **Marca:** `company_branding` (0170) para ícono y colores por defecto.
 - **Avisos y correo:** `apps/web/lib/notifications/notify.ts`, plantillas en apps/web/lib/email-templates/ (ver `view-digest.ts`).
-- **WhatsApp:** packages/agent-tools/src/whatsapp/** (revisar si hay envío saliente de plantilla; si no, la acción WhatsApp queda detrás de una bandera y se dice).
 - **PWA:** ya existe para Cortex (`apps/web/app/manifest.ts`, `apps/web/app/service-worker.tsx`, `public/sw.js`): imitar el patrón, con manifiesto por app.
 
 ## Modelo de datos (migración nueva)
@@ -68,7 +67,7 @@ Todas las tablas llevan `organization_id`, RLS como 0160/0201 y acceso por `getO
   - `export: boolean`.
 - **`custom_app_users`:** id, app_id, organization_id, name, `email?`, `phone?`, `role_key`, `attributes` jsonb (p.ej. `{cliente: "Andina"}`, usado por los filtros de fila), status (`invited`/`active`/`disabled`), last_seen_at, created_by. Un miembro de Cortex también puede entrar a la app con su sesión normal, con un rol asignado. En ese caso guardar `member_user_id` en vez de credenciales propias.
 - **`custom_app_sessions`:** id, app_user_id, token_hash (scrypt/sha256 del token), expires_at, device (user agent corto), created_at, revoked_at.
-- **`custom_app_login_codes`:** app_user_id, code_hash, channel (`email`/`whatsapp`), expires_at (10 min), attempts (bloqueo a los 5).
+- **`custom_app_login_codes`:** app_user_id, code_hash, channel (`email`), expires_at (10 min), attempts (bloqueo a los 5).
 - **`custom_app_automations`:** id, app_id, name, enabled, `trigger` jsonb, `conditions` jsonb, `actions` jsonb, created_by.
 - **`custom_app_automation_runs`:** id, automation_id, trigger_ref (fila/evento), status, error, started_at, finished_at, `idempotency_key` único (automatización + fila + versión del evento).
 - **`tracker_rows.created_by_app_user`** (uuid, nullable): quién de la app creó la fila, para el filtro «own». Alternativa: guardarlo en `custom_view_submissions`, pero el filtro de lectura necesita la fila.
@@ -79,14 +78,14 @@ Sin better-auth (es para miembros y empresas). Sesión propia, sencilla y revoca
 
 1. **Entrada:** `/a/<empresa>/<app>` o, más corto, `/a/<appId-corto>`.
    - Si no hay sesión: pantalla de entrada con la marca de la app.
-   - El usuario pone correo o celular y recibe un código de 6 dígitos (correo con las plantillas existentes; WhatsApp si hay envío saliente).
+   - El usuario pone su correo y recibe un código de 6 dígitos (plantillas de correo existentes). Decidido: sin WhatsApp.
    - Tiene topes por IP y por usuario, y el código expira.
 2. **Cookie de sesión:** `cortex_app_<appId>`, httpOnly, sameSite=lax, 30 días deslizante. El servidor guarda solo el hash. Cerrar sesión y «cerrar todas mis sesiones».
 3. **Dispositivo compartido de planta (opcional, fase 4):** el supervisor deja un celular «en modo kiosco» con sesión de dispositivo. Cada operario entra con un PIN de 4–6 dígitos ligado a su usuario, y la sesión se cierra sola tras N minutos sin uso.
 4. **Middleware:** `apps/web/middleware.ts` agrega `/a` y `/api/apps/public` a `PUBLIC_PATHS`. La autorización real va en cada ruta con un helper `requireAppUser(appId)` que devuelve {app, user, role, db} con el cliente acotado a la empresa de la app (como `openPublicView` en lib/views/public.ts).
 5. **Invitar usuarios:**
    - desde el editor de la app: uno por uno o importando un CSV (nombre, correo/celular, rol, atributos);
-   - les llega el enlace por correo o WhatsApp;
+   - les llega el enlace por correo;
    - desactivar corta todas sus sesiones.
 6. **Miembros de Cortex:** entran con su sesión y el rol que les asigne la app. Un owner/admin siempre puede entrar como «administrador».
 
@@ -153,7 +152,6 @@ Motor simple, durable e idempotente, ejecutado con el sistema de trabajos existe
   - `notify_member`: campana a miembros o roles de Cortex;
   - `notify_app_user`: push o correo al creador de la fila o a un rol;
   - `email`: plantilla con variables `{{campo}}`;
-  - `whatsapp`: solo si hay envío saliente aprobado; si no, deshabilitada con el motivo;
   - `webhook`: POST firmado HMAC a una URL https, sin redirecciones a IPs privadas; reutilizar las protecciones de red de las herramientas personalizadas;
   - `ask_cortex`: instrucción en texto que Cortex ejecuta con las herramientas permitidas y SIEMPRE pasando por aprobación si escribe fuera de la tabla. Respetar `requiresConfirmation` y las políticas (packages/agent-tools/src/security/policy.ts). Es la última fase.
 - **Garantías:**
@@ -203,10 +201,11 @@ Motor simple, durable e idempotente, ejecutado con el sistema de trabajos existe
 
 ### Fase 3: Automatizaciones
 
-- Motor, disparadores de fila/formulario/aprobación/horario/botón y acciones `set_field`, `create_row`, `notify_member`, `notify_app_user` (correo), `email` y `webhook`.
+- Motor, disparadores de fila/formulario/aprobación/horario/botón y acciones `set_field`, `create_row`, `notify_member`, `notify_app_user` (push y correo), `email` y `webhook`.
+- Web Push (VAPID, suscripción por usuario de app y por miembro): con el correo es el único canal de avisos, así que va aquí y no en extras.
 - Historial y plantillas.
 - **Acepta:**
-  - «duplicado → aviso al supervisor» llega en menos de 1 minuto;
+  - «duplicado → aviso al supervisor» llega por push (o correo si no tiene push activo) en menos de 1 minuto;
   - no hay bucles;
   - reintento tras un error de red;
   - el historial muestra cada corrida.
@@ -214,8 +213,6 @@ Motor simple, durable e idempotente, ejecutado con el sistema de trabajos existe
 ### Fase 4: Extras
 
 - PIN y modo kiosco en dispositivo compartido.
-- Web Push.
-- WhatsApp saliente (si hay proveedor).
 - `ask_cortex` con aprobaciones.
 - Portal de clientes con filtro por atributo.
 - Diseñador por texto completo (`apps.design`).
@@ -224,8 +221,8 @@ Motor simple, durable e idempotente, ejecutado con el sistema de trabajos existe
 
 - **Fuga entre clientes en un portal:** es el riesgo principal. El scope de filas va en el servidor ANTES de computar, nunca en el cliente. Las pruebas de aislamiento bloquean el merge.
 - **Costo de automatizaciones con `ask_cortex`:** tope por app y por día, y cuenta en el plan.
-- **Precio y plan:** ¿las apps y los usuarios externos cuentan como asientos? Hay que definirlo antes de la fase 2. Sugerencia: usuarios de app ilimitados en planes pagos con tope de uso, no por asiento.
-- **WhatsApp saliente:** confirmar si hay número y plantillas aprobadas. Si no, solo correo y push.
+- **Precio y plan (DECIDIDO 2026-10-06):** los usuarios de app son ilimitados y NO cuentan como asientos. Sí aplican topes de uso: envíos, subidas, dictados y automatizaciones por app y por día, contados en el plan.
+- **Avisos (DECIDIDO 2026-10-06):** solo correo y notificaciones push (Web Push). No hay WhatsApp saliente: la acción `whatsapp` de las automatizaciones no se implementa en v1, y la entrada con código va solo por correo.
 - **Dominio propio por app** (`planta.empresa.com`): fuera de alcance v1; dejar el diseño compatible (la app se resuelve por host o por ruta).
 
 ## Cómo trabajar
