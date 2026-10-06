@@ -331,7 +331,9 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   trackers_row_lookup_create: 'Consultar una API fila por fila',
   trackers_row_lookup_status: 'Ver cómo van las consultas automáticas',
   trackers_row_lookup_update: 'Cambiar o pausar una consulta automática',
-  trackers_sync_from_drive_folder: 'Llenar una tabla desde una carpeta de Drive',
+  trackers_propose_from_drive_folder: 'Proponer una tabla desde una carpeta de Drive',
+  trackers_sync_from_drive_folder:
+    'Llenar una tabla desde una carpeta de Drive (hojas, documentos y fotos)',
   trackers_drive_syncs: 'Ver las carpetas de Drive que llenan tablas',
   trackers_retry_sync: 'Volver a correr una sincronización',
   accounting_status: 'Ver cómo va el programa contable',

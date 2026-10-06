@@ -1,6 +1,7 @@
 'use client';
 
 import type {
+  FolderProposalView,
   SchemaActions,
   SchemaEditorData,
   SchemaImpact,
@@ -57,6 +58,7 @@ export function SchemaEditor({
   data,
   seed,
   sheet,
+  folder,
   actions,
   onSaved,
   onCreated,
@@ -65,6 +67,7 @@ export function SchemaEditor({
   data?: SchemaEditorData;
   seed?: SchemaSeed;
   sheet?: SheetProposalView;
+  folder?: FolderProposalView;
   actions: SchemaActions;
   onSaved?: (fresh: SchemaEditorData) => void;
   onCreated?: (created: { slug: string; id: string; fields: TrackerField[] }) => void;
@@ -99,6 +102,7 @@ export function SchemaEditor({
   const [okNote, setOkNote] = useState<string | null>(null);
   // Sólo «desde una hoja».
   const keyFromColumns = useMemo(() => {
+    if (folder) return folder.keyFields;
     if (!sheet) return [];
     return sheet.keyColumns.flatMap((col) => {
       const hit = Object.entries(sheet.evidence).find(
@@ -106,7 +110,7 @@ export function SchemaEditor({
       );
       return hit ? [hit[0]] : [];
     });
-  }, [sheet]);
+  }, [sheet, folder]);
   const [keyFields, setKeyFields] = useState<string[]>(keyFromColumns);
   const [every, setEvery] = useState(15);
   const [notify, setNotify] = useState(false);
@@ -128,12 +132,17 @@ export function SchemaEditor({
       }),
     [name, description, fields, duplicates, start],
   );
-  const sheetIssues = sheet
-    ? [
-        keyFields.length === 0 ? 'Elige al menos una columna que identifique cada fila.' : null,
-        intervalProblem(every),
-      ].filter((x): x is string => Boolean(x))
-    : [];
+  const sheetIssues =
+    sheet || folder
+      ? [
+          keyFields.length === 0 ? 'Elige al menos una columna que identifique cada fila.' : null,
+          folder
+            ? every < 10 || every > 1440
+              ? 'Entre 10 y 1440 minutos.'
+              : null
+            : intervalProblem(every),
+        ].filter((x): x is string => Boolean(x))
+      : [];
   const blocking = !name.trim() || !validation.ok || Boolean(ruleIssue) || sheetIssues.length > 0;
 
   function change(next: TrackerField[]) {
@@ -172,6 +181,32 @@ export function SchemaEditor({
     try {
       const cleaned = cleanFields(fields);
       if (!data) {
+        if (folder && actions.createFromFolder) {
+          const r = await actions.createFromFolder({
+            folder: folder.folder,
+            recursive: folder.recursive,
+            name,
+            description,
+            fields: cleaned,
+            sources: Object.fromEntries(
+              Object.entries(folder.evidence).map(([k, e]) => [
+                k,
+                {
+                  sourceColumn: e.sourceColumn,
+                  fromDocument: e.fromDocument,
+                  fromFolder: e.fromFolder,
+                  hint: e.hint,
+                },
+              ]),
+            ),
+            keyFields,
+            duplicates,
+            intervalMinutes: every,
+            notify,
+          });
+          if (!r.ok) return setError(r.error);
+          return onCreated?.(r);
+        }
         if (sheet && actions.createFromSheet) {
           const columns = Object.fromEntries(
             Object.entries(sheet.evidence).map(([k, e]) => [k, e.sourceColumn]),
@@ -234,6 +269,33 @@ export function SchemaEditor({
           Tu equipo no tiene permiso para cambiar los campos ni las reglas de las tablas. Puedes
           verlas.
         </p>
+      )}
+
+      {folder && (
+        <div className="rounded-card border border-primary/30 bg-primary-soft/30 p-3 text-xs leading-relaxed text-ink-muted">
+          <p className="font-semibold text-ink">
+            Esto es lo que Cortex vio en «{folder.folder.name}»
+          </p>
+          <p>
+            {folder.inventory.total} archivos: {folder.inventory.sheets} hojas,{' '}
+            {folder.inventory.documents} documentos, {folder.inventory.images} imágenes
+            {folder.inventory.unreadable
+              ? `, ${folder.inventory.unreadable} que no puedo leer`
+              : ''}
+            .{' '}
+            {folder.recursive
+              ? `Incluye ${folder.inventory.subfolders.length} subcarpeta(s).`
+              : 'Sólo la carpeta principal.'}{' '}
+            {folder.sheetRows > 0 && `Las hojas (${folder.sheetRows} filas) se leen sin modelo. `}
+            Debajo de cada campo ves de dónde sale y por qué; corrige antes de crear. Lo que se
+            borre después de una hoja no se borra de la tabla.
+          </p>
+          {[...folder.inventory.notes, ...folder.notes].map((n) => (
+            <p key={n} className="mt-1">
+              {n}
+            </p>
+          ))}
+        </div>
       )}
 
       {sheet && (
@@ -311,7 +373,23 @@ export function SchemaEditor({
               readOnly={readOnly}
               open={open === '*' || open === f.key}
               onToggle={() => setOpen(open === f.key ? null : f.key)}
-              note={sheet?.evidence[f.key]}
+              note={
+                sheet?.evidence[f.key] ??
+                (folder?.evidence[f.key]
+                  ? {
+                      sourceColumn: folder.evidence[f.key]?.sourceColumn ?? '',
+                      label: folder.evidence[f.key]?.sourceColumn
+                        ? `Columna «${folder.evidence[f.key]?.sourceColumn}»`
+                        : folder.evidence[f.key]?.fromFolder
+                          ? 'Subcarpeta'
+                          : folder.evidence[f.key]?.fromDocument
+                            ? 'Documento'
+                            : 'Campo del equipo',
+                      why: folder.evidence[f.key]?.why ?? [],
+                      samples: folder.evidence[f.key]?.samples ?? [],
+                    }
+                  : undefined)
+              }
               onChange={(next) => change(fields.map((x) => (x.key === f.key ? next : x)))}
               onMove={(d) => change(moveField(fields, i, i + d))}
               onRemove={() => dropField(f.key)}
@@ -358,9 +436,9 @@ export function SchemaEditor({
         )}
       </Section>
 
-      {sheet && (
+      {(sheet || folder) && (
         <Section title="Cómo se reconoce cada fila">
-          <p className="text-xs text-ink-muted">{sheet.keyWhy}</p>
+          <p className="text-xs text-ink-muted">{(sheet ?? folder)?.keyWhy}</p>
           <div className="flex flex-wrap gap-1.5">
             {fields.map((f) => {
               const on = keyFields.includes(f.key);
@@ -388,12 +466,16 @@ export function SchemaEditor({
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field
-              label="Cada cuánto se vuelve a leer la hoja (minutos)"
-              hint={intervalProblem(every) ?? undefined}
+              label={`Cada cuánto se vuelve a leer ${folder ? 'la carpeta' : 'la hoja'} (minutos)`}
+              hint={
+                (folder
+                  ? sheetIssues.find((i) => i.startsWith('Entre'))
+                  : intervalProblem(every)) ?? undefined
+              }
             >
               <input
                 type="number"
-                min={5}
+                min={folder ? 10 : 5}
                 max={1440}
                 value={every}
                 onChange={(e) => setEvery(Number(e.target.value))}
@@ -414,7 +496,7 @@ export function SchemaEditor({
         rule={duplicates}
         fields={fields}
         readOnly={readOnly}
-        hint={sheet?.duplicates?.why}
+        hint={(sheet ?? folder)?.duplicates?.why}
         onChange={(r) => {
           setDuplicates(r);
           setImpact(null);
@@ -492,9 +574,11 @@ export function SchemaEditor({
               )}
               {editing
                 ? 'Guardar campos y reglas'
-                : sheet
-                  ? 'Crear y llenar con la hoja'
-                  : 'Crear tabla'}
+                : folder
+                  ? 'Crear y llenar con la carpeta'
+                  : sheet
+                    ? 'Crear y llenar con la hoja'
+                    : 'Crear tabla'}
             </button>
           )}
         </div>

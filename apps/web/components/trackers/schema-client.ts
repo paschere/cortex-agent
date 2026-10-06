@@ -2,11 +2,14 @@
 
 import {
   analyzeSchemaChange,
+  createTableFromFolder,
   createTableFromSheet,
   createTrackerWithSchema,
+  findFolders,
   listSheetSources,
   listTrackerChoices,
   loadSchemaEditor,
+  proposeFromFolder,
   proposeFromSheet,
   runSyncNow,
   saveTrackerSchema,
@@ -24,6 +27,9 @@ export const schemaActions: SchemaActions = {
   listSheets: listSheetSources,
   proposeFromSheet,
   createFromSheet: createTableFromSheet,
+  findFolders,
+  proposeFromFolder,
+  createFromFolder: createTableFromFolder,
   updateSync: updateSyncSettings,
   syncNow: runSyncNow,
 };

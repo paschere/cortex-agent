@@ -106,7 +106,10 @@ export function fieldsFromSheet(sheet: SheetData): {
   return { fields, mapping };
 }
 
-function cellFor(field: TrackerField, cell: SheetValue | undefined): string | number | undefined {
+export function cellFor(
+  field: TrackerField,
+  cell: SheetValue | undefined,
+): string | number | undefined {
   if (cell === null || cell === undefined) return undefined;
   if (typeof cell === 'boolean') return cell ? 'Sí' : 'No';
   const text = String(cell).trim();

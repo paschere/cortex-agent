@@ -400,6 +400,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.row_lookup_create': 'Consulta en una API el estado de cada fila de la tabla ',
   'trackers.row_lookup_status': 'Muéstrame cómo van las consultas automáticas',
   'trackers.row_lookup_update': 'Cambia o pausa la consulta automática ',
+  'trackers.propose_from_drive_folder': 'Mira la carpeta de Drive y propón la tabla: ',
   'trackers.sync_from_drive_folder': 'Llena una tabla con los archivos de la carpeta de Drive ',
   'trackers.drive_syncs': 'Muéstrame las carpetas de Drive que llenan tablas',
   'trackers.retry_sync': 'Vuelve a correr la sincronización de ',

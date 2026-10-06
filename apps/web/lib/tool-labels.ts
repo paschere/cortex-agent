@@ -458,8 +458,12 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     label: 'Cambiar o pausar una consulta automática',
     icon: 'ScanSearch',
   },
+  trackers_propose_from_drive_folder: {
+    label: 'Proponer una tabla desde una carpeta de Drive',
+    icon: 'FolderInput',
+  },
   trackers_sync_from_drive_folder: {
-    label: 'Llenar una tabla desde una carpeta de Drive',
+    label: 'Llenar una tabla desde una carpeta de Drive (hojas, documentos y fotos)',
     icon: 'FolderInput',
   },
   trackers_drive_syncs: {

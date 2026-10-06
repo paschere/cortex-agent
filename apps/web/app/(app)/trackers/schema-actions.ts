@@ -23,7 +23,9 @@ import {
   checkSpecAgainst,
   createTrackerSync,
   defineTracker,
+  driveFolderMeta,
   duplicateRuleSchema,
+  findDriveFolders,
   getDuplicateRule,
   getTool,
   getTrackerById,
@@ -42,10 +44,13 @@ import {
   viewSpecSchema,
   writeAuditEvent,
 } from '@cortex/agent-tools';
+import { proposeFromDriveFolder } from '@cortex/agent-tools/src/drive-table/propose-folder';
 import { proposeTableFromSheet } from '@cortex/agent-tools/src/table-sync/propose';
 import { NotFoundError, type UUID, ValidationError, logger } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 import type {
+  FolderChoice,
+  FolderProposalView,
   SchemaEditorData,
   SchemaImpact,
   SchemaResult,
@@ -786,6 +791,221 @@ export async function createTableFromSheet(input: {
     };
   } catch (err) {
     return { ok: false, error: message(err, 'No se pudo crear la tabla desde la hoja.') };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Crear una tabla DESDE una carpeta de Drive
+// ---------------------------------------------------------------------------
+
+/**
+ * La carpeta se lee con las credenciales de Google de quien la crea (igual que
+ * `trackers.sync_from_drive_folder`), y sólo si su equipo puede definir tablas
+ * y llenarlas desde una carpeta de Drive.
+ */
+async function folderContext() {
+  const { user, db } = await context();
+  const denied = await deniedToolPatterns(db, user.id, { failClosed: true });
+  if (isToolDenied('trackers.sync_from_drive_folder', denied))
+    throw new ValidationError(
+      'Tu equipo no tiene permiso para llenar tablas desde una carpeta de Drive.',
+    );
+  const ctx = buildToolContext({
+    organizationId: user.organization.id,
+    userId: user.id as UUID,
+    agentId: user.id as UUID,
+    surface: 'web',
+  });
+  return { user, db, ctx, drive: { integrations: ctx.integrations, signal: undefined } };
+}
+
+const DRIVE_ID_RE = /^[A-Za-z0-9_-]{10,200}$/;
+
+export async function findFolders(ref: string): Promise<SchemaResult<{ folders: FolderChoice[] }>> {
+  try {
+    const { drive } = await folderContext();
+    const text = cleanText(ref, 500);
+    if (!text) return { ok: false, error: 'Pega el enlace de la carpeta o escribe su nombre.' };
+    const fromUrl =
+      text.match(/\/folders\/([A-Za-z0-9_-]{10,})/)?.[1] ??
+      text.match(/[?&]id=([A-Za-z0-9_-]{10,})/)?.[1] ??
+      (/^[A-Za-z0-9_-]{25,}$/.test(text) && /\d/.test(text) ? text : null);
+    if (fromUrl) {
+      const meta = await driveFolderMeta(drive, fromUrl);
+      return { ok: true, folders: [{ id: meta.id, name: meta.name }] };
+    }
+    const found = await findDriveFolders(drive, text);
+    if (!found.length)
+      return { ok: false, error: `No encontré en tu Drive una carpeta llamada «${text}».` };
+    return { ok: true, folders: found.map((f) => ({ id: f.id, name: f.name })) };
+  } catch (err) {
+    return { ok: false, error: message(err, 'No se pudo buscar la carpeta en tu Drive.') };
+  }
+}
+
+export async function proposeFromFolder(
+  folderId: string,
+  includeSubfolders: boolean,
+): Promise<SchemaResult<{ proposal: FolderProposalView }>> {
+  try {
+    const { drive } = await folderContext();
+    if (!DRIVE_ID_RE.test(String(folderId)))
+      return { ok: false, error: 'Esa carpeta no es válida.' };
+    const folder = await driveFolderMeta(drive, folderId);
+    const p = await proposeFromDriveFolder(drive, folder, {
+      includeSubfolders: Boolean(includeSubfolders),
+    });
+    const evidence: FolderProposalView['evidence'] = {};
+    const fields: TrackerField[] = p.fields.map(
+      ({ sourceColumn, fromDocument, fromFolder, hint, why, samples, ...field }) => {
+        evidence[field.key] = {
+          ...(sourceColumn ? { sourceColumn } : {}),
+          ...(fromDocument ? { fromDocument } : {}),
+          ...(fromFolder ? { fromFolder } : {}),
+          ...(hint ? { hint } : {}),
+          why,
+          samples,
+        };
+        return field as TrackerField;
+      },
+    );
+    const inv = p.inventory;
+    return {
+      ok: true,
+      proposal: {
+        folder: { id: folder.id, name: folder.name },
+        recursive: p.recursive,
+        inventory: {
+          total: inv.total,
+          sheets: inv.counts.sheet,
+          documents: inv.counts.document,
+          images: inv.counts.image,
+          unreadable: inv.counts.unreadable,
+          subfolders: inv.folders.map((f) => ({ path: f.path, files: f.files })),
+          notes: [
+            ...(inv.skipped.length
+              ? [`Hay ${inv.skipped.length} subcarpeta(s) que no se incluyeron.`]
+              : []),
+            ...(inv.tooDeep.length
+              ? [`${inv.tooDeep.length} subcarpeta(s) están a más de ${inv.maxDepth} niveles.`]
+              : []),
+            ...(inv.truncated ? [`Sólo se contaron los primeros ${inv.maxFiles} archivos.`] : []),
+            ...(inv.problems.length ? [`No se pudo abrir: ${inv.problems.join(', ')}.`] : []),
+            ...inv.unreadable.slice(0, 5).map((u) => `«${u.name}»: ${u.reason}`),
+          ],
+        },
+        suggestedName: p.name.slice(0, 80),
+        description: p.description,
+        fields,
+        evidence,
+        keyFields: p.keyFields,
+        keyWhy: p.keyWhy,
+        duplicates: p.duplicates
+          ? {
+              key: p.duplicates.key,
+              distinctBy: p.duplicates.distinctBy,
+              flagField: p.duplicates.flagField,
+              flagValue: p.duplicates.flagValue,
+              why: p.duplicates.why,
+            }
+          : null,
+        sheetRows: p.sheetRows,
+        notes: p.notes,
+      },
+    };
+  } catch (err) {
+    return { ok: false, error: message(err, 'No se pudo leer la carpeta.') };
+  }
+}
+
+export async function createTableFromFolder(input: {
+  folder: FolderChoice;
+  recursive: boolean;
+  name: string;
+  description: string;
+  fields: TrackerField[];
+  sources: Record<
+    string,
+    { sourceColumn?: string; fromDocument?: boolean; fromFolder?: boolean; hint?: string }
+  >;
+  keyFields: string[];
+  duplicates: DuplicateDraft | null;
+  intervalMinutes: number;
+  notify: boolean;
+}): Promise<SchemaResult<{ slug: string; id: string; fields: TrackerField[] }>> {
+  const started = performance.now();
+  try {
+    const { user, db, ctx } = await folderContext();
+    const folderId = String(input?.folder?.id ?? '');
+    if (!DRIVE_ID_RE.test(folderId)) return { ok: false, error: 'Esa carpeta no es válida.' };
+    const name = cleanText(input?.name, 80);
+    if (!name) return { ok: false, error: 'Ponle un nombre a la tabla.' };
+    const every = Number(input?.intervalMinutes);
+    if (!Number.isInteger(every) || every < 10 || every > 1440)
+      return { ok: false, error: 'Cada cuánto: entre 10 y 1440 minutos.' };
+    const fields = parseDraftFields(input?.fields);
+    const rule = parseDraftRule(input?.duplicates, fields);
+    await checkRelations(db, fields);
+    const keyFields = (Array.isArray(input?.keyFields) ? input.keyFields : [])
+      .map(String)
+      .filter((k) => fields.some((f) => f.key === k))
+      .slice(0, 5);
+    if (!keyFields.length)
+      return { ok: false, error: 'Elige al menos un campo que identifique cada registro.' };
+    const sources = input?.sources ?? {};
+    const approved = fields.map((f) => {
+      const s = sources[f.key] ?? {};
+      const sourceColumn = typeof s.sourceColumn === 'string' ? s.sourceColumn.slice(0, 120) : '';
+      return {
+        ...f,
+        ...(sourceColumn ? { sourceColumn } : {}),
+        fromDocument: Boolean(s.fromDocument),
+        ...(s.fromFolder ? { fromFolder: true } : {}),
+        ...(typeof s.hint === 'string' && s.hint ? { hint: s.hint.slice(0, 200) } : {}),
+      };
+    });
+    const { data: slugs, error } = await db.from('trackers').select('slug').limit(1000);
+    if (error) throw error;
+    const slug = slugFromName(
+      name,
+      ((slugs ?? []) as Array<{ slug: string }>).map((s) => s.slug),
+    );
+    const tool = getTool('trackers.sync_from_drive_folder');
+    if (!tool) return { ok: false, error: 'Esta instalación no lee carpetas de Drive.' };
+    await tool.handler(
+      tool.inputSchema.parse({
+        folder: `https://drive.google.com/drive/folders/${folderId}`,
+        table: slug,
+        tableName: name,
+        tableDescription: cleanText(input?.description, 500) || undefined,
+        fields: approved,
+        keyFields,
+        ...(rule ? { duplicates: rule } : {}),
+        recursive: Boolean(input?.recursive),
+        intervalMinutes: every,
+        notify: Boolean(input?.notify),
+      }),
+      ctx,
+    );
+    const tracker = await getTrackerBySlug(db, slug);
+    if (!tracker) return { ok: false, error: 'No se pudo crear la tabla.' };
+    await audit(
+      db,
+      user.id,
+      started,
+      {
+        tracker: tracker.slug,
+        created: true,
+        fromDriveFolder: folderId,
+        recursive: Boolean(input?.recursive),
+        fields: fields.length,
+      },
+      'trackers.sync_from_drive_folder',
+    );
+    revalidatePath('/trackers');
+    return { ok: true, slug: tracker.slug, id: tracker.id, fields };
+  } catch (err) {
+    return { ok: false, error: message(err, 'No se pudo crear la tabla desde la carpeta.') };
   }
 }
 

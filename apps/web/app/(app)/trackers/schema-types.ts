@@ -91,6 +91,49 @@ export interface SheetProposalView {
   notes: string[];
 }
 
+/** Una carpeta de Drive encontrada (por enlace o por nombre). */
+export interface FolderChoice {
+  id: string;
+  name: string;
+}
+
+/** Lo que Cortex vio en una carpeta de Drive y propone, listo para abrir el editor prellenado. */
+export interface FolderProposalView {
+  folder: FolderChoice;
+  /** Se incluyeron las subcarpetas. */
+  recursive: boolean;
+  inventory: {
+    total: number;
+    sheets: number;
+    documents: number;
+    images: number;
+    unreadable: number;
+    subfolders: Array<{ path: string; files: number }>;
+    /** Lo que no se pudo leer o no se incluyó, en español. */
+    notes: string[];
+  };
+  suggestedName: string;
+  description: string;
+  fields: TrackerField[];
+  /** Por cada campo: de dónde sale (hoja, documento, subcarpeta), por qué y ejemplos. */
+  evidence: Record<
+    string,
+    {
+      sourceColumn?: string;
+      fromDocument?: boolean;
+      fromFolder?: boolean;
+      hint?: string;
+      why: string[];
+      samples: string[];
+    }
+  >;
+  keyFields: string[];
+  keyWhy: string;
+  duplicates: (DuplicateDraft & { why: string }) | null;
+  sheetRows: number;
+  notes: string[];
+}
+
 export interface SchemaActions {
   load: (slug: string) => Promise<SchemaResult<{ data: SchemaEditorData }>>;
   analyze: (
@@ -126,6 +169,27 @@ export interface SchemaActions {
     intervalMinutes: number;
     notify: boolean;
   }) => Promise<SchemaResult<{ slug: string; id: string; fields: TrackerField[]; loaded: number }>>;
+  findFolders?: (ref: string) => Promise<SchemaResult<{ folders: FolderChoice[] }>>;
+  proposeFromFolder?: (
+    folderId: string,
+    includeSubfolders: boolean,
+  ) => Promise<SchemaResult<{ proposal: FolderProposalView }>>;
+  createFromFolder?: (input: {
+    folder: FolderChoice;
+    recursive: boolean;
+    name: string;
+    description: string;
+    fields: TrackerField[];
+    /** Campo → de dónde sale (la evidencia de la propuesta, con lo que la persona dejó). */
+    sources: Record<
+      string,
+      { sourceColumn?: string; fromDocument?: boolean; fromFolder?: boolean; hint?: string }
+    >;
+    keyFields: string[];
+    duplicates: DuplicateDraft | null;
+    intervalMinutes: number;
+    notify: boolean;
+  }) => Promise<SchemaResult<{ slug: string; id: string; fields: TrackerField[] }>>;
   updateSync: (
     kind: SchemaSyncInfo['kind'],
     syncId: string,

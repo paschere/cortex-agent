@@ -48,6 +48,16 @@ export const extractFieldSchema = z.object({
 
 /** Cuántos registros se aceptan de un solo archivo. */
 export const MAX_ROWS_PER_FILE = 50;
+/** Filas que se leen de UNA hoja de cálculo de la carpeta (sin modelo). */
+export const SHEET_ROWS_PER_FILE = 5000;
+/** Lo más que pesa una foto, un escaneo o un archivo que se baja entero. */
+export const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
+/** Una imagen más pesada que esto la rechaza el modelo. */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Páginas de un PDF escaneado que se mandan al modelo. */
+export const MAX_SCAN_PAGES = 15;
+/** El campo que se llena solo con la subcarpeta de cada archivo. */
+export const CARPETA_KEY = 'carpeta';
 /** Cuánto texto del archivo va al modelo. */
 export const MAX_PROMPT_CHARS = 30_000;
 /** Reintentos de un archivo que falló por algo pasajero. */
@@ -502,6 +512,14 @@ export function planFileRows(input: {
   documentText: string;
   fileId: string;
   truncated?: boolean;
+  /**
+   * El modelo vio una foto o un escaneo y no hay texto contra el cual
+   * comprobar la cita: la cita es «(foto)» o el texto que leyó. Se cree el
+   * valor si tiene la forma de su tipo; lo dudoso sigue marcando la fila.
+   */
+  visual?: boolean;
+  /** Valores que no se leen del archivo y entran a la clave (la subcarpeta). */
+  fixed?: Record<string, string | number>;
 }): FilePlan {
   const doc = compact(input.documentText);
   const notes: string[] = [];
@@ -537,11 +555,11 @@ export function planFileRows(input: {
       }
       const quote = cell?.cita?.trim() ?? '';
       const quoteKey = compact(quote);
-      if (!quoteKey || !doc.includes(quoteKey)) {
+      if (!input.visual && (!quoteKey || !doc.includes(quoteKey))) {
         review.push(`«${field.label}» sin una frase del documento que lo respalde.`);
         continue;
       }
-      const read = readCell(field, raw, quote);
+      const read = input.visual ? readVisualCell(field, raw) : readCell(field, raw, quote);
       if (!read.ok) {
         review.push(read.reason);
         continue;
@@ -551,6 +569,7 @@ export function planFileRows(input: {
         review.push(`«${field.label}» dudoso: «${String(read.value).slice(0, 60)}».`);
     }
     if (!Object.keys(values).length) return;
+    Object.assign(values, input.fixed ?? {});
 
     const key = externalKeyFor(values, input.keyFields, input.fields);
     const planned: PlannedFileRow = {
@@ -574,6 +593,39 @@ export function planFileRows(input: {
     );
   });
   return { rows: [...byKey.values()], notes };
+}
+
+/** Un valor leído de una imagen: sin frase que comprobar, sólo que tenga la forma de su tipo. */
+function readVisualCell(
+  field: TrackerField,
+  raw: string,
+): { ok: true; value: string | number } | { ok: false; reason: string } {
+  switch (field.type) {
+    case 'number':
+    case 'money': {
+      const n = parseNumberValue(raw);
+      return n === null
+        ? { ok: false, reason: `«${field.label}» no es un número: «${raw.slice(0, 40)}».` }
+        : { ok: true, value: n };
+    }
+    case 'date': {
+      const day = parseDateValue(raw);
+      return day
+        ? { ok: true, value: day }
+        : { ok: false, reason: `«${field.label}» no es una fecha: «${raw.slice(0, 40)}».` };
+    }
+    case 'select': {
+      const option = field.options?.find((o) => compact(o) === compact(raw));
+      return option
+        ? { ok: true, value: option }
+        : {
+            ok: false,
+            reason: `«${field.label}» dice «${raw.slice(0, 40)}», que no es una de sus opciones.`,
+          };
+    }
+    default:
+      return { ok: true, value: raw.slice(0, 400) };
+  }
 }
 
 function readCell(
@@ -690,6 +742,10 @@ export interface LedgerEntry {
   revision: string;
   status: 'ok' | 'needs_review' | 'error';
   attempts: number;
+  /** Subcarpeta en la que estaba cuando se leyó (0205). */
+  folder_path?: string | null;
+  /** Filas que salieron del archivo (para re-clavar si se mueve de subcarpeta). */
+  tracker_row_ids?: string[] | null;
 }
 
 export interface FolderFile {
@@ -699,12 +755,23 @@ export interface FolderFile {
   revision: string;
   modifiedTime: string | null;
   size: number | null;
+  /** Subcarpeta relativa a la carpeta conectada («Cliente A / Octubre»); '' en la raíz. */
+  path?: string;
 }
 
-/** ¿Se lee este archivo en esta corrida? Una vez por revisión; un error pasajero, hasta tres. */
-export function shouldProcess(entry: LedgerEntry | undefined, revision: string): boolean {
+/**
+ * ¿Se lee este archivo en esta corrida? Una vez por revisión; un error
+ * pasajero, hasta tres; y de nuevo si lo movieron de subcarpeta (para que el
+ * campo «Carpeta» lo refleje; las filas son las mismas).
+ */
+export function shouldProcess(
+  entry: LedgerEntry | undefined,
+  revision: string,
+  path = '',
+): boolean {
   if (!entry) return true;
   if (entry.revision !== revision) return true;
+  if ((entry.folder_path ?? '') !== path && entry.status !== 'error') return true;
   return entry.status === 'error' && entry.attempts < MAX_ATTEMPTS;
 }
 
@@ -731,7 +798,7 @@ export function pickFiles(
 ): { now: FolderFile[]; backlog: number } {
   const byId = new Map(ledger.map((l) => [l.file_id, l]));
   const due = files
-    .filter((f) => shouldProcess(byId.get(f.id), f.revision))
+    .filter((f) => shouldProcess(byId.get(f.id), f.revision, f.path ?? ''))
     .sort((a, b) => (b.modifiedTime ?? '').localeCompare(a.modifiedTime ?? ''));
   return { now: due.slice(0, cap), backlog: Math.max(0, due.length - cap) };
 }

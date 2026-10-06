@@ -1,13 +1,15 @@
 'use client';
 
 import type {
+  FolderChoice,
+  FolderProposalView,
   SchemaActions,
   SheetProposalView,
   SheetSourceInfo,
 } from '@/app/(app)/trackers/schema-types';
 import type { TrackerField } from '@/lib/trackers/schema-editor';
 import * as Dialog from '@radix-ui/react-dialog';
-import { FileSpreadsheet, Loader2, Table2, X } from 'lucide-react';
+import { FileSpreadsheet, FolderInput, Loader2, Table2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { SchemaEditor, type SchemaSeed } from './SchemaEditor';
 import { schemaActions } from './schema-client';
@@ -15,8 +17,10 @@ import { schemaActions } from './schema-client';
 /**
  * «CREAR TABLA NUEVA» CON TODAS LAS REGLAS.
  *
- * Dos caminos: desde cero (un campo de texto y a armarlo) o desde una hoja
- * conectada del Feed de la persona. En el segundo, Cortex LEE la hoja y abre el
+ * Tres caminos: desde cero (un campo de texto y a armarlo), desde una hoja
+ * conectada del Feed de la persona o desde una carpeta de Drive (enlace o
+ * nombre, con o sin subcarpetas): Cortex mira qué hay dentro, lee una muestra y
+ * abre el mismo editor prellenado; al crear se llena con los archivos. En el segundo, Cortex LEE la hoja y abre el
  * editor ya prellenado —tipos, obligatorios, formatos, clave, duplicados— con
  * el porqué de cada cosa; la persona corrige y al crear la tabla se llena con
  * la hoja y queda sincronizada. Sólo se ofrecen las hojas del propio Feed.
@@ -26,7 +30,9 @@ type Step =
   | { kind: 'choose' }
   | { kind: 'scratch' }
   | { kind: 'sheets' }
-  | { kind: 'sheet'; proposal: SheetProposalView };
+  | { kind: 'sheet'; proposal: SheetProposalView }
+  | { kind: 'folders' }
+  | { kind: 'folder'; proposal: FolderProposalView };
 
 const BLANK: TrackerField[] = [{ key: 'nombre', label: 'Nombre', type: 'text', required: true }];
 
@@ -99,6 +105,12 @@ export function CreateTableDialog({
                   text="Cortex lee tu hoja y te propone los campos y las reglas; tú corriges."
                   onClick={() => setStep({ kind: 'sheets' })}
                 />
+                <Choice
+                  icon={<FolderInput className="h-5 w-5" />}
+                  title="Desde una carpeta de Drive"
+                  text="Cortex mira qué hay (hojas, PDF, fotos, subcarpetas), lee una muestra y te propone los campos."
+                  onClick={() => setStep({ kind: 'folders' })}
+                />
               </div>
             )}
             {step.kind === 'scratch' && (
@@ -116,6 +128,35 @@ export function CreateTableDialog({
                 onProposal={(proposal) => {
                   setStep({ kind: 'sheet', proposal });
                 }}
+              />
+            )}
+            {step.kind === 'folders' && (
+              <FolderPicker
+                actions={actions}
+                onBack={() => setStep({ kind: 'choose' })}
+                onProposal={(proposal) => setStep({ kind: 'folder', proposal })}
+              />
+            )}
+            {step.kind === 'folder' && (
+              <SchemaEditor
+                folder={step.proposal}
+                seed={{
+                  name: step.proposal.suggestedName,
+                  description: step.proposal.description,
+                  fields: step.proposal.fields,
+                  duplicates: step.proposal.duplicates
+                    ? {
+                        key: step.proposal.duplicates.key,
+                        distinctBy: step.proposal.duplicates.distinctBy,
+                        flagField: step.proposal.duplicates.flagField,
+                        flagValue: step.proposal.duplicates.flagValue,
+                      }
+                    : null,
+                  otherTrackers: others,
+                }}
+                actions={actions}
+                onCreated={onCreated}
+                onCancel={() => setStep({ kind: 'folders' })}
               />
             )}
             {step.kind === 'sheet' && (
@@ -252,6 +293,116 @@ function SheetPicker({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Pegar el enlace de una carpeta de Drive o escribir su nombre. Con la casilla
+ * «incluir subcarpetas» (encendida: si la carpeta tiene subcarpetas, entran).
+ * Leer es lo único que pasa aquí: nada se crea hasta el editor.
+ */
+function FolderPicker({
+  actions,
+  onBack,
+  onProposal,
+}: {
+  actions: SchemaActions;
+  onBack: () => void;
+  onProposal: (p: FolderProposalView) => void;
+}) {
+  const [ref, setRef] = useState('');
+  const [deep, setDeep] = useState(true);
+  const [choices, setChoices] = useState<FolderChoice[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function read(folder: FolderChoice) {
+    if (!actions.proposeFromFolder) return;
+    setBusy(folder.id);
+    setError(null);
+    const r = await actions.proposeFromFolder(folder.id, deep);
+    setBusy(null);
+    if (r.ok) onProposal(r.proposal);
+    else setError(r.error);
+  }
+
+  async function search() {
+    if (!actions.findFolders || !ref.trim()) return;
+    setBusy('search');
+    setError(null);
+    setChoices([]);
+    const r = await actions.findFolders(ref);
+    setBusy(null);
+    if (!r.ok) return setError(r.error);
+    // Un enlace (o un único nombre) se lee de una vez; si hay varias, se elige.
+    if (r.folders.length === 1) return read(r.folders[0] as FolderChoice);
+    setChoices(r.folders);
+  }
+
+  if (!actions.findFolders || !actions.proposeFromFolder)
+    return <p className="pb-4 text-sm text-rose">Esta pantalla no puede leer carpetas de Drive.</p>;
+
+  return (
+    <div className="space-y-3 pb-4">
+      <button type="button" onClick={onBack} className="text-xs font-semibold text-primary">
+        ← Volver
+      </button>
+      <label className="block text-xs font-semibold text-ink" htmlFor="folder-ref">
+        Enlace o nombre de la carpeta
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="folder-ref"
+          value={ref}
+          maxLength={500}
+          onChange={(e) => setRef(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && search()}
+          placeholder="https://drive.google.com/drive/folders/… o «Facturas»"
+          className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink"
+        />
+        <button
+          type="button"
+          onClick={search}
+          disabled={busy !== null || !ref.trim()}
+          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Leer carpeta
+        </button>
+      </div>
+      <label className="flex items-center gap-2 text-xs text-ink-muted">
+        <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} />
+        Incluir subcarpetas (hasta 3 niveles); la subcarpeta de cada archivo queda en un campo
+        «Carpeta»
+      </label>
+      {busy && (
+        <p className="flex items-center gap-2 text-sm text-ink-muted">
+          <Loader2 className="h-4 w-4 animate-spin" /> Mirando qué hay en la carpeta y leyendo una
+          muestra…
+        </p>
+      )}
+      {error && <p className="text-sm text-rose">{error}</p>}
+      {choices.length > 1 && (
+        <ul className="space-y-2">
+          {choices.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => read(c)}
+                className="w-full rounded-card border border-border p-3 text-left text-sm font-semibold text-ink hover:border-primary/50 disabled:opacity-50"
+              >
+                {c.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs leading-relaxed text-ink-muted">
+        Se lee con tu cuenta de Google. Las hojas se leen fila por fila, sin modelo; los PDF, Word y
+        fotos los lee el modelo y lo dudoso queda «Por revisar».
+      </p>
     </div>
   );
 }

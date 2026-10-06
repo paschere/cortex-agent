@@ -1,6 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TrackerField } from '../trackers/schema';
+
+// Los PDF se «abren» con lo que cada prueba diga (un escaneo no trae texto).
+const parse = vi.hoisted(() => ({
+  fn: undefined as
+    | undefined
+    | ((b: Buffer, m: string) => Promise<{ text: string; pages?: number }>),
+}));
+vi.mock('../kb/parsers', async (orig) => {
+  const real = await orig<typeof import('../kb/parsers')>();
+  return {
+    ...real,
+    parseDocument: (b: Buffer, m: string) => (parse.fn ? parse.fn(b, m) : real.parseDocument(b, m)),
+  };
+});
 import {
   type DriveAccess,
   type DriveFolderSyncRow,
@@ -153,7 +167,10 @@ const reading: ExtractionOutput = {
   observacion: null,
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  parse.fn = undefined;
+});
 
 describe('un archivo de la carpeta, de punta a punta', () => {
   it('crea la fila, la anota en el libro, y leerlo otra vez no la duplica', async () => {
@@ -238,12 +255,349 @@ describe('un archivo de la carpeta, de punta a punta', () => {
     const photo = await processDriveFile(db, drive, {
       sync,
       tracker,
-      file: { ...doc(), id: 'file-2', mimeType: 'image/jpeg' },
+      file: { ...doc(), id: 'file-2', mimeType: 'image/heic' },
       extractor: async () => reading,
     });
     expect(photo.status).toBe('error');
     const ledger = tables.drive_folder_sync_files?.find((f) => f.file_id === 'file-2');
     expect(ledger).toMatchObject({ status: 'error', attempts: 3 });
-    expect(String(ledger?.error)).toContain('imagen');
+    expect(String(ledger?.error)).toContain('HEIC');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hojas sin modelo, fotos, escaneos y subcarpetas
+// ---------------------------------------------------------------------------
+
+const invFields: TrackerField[] = [
+  { key: 'numero', label: 'Número', type: 'text', required: false },
+  { key: 'cliente', label: 'Cliente', type: 'text', required: false },
+  { key: 'total', label: 'Total', type: 'money', required: false },
+  { key: 'carpeta', label: 'Carpeta', type: 'text', required: false },
+  preset.fields.find((f) => f.key === 'revision') as TrackerField,
+];
+const invTracker = {
+  id: 't2',
+  slug: 'facturas',
+  name: 'Facturas',
+  description: '',
+  fields: invFields,
+};
+const invSync: DriveFolderSyncRow = {
+  ...sync,
+  id: 's2',
+  tracker_id: 't2',
+  extract_fields: [
+    { key: 'numero', hint: '' },
+    { key: 'cliente', hint: '' },
+    { key: 'total', hint: '' },
+  ],
+  key_fields: ['numero'],
+  defaults: {},
+  sheet_mapping: { numero: 'Factura', cliente: 'Cliente', total: 'Valor' },
+  recursive: true,
+};
+const CSV = 'Factura,Cliente,Valor\nFE-1,Flores,100\nFE-2,Agro,200';
+const csvFile = (path = '', revision = 'r1'): FolderFile => ({
+  id: 'hoja-1',
+  name: 'octubre.csv',
+  mimeType: 'text/csv',
+  revision,
+  modifiedTime: null,
+  size: null,
+  path,
+});
+const stubBody = (body: string | Buffer) =>
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(body, { status: 200 })),
+  );
+const neverModel: DriveRowExtractor = async () => {
+  throw new Error('una hoja no pasa por el modelo');
+};
+
+describe('una hoja dentro de la carpeta', () => {
+  it('se lee fila por fila sin modelo; releerla no duplica; moverla de subcarpeta sólo cambia «Carpeta»', async () => {
+    stubBody(CSV);
+    const { db, tables } = fakeDb();
+    const first = await processDriveFile(db, drive, {
+      sync: invSync,
+      tracker: invTracker,
+      file: csvFile('Cliente A'),
+      extractor: neverModel,
+    });
+    expect(first).toMatchObject({ status: 'ok', inserted: 2 });
+    expect(tables.tracker_rows?.[0]).toMatchObject({
+      external_key: 'hoja:hoja-1:0:FE1',
+      values: {
+        numero: 'FE-1',
+        cliente: 'Flores',
+        total: 100,
+        carpeta: 'Cliente A',
+        revision: 'OK',
+      },
+    });
+    expect(tables.drive_folder_sync_files?.[0]).toMatchObject({
+      read_via: 'sheet',
+      folder_path: 'Cliente A',
+      status: 'ok',
+    });
+
+    const again = await processDriveFile(db, drive, {
+      sync: invSync,
+      tracker: invTracker,
+      file: csvFile('Cliente A', 'r2'),
+      extractor: neverModel,
+    });
+    expect(again).toMatchObject({ inserted: 0, updated: 0 });
+
+    // El archivo se movió a otra subcarpeta: las mismas filas, con otra carpeta.
+    const moved = await processDriveFile(db, drive, {
+      sync: invSync,
+      tracker: invTracker,
+      file: csvFile('Cliente B'),
+      extractor: neverModel,
+    });
+    expect(moved).toMatchObject({ inserted: 0, updated: 2 });
+    expect(tables.tracker_rows).toHaveLength(2);
+    expect((tables.tracker_rows?.[0] as { values: Row }).values.carpeta).toBe('Cliente B');
+  });
+
+  it('encabezados distintos: no inventa filas y el libro la deja por revisar con el motivo', async () => {
+    stubBody('Código,Cosa\nA,B\nC,D');
+    const { db, tables } = fakeDb();
+    const r = await processDriveFile(db, drive, {
+      sync: invSync,
+      tracker: invTracker,
+      file: csvFile(),
+      extractor: neverModel,
+    });
+    expect(r).toMatchObject({ status: 'needs_review', inserted: 0 });
+    expect(tables.tracker_rows).toHaveLength(0);
+    const entry = tables.drive_folder_sync_files?.[0] as { notes: string[]; status: string };
+    expect(entry.status).toBe('needs_review');
+    expect(entry.notes.join(' ')).toContain('no cuadra');
+  });
+
+  it('una sincronización anterior (sin mapeo) sigue leyendo la hoja con el modelo', async () => {
+    stubBody(CSV);
+    const { db, tables } = fakeDb();
+    const extractor: DriveRowExtractor = vi.fn(async ({ prompt }) => {
+      expect(prompt).toContain('<documento>');
+      return {
+        filas: [
+          {
+            campos: {
+              numero: c('FE-1', 'FE-1'),
+              cliente: c('Flores', 'Flores'),
+              total: c(null, null),
+            },
+          },
+        ],
+        observacion: null,
+      };
+    });
+    const r = await processDriveFile(db, drive, {
+      sync: { ...invSync, sheet_mapping: {} },
+      tracker: invTracker,
+      file: csvFile(),
+      extractor,
+    });
+    expect(extractor).toHaveBeenCalledOnce();
+    expect(r.inserted).toBe(1);
+    expect(tables.drive_folder_sync_files?.[0]).toMatchObject({ read_via: 'text' });
+  });
+});
+
+describe('fotos y escaneos van al modelo', () => {
+  const visual: ExtractionOutput = {
+    filas: [
+      {
+        campos: {
+          numero: c('FE-9', '(foto)'),
+          cliente: c('Tienda La 14', 'Tienda La 14'),
+          total: c('450.5', '(foto)', true),
+        },
+      },
+    ],
+    observacion: null,
+  };
+  const image = (over: Partial<FolderFile> = {}): FolderFile => ({
+    id: 'img-1',
+    name: 'factura.jpg',
+    mimeType: 'image/jpeg',
+    revision: 'r1',
+    modifiedTime: null,
+    size: 1000,
+    path: 'Cliente A',
+    ...over,
+  });
+
+  it('una imagen se manda como contenido, la cita es «(foto)», y el libro dice que se leyó por imagen', async () => {
+    stubBody(Buffer.from([0xff, 0xd8, 0xff]));
+    const { db, tables } = fakeDb();
+    const extractor: DriveRowExtractor = vi.fn(async ({ system, media }) => {
+      expect(media).toMatchObject({ kind: 'image', mimeType: 'image/jpeg' });
+      expect(media?.data.length).toBe(3);
+      expect(system).toContain('FOTO O UN ESCANEO');
+      return visual;
+    });
+    const r = await processDriveFile(db, drive, {
+      sync: invSync,
+      tracker: invTracker,
+      file: image(),
+      extractor,
+    });
+    // El total quedó dudoso: la fila se marca por revisar, pero entra.
+    expect(r).toMatchObject({ status: 'needs_review', inserted: 1 });
+    expect(tables.tracker_rows?.[0]).toMatchObject({
+      values: { numero: 'FE-9', total: 450.5, carpeta: 'Cliente A', revision: 'Por revisar' },
+    });
+    expect(tables.drive_folder_sync_files?.[0]).toMatchObject({ read_via: 'image' });
+  });
+
+  it('un PDF sin capa de texto se manda como archivo; con más de 15 páginas, no', async () => {
+    stubBody(Buffer.from('%PDF'));
+    const { db, tables } = fakeDb();
+    parse.fn = async () => ({ text: '  ', pages: 3 });
+    const extractor: DriveRowExtractor = vi.fn(async ({ media }) => {
+      expect(media?.kind).toBe('pdf');
+      return visual;
+    });
+    const pdf: FolderFile = {
+      ...image(),
+      id: 'pdf-1',
+      name: 'escaneo.pdf',
+      mimeType: 'application/pdf',
+    };
+    const ok = await processDriveFile(db, drive, {
+      sync: invSync,
+      tracker: invTracker,
+      file: pdf,
+      extractor,
+    });
+    expect(ok.inserted).toBe(1);
+    expect(tables.drive_folder_sync_files?.find((f) => f.file_id === 'pdf-1')).toMatchObject({
+      read_via: 'pdf_scan',
+    });
+
+    parse.fn = async () => ({ text: '', pages: 40 });
+    const big = await processDriveFile(db, drive, {
+      sync: invSync,
+      tracker: invTracker,
+      file: { ...pdf, id: 'pdf-2' },
+      extractor,
+    });
+    expect(big.status).toBe('error');
+    expect(big.error).toContain('15');
+  });
+
+  it('un PDF con texto sigue leyéndose como texto', async () => {
+    stubBody(Buffer.from('%PDF'));
+    const { db, tables } = fakeDb();
+    parse.fn = async () => ({ text: 'FACTURA FE-1 de Flores por 100 pesos', pages: 1 });
+    const extractor: DriveRowExtractor = vi.fn(async ({ media, prompt }) => {
+      expect(media).toBeUndefined();
+      expect(prompt).toContain('FE-1');
+      return {
+        filas: [
+          {
+            campos: {
+              numero: c('FE-1', 'FACTURA FE-1'),
+              cliente: c(null, null),
+              total: c(null, null),
+            },
+          },
+        ],
+        observacion: null,
+      };
+    });
+    await processDriveFile(db, drive, {
+      sync: invSync,
+      tracker: invTracker,
+      file: { ...image(), mimeType: 'application/pdf', name: 'f.pdf' },
+      extractor,
+    });
+    expect(tables.drive_folder_sync_files?.[0]).toMatchObject({ read_via: 'text' });
+  });
+
+  it('una imagen de más de 5 MB, un Excel o Word antiguo y un HEIC dicen claro por qué no', async () => {
+    stubBody('x');
+    const { db, tables } = fakeDb();
+    const run = (file: FolderFile) =>
+      processDriveFile(db, drive, {
+        sync: invSync,
+        tracker: invTracker,
+        file,
+        extractor: neverModel,
+      });
+    expect((await run(image({ id: 'a', size: 6 * 1024 * 1024 }))).error).toContain('5 MB');
+    expect((await run(image({ id: 'b', mimeType: 'application/vnd.ms-excel' }))).error).toContain(
+      '.xlsx',
+    );
+    expect((await run(image({ id: 'c', mimeType: 'application/msword' }))).error).toContain(
+      '.docx',
+    );
+    expect((await run(image({ id: 'd', mimeType: 'image/heic' }))).error).toContain('JPG');
+    expect(tables.drive_folder_sync_files?.every((f) => f.attempts === 3)).toBe(true);
+  });
+});
+
+describe('subcarpetas', () => {
+  it('con la carpeta en la clave, mover el archivo cambia la clave de su fila, no la duplica', async () => {
+    stubBody('FACTURA FE-1 Flores del Campo SAS, total cien mil pesos');
+    const { db, tables } = fakeDb();
+    const keyed = { ...invSync, key_fields: ['numero', 'carpeta'], sheet_mapping: {} };
+    const extractor: DriveRowExtractor = async () => ({
+      filas: [
+        {
+          campos: {
+            numero: c('FE-1', 'FACTURA FE-1'),
+            cliente: c('Flores', 'Flores'),
+            total: c(null, null),
+          },
+        },
+      ],
+      observacion: null,
+    });
+    const gdoc = (path: string): FolderFile => ({
+      id: 'doc-1',
+      name: 'f.gdoc',
+      mimeType: 'application/vnd.google-apps.document',
+      revision: 'r1',
+      modifiedTime: null,
+      size: null,
+      path,
+    });
+    await processDriveFile(db, drive, {
+      sync: keyed,
+      tracker: invTracker,
+      file: gdoc('Cliente A'),
+      extractor,
+    });
+    const row = tables.tracker_rows?.[0] as { id: string; external_key: string };
+    expect(row.external_key).toBe('FE1 | CLIENTEA');
+    const ledger = tables.drive_folder_sync_files?.[0] as {
+      folder_path: string;
+      tracker_row_ids: string[];
+    };
+    expect(ledger.folder_path).toBe('Cliente A');
+
+    await processDriveFile(db, drive, {
+      sync: keyed,
+      tracker: invTracker,
+      file: gdoc('Cliente B'),
+      extractor,
+      ledger: {
+        file_id: 'doc-1',
+        revision: 'r1',
+        status: 'ok',
+        attempts: 1,
+        folder_path: ledger.folder_path,
+        tracker_row_ids: [row.id],
+      },
+    });
+    expect(tables.tracker_rows).toHaveLength(1);
+    expect(row.external_key).toBe('FE1 | CLIENTEB');
   });
 });

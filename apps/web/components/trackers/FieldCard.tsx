@@ -83,7 +83,7 @@ export function FieldCard({
   open: boolean;
   onToggle: () => void;
   /** «Por qué se propuso así»: evidencia de la hoja. */
-  note?: { sourceColumn: string; why: string[]; samples: string[] };
+  note?: { sourceColumn: string; label?: string; why: string[]; samples: string[] };
 }) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const set = (patch: Partial<TrackerField>) => onChange({ ...field, ...patch });
@@ -178,7 +178,9 @@ export function FieldCard({
       {note && (
         <div className="mx-3 mb-2 rounded-sm bg-primary-soft/40 px-3 py-2 text-micro leading-relaxed text-ink-muted">
           <p>
-            <span className="font-semibold text-ink">Columna «{note.sourceColumn}»:</span>{' '}
+            <span className="font-semibold text-ink">
+              {note.label ?? `Columna «${note.sourceColumn}»`}:
+            </span>{' '}
             {note.why.length ? note.why.join(' · ') : 'sin pistas fuertes, queda como texto.'}
           </p>
           {note.samples.length > 0 && (
