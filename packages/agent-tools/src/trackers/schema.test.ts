@@ -44,4 +44,48 @@ describe('el esquema de una tabla inventada', () => {
     expect(rowLabel([plate], { placa: 'ABC123' })).toBe('ABC123');
     expect(rowLabel([plate], { placa: 'ABC123' }, 'La de Ana')).toBe('La de Ana');
   });
+
+  describe('los tipos longtext, checkbox y time', () => {
+    const base = { key: 'campo', label: 'Campo', required: false };
+
+    it('se aceptan como tipos de campo', () => {
+      for (const type of ['longtext', 'checkbox', 'time'] as const)
+        expect(trackerFieldsSchema.safeParse([{ ...base, type }]).success).toBe(true);
+    });
+
+    it('longtext admite saltos de línea y más largo que un texto corto', () => {
+      const long = { ...base, type: 'longtext' as const };
+      const text = 'a\nb'.padEnd(1500, 'x');
+      expect(coerceValue(long, text)).toEqual({ ok: true, value: text });
+      expect(coerceValue({ ...base, type: 'text' as const }, text).ok).toBe(false);
+      expect(coerceValue(long, 'x'.repeat(4001)).ok).toBe(false);
+    });
+
+    it('checkbox guarda 1/0 y entiende sí/no, true/false y booleanos', () => {
+      const box = { ...base, type: 'checkbox' as const };
+      expect(coerceValue(box, true)).toEqual({ ok: true, value: 1 });
+      expect(coerceValue(box, false)).toEqual({ ok: true, value: 0 });
+      expect(coerceValue(box, 'Sí')).toEqual({ ok: true, value: 1 });
+      expect(coerceValue(box, 'no')).toEqual({ ok: true, value: 0 });
+      expect(coerceValue(box, '0')).toEqual({ ok: true, value: 0 });
+      expect(coerceValue(box, 'quizás').ok).toBe(false);
+    });
+
+    it('time acepta HH:MM, completa el cero y rechaza horas imposibles', () => {
+      const t = { ...base, type: 'time' as const };
+      expect(coerceValue(t, '08:05')).toEqual({ ok: true, value: '08:05' });
+      expect(coerceValue(t, '8:05')).toEqual({ ok: true, value: '08:05' });
+      expect(coerceValue(t, '23:59').ok).toBe(true);
+      expect(coerceValue(t, '24:00').ok).toBe(false);
+      expect(coerceValue(t, '12:60').ok).toBe(false);
+      expect(coerceValue(t, '12h30').ok).toBe(false);
+    });
+
+    it('vacío no obligatorio queda vacío; obligatorio avisa', () => {
+      expect(coerceValue({ ...base, type: 'time' as const }, '')).toEqual({ ok: true, value: '' });
+      expect(coerceValue({ ...base, required: true, type: 'checkbox' as const }, '').ok).toBe(
+        false,
+      );
+    });
+  });
 });

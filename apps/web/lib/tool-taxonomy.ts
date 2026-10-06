@@ -346,6 +346,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'emerald',
     icon: 'FolderOpen',
   },
+  feed: {
+    name: 'Fuentes conectadas',
+    blurb:
+      'Conectar una hoja de Google que la persona pega en el chat, para leerla, llenar una tabla o armar una vista.',
+    tone: 'emerald',
+    icon: 'Table2',
+  },
   gsheets: {
     name: 'Google Sheets',
     blurb: 'Leer rangos de hojas compartidas y agregarles filas.',
@@ -724,6 +731,7 @@ const FAMILY_GROUP: Record<string, string> = {
   kb: 'docs',
   attachments: 'docs',
   gdrive: 'docs',
+  feed: 'docs',
   gsheets: 'docs',
   format: 'docs',
   // A report is a document Cortex writes, so it sits with the rest of what it

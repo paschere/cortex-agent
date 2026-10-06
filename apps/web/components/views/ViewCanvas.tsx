@@ -20,6 +20,7 @@ import {
 import { useCallback, useId, useMemo, useState, useTransition } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { DictateRecord, type Dictated } from './DictateRecord';
 import { ViewChart } from './ViewChart';
 import { ViewZones } from './ViewZones';
 import { CalendarBlock } from './blocks/Calendar';
@@ -43,6 +44,7 @@ import {
   TONE_BAR,
   ViewThemeProvider,
   statusTone,
+  useViewTheme,
 } from './blocks/theme';
 import {
   EditableCell,
@@ -83,7 +85,10 @@ export type SubmitTarget =
 export type SubmitFn = (
   blockId: string,
   values: Record<string, string>,
-) => Promise<{ ok: true; message: string } | { ok: false; error: string }>;
+) => Promise<
+  /** `duplicate`: la regla de duplicados de la tabla marcó lo enviado (se pinta como alerta). */
+  { ok: true; message: string; duplicate?: string | null } | { ok: false; error: string }
+>;
 
 /** Adentro por server action (con sesión); afuera por la ruta pública (con token). */
 function submitterFor(target: SubmitTarget): SubmitFn | undefined {
@@ -99,10 +104,11 @@ function submitterFor(target: SubmitTarget): SubmitFn | undefined {
         });
         const body = (await res.json().catch(() => null)) as {
           message?: string;
+          duplicate?: string | null;
           error?: string;
         } | null;
         return res.ok && body?.message
-          ? { ok: true, message: body.message }
+          ? { ok: true, message: body.message, duplicate: body.duplicate ?? null }
           : { ok: false, error: body?.error ?? 'No se pudo enviar. Inténtalo otra vez.' };
       } catch {
         return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
@@ -151,9 +157,15 @@ export function ViewCanvas({
   const wanted = page ? page.current : localPage;
   const current = pages.find((p) => p.id === wanted) ?? pages[0] ?? null;
   const visible = current ? new Set(current.blockIds) : null;
-  const shown = visible ? view.blocks.filter((b) => visible.has(b.id)) : view.blocks;
   const theme = view.theme;
   const compact = theme?.density === 'compact';
+  const operator = theme?.layout === 'operator';
+  const inPage = visible ? view.blocks.filter((b) => visible.has(b.id)) : view.blocks;
+  // Planta: el formulario manda. Sube arriba (orden estable) para que quien
+  // llega con el celular en la mano registre sin bajar por nada.
+  const shown = operator
+    ? [...inPage.filter((b) => b.type === 'form'), ...inPage.filter((b) => b.type !== 'form')]
+    : inPage;
   const scope = useBrandScope();
 
   // La ficha abierta: se busca en la vista de AHORA, así que después de un
@@ -174,7 +186,12 @@ export function ViewCanvas({
         onChanged={onChanged}
       >
         <RecordOpenerProvider value={openRecord}>
-          <div className={scope.className} style={scope.style}>
+          <div
+            className={clsx(scope.className, operator && 'view-operator')}
+            style={scope.style}
+            data-view-layout={theme?.layout ?? 'dashboard'}
+            data-view-style={theme?.style ?? 'clean'}
+          >
             {(view.filtersBar?.length ?? 0) > 0 && (
               <FilterBar
                 items={view.filtersBar ?? []}
@@ -200,26 +217,38 @@ export function ViewCanvas({
               }
               aria-busy={filters?.pending || undefined}
               className={clsx(
-                'grid grid-cols-1 transition-opacity duration-200 md:grid-cols-6',
-                compact ? 'gap-3' : 'gap-4 md:gap-5',
+                'grid transition-opacity duration-200',
+                operator ? 'mx-auto max-w-2xl grid-cols-6 gap-3' : 'grid-cols-1 md:grid-cols-6',
+                !operator && (compact ? 'gap-3' : 'gap-4 md:gap-5'),
                 filters?.pending && 'opacity-60',
               )}
             >
               {shown.map((block) => (
-                <section key={block.id} className={clsx('view-block min-w-0', SPAN[block.width])}>
+                <section
+                  key={block.id}
+                  className={clsx(
+                    'view-block min-w-0',
+                    // Planta: una columna; las métricas de a dos en el celular, de a tres arriba.
+                    operator
+                      ? block.type === 'metric'
+                        ? 'view-metric-cell col-span-3 min-w-0 overflow-hidden sm:col-span-2'
+                        : 'col-span-6'
+                      : SPAN[block.width],
+                  )}
+                >
                   <Block block={block} target={target} submit={submit} />
                 </section>
               ))}
               {shown.length === 0 && (
                 <EmptyState
-                  className="md:col-span-6"
+                  className="col-span-full"
                   icon={<Inbox className="h-5 w-5" aria-hidden />}
                   title="Esta página todavía no tiene bloques"
                   hint="Pídele a Cortex que agregue uno, o ábrela en el lienzo para armarla con las manos."
                 />
               )}
               {view.partial.length > 0 && (
-                <p className="text-micro text-ink-faint md:col-span-6">
+                <p className="col-span-full text-micro text-ink-faint">
                   Cifras calculadas sobre las 2.000 filas más recientes de {view.partial.join(', ')}
                   .
                 </p>
@@ -351,6 +380,8 @@ function statusColumns(block: TableBlock): Set<number> {
 }
 
 function Table({ block }: { block: TableBlock }) {
+  const { layout } = useViewTheme();
+  const operator = layout === 'operator';
   const open = useRecordOpener(block.id, block.record);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
@@ -385,15 +416,26 @@ function Table({ block }: { block: TableBlock }) {
       title={block.title}
       source={`${block.total} ${block.total === 1 ? 'fila' : 'filas'} · ${block.source}`}
     >
-      {block.searchable && block.rows.length > 5 && (
-        <label className="view-no-print mb-4 flex h-10 items-center gap-2 rounded-pill border border-border bg-surface-2/70 px-4 transition-colors focus-within:border-border-strong focus-within:bg-surface">
-          <Search className="h-4 w-4 text-ink-faint" aria-hidden />
+      {block.searchable && block.rows.length > (operator ? 0 : 5) && (
+        <label
+          className={clsx(
+            'view-no-print mb-4 flex items-center gap-2 rounded-pill border border-border bg-surface-2/70 px-4 transition-colors focus-within:border-border-strong focus-within:bg-surface',
+            operator ? 'h-14 border-border-strong' : 'h-10',
+          )}
+        >
+          <Search
+            className={clsx('text-ink-faint', operator ? 'h-5 w-5' : 'h-4 w-4')}
+            aria-hidden
+          />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar en la tabla"
             aria-label={`Buscar en ${block.title}`}
-            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
+            className={clsx(
+              'w-full bg-transparent text-ink outline-none placeholder:text-ink-faint',
+              operator ? 'text-lg' : 'text-sm',
+            )}
           />
           {query && (
             <span className="tabular shrink-0 font-mono text-micro text-ink-faint">
@@ -404,30 +446,57 @@ function Table({ block }: { block: TableBlock }) {
       )}
 
       {/* Teléfono: una tarjeta por fila, con sus campos en renglones. */}
-      <ul className="space-y-2.5 sm:hidden">
+      <ul className={clsx('space-y-2.5', operator ? 'space-y-3' : 'sm:hidden')}>
         {rows.map((r) => (
-          <li key={r.id} className="rounded-sm border border-border bg-surface p-3.5 shadow-card">
+          <li
+            key={r.id}
+            className={clsx(
+              'rounded-sm border shadow-card',
+              operator ? 'border-2 p-4' : 'p-3.5',
+              r.alert
+                ? 'border-rose/50 bg-rose-soft'
+                : operator
+                  ? 'border-border-strong bg-surface'
+                  : 'border-border bg-surface',
+            )}
+          >
             <div className="flex items-start justify-between gap-3">
               {open ? (
                 <button
                   type="button"
                   onClick={() => open(r.id)}
-                  className="flex min-w-0 items-center gap-1 text-left text-sm font-bold text-ink"
+                  className={clsx(
+                    'flex min-w-0 items-center gap-1 text-left font-bold text-ink',
+                    operator ? 'text-lg' : 'text-sm',
+                  )}
                 >
                   <span className="truncate">{r.cells[0]}</span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
                 </button>
               ) : (
-                <p className="min-w-0 truncate text-sm font-bold text-ink">{r.cells[0]}</p>
+                <p
+                  className={clsx(
+                    'min-w-0 truncate font-bold text-ink',
+                    operator ? 'text-lg' : 'text-sm',
+                  )}
+                >
+                  {r.cells[0]}
+                </p>
               )}
             </div>
-            <dl className="mt-2.5 space-y-1.5">
+            <dl className={clsx('mt-2.5', operator ? 'space-y-2.5' : 'space-y-1.5')}>
               {r.cells.slice(1).map((cell, j) => {
                 const i = j + 1;
                 const column = block.columns[i];
                 if (!column) return null;
                 return (
-                  <div key={column.key} className="flex items-center justify-between gap-3 text-xs">
+                  <div
+                    key={column.key}
+                    className={clsx(
+                      'flex items-center justify-between gap-3',
+                      operator ? 'text-base' : 'text-xs',
+                    )}
+                  >
                     <dt className="shrink-0 text-ink-faint">{column.label}</dt>
                     <dd
                       className={clsx(
@@ -470,7 +539,7 @@ function Table({ block }: { block: TableBlock }) {
       <div
         className={clsx(
           'view-table-scroll scroll-slim -mx-4 hidden max-h-[34rem] overflow-auto sm:-mx-6',
-          rows.length > 0 && 'sm:block',
+          rows.length > 0 && !operator && 'sm:block',
         )}
       >
         <table className="view-table w-full min-w-[34rem] border-separate border-spacing-0 text-sm">
@@ -533,7 +602,9 @@ function Table({ block }: { block: TableBlock }) {
                     : undefined
                 }
                 className={clsx(
-                  'group/row transition-colors duration-100 hover:bg-surface-2/60 [&>td]:border-b [&>td]:border-border/60 [&:last-child>td]:border-0',
+                  'group/row transition-colors duration-100 [&>td]:border-b [&>td]:border-border/60 [&:last-child>td]:border-0',
+                  // Fila con la marca de duplicado: tono de alerta para corregirla antes de despachar.
+                  r.alert ? 'bg-rose-soft hover:bg-rose-soft/70' : 'hover:bg-surface-2/60',
                   open && 'cursor-pointer',
                 )}
               >
@@ -675,7 +746,9 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                   }}
                   onDragEnd={() => setDragging(null)}
                   className={clsx(
-                    'rounded-sm border border-border bg-surface p-3 shadow-card transition-all duration-150 hover:border-border-strong',
+                    card.alert
+                      ? 'rounded-sm border border-rose/50 bg-rose-soft p-3 shadow-card transition-all duration-150'
+                      : 'rounded-sm border border-border bg-surface p-3 shadow-card transition-all duration-150 hover:border-border-strong',
                     canDrag && 'cursor-grab hover:-translate-y-px active:cursor-grabbing',
                     dragging === card.id && 'rotate-1 opacity-50',
                   )}
@@ -749,7 +822,9 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
   );
 }
 
-const INPUT =
+const INPUT_OPERATOR =
+  'h-14 w-full rounded-sm border-2 border-border-strong bg-surface px-4 text-lg text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary focus-visible:ring-4 focus-visible:ring-primary/20';
+const INPUT_BASE =
   'h-11 w-full rounded-sm border border-border-strong bg-surface px-3.5 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint hover:border-ink-faint/50 focus:border-primary focus-visible:ring-4 focus-visible:ring-primary/15';
 
 function Form({
@@ -763,9 +838,13 @@ function Form({
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [done, setDone] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [heard, setHeard] = useState<Dictated | null>(null);
   const [pending, start] = useTransition();
   const disabled = target.kind === 'preview' || !submit;
+  const operator = useViewTheme().layout === 'operator';
+  const INPUT = operator ? INPUT_OPERATOR : INPUT_BASE;
 
   if (done) {
     return (
@@ -775,6 +854,14 @@ function Form({
             <Check className="h-7 w-7" strokeWidth={2.5} aria-hidden />
           </span>
           <p className="text-base font-bold text-ink">{done}</p>
+          {duplicate && (
+            <p
+              role="alert"
+              className="max-w-sm rounded-sm border border-rose/30 bg-rose-soft px-3 py-2 text-sm font-semibold text-rose"
+            >
+              {duplicate}
+            </p>
+          )}
           <p className="max-w-xs text-xs leading-relaxed text-ink-muted">
             Lo enviado ya está en «{block.title}».
           </p>
@@ -783,7 +870,9 @@ function Form({
             className="mt-1 rounded-pill border border-border px-4 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-surface-2"
             onClick={() => {
               setDone(null);
+              setDuplicate(null);
               setValues({});
+              setHeard(null);
             }}
           >
             Enviar otro
@@ -798,23 +887,58 @@ function Form({
       {block.intro && (
         <p className="-mt-1 mb-5 text-sm leading-relaxed text-ink-muted">{block.intro}</p>
       )}
+      {!disabled && (
+        <DictateRecord
+          className="mb-5"
+          target={target}
+          blockId={block.id}
+          onDictated={(d) => {
+            setValues((v) => ({ ...v, ...d.values }));
+            setHeard(d);
+            setError(null);
+          }}
+        />
+      )}
+      {heard && (
+        <p className="-mt-2 mb-5 rounded-sm bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-muted">
+          Oí: «{heard.heard}». Revisa antes de enviar
+          {heard.missing.length
+            ? `; falta: ${heard.missing
+                .map((k) => block.fields.find((f) => f.key === k)?.label ?? k)
+                .join(', ')}.`
+            : '.'}
+        </p>
+      )}
       <form
-        className="grid gap-4 sm:grid-cols-2"
+        className={clsx('grid', operator ? 'gap-5' : 'gap-4 sm:grid-cols-2')}
         onSubmit={(e) => {
           e.preventDefault();
           if (disabled || !submit) return;
           setError(null);
           start(async () => {
             const res = await submit(block.id, values);
-            if (res.ok) setDone(res.message);
-            else setError(res.error);
+            if (res.ok) {
+              setDone(res.message);
+              setDuplicate(res.duplicate ?? null);
+            } else setError(res.error);
           });
         }}
       >
         {block.fields.map((f) => (
           // biome-ignore lint/a11y/noLabelWithoutControl: el control está dentro, en una rama del ternario.
-          <label key={f.key} className={clsx('block', f.type === 'text' && 'sm:col-span-2')}>
-            <span className="mb-1.5 flex items-baseline justify-between gap-2 text-xs font-semibold text-ink">
+          <label
+            key={f.key}
+            className={clsx(
+              'block',
+              (f.type === 'text' || f.type === 'longtext') && 'sm:col-span-2',
+            )}
+          >
+            <span
+              className={clsx(
+                'flex items-baseline justify-between gap-2 font-semibold text-ink',
+                operator ? 'mb-2 text-base' : 'mb-1.5 text-xs',
+              )}
+            >
               <span>
                 {f.label}
                 {f.required && (
@@ -842,15 +966,42 @@ function Form({
                   </option>
                 ))}
               </select>
+            ) : f.type === 'longtext' ? (
+              <textarea
+                required={f.required}
+                rows={3}
+                maxLength={4000}
+                value={values[f.key] ?? ''}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                className={clsx(INPUT, 'h-auto min-h-[5.5rem] py-2.5')}
+              />
+            ) : f.type === 'checkbox' ? (
+              <span className={clsx('flex items-center gap-3', operator ? 'h-14' : 'h-11')}>
+                <input
+                  type="checkbox"
+                  required={f.required}
+                  checked={values[f.key] === '1' || values[f.key] === 'true'}
+                  onChange={(e) =>
+                    setValues((v) => ({ ...v, [f.key]: e.target.checked ? '1' : '0' }))
+                  }
+                  className={clsx(
+                    'rounded-sm border-border-strong accent-primary',
+                    operator ? 'h-7 w-7' : 'h-5 w-5',
+                  )}
+                />
+                <span className={clsx('text-ink-muted', operator ? 'text-lg' : 'text-sm')}>Sí</span>
+              </span>
             ) : (
               <input
                 required={f.required}
                 type={
                   f.type === 'date'
                     ? 'date'
-                    : f.type === 'number' || f.type === 'money'
-                      ? 'number'
-                      : 'text'
+                    : f.type === 'time'
+                      ? 'time'
+                      : f.type === 'number' || f.type === 'money'
+                        ? 'number'
+                        : 'text'
                 }
                 inputMode={f.type === 'number' || f.type === 'money' ? 'decimal' : undefined}
                 step="any"
@@ -866,18 +1017,29 @@ function Form({
         {error && (
           <p
             role="alert"
-            className="rounded-sm border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose sm:col-span-2"
+            className={clsx(
+              'rounded-sm border border-rose/30 bg-rose-soft px-3 py-2 text-rose sm:col-span-2',
+              operator ? 'text-base font-semibold' : 'text-xs',
+            )}
           >
             {error}
           </p>
         )}
-        <div className="flex flex-col gap-3 pt-1 sm:col-span-2 sm:flex-row sm:items-center">
+        <div
+          className={clsx(
+            'flex flex-col gap-3 pt-1 sm:col-span-2',
+            !operator && 'sm:flex-row sm:items-center',
+          )}
+        >
           <button
             type="submit"
             disabled={disabled || pending}
-            className="cortex-primary-button inline-flex h-11 items-center justify-center gap-2 rounded-pill bg-primary px-6 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong hover:shadow-pop disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
+            className={clsx(
+              operator ? 'h-14 w-full text-lg' : 'h-11 px-6 text-sm',
+              'cortex-primary-button inline-flex items-center justify-center gap-2 rounded-pill bg-primary font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong hover:shadow-pop disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
+            )}
           >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
             {block.submitLabel}
           </button>
           {target.kind === 'preview' && (

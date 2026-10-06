@@ -227,7 +227,14 @@ export function samplePulseView(): ComputedView {
     alerts: [],
     writable: false,
     pages: [],
-    theme: { accent: 'primary', density: 'comfortable', header: 'plain', cover: null },
+    theme: {
+      accent: 'primary',
+      density: 'comfortable',
+      header: 'plain',
+      layout: 'dashboard',
+      style: 'clean',
+      cover: null,
+    },
   };
 }
 

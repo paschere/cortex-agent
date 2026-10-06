@@ -1,5 +1,12 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  type DuplicateRule,
+  type TouchedKey,
+  applyDuplicateRule,
+  getDuplicateRule,
+  validateDuplicateRule,
+} from './duplicates';
 import { type TrackerField, coerceValue, rowLabel, trackerFieldsSchema } from './schema';
 
 /**
@@ -116,8 +123,25 @@ export async function defineTracker(
     description: string;
     fields: TrackerField[];
     userId: string;
+    /**
+     * La regla de duplicados (0201). `undefined` la deja como está —los demás
+     * que redefinen una tabla (sync, lookups) no la mencionan y no deben
+     * borrarla—; `null` la quita.
+     */
+    duplicates?: DuplicateRule | null;
   },
 ): Promise<{ tracker: TrackerRow; created: boolean }> {
+  if (input.duplicates) {
+    const problem = validateDuplicateRule(input.duplicates, input.fields);
+    if (problem) throw new ValidationError(`Regla de duplicados: ${problem}`);
+  }
+  const withRule = input.duplicates === undefined ? {} : { duplicates: input.duplicates };
+  const reapply = async (tracker: TrackerRow) => {
+    // Una regla nueva o cambiada se aplica a lo que la tabla ya tiene.
+    if (input.duplicates) await applyDuplicateRule(db, tracker.id);
+    else if (input.duplicates === null) await clearDuplicateFlags(db, tracker.id);
+    return tracker;
+  };
   const existing = await getTrackerBySlug(db, input.slug);
   if (existing) {
     const { data, error } = await db
@@ -126,13 +150,17 @@ export async function defineTracker(
         name: input.name,
         description: input.description,
         fields: input.fields,
+        ...withRule,
         updated_at: new Date().toISOString(),
       })
       .eq('id', existing.id)
       .select(TRACKER_COLUMNS)
       .single();
     if (error) throw error;
-    return { tracker: adaptTracker(data as Record<string, unknown>), created: false };
+    return {
+      tracker: await reapply(adaptTracker(data as Record<string, unknown>)),
+      created: false,
+    };
   }
 
   const { data, error } = await db
@@ -142,13 +170,28 @@ export async function defineTracker(
       name: input.name,
       description: input.description,
       fields: input.fields,
+      ...withRule,
       created_by: input.userId,
     })
     .select(TRACKER_COLUMNS)
     .single();
   if (error) throw error;
-  return { tracker: adaptTracker(data as Record<string, unknown>), created: true };
+  return { tracker: await reapply(adaptTracker(data as Record<string, unknown>)), created: true };
 }
+
+/** Quitar la regla: las marcas que ella puso se van con ella. */
+async function clearDuplicateFlags(db: SupabaseClient, trackerId: string): Promise<void> {
+  // Sin regla no se sabe qué campo era; se lee del último estado guardado antes
+  // de borrarla sería lo ideal, pero basta con soltar la bandera: el valor
+  // «Duplicada» que quede en la celda es un estado más que alguien puede cambiar.
+  await db
+    .from('tracker_rows')
+    .update({ duplicate_flagged: false })
+    .eq('tracker_id', trackerId)
+    .eq('duplicate_flagged', true);
+}
+
+export { getDuplicateRule };
 
 export async function removeTracker(db: SupabaseClient, slug: string): Promise<boolean> {
   const { data, error } = await db
@@ -205,7 +248,9 @@ export async function upsertRow(
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new NotFoundError('Esa fila no está en esta tabla.');
-    return adaptEntry(data as Record<string, unknown>);
+    // La clave pudo cambiar: se revisa la tabla entera (guía vieja y nueva).
+    const saved = adaptEntry(data as Record<string, unknown>);
+    return withDuplicates(db, input.tracker.id, saved);
   }
 
   const { data, error } = await db
@@ -219,7 +264,29 @@ export async function upsertRow(
     .select(TRACKER_ROW_COLUMNS)
     .single();
   if (error) throw error;
-  return adaptEntry(data as Record<string, unknown>);
+  const inserted = adaptEntry(data as Record<string, unknown>);
+  return withDuplicates(db, input.tracker.id, inserted, [inserted.values]);
+}
+
+/**
+ * Aplica la regla de duplicados y devuelve la fila como quedó (con su marca):
+ * el llamador (chat, grilla, trabajo del equipo) muestra lo que hay en la base,
+ * no lo que mandó.
+ */
+async function withDuplicates(
+  db: SupabaseClient,
+  trackerId: string,
+  row: TrackerEntryRow,
+  touched?: TouchedKey[],
+): Promise<TrackerEntryRow> {
+  const outcome = await applyDuplicateRule(db, trackerId, touched);
+  if (!outcome.changed) return row;
+  const { data } = await db
+    .from('tracker_rows')
+    .select(TRACKER_ROW_COLUMNS)
+    .eq('id', row.id)
+    .maybeSingle();
+  return data ? adaptEntry(data as Record<string, unknown>) : row;
 }
 
 export async function queryRows(
@@ -259,5 +326,7 @@ export async function removeRow(
     .select('id')
     .maybeSingle();
   if (error) throw error;
+  // Borrar una de las dos guías repetidas resuelve el conflicto de la otra.
+  if (data) await applyDuplicateRule(db, trackerId);
   return Boolean(data);
 }

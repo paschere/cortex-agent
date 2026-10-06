@@ -23,6 +23,8 @@ vi.mock('@cortex/agent-tools', () => ({
   ...files,
   parseDocument: async () => ({ text: 'Contenido leído' }),
 }));
+// La captura vive ahora en el paquete (table-sync/feed-capture), que importa el almacén de archivos directo.
+vi.mock('@cortex/agent-tools/src/files/store', () => ({ ...files }));
 vi.mock('@cortex/agent-tools/src/web/scrape', () => ({
   webScrape: { handler: vi.fn(async () => ({ content: 'Página pública', truncated: false })) },
 }));

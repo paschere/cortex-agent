@@ -57,7 +57,10 @@ export async function POST(req: NextRequest) {
         patch: parsed.data.patch,
         actor: null,
       });
-      return NextResponse.json({ message: `Guardado en «${res.label}».` });
+      return NextResponse.json({
+        message: `Guardado en «${res.label}».${res.duplicate ? ` ${res.duplicate}` : ''}`,
+        duplicate: res.duplicate,
+      });
     }
     const res = await runViewAction(db, view, {
       blockId: parsed.data.blockId,

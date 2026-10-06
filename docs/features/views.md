@@ -211,6 +211,18 @@ Pantalla completa (`components/views/editor/ViewEditor.tsx` + `components/views/
 - **Avisos:** `spec.alerts` (hasta 5). Cuando aparece una fila nueva que cumple los filtros mientras la vista está abierta: aviso en pantalla, sonido y, si la persona lo permite, notificación del sistema. El sonido se activa con «Activar avisos» (los navegadores exigen un clic). `bell` suena además en la campana de quien creó la vista cuando entra una fila por un formulario de esa vista, esté o no abierta.
 - Todo se configura con texto en el diseñador («que se pueda cambiar el estado arrastrando», «que suene cuando entre una factura de más de 5 millones»).
 
+## Operación desde el celular: diseño operario, dictado y duplicados (0201)
+
+Para que cualquier equipo en terreno (planta, bodega, recepción, inspección, conteo) registre rápido desde el celular:
+
+- **Diseño** (`spec.theme.layout`): `dashboard` (el de siempre) u `operator`, que pone una columna, el formulario arriba, controles de 56 px, tablas como tarjetas grandes con buscador y métricas de a dos en el celular y de a tres en pantallas grandes. **Estilo** (`spec.theme.style`): `clean`, `bold` (títulos fuertes, borde de acento) o `dark-panel` (oscuro siempre, para pantallas de planta o TV; toda la página, no sólo el lienzo).
+- **Dictar registro**: botón grande en cada formulario (dentro de la app y en el enlace, también con contraseña). Con SpeechRecognition (Chrome, Safari) se manda el texto; sin él (Firefox) se graba y Deepgram transcribe. `POST /api/views/[id]/dictate` y `POST /api/views/public/dictate` (`lib/views/dictate.ts`) devuelven valores por campo para revisar; **nunca guardan**: el envío sigue siendo el del formulario. Cuesta una respuesta del plan; tope de 12 por minuto por vista.
+- **Campos nuevos** de tabla: `longtext`, `time` (HH:MM) y `checkbox` (se guarda 1/0).
+- **Duplicados** por tabla (`trackers.duplicates`, migración 0201): `{ key, distinctBy?, flagField, flagValue }`. Si dos o más filas comparten la clave normalizada y difieren en `distinctBy`, todas se marcan; la marca se quita sola cuando se corrige (sólo si la puso la regla, `tracker_rows.duplicate_flagged`). Se aplica en `applyDuplicateRule` después de toda escritura: chat, vistas, grilla, importación, sincronización de hojas y de carpetas de Drive. Las filas marcadas se resaltan y el formulario avisa al enviar.
+- **Datos desde Drive o Sheets para una vista compartida**: tienen que ir a una tabla propia (`trackers.sync_from_drive_folder`, `trackers.sync_from_source`), no al Feed, que es privado. Si la tabla tiene regla con `distinctBy`, la sincronización de carpeta agrega ese campo a la clave del documento; si no, la segunda versión pisaría a la primera y nunca habría duplicado.
+- **Plantillas** (Operación): Registro con control de duplicados, Recepción de mercancía, Inspección con lista de chequeo, Conteo de inventario.
+- **Escaparate**: `/v/views-showcase?diseno=operario&estilo=panel|fuerte`.
+
 ## Límites
 
 - Cada vista lee hasta 2.000 filas por tabla; si hay más, las cifras se marcan como parciales.

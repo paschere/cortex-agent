@@ -784,6 +784,62 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
       'Operación de carga: un tablero de guías por estado que se pueda arrastrar, cuántas guías entraron hoy, los dollies en uso y disponibles, y un formulario para registrar una guía nueva.',
   },
   {
+    id: 'registro_sin_duplicados',
+    kind: 'prompt',
+    icon: 'inbox',
+    category: 'Operación',
+    sketch: [
+      S('form', 'full'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('table', 'full'),
+    ],
+    title: 'Registro con control de duplicados',
+    body: 'Para el equipo en operación, desde el celular: registrar (también dictando) guías, pedidos, facturas o lo que llegue, y ver marcado lo que se repite.',
+    prompt:
+      'Registro con control de duplicados: una pantalla para el equipo en operación, que se usa desde el celular. Usa theme.layout "operator" (una columna, el formulario primero, controles grandes). Pregúntame qué se registra (guías, pedidos, facturas, órdenes, seriales…) si no es obvio por mis tablas. Si no existe la tabla, créala con trackers.define con: un código que identifica cada registro (número de guía, pedido, factura…), la fecha, los 2–4 datos que más importen y un estado (opciones que incluyan Duplicado), con la regla duplicates {key: <el código>, distinctBy: "fecha", flagField: "estado", flagValue: "Duplicado"} para que un código repetido con otra fecha quede marcado y se corrija a tiempo. Arriba el formulario de registro, con el dictado activo para hablarle en vez de teclear. Luego tres métricas pequeñas: registros de hoy, duplicados por corregir y cerrados. Debajo, los registros como tarjetas grandes con el estado bien visible y un buscador por código. Si los documentos llegan a una carpeta de Drive o a una hoja de Google, ofrece llenar la tabla desde ahí (trackers.sync_from_drive_folder con key_fields = código Y fecha, o trackers.sync_from_source).',
+  },
+  {
+    id: 'recepcion_planta',
+    kind: 'prompt',
+    icon: 'boxes',
+    category: 'Operación',
+    sketch: [S('form', 'full'), S('metric', 'half'), S('metric', 'half'), S('table', 'full')],
+    title: 'Recepción de mercancía',
+    body: 'Registro de llegadas desde el celular: hora, proveedor o cliente, cantidad, novedades e inspección.',
+    prompt:
+      'Recepción de mercancía: una pantalla para quien recibe en bodega, planta o tienda, pensada para el celular. Usa theme.layout "operator". Si no existe una tabla de recepciones, créala con trackers.define con los campos fecha (fecha), hora (hora), proveedor_cliente (texto), documento (texto: remisión, factura o guía), cantidad (número), novedades (texto largo) e inspeccionado (casilla). Arriba un formulario grande para registrar una llegada, con dictado. Después dos métricas pequeñas: llegadas de hoy y llegadas con novedades. Debajo, las últimas llegadas como tarjetas grandes con un buscador. Si las remisiones o actas llegan a una carpeta de Drive, ofrece llenar la tabla desde ahí con trackers.sync_from_drive_folder con key_fields que incluyan documento y fecha.',
+  },
+  {
+    id: 'inspeccion_checklist',
+    kind: 'prompt',
+    icon: 'truck',
+    category: 'Operación',
+    sketch: [S('form', 'full'), S('metric', 'half'), S('metric', 'half'), S('table', 'full')],
+    title: 'Inspección con lista de chequeo',
+    body: 'Preoperacional de vehículos, equipos o locales desde el celular: casillas, novedades y lo que no pasó.',
+    prompt:
+      'Inspección con lista de chequeo: una pantalla para hacer la inspección diaria (preoperacional de vehículos, equipos, máquinas o locales) desde el celular. Usa theme.layout "operator". Pregúntame qué se inspecciona si no es obvio. Si no existe la tabla, créala con trackers.define con: fecha (fecha), hora (hora), qué se inspeccionó (texto: placa, equipo o sitio), quién (texto), de 4 a 8 puntos de chequeo como casillas, observaciones (texto largo) y resultado (opciones: Aprobado, Con novedad, No apto). Arriba el formulario con dictado. Dos métricas: inspecciones de hoy y con novedad o no aptas. Debajo, las inspecciones como tarjetas, las que no pasaron resaltadas.',
+  },
+  {
+    id: 'conteo_inventario',
+    kind: 'prompt',
+    icon: 'boxes',
+    category: 'Operación',
+    sketch: [
+      S('form', 'full'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('metric', 'third'),
+      S('table', 'full'),
+    ],
+    title: 'Conteo de inventario',
+    body: 'Contar en bodega con el celular: referencia, ubicación y cantidad, dictando, con los conteos repetidos marcados.',
+    prompt:
+      'Conteo de inventario: una pantalla para contar en bodega desde el celular. Usa theme.layout "operator". Si no existe la tabla, créala con trackers.define con: fecha (fecha), referencia (texto), ubicacion (texto), cantidad (número), contado_por (texto), observaciones (texto largo) y estado (opciones: Contado, Diferencia, Duplicado), con la regla duplicates {key: "referencia", distinctBy: "ubicacion", flagField: "estado", flagValue: "Duplicado"} si la misma referencia no debería estar en dos ubicaciones; pregúntame si aplica. Arriba el formulario con dictado («referencia A-102, estante 3, cuarenta unidades»). Tres métricas: referencias contadas hoy, unidades contadas y con diferencia o duplicadas. Debajo, los conteos como tarjetas con buscador por referencia.',
+  },
+  {
     id: 'cartera',
     kind: 'spec',
     icon: 'wallet',

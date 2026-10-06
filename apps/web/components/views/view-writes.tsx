@@ -152,7 +152,7 @@ export function EditableValue({
   const [value, setValue] = useState(raw == null ? '' : String(raw));
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const input = useRef<HTMLInputElement & HTMLSelectElement>(null);
+  const input = useRef<HTMLInputElement & HTMLSelectElement & HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!editing) setValue(raw == null ? '' : String(raw));
@@ -181,7 +181,7 @@ export function EditableValue({
   return (
     <Tag className={clsx(className, 'group/cell relative')}>
       {editing ? (
-        edit.type === 'select' ? (
+        edit.type === 'select' || edit.type === 'checkbox' ? (
           <select
             ref={input}
             aria-label={label ? `Editar ${label}` : undefined}
@@ -191,21 +191,40 @@ export function EditableValue({
             className={EDIT_INPUT}
           >
             {!edit.required && <option value="">—</option>}
-            {edit.options.map((o) => (
+            {/* Una casilla se guarda como 1/0; el servidor la entiende así. */}
+            {(edit.type === 'checkbox' ? ['1', '0'] : edit.options).map((o) => (
               <option key={o} value={o}>
-                {o}
+                {edit.type === 'checkbox' ? (o === '1' ? 'Sí' : 'No') : o}
               </option>
             ))}
           </select>
+        ) : edit.type === 'longtext' ? (
+          <textarea
+            ref={input}
+            rows={3}
+            aria-label={label ? `Editar ${label}` : undefined}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={() => void commit(value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setValue(raw == null ? '' : String(raw));
+                setEditing(false);
+              }
+            }}
+            className={EDIT_INPUT}
+          />
         ) : (
           <input
             ref={input}
             type={
               edit.type === 'date'
                 ? 'date'
-                : edit.type === 'number' || edit.type === 'money'
-                  ? 'number'
-                  : 'text'
+                : edit.type === 'time'
+                  ? 'time'
+                  : edit.type === 'number' || edit.type === 'money'
+                    ? 'number'
+                    : 'text'
             }
             step="any"
             aria-label={label ? `Editar ${label}` : undefined}

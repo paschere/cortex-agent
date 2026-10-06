@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { duplicateRuleSchema, getDuplicateRule } from './duplicates';
 import { trackerFieldSchema, trackerFieldsSchema, trackerSlugSchema } from './schema';
 import {
   defineTracker,
@@ -29,6 +30,7 @@ const trackerSummary = z.object({
   description: z.string(),
   fields: z.array(trackerFieldSchema),
   rowCount: z.number().int().optional(),
+  duplicates: duplicateRuleSchema.nullish(),
 });
 
 const entrySchema = z.object({
@@ -56,8 +58,13 @@ export const trackersDefine = registerTool({
       .default('')
       .describe('One line on what belongs here, so a later turn does not invent a second table.'),
     fields: trackerFieldsSchema.describe(
-      'The columns. key is snake_case. type is text, number, date, money or select. select needs options.',
+      'The columns. key is snake_case. type is text, longtext (multi-line notes), number, date (YYYY-MM-DD), time (HH:MM, 24h), money, select or checkbox (yes/no, stored as 1/0). select needs options.',
     ),
+    duplicates: duplicateRuleSchema
+      .nullish()
+      .describe(
+        'Optional duplicate rule. When two or more rows share the same `key` value (compared ignoring case, spaces and dashes) AND differ in `distinctBy`, ALL of them get `flagValue` written into `flagField`; the mark disappears by itself once the conflict is fixed (a date corrected, a row deleted). Example for air waybills: {key:"numero_guia", distinctBy:"fecha", flagField:"estado", flagValue:"Duplicada"}. Omit distinctBy to flag ANY repeated key. flagField must be a select that has flagValue among its options (or a text field), and different from key/distinctBy. Omit `duplicates` to leave the current rule untouched; pass null to remove it.',
+      ),
   }),
   outputSchema: z.object({
     tracker: trackerSummary,
@@ -74,7 +81,12 @@ export const trackersDefine = registerTool({
       description: input.description ?? '',
       fields,
       userId: ctx.userId,
+      duplicates: input.duplicates ? duplicateRuleSchema.parse(input.duplicates) : input.duplicates,
     });
+    const rule = (await getDuplicateRule(ctx.db, tracker.id))?.rule ?? null;
+    const ruleNote = rule
+      ? ` Regla de duplicados: si «${rule.key}» se repite${rule.distinctBy ? ` con distinto «${rule.distinctBy}»` : ''}, se marca «${rule.flagValue}» en «${rule.flagField}».`
+      : '';
     return {
       tracker: {
         id: tracker.id,
@@ -82,11 +94,12 @@ export const trackersDefine = registerTool({
         name: tracker.name,
         description: tracker.description,
         fields: tracker.fields,
+        duplicates: rule,
       },
       created,
       markdown: created
-        ? `Tabla **${tracker.name}** creada (\`${tracker.slug}\`). Campos: ${fieldsMarkdown(tracker.fields)}. Para llenarla usa trackers.upsert; para verla, trackers.query.`
-        : `Tabla **${tracker.name}** actualizada (\`${tracker.slug}\`). Campos ahora: ${fieldsMarkdown(tracker.fields)}.`,
+        ? `Tabla **${tracker.name}** creada (\`${tracker.slug}\`). Campos: ${fieldsMarkdown(tracker.fields)}.${ruleNote} Para llenarla usa trackers.upsert; para verla, trackers.query.`
+        : `Tabla **${tracker.name}** actualizada (\`${tracker.slug}\`). Campos ahora: ${fieldsMarkdown(tracker.fields)}.${ruleNote}`,
     };
   },
 });
@@ -206,8 +219,10 @@ export const trackersUpsert = registerTool({
     tracker: trackerSlugSchema,
     rowId: z.string().uuid().optional().describe('If set, updates that row instead of inserting.'),
     values: z
-      .record(z.union([z.string(), z.number()]))
-      .describe('Map of field key to value. Keys must exist on the table.'),
+      .record(z.union([z.string(), z.number(), z.boolean()]))
+      .describe(
+        'Map of field key to value. Keys must exist on the table. checkbox takes true/false (or "sí"/"no"); time takes "HH:MM". If the table has a duplicate rule, a row that repeats a key with a different date comes back flagged — tell the person.',
+      ),
     label: z
       .string()
       .max(200)
@@ -236,13 +251,20 @@ export const trackersUpsert = registerTool({
       userId: ctx.userId,
     });
     const created = !input.rowId;
+    // `upsertRow` ya aplicó la regla de duplicados: si la fila quedó marcada, se dice.
+    const rule = (await getDuplicateRule(ctx.db, tracker.id))?.rule;
+    const flagged = Boolean(rule && String(row.values[rule.flagField] ?? '') === rule.flagValue);
+    const warning = flagged
+      ? ` ⚠ Quedó marcada «${rule?.flagValue}»: «${rule?.key}» se repite en otra fila${rule?.distinctBy ? ` con distinto «${rule.distinctBy}»` : ''}. Hay que corregir una de las dos.`
+      : '';
     return {
       row: { id: row.id, label: row.label, values: row.values, updatedAt: row.updated_at },
       tracker: { slug: tracker.slug, name: tracker.name },
       created,
-      markdown: created
-        ? `Anotado en **${tracker.name}**: ${row.label}.`
-        : `Actualizado en **${tracker.name}**: ${row.label}.`,
+      markdown:
+        (created
+          ? `Anotado en **${tracker.name}**: ${row.label}.`
+          : `Actualizado en **${tracker.name}**: ${row.label}.`) + warning,
     };
   },
 });

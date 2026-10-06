@@ -1,5 +1,6 @@
 import type {
   ComputedView,
+  DuplicateRule,
   TrackerField,
   ViewAlert,
   ViewBlock,
@@ -78,6 +79,8 @@ export interface NewTrackerDraft {
   name: string;
   description: string;
   fields: TrackerField[];
+  /** Regla de duplicados de la tabla nueva (0201), si la lleva. */
+  duplicates?: DuplicateRule;
 }
 
 /** Todo lo que el lienzo edita y guarda junto: nombre, descripción, spec y tablas por crear. */

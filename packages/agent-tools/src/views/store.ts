@@ -6,6 +6,7 @@ import { bogotaToday } from '../commitments/shape';
 import { moduleByKey } from '../modules/catalog';
 import { enabledModules, moduleOffMessage } from '../modules/store';
 import { appBaseUrl } from '../reports/store';
+import { applyDuplicateRule, duplicateMessage, getDuplicateRule } from '../trackers/duplicates';
 import { rowLabel } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, listTrackers, shapeValues } from '../trackers/store';
 import { type ViewRow, type ViewSource, blockWriteFields } from './compute';
@@ -449,6 +450,19 @@ export async function loadViewSources(
   const { data, error } = await db.from('trackers').select(TRACKER_COLUMNS).in('slug', slugs);
   if (error) throw error;
   const trackers = (data ?? []) as unknown as TrackerRow[];
+  // La marca de duplicados, en una lectura aparte y tolerante: si la migración
+  // 0201 aún no está, las vistas siguen funcionando, sólo sin resaltar.
+  const flags = new Map<string, { field: string; value: string }>();
+  const { data: ruleRows } = await db
+    .from('trackers')
+    .select('slug, duplicates')
+    .in('slug', slugs)
+    .not('duplicates', 'is', null);
+  for (const r of (ruleRows ?? []) as Array<{ slug: string; duplicates: unknown }>) {
+    const d = r.duplicates as { flagField?: unknown; flagValue?: unknown } | null;
+    if (d && typeof d.flagField === 'string' && typeof d.flagValue === 'string')
+      flags.set(r.slug, { field: d.flagField, value: d.flagValue });
+  }
   await Promise.all(
     trackers.map(async (t) => {
       const { data: rows, error: rowsError } = await db
@@ -460,7 +474,12 @@ export async function loadViewSources(
       if (rowsError) throw rowsError;
       const list = (rows ?? []).map((r) => adaptEntry(r as Record<string, unknown>));
       sources.set(t.slug, {
-        tracker: { slug: t.slug, name: t.name, fields: Array.isArray(t.fields) ? t.fields : [] },
+        tracker: {
+          slug: t.slug,
+          name: t.name,
+          fields: Array.isArray(t.fields) ? t.fields : [],
+          ...(flags.has(t.slug) ? { alertFlag: flags.get(t.slug) } : {}),
+        },
         rows: list.slice(0, VIEW_ROW_CAP),
         truncated: list.length > VIEW_ROW_CAP,
       });
@@ -895,7 +914,7 @@ export async function submitViewForm(
     values: Record<string, unknown>;
     submittedBy: string | null;
   },
-): Promise<{ rowId: string; message: string }> {
+): Promise<{ rowId: string; message: string; duplicate: string | null }> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
@@ -951,7 +970,20 @@ export async function submitViewForm(
     submitted_by: input.submittedBy,
   });
 
-  return { rowId, message: block.successMessage };
+  // La regla de duplicados de la tabla (si tiene): si esta fila chocó con otra,
+  // se avisa a quien la mandó para que corrija ya, no después de despachar.
+  const rule = await getDuplicateRule(db, tracker.id);
+  let duplicate: string | null = null;
+  if (rule) {
+    const outcome = await applyDuplicateRule(db, tracker.id, [values]);
+    duplicate = duplicateMessage(
+      rule.rule,
+      rule.fields,
+      outcome.conflicts.find((c) => c.rowId === rowId),
+    );
+  }
+
+  return { rowId, message: block.successMessage, duplicate };
 }
 
 // ---------------------------------------------------------------------------
@@ -1026,7 +1058,11 @@ async function patchRow(
     actionId?: string;
     actor: string | null;
   },
-): Promise<{ label: string; changes: Record<string, { from: unknown; to: unknown }> }> {
+): Promise<{
+  label: string;
+  changes: Record<string, { from: unknown; to: unknown }>;
+  duplicate: string | null;
+}> {
   const keys = Object.keys(input.patch);
   if (!keys.length) throw new ValidationError('No hay nada que cambiar.');
   const outside = keys.filter((k) => !input.allowed.has(k));
@@ -1057,7 +1093,7 @@ async function patchRow(
   for (const k of keys)
     if (before[k] !== values[k]) changes[k] = { from: before[k] ?? null, to: values[k] ?? null };
   const label = rowLabel(input.tracker.fields, values);
-  if (!Object.keys(changes).length) return { label, changes };
+  if (!Object.keys(changes).length) return { label, changes, duplicate: null };
 
   const { error } = await db
     .from('tracker_rows')
@@ -1065,6 +1101,18 @@ async function patchRow(
     .eq('id', input.rowId)
     .eq('tracker_id', input.tracker.id);
   if (error) throw error;
+  // Cambiar la guía o su fecha puede crear o resolver un conflicto de duplicados;
+  // se revisa la guía de antes y la de ahora.
+  const dupRule = await getDuplicateRule(db, input.tracker.id);
+  let duplicate: string | null = null;
+  if (dupRule) {
+    const outcome = await applyDuplicateRule(db, input.tracker.id, [before, values]);
+    duplicate = duplicateMessage(
+      dupRule.rule,
+      dupRule.fields,
+      outcome.conflicts.find((c) => c.rowId === input.rowId),
+    );
+  }
   await db.from('custom_view_events').insert({
     view_id: view.id,
     block_id: input.blockId,
@@ -1074,7 +1122,7 @@ async function patchRow(
     changes,
     actor: input.actor,
   });
-  return { label, changes };
+  return { label, changes, duplicate };
 }
 
 /** Los bloques cuyas filas se tocan: celdas, tarjetas, fichas, eventos. */
@@ -1085,7 +1133,7 @@ export async function editViewRow(
   db: SupabaseClient,
   view: CustomViewRow,
   input: { blockId: string; rowId: string; patch: Record<string, unknown>; actor: string | null },
-): Promise<{ label: string }> {
+): Promise<{ label: string; duplicate: string | null }> {
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Esta vista no se puede editar.');
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
@@ -1098,7 +1146,7 @@ export async function editViewRow(
   if (!allowed.size) throw new ValidationError('Este bloque no se edita.');
   if (!input.actor) await assertPublicBudget(db, view.id);
   const tracker = await trackerForBlock(db, block.tracker);
-  const { label } = await patchRow(db, view, {
+  const { label, duplicate } = await patchRow(db, view, {
     blockId: block.id,
     tracker,
     rowId: input.rowId,
@@ -1112,7 +1160,7 @@ export async function editViewRow(
         : 'edit',
     actor: input.actor,
   });
-  return { label };
+  return { label, duplicate };
 }
 
 export type ViewActionOutcome =

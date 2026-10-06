@@ -70,6 +70,104 @@ html:root
   color: rgb(var(--brand-button-ink));
 }
 
+/* =============================================================================
+   DISEÑO «OPERARIO» (spec.theme.layout = 'operator'): la pantalla de planta.
+   Una columna, celular primero. El resto (inputs h-14, tarjetas, botón ancho)
+   va en las clases del lienzo; aquí sólo lo que Tailwind no dice solo.
+   ========================================================================== */
+
+/* Métricas de a tres por fila: compactas, con la cifra a la vista. */
+.view-operator .view-metric-cell .view-card {
+  padding: 0.75rem;
+}
+.view-operator .view-metric-cell .view-card p {
+  font-size: 0.8125rem;
+}
+.view-operator .view-metric-cell .view-card .font-mono {
+  font-size: 1.75rem !important;
+  font-weight: 800;
+}
+/* Alto contraste: bordes de verdad en tarjetas y tinta plena en el texto
+   secundario (una nave con sol en la pantalla no perdona grises). */
+.view-operator {
+  --ink-muted: var(--ink);
+  --border: var(--border-strong);
+}
+.view-operator .view-card {
+  border-width: 2px;
+}
+/* El estado de cada tarjeta, grande: el chip crece. */
+.view-operator ul > li [class*="rounded-pill"][class*="px-2"] {
+  font-size: 0.9375rem;
+  padding: 0.25rem 0.75rem;
+  font-weight: 700;
+}
+
+/* =============================================================================
+   ESTILOS (spec.theme.style). `clean` es la piel de siempre y no escribe nada.
+   ========================================================================== */
+
+/* bold: títulos con peso y tarjetas con borde del acento arriba. */
+.cortex-view[data-view-style="bold"] .view-card {
+  border-top: 4px solid rgb(var(--view-fill));
+}
+.cortex-view[data-view-style="bold"] .view-card h2 {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: none;
+}
+
+/* dark-panel: panel oscuro tipo pantalla de planta o TV. Siempre oscuro, aun
+   en el enlace público claro: reasigna la paleta oscura de globals.css dentro
+   del envoltorio, y en la página que lo contiene (:has) para que la cabecera
+   y el fondo no queden claros alrededor. Con marca, el acento sigue siendo el
+   de la empresa. */
+.cortex-view[data-view-style="dark-panel"],
+.cortex-view:has([data-view-style="dark-panel"]) {
+  color-scheme: dark;
+  --canvas: 20 19 17;
+  --surface: 29 28 25;
+  --surface-2: 38 37 33;
+  --border: 52 50 46;
+  --border-strong: 76 74 68;
+  --ink: 241 239 233;
+  --ink-muted: 187 184 175;
+  --ink-faint: 155 152 143;
+  --emerald: 74 214 158;
+  --emerald-soft: 22 49 39;
+  --amber: 247 182 92;
+  --amber-soft: 56 40 20;
+  --rose: 255 128 150;
+  --rose-soft: 64 26 36;
+  --sky: 120 198 240;
+  --sky-soft: 22 44 58;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -14px rgb(0 0 0 / 0.5);
+  background: rgb(var(--canvas));
+  color: rgb(var(--ink));
+  border-radius: 1rem;
+  padding: 1rem;
+}
+.cortex-view[data-view-style="dark-panel"]:not(.cortex-brand),
+.cortex-view:not(.cortex-brand):has([data-view-style="dark-panel"]) {
+  --primary: 151 157 255;
+  --primary-strong: 186 190 255;
+  --primary-soft: 41 41 76;
+  --primary-ink: 199 202 255;
+}
+.cortex-view[data-view-style="dark-panel"].cortex-brand,
+.cortex-view.cortex-brand:has([data-view-style="dark-panel"]) {
+  --primary: var(--bd-primary);
+  --primary-strong: var(--bd-primary-strong);
+  --primary-soft: var(--bd-primary-soft);
+  --primary-ink: var(--bd-primary-ink);
+  --view-fill: var(--bd-fill);
+  --view-fill-2: var(--bd-fill-2);
+}
+.cortex-view[data-view-style="dark-panel"] .cortex-primary-button {
+  background-color: #4f46e5;
+}
+
 /* --- La franja de la marca arriba del enlace público y de la portada ------ */
 .view-brand-stripe {
   background: linear-gradient(

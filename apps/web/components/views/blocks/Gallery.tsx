@@ -71,7 +71,8 @@ export function GalleryBlock({ block }: { block: Gallery }) {
             <li
               key={card.id}
               className={clsx(
-                'group relative flex flex-col overflow-hidden rounded-sm border border-border bg-surface shadow-card transition-all duration-150',
+                'group relative flex flex-col overflow-hidden rounded-sm border shadow-card transition-all duration-150',
+                card.alert ? 'border-rose/50 bg-rose-soft' : 'border-border bg-surface',
                 open &&
                   'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-pop focus-within:ring-2 focus-within:ring-primary/40',
               )}

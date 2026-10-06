@@ -173,12 +173,12 @@ describe('un archivo de la carpeta, de punta a punta', () => {
       status: 'ok',
       inserted: 1,
       updated: 0,
-      newLabels: ['045-12345678'],
+      newLabels: ['045-12345678 · 2026-03-12'],
     });
     expect(tables.tracker_rows).toHaveLength(1);
     expect(tables.tracker_rows?.[0]).toMatchObject({
-      external_key: '04512345678',
-      label: '045-12345678',
+      external_key: '04512345678 | 2026-03-12',
+      label: '045-12345678 · 2026-03-12',
       values: {
         guia: '045-12345678',
         vuelo: 'AV9',

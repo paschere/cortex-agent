@@ -4,8 +4,8 @@ import { foldText, isEmptyValue, parseDay, parseNumber } from './format';
 /**
  * LAS TABLAS DE LA EMPRESA EN LA GRILLA, Y DE VUELTA.
  *
- * Una tabla inventada (`trackers`, 0115) tiene cinco tipos de campo: texto,
- * número, fecha, plata y opciones. Aquí se traducen a columnas de la grilla, y
+ * Una tabla inventada (`trackers`, 0115) tiene ocho tipos de campo: texto,
+ * texto largo, número, fecha, hora, plata, opciones y casilla sí/no. Aquí se traducen a columnas de la grilla, y
  * lo que la grilla edita se traduce al valor que `upsertRow` acepta — que es la
  * validación de verdad: esto solo prepara, no decide.
  *
@@ -13,17 +13,31 @@ import { foldText, isEmptyValue, parseDay, parseNumber } from './format';
  * (servidor) y las pruebas.
  */
 
-export type TrackerFieldType = 'text' | 'number' | 'date' | 'money' | 'select';
+export type TrackerFieldType =
+  | 'text'
+  | 'longtext'
+  | 'number'
+  | 'date'
+  | 'time'
+  | 'money'
+  | 'select'
+  | 'checkbox';
 export const TRACKER_FIELD_TYPES: TrackerFieldType[] = [
   'text',
+  'longtext',
   'number',
   'money',
   'date',
+  'time',
   'select',
+  'checkbox',
 ];
 
 export const TRACKER_TYPE_LABEL: Record<TrackerFieldType, string> = {
   text: 'Texto',
+  longtext: 'Texto largo',
+  time: 'Hora',
+  checkbox: 'Sí/No',
   number: 'Número',
   money: 'Plata',
   date: 'Fecha',
@@ -89,6 +103,17 @@ export function labelFieldKey(fields: TrackerFieldLike[]): string | null {
   return f?.key ?? null;
 }
 
+const GRID_TYPE: Record<TrackerFieldType, GridColumn['type']> = {
+  text: 'text',
+  longtext: 'long_text',
+  number: 'number',
+  date: 'date',
+  time: 'text',
+  money: 'money',
+  select: 'select',
+  checkbox: 'boolean',
+};
+
 export function trackerColumns(
   fields: TrackerFieldLike[],
   opts: { editable?: boolean; withUpdated?: boolean } = {},
@@ -100,7 +125,8 @@ export function trackerColumns(
     const column: GridColumn = {
       key: f.key,
       label: f.label,
-      type: f.type,
+      // La grilla no tiene «hora»: se ve y se edita como texto (HH:MM).
+      type: GRID_TYPE[f.type],
       editable,
       required: Boolean(f.required),
       ...(isName ? { pinned: true, primary: true, width: 240 } : {}),
@@ -142,6 +168,12 @@ export function trackerGridRow(entry: TrackerEntryLike): GridRow {
  * Vacío es `''` (así lo entiende la tabla); una fecha va como `YYYY-MM-DD`.
  */
 export function toTrackerValue(type: TrackerFieldType, value: unknown): string | number {
+  // La casilla de la grilla manda true/false; la tabla la guarda como 1/0.
+  if (type === 'checkbox') {
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    if (isEmptyValue(value)) return '';
+    return String(value).trim();
+  }
   if (isEmptyValue(value)) return '';
   if (type === 'number' || type === 'money') {
     const n = parseNumber(value);

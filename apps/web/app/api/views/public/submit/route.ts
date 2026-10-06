@@ -21,7 +21,7 @@ export const runtime = 'nodejs';
 const input = z.object({
   token: z.string().min(32).max(64),
   blockId: z.string().min(1).max(40),
-  values: z.record(z.string().max(400)).refine((v) => Object.keys(v).length <= 30),
+  values: z.record(z.string().max(4000)).refine((v) => Object.keys(v).length <= 30),
 });
 
 export async function POST(req: NextRequest) {
@@ -49,7 +49,8 @@ export async function POST(req: NextRequest) {
       submittedBy: null,
     });
     await bellForSubmission(db, view, parsed.data.blockId, 'Alguien con el enlace');
-    return NextResponse.json({ message: res.message });
+    // `duplicate` viaja aparte para que la pantalla lo pinte como alerta, no como éxito.
+    return NextResponse.json({ message: res.message, duplicate: res.duplicate });
   } catch (err) {
     if (err instanceof SubmissionLimitError)
       return NextResponse.json({ error: err.message }, { status: 429 });

@@ -218,6 +218,18 @@ export const HEADER_LABEL: Record<(typeof HEADER_STYLES)[number], string> = {
   hero: 'Portada grande',
 };
 
+export const LAYOUTS = ['dashboard', 'operator'] as const;
+export const LAYOUT_LABEL: Record<(typeof LAYOUTS)[number], string> = {
+  dashboard: 'Panel',
+  operator: 'Operario (celular)',
+};
+export const VIEW_STYLES = ['clean', 'bold', 'dark-panel'] as const;
+export const VIEW_STYLE_LABEL: Record<(typeof VIEW_STYLES)[number], string> = {
+  clean: 'Limpio',
+  bold: 'Fuerte',
+  'dark-panel': 'Panel oscuro',
+};
+
 /** Los tres campos que toda fila tiene, con el nombre que ve la gente. */
 export const BUILTIN_FIELD_LABEL: Record<string, string> = {
   label: 'Nombre',

@@ -424,7 +424,14 @@ export function BrandPanel({
               <ViewCover
                 title="Cómo va la empresa"
                 subtitle="Ventas, cartera y despachos, al día."
-                theme={{ accent: 'primary', density: 'comfortable', header: 'plain', cover: null }}
+                theme={{
+                  accent: 'primary',
+                  density: 'comfortable',
+                  header: 'plain',
+                  layout: 'dashboard',
+                  style: 'clean',
+                  cover: null,
+                }}
                 brand={draft}
               />
               <div className="grid gap-4 xl:grid-cols-2">

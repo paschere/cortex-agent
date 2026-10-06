@@ -22,6 +22,7 @@ import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import {
   type TrackerField,
   type TrackerRow,
+  applyDuplicateRule,
   defineTracker,
   getTool,
   getTrackerById,
@@ -295,6 +296,7 @@ export async function deleteTrackerRows(
       .select('id');
     if (error) throw error;
     const removed = (data ?? []).length;
+    if (removed) await applyDuplicateRule(db, tracker.id);
     await audit(db, user.id, 'trackers.remove', started, {
       tracker: tracker.slug,
       rowIds: ids.slice(0, 200),
@@ -477,6 +479,8 @@ export async function importTrackerRows(
       if (error) throw error;
       inserted += chunk.length;
     }
+    // Un archivo importado puede traer guías repetidas con otra fecha.
+    await applyDuplicateRule(db, tracker.id);
     await audit(db, user.id, 'trackers.upsert', started, {
       tracker: tracker.slug,
       imported: inserted,

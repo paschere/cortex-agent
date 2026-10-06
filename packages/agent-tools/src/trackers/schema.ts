@@ -13,8 +13,43 @@ import { z } from 'zod';
 export const TRACKER_SLUG_RE = /^[a-z][a-z0-9_]{1,47}$/;
 export const FIELD_KEY_RE = /^[a-z][a-z0-9_]{0,31}$/;
 
-export const FIELD_TYPES = ['text', 'number', 'date', 'money', 'select'] as const;
+/**
+ * `longtext` es texto con varias líneas (observaciones); `checkbox` es sí/no y
+ * se guarda como 1/0 —un número— para que los valores de fila sigan siendo
+ * `string | number` en todo el repo (compute, grilla, feed); `time` es una hora
+ * del día «HH:MM» (24 h), sin fecha ni zona.
+ */
+export const FIELD_TYPES = [
+  'text',
+  'longtext',
+  'number',
+  'date',
+  'time',
+  'money',
+  'select',
+  'checkbox',
+] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
+
+/** Largo máximo de un texto corto y de uno largo. */
+export const TEXT_MAX = 400;
+export const LONGTEXT_MAX = 4000;
+
+const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+const YES = new Set(['1', 'true', 'si', 'sí', 'yes', 'x', 'on']);
+const NO = new Set(['0', 'false', 'no', 'off']);
+
+/** «sí»/«no» y sus variantes → 1/0; null si no se entiende. */
+export function parseCheckbox(raw: unknown): 0 | 1 | null {
+  if (typeof raw === 'boolean') return raw ? 1 : 0;
+  if (typeof raw === 'number') return raw === 1 ? 1 : raw === 0 ? 0 : null;
+  if (typeof raw === 'string') {
+    const t = raw.trim().toLowerCase();
+    if (YES.has(t)) return 1;
+    if (NO.has(t)) return 0;
+  }
+  return null;
+}
 
 export const trackerFieldSchema = z
   .object({
@@ -75,18 +110,32 @@ export function coerceValue(
 
   switch (field.type) {
     case 'text':
-    case 'date': {
+    case 'longtext':
+    case 'date':
+    case 'time': {
       if (typeof raw !== 'string') {
         return { ok: false, message: `«${field.label}» tiene que ser texto.` };
       }
       const value = raw.trim();
-      if (value.length > 400) {
+      if (value.length > (field.type === 'longtext' ? LONGTEXT_MAX : TEXT_MAX)) {
         return { ok: false, message: `«${field.label}» es demasiado largo.` };
       }
       if (field.type === 'date' && value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
         return { ok: false, message: `«${field.label}» tiene que ser una fecha YYYY-MM-DD.` };
       }
+      if (field.type === 'time' && value) {
+        const m = TIME_RE.exec(value);
+        if (!m) return { ok: false, message: `«${field.label}» tiene que ser una hora HH:MM.` };
+        return { ok: true, value: `${m[1]?.padStart(2, '0')}:${m[2]}` };
+      }
       return { ok: true, value };
+    }
+    case 'checkbox': {
+      const flag = parseCheckbox(raw);
+      if (flag === null) {
+        return { ok: false, message: `«${field.label}» tiene que ser sí o no.` };
+      }
+      return { ok: true, value: flag };
     }
     case 'number':
     case 'money': {

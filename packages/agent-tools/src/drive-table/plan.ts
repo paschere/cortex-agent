@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { quoteSupportsAmount } from '../documents/verify';
+import type { DuplicateRule } from '../trackers/duplicates';
 import type { FieldType, TrackerField } from '../trackers/schema';
 
 /**
@@ -79,6 +80,8 @@ export interface DriveTablePreset {
   extract: ExtractField[];
   keyFields: string[];
   defaults: Record<string, string>;
+  /** La regla de duplicados con que nace la tabla (ver trackers/duplicates.ts). */
+  duplicates?: DuplicateRule;
 }
 
 const text = (key: string, label: string): TrackerField => ({
@@ -115,7 +118,13 @@ export const DRIVE_TABLE_PRESETS: Record<string, DriveTablePreset> = {
       num('piezas', 'Piezas'),
       num('peso_kg', 'Peso (kg)'),
       text('consignatario', 'Consignatario'),
-      select('estado', 'Estado', ['Pendiente', 'Dolly asignado', 'En plataforma', 'Entregado']),
+      select('estado', 'Estado', [
+        'Pendiente',
+        'Dolly asignado',
+        'En plataforma',
+        'Entregado',
+        'Duplicada',
+      ]),
       text('dolly', 'Dolly'),
       text('notas', 'Notas'),
       REVIEW_FIELD,
@@ -137,8 +146,18 @@ export const DRIVE_TABLE_PRESETS: Record<string, DriveTablePreset> = {
         hint: 'Instrucciones de manejo u observaciones del documento, en una línea.',
       },
     ],
-    keyFields: ['guia'],
+    // La clave es guía + fecha, no sólo la guía: con sólo la guía, la misma
+    // guía con otra fecha ACTUALIZARÍA la fila vieja y el error se perdería.
+    // Con las dos, nacen dos filas y la regla las marca Duplicada para que
+    // alguien corrija antes de despachar.
+    keyFields: ['guia', 'fecha_vuelo'],
     defaults: { estado: 'Pendiente' },
+    duplicates: {
+      key: 'guia',
+      distinctBy: 'fecha_vuelo',
+      flagField: 'estado',
+      flagValue: 'Duplicada',
+    },
   },
   facturas_proveedor: {
     id: 'facturas_proveedor',

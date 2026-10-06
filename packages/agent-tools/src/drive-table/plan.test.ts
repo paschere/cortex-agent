@@ -415,7 +415,7 @@ describe('los ejemplos de partida', () => {
     }
     expect(
       DRIVE_TABLE_PRESETS.guias_aereas?.fields.find((f) => f.key === 'estado')?.options,
-    ).toEqual(['Pendiente', 'Dolly asignado', 'En plataforma', 'Entregado']);
+    ).toEqual(['Pendiente', 'Dolly asignado', 'En plataforma', 'Entregado', 'Duplicada']);
   });
 });
 

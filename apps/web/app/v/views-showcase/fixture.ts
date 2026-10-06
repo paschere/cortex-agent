@@ -660,7 +660,14 @@ export function showcaseView(opts: { pages?: boolean; empty?: boolean } = {}): C
           { id: 'operacion', title: 'Operación', blockIds: list.slice(7).map((b) => b.id) },
         ]
       : [],
-    theme: { accent: 'primary', density: 'comfortable', header: 'plain', cover: null },
+    theme: {
+      accent: 'primary',
+      density: 'comfortable',
+      header: 'plain',
+      layout: 'dashboard',
+      style: 'clean',
+      cover: null,
+    },
   };
 }
 

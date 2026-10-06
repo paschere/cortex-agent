@@ -9,6 +9,7 @@ import {
   archiveView,
   createView,
   defineTracker,
+  duplicateRuleSchema,
   editViewRow,
   getTrackerBySlug,
   mustGetView,
@@ -59,6 +60,7 @@ const newTrackerSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500).default(''),
   fields: trackerFieldsSchema,
+  duplicates: duplicateRuleSchema.optional(),
 });
 export type NewTracker = z.infer<typeof newTrackerSchema>;
 
@@ -232,7 +234,9 @@ export async function submitViewFormAction(
   viewId: string,
   blockId: string,
   values: Record<string, string>,
-): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; message: string; duplicate?: string | null } | { ok: false; error: string }
+> {
   try {
     const user = await requireSession();
     const db = getOrgScopedClient(user.organization.id);
@@ -240,7 +244,7 @@ export async function submitViewFormAction(
     const res = await submitViewForm(db, view, { blockId, values, submittedBy: user.id });
     await bellForSubmission(db, view, blockId, user.name || user.email);
     revalidatePath(`/views/${view.slug}`);
-    return { ok: true, message: res.message };
+    return { ok: true, message: res.message, duplicate: res.duplicate };
   } catch (err) {
     if (err instanceof SubmissionLimitError) return { ok: false, error: err.message };
     return { ok: false, error: describe(err, 'No se pudo enviar el formulario.') };
@@ -258,7 +262,10 @@ export async function editViewRowAction(
     const db = getOrgScopedClient(user.organization.id);
     const view = await mustGetView(db, viewId);
     const res = await editViewRow(db, view, { blockId, rowId, patch, actor: user.id });
-    return { ok: true, message: `Guardado en «${res.label}».` };
+    return {
+      ok: true,
+      message: `Guardado en «${res.label}».${res.duplicate ? ` ${res.duplicate}` : ''}`,
+    };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo guardar el cambio.') };
   }

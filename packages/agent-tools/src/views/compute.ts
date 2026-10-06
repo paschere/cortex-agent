@@ -105,6 +105,7 @@ export interface BoardBody {
       id: string;
       label: string;
       details: Array<{ label: string; value: string }>;
+      alert?: boolean;
     }>;
   }>;
   source: string;
@@ -135,7 +136,13 @@ export type ComputedBlock =
         /** Presente sólo si la columna se edita Y quien mira puede escribir. */
         edit?: { type: TrackerField['type']; options: string[]; required: boolean };
       }>;
-      rows: Array<{ id: string; cells: string[]; sort: Array<string | number | null> }>;
+      rows: Array<{
+        id: string;
+        cells: string[];
+        sort: Array<string | number | null>;
+        /** La fila lleva la marca de duplicado de la tabla: se resalta. */
+        alert?: boolean;
+      }>;
       total: number;
       searchable: boolean;
       source: string;
@@ -183,6 +190,7 @@ export type ComputedBlock =
         subtitle: string | null;
         meta: Array<{ label: string; value: string }>;
         badge: { label: string; tone: Tone } | null;
+        alert?: boolean;
         /** Sólo una dirección `https:` pública; cualquier otra cosa llega null. */
         image: string | null;
       }>;
@@ -314,6 +322,8 @@ export interface ComputedTheme {
   accent: Tone;
   density: 'comfortable' | 'compact';
   header: 'plain' | 'hero';
+  layout: 'dashboard' | 'operator';
+  style: 'clean' | 'bold' | 'dark-panel';
   cover: string | null;
 }
 
@@ -418,6 +428,7 @@ function displayValue(tracker: CatalogTracker, row: ViewRow, key: string): strin
   const v = rawValue(row, key);
   if (v === undefined) return '—';
   const type = fieldType(tracker, key);
+  if (type === 'checkbox') return Number(v) === 1 ? 'Sí' : 'No';
   if (type === 'money') return formatValue(Number(v), 'money');
   if (type === 'number') return formatValue(Number(v), 'number');
   if (
@@ -427,6 +438,12 @@ function displayValue(tracker: CatalogTracker, row: ViewRow, key: string): strin
   )
     return viewShortDate(v);
   return String(v);
+}
+
+/** ¿Esta fila lleva la marca de la regla de duplicados de su tabla? */
+function isAlertRow(tracker: CatalogTracker, row: ViewRow): boolean {
+  const flag = tracker.alertFlag;
+  return Boolean(flag && String(row.values[flag.field] ?? '') === flag.value);
 }
 
 function fieldLabel(tracker: CatalogTracker, key: string): string {
@@ -957,6 +974,7 @@ function computeBlock(
         rows: shown.map((r) => ({
           id: r.id,
           cells: keys.map((key) => displayValue(tracker, r, key)),
+          ...(isAlertRow(tracker, r) ? { alert: true } : {}),
           sort: keys.map((key) => {
             const v = rawValue(r, key);
             return v === undefined ? null : v;
@@ -1071,6 +1089,7 @@ function computeBlock(
           cards: c.list.slice(0, block.limit).map((r) => ({
             id: r.id,
             label: r.label,
+            ...(isAlertRow(tracker, r) ? { alert: true } : {}),
             details: details
               .map((key) => ({
                 label: fieldLabel(tracker, key),
@@ -1115,6 +1134,7 @@ function computeBlock(
           const image = block.imageField ? rawValue(r, block.imageField) : undefined;
           return {
             id: r.id,
+            ...(isAlertRow(tracker, r) ? { alert: true } : {}),
             title: text(r, block.titleField) ?? r.label,
             subtitle: text(r, block.subtitleField),
             meta: block.metaFields
@@ -1414,6 +1434,8 @@ export function computeTheme(spec: Pick<ViewSpec, 'theme' | 'accent'>): Computed
     accent: spec.theme?.accent ?? spec.accent,
     density: spec.theme?.density ?? 'comfortable',
     header: spec.theme?.header ?? 'plain',
+    layout: spec.theme?.layout ?? 'dashboard',
+    style: spec.theme?.style ?? 'clean',
     cover: httpsUrl(spec.theme?.cover),
   };
 }

@@ -6,7 +6,17 @@ import './tools';
 import './enrich-tools';
 import './lookups';
 
-export { trackersSyncFromSource, trackersSyncs } from './tools';
+export { feedConnectGoogleSheet, trackersSyncFromSource, trackersSyncs } from './tools';
+export {
+  FeedCaptureError,
+  captureGoogleSheetFeed,
+  feedFingerprint,
+  googleSpreadsheetId,
+  parseGoogleSheetRef,
+  persistFeedCapture,
+  readGoogleSheetFeed,
+  registerFeedSourceCapture,
+} from './feed-capture';
 export { trackersUpdateFromSource } from './enrich-tools';
 export { applyUpdateOnly, createUpdateOnlySync, matchPart } from './enrich';
 export {

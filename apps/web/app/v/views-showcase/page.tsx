@@ -35,6 +35,8 @@ export default async function ViewsShowcasePage({
       hero={one('portada') === '1'}
       inApp={one('lugar') === 'app'}
       panel={one('panel')}
+      layout={one('diseno')}
+      look={one('estilo')}
     />
   );
 }

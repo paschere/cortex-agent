@@ -562,10 +562,23 @@ export const MAX_VIEW_PAGES = 8;
  */
 export const DENSITIES = ['comfortable', 'compact'] as const;
 export const HEADER_STYLES = ['plain', 'hero'] as const;
+/**
+ * `layout`: `dashboard` (por defecto) es la rejilla de siempre; `operator` es
+ * la pantalla de planta, pensada para el celular: UNA columna, el formulario
+ * primero, controles grandes, tablas como tarjetas con el estado a la vista,
+ * métricas compactas en una fila y alto contraste.
+ * `style`: la piel. `clean` es la de siempre; `bold` pone títulos más fuertes y
+ * tarjetas con borde del acento; `dark-panel` es un panel oscuro tipo pantalla
+ * de planta o TV (siempre oscuro, también en el enlace público claro).
+ */
+export const LAYOUTS = ['dashboard', 'operator'] as const;
+export const VIEW_STYLES = ['clean', 'bold', 'dark-panel'] as const;
 export const viewThemeSchema = z.object({
   accent: z.enum(TONES).optional(),
   density: z.enum(DENSITIES).optional(),
   header: z.enum(HEADER_STYLES).optional(),
+  layout: z.enum(LAYOUTS).optional(),
+  style: z.enum(VIEW_STYLES).optional(),
   cover: httpsField.optional(),
 });
 export type ViewTheme = z.infer<typeof viewThemeSchema>;
@@ -664,6 +677,11 @@ export interface CatalogTracker {
   slug: string;
   name: string;
   fields: TrackerField[];
+  /**
+   * La marca de la regla de duplicados de la tabla (0201): una fila con este
+   * valor en este campo se pinta en tono de alerta (tabla, tarjetas, galería).
+   */
+  alertFlag?: { field: string; value: string };
   /**
    * Una tabla del Feed que la vista YA usaba y que quien la edita no puede
    * leer (es del Feed privado de otra persona, o venció). Se acepta tal cual

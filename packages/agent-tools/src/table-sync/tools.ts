@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { fetchCustomToolById } from '../custom-tools/store';
 import { registerTool } from '../index';
 import { trackerSlugSchema } from '../trackers/schema';
+import { FeedCaptureError, captureGoogleSheetFeed, parseGoogleSheetRef } from './feed-capture';
 import { createTrackerSync, latestSourceSheet, listTrackerSyncs } from './sync';
 
 /**
@@ -41,7 +42,7 @@ export async function resolveSource(db: SupabaseClient, actorId: string, ref: st
   }>;
   if (!rows.length)
     throw new NotFoundError(
-      `No encontré una fuente conectada tuya llamada «${ref}». Conéctala primero en el Feed.`,
+      `No hay una fuente conectada llamada «${ref}». Si la persona dio un enlace de Google Sheets, conéctala tú con feed_connect_google_sheet (pasa el enlace) y vuelve a llamar con el id que devuelve; no la mandes al Feed.`,
     );
   if (rows.length > 1 && !byId)
     throw new ValidationError(
@@ -49,7 +50,9 @@ export async function resolveSource(db: SupabaseClient, actorId: string, ref: st
     );
   const source = rows[0];
   if (!source?.enabled)
-    throw new ValidationError('Esa fuente está desactivada. Actívala en el Feed.');
+    throw new ValidationError(
+      'Esa fuente está desactivada: sólo la persona dueña puede reactivarla, desde el interruptor de la fuente en el Feed. Dile que la active y vuelve a intentar; no la conectes de nuevo.',
+    );
   return source;
 }
 
@@ -113,7 +116,7 @@ export async function setSourceQuery(
 export const trackersSyncFromSource = registerTool({
   id: 'trackers.sync_from_source',
   description:
-    'Make a company table fill itself from a connected Feed source (a Google Sheet, a web page table or an API such as a flights API): every few minutes it re-reads the source, adds new rows and updates changed ones, identified by key columns (e.g. flight number + date). Creates the table from the source columns if it does not exist. Use it when the person wants a table/view to stay updated from a sheet or an API, or to be alerted when new rows arrive. If the API needs fixed query parameters (airport, date) pass query (values may use {hoy:YYYY-MM-DD}). If an API returns its list inside a field ("data", "arrivals", "flights") pass recordsPath; if it returns rows as arrays without names (OpenSky "states"), pass recordsPath and columns (names in order). Only the owner of the source can do this. Requires confirmation.',
+    'Make a company table fill itself from a connected Feed source (a Google Sheet — if the person gave a Google Sheets link and it is not connected yet, connect it first with feed_connect_google_sheet and pass the returned source id here — a web page table or an API such as a flights API): every few minutes it re-reads the source, adds new rows and updates changed ones, identified by key columns (e.g. flight number + date). Creates the table from the source columns if it does not exist. Use it when the person wants a table/view to stay updated from a sheet or an API, or to be alerted when new rows arrive. If the API needs fixed query parameters (airport, date) pass query (values may use {hoy:YYYY-MM-DD}). If an API returns its list inside a field ("data", "arrivals", "flights") pass recordsPath; if it returns rows as arrays without names (OpenSky "states"), pass recordsPath and columns (names in order). Only the owner of the source can do this. Requires confirmation.',
   inputSchema: z.object({
     source: z.string().trim().min(1).max(240).describe('Name or id of the connected Feed source.'),
     table: trackerSlugSchema.describe(
@@ -208,7 +211,7 @@ export const trackersSyncFromSource = registerTool({
     });
     if (!queued)
       throw new ValidationError(
-        'La fuente todavía no tiene una tabla legible y no pude programar la primera lectura. Actualízala en el Feed y vuelve a intentar.',
+        'La fuente todavía no tiene una tabla legible y no pude programar la primera lectura. Si es una hoja de Google, vuelve a llamar a feed_connect_google_sheet con su enlace para traer una captura fresca y reintenta; si es otra fuente, la persona la actualiza desde el Feed.',
       );
     return {
       status: 'scheduled' as const,
@@ -216,6 +219,99 @@ export const trackersSyncFromSource = registerTool({
       inserted: 0,
       markdown: `Listo: vuelvo a leer «${source.name}»${reshape ? ' con la forma nueva' : ''}, creo la tabla \`${input.table}\` y la dejo llenándose sola cada ${common.intervalMinutes} minutos. Te aviso en la campana cuando termine la primera carga.`,
     };
+  },
+});
+
+/**
+ * CONECTAR UNA HOJA DE GOOGLE DESDE EL CHAT.
+ *
+ * Antes la persona pegaba el enlace y Cortex contestaba «conéctala primero en el
+ * Feed»: no existía ninguna herramienta que creara la fuente, sólo el botón del
+ * Feed. Ésta hace el mismo trabajo que ese botón (misma captura, mismos topes,
+ * misma huella y mismo `config_hash`, así que no duplica una hoja ya conectada:
+ * la refresca) y devuelve las pestañas con encabezados y filas para que el
+ * modelo siga solo con `trackers.sync_from_source` o con una vista.
+ *
+ * Pide confirmación aunque sólo lee: crea una fuente y una entrada en el Feed
+ * privado de la persona, con una copia de la hoja que vive siete días.
+ */
+export const feedConnectGoogleSheet = registerTool({
+  id: 'feed.connect_google_sheet',
+  description:
+    "Connect a Google Sheet to the person's Feed in one step and return its tabs with headers and row counts plus the source id. Use it as soon as the person pastes a docs.google.com/spreadsheets link (or sheet id) to analyse it, build a table or a view from it, or keep it synced — never tell them to go to the Feed to connect it. Safe to repeat: an already connected sheet is refreshed, not duplicated. Next steps: trackers.sync_from_source (source = the returned sourceId, sheet = tab index) to fill a company table from it, or feed_table_query. Needs the company Google connection (Datos y conexiones). For a Google Drive FOLDER use trackers.sync_from_drive_folder instead. Requires confirmation.",
+  inputSchema: z.object({
+    sheet: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2048)
+      .describe('Google Sheets link (docs.google.com/spreadsheets/d/...) or the spreadsheet id.'),
+  }),
+  outputSchema: z.object({
+    sourceId: z.string(),
+    attachmentId: z.string(),
+    name: z.string(),
+    url: z.string(),
+    refreshed: z.boolean(),
+    partial: z.boolean(),
+    tabs: z.array(
+      z.object({
+        sheet: z.number().int(),
+        name: z.string(),
+        headers: z.array(z.string()),
+        rows: z.number().int(),
+      }),
+    ),
+    markdown: z.string(),
+  }),
+  // Igual que gsheets.read_range: sin Google conectado, el registro responde
+  // con el error de integración de siempre en vez de uno del handler.
+  requiredScopes: [
+    { provider: 'google', scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] },
+  ],
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 6 },
+  handler: async (input, ctx) => {
+    const spreadsheetId = parseGoogleSheetRef(input.sheet);
+    if (!spreadsheetId)
+      throw new ValidationError(
+        'Eso no parece un enlace de Google Sheets. Pide el enlace completo (docs.google.com/spreadsheets/d/...). Si es una carpeta de Drive usa trackers.sync_from_drive_folder.',
+      );
+    try {
+      const captured = await captureGoogleSheetFeed({
+        db: ctx.db,
+        ctx,
+        actorId: ctx.userId,
+        spreadsheetId,
+      });
+      const tabs = captured.tables.map(
+        (t) =>
+          `- Pestaña ${t.sheet} «${t.name}»: ${t.rows} filas · ${t.headers.filter(Boolean).join(', ') || 'sin encabezados'}`,
+      );
+      return {
+        sourceId: captured.sourceId,
+        attachmentId: captured.attachmentId,
+        name: captured.name,
+        url: captured.url,
+        refreshed: captured.deduplicated,
+        partial: captured.truncated,
+        tabs: captured.tables,
+        markdown: `${captured.deduplicated ? 'Ya estaba conectada; la actualicé.' : 'Conecté'} «${captured.name}» al Feed (fuente \`${captured.sourceId}\`).${captured.truncated ? ' La captura es parcial (máximo 1.000 filas y 52 columnas por pestaña).' : ''}\n${tabs.join('\n')}`,
+      };
+    } catch (err) {
+      if (err instanceof FeedCaptureError) throw new ValidationError(err.message);
+      const hasGoogle = await ctx.integrations
+        .hasScopes('google', ['https://www.googleapis.com/auth/spreadsheets.readonly'])
+        .catch(() => false);
+      if (!hasGoogle)
+        throw new ValidationError(
+          'Google no está conectado en esta empresa (o falta el permiso de Hojas). Conéctalo en Datos y conexiones y vuelve a pegar el enlace; ése es el único paso que no puedo hacer yo.',
+        );
+      if (err instanceof ValidationError) throw err;
+      throw new ValidationError(
+        'No pude leer la hoja con la conexión de Google de la empresa. Revisa que la persona tenga permiso sobre el archivo (compártelo con la cuenta conectada) y que el enlace sea el correcto.',
+      );
+    }
   },
 });
 

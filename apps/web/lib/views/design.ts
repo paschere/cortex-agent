@@ -1,11 +1,15 @@
 import {
   type CatalogTracker,
+  type DuplicateRule,
+  FIELD_TYPES,
   type TrackerField,
   type ViewSpec,
   checkSpecAgainst,
+  duplicateRuleSchema,
   specWrites,
   trackerFieldsSchema,
   trackerSlugSchema,
+  validateDuplicateRule,
   viewSpecSchema,
 } from '@cortex/agent-tools';
 import { z } from 'zod';
@@ -77,12 +81,22 @@ export const modelDesignSchema = z.object({
             z.object({
               key: z.string().max(32),
               label: z.string().max(60),
-              type: z.enum(['text', 'number', 'date', 'money', 'select']),
+              type: z.enum(FIELD_TYPES),
               required: z.boolean(),
               options: z.array(z.string().max(80)).max(30),
             }),
           )
           .max(20),
+        /** Regla de duplicados opcional; null si la tabla no la necesita. */
+        duplicates: z
+          .object({
+            key: z.string().max(32),
+            distinctBy: z.string().max(32),
+            flagField: z.string().max(32),
+            flagValue: z.string().max(80),
+          })
+          .nullable()
+          .optional(),
       }),
     )
     .max(2),
@@ -121,6 +135,7 @@ export interface NewTrackerDraft {
   name: string;
   description: string;
   fields: TrackerField[];
+  duplicates?: DuplicateRule;
 }
 
 export type DesignResult =
@@ -175,12 +190,29 @@ export function checkDesign(
           .map((i) => i.message)
           .join('; ')}.`,
       );
+    // Regla de duplicados: se valida contra los campos ya normalizados; una
+    // regla inválida se descarta con aviso, no tumba la tabla.
+    let duplicates: DuplicateRule | undefined;
+    if (t.duplicates && fields.success) {
+      const rule = duplicateRuleSchema.safeParse({
+        key: t.duplicates.key,
+        distinctBy: t.duplicates.distinctBy || undefined,
+        flagField: t.duplicates.flagField,
+        flagValue: t.duplicates.flagValue || undefined,
+      });
+      const problem = rule.success
+        ? validateDuplicateRule(rule.data, fields.data)
+        : 'forma inválida';
+      if (rule.success && !problem) duplicates = rule.data;
+      else problems.push(`La regla de duplicados de «${t.slug}» no es válida: ${problem}.`);
+    }
     if (slug.success && fields.success)
       newTrackers.push({
         slug: slug.data,
         name: t.name.trim() || slug.data,
         description: t.description.trim(),
         fields: fields.data,
+        ...(duplicates ? { duplicates } : {}),
       });
   }
 
@@ -400,7 +432,7 @@ El catálogo trae las tablas reales: slug, nombre, campos (key, label, type, opt
 
 Hay tres clases de entrada en el catálogo. kind "tracker" son tablas que la empresa se inventó. kind "platform" son fuentes de la plataforma con datos vivos de Cortex (su slug empieza por "cortex."): se usan en "tracker" igual que una tabla, pero son de SÓLO LECTURA — nunca pongas un form sobre ellas — y antes de proponer una tabla nueva que copie ventas, pagos, clientes, vencimientos, metas, asuntos de Gerencia, prospectos, facturas de proveedores, inventario, impuestos, contratos, PQRS, oportunidades comerciales, proyectos, flota o documentos que vencen, usa la fuente que ya existe. "Ventas" es cortex.ventas (facturas de venta confirmadas; la cartera es su saldo y su estado). En las fuentes de la plataforma los campos money son siempre pesos; lo facturado en otra moneda va aparte en un campo numérico *_otra_moneda y no se mezcla. Las fuentes con sensitivity "internal" nombran gente del equipo o su trabajo: una vista que las use nunca se podrá compartir por enlace ni con contraseña; úsalas sólo si lo piden y, si la petición habla de compartir o de clientes externos, dilo en explanation.
 
-kind "feed" son tablas del Feed de ESTA persona (archivos, hojas de Google, APIs y cruces que ella misma subió o conectó; su slug empieza por "feed.", "feedsrc." o "feedview."). Sus campos salen de los encabezados de la hoja y su tipo se infirió de las celdas; úsalas cuando la persona hable de «el Excel», «la hoja», «lo que subí al Feed», «la fuente conectada» o nombre el archivo. Son de SÓLO LECTURA (nada de form, editable, draggable ni botones) y PRIVADAS: sólo su dueño ve las filas; si un compañero abre la vista, esos bloques le muestran un aviso, y una vista con ellas nunca se comparte por enlace — dilo en explanation si piden compartirla o mostrársela al equipo, y sugiere copiar esos datos a una tabla del espacio. Las "feedsrc." siguen la última lectura de una fuente conectada: como la vista abierta se recalcula sola (refreshSeconds), cuando la fuente se sincroniza el tablero cambia sin que nadie haga nada; si piden «en vivo», usa refreshSeconds 10 y dilo. Las "feed." son capturas fijas que vencen a los 7 días; si piden algo que dure, sugiere conectar la fuente en Feed. Una entrada con unavailable true es una tabla del Feed que la vista ya usaba y esta persona no puede ver: conserva sus bloques EXACTAMENTE como están y no crees bloques nuevos sobre ella.
+kind "feed" son tablas del Feed de ESTA persona (archivos, hojas de Google, APIs y cruces que ella misma subió o conectó; su slug empieza por "feed.", "feedsrc." o "feedview."). Sus campos salen de los encabezados de la hoja y su tipo se infirió de las celdas; úsalas cuando la persona hable de «el Excel», «la hoja», «lo que subí al Feed», «la fuente conectada» o nombre el archivo. Son de SÓLO LECTURA (nada de form, editable, draggable ni botones) y PRIVADAS: sólo su dueño ve las filas; si un compañero abre la vista, esos bloques le muestran un aviso, y una vista con ellas nunca se comparte por enlace — dilo en explanation si piden compartirla o mostrársela al equipo, y sugiere copiar esos datos a una tabla del espacio. Las "feedsrc." siguen la última lectura de una fuente conectada: como la vista abierta se recalcula sola (refreshSeconds), cuando la fuente se sincroniza el tablero cambia sin que nadie haga nada; si piden «en vivo», usa refreshSeconds 10 y dilo. Las "feed." son capturas fijas que vencen a los 7 días; si piden algo que dure, dilo en explanation. Si la vista se va a compartir con enlace o contraseña, o la va a usar gente de planta, la fuente NO puede ser una tabla del Feed (son privadas y no se comparten): debe ser una tabla propia (kind "tracker") que se llene desde la hoja o la carpeta de Drive con trackers.sync_from_source o trackers.sync_from_drive_folder; propónla en newTrackers y dilo en explanation, en vez de sugerir «conectar la fuente en el Feed». Una entrada con unavailable true es una tabla del Feed que la vista ya usaba y esta persona no puede ver: conserva sus bloques EXACTAMENTE como están y no crees bloques nuevos sobre ella.
 
 Fuentes de los módulos de operación (todas internal y de sólo lectura; usa la que corresponda en vez de inventar una tabla): cortex.por_pagar (facturas de proveedores: proveedor, número, total, neto, vence, dias, estado, alertas; un programa de pagos es una tabla filtrada por estado Aprobada/Programada y ordenada por vence), cortex.inventario (productos con existencia, minimo, faltante, alerta, dias_cobertura, valor), cortex.ordenes_compra (órdenes de compra: estado, esperada, atrasada, total), cortex.impuestos (calendario tributario: tipo, periodo, vence, estado, vencida), cortex.nomina (SÓLO totales por período, nunca por persona, y sólo para quien administra: devengado, deducciones, aportes, neto, personas — nunca prometas ni armes una vista de lo que gana alguien), cortex.contratos (tipo, contraparte, valor, vence, aviso_hasta, estado, próxima obligación), cortex.pqrs (radicado, clase, vence, dias_habiles, estado; sin el texto de la solicitud), cortex.cumplimiento (obligaciones de cumplimiento: area, vence, estado, aplica), cortex.comercial (oportunidades: etapa, estado, valor, probabilidad, ponderado, cierre_esperado, responsable, cliente), cortex.proyectos (proyectos y órdenes de servicio con avance, horas, costo, facturado y margen), cortex.flota (vehículos con km, costo_km, próximo mantenimiento, SOAT/tecnomecánica y comparendos), cortex.documentos_vencen (papeles que vencen ya confirmados: tipo, sujeto, vence, estado, responsable), cortex.estados (estado de resultados, balance e indicadores por mes) y cortex.presupuesto (presupuesto contra real por categoría y mes). Cada una pertenece a un módulo que la empresa puede tener apagado: una entrada con unavailable true es una fuente de un módulo apagado que la vista ya usaba — conserva sus bloques tal cual, no crees bloques nuevos sobre ella y di en explanation que el módulo está apagado. En money siempre son pesos (otra moneda va aparte en *_otra_moneda o sólo en moneda). En cortex.comercial las etapas siguen el embudo estándar (Nuevo, Contactado, Cotización enviada, Negociación, En riesgo, Ganada, Perdida): para un tablero por etapa usa groupBy etapa; si la empresa cambió sus etapas, las que no coinciden caen en «Sin estado», y dilo.
 
@@ -408,7 +440,7 @@ Las fuentes con sensitivity "personal" (cortex.activaciones, cortex.seguimientos
 
 Si te dan la vista actual, devuelve la vista COMPLETA ya cambiada (no un diff), conservando los ids y bloques que la persona no pidió tocar.
 
-Si lo que piden necesita datos que no existen en ninguna tabla, puedes proponer hasta 2 tablas nuevas en newTrackers (slug en minúsculas_con_guion_bajo, 1-20 campos; type text|number|date|money|select; select necesita options; options vacío en los demás) y usarlas en la vista. Nunca propongas una tabla que duplique una existente. No inventes filas.
+Si lo que piden necesita datos que no existen en ninguna tabla, puedes proponer hasta 2 tablas nuevas en newTrackers (slug en minúsculas_con_guion_bajo, 1-20 campos; type text|longtext|number|date|time|money|select|checkbox; select necesita options; options vacío en los demás; longtext es texto largo, time una hora HH:MM, checkbox sí/no) y usarlas en la vista. Si hay que detectar repetidos (p. ej. una guía con el mismo número y otra fecha), la tabla nueva puede llevar duplicates {key, distinctBy ("" si cualquier repetición cuenta), flagField (select con flagValue entre sus options), flagValue}; en las demás, null. Nunca propongas una tabla que duplique una existente. No inventes filas.
 
 specJson es JSON con esta forma exacta:
 {"version":1,"subtitle"?:string,"accent"?:"primary"|"emerald"|"amber"|"sky"|"rose","blocks":[...]}
@@ -429,7 +461,7 @@ filters: [{"field":key,"op":"eq"|"neq"|"contains"|"gt"|"gte"|"lt"|"lte"|"empty"|
 - {"type":"media","title"?,"kind":"image"|"embed","url":dirección https,"alt"?,"caption"?,"aspect"?:"16:9"|"4:3"|"1:1"|"3:4"} — una imagen, o un video/mapa/presentación SÓLO de YouTube, Loom, Google Maps («Insertar un mapa», /maps/embed?pb=…) o Google Slides/Docs publicados en la web. Nunca otras páginas ni HTML. Úsalo sólo si la persona te da el enlace; no inventes direcciones.
 - {"type":"links","title"?,"links":[{"label"(≤40),"href":ruta interna como /views/cartera o https,"description"?,"tone"?}](1-8),"style"?:"buttons"|"cards"} — botones de navegación a otras vistas o páginas (un portal, un índice).
 FICHA DE CADA FILA: en table, board, zones, gallery y calendar, tocar una fila abre su ficha con sus campos (por defecto todos los de una tabla propia dentro de Cortex; por enlace público, sólo los que el bloque ya muestra). "openRecord":false la apaga; "detailFields":[≤16 keys] elige qué muestra (ponlo si piden mostrar más campos afuera, y nunca incluyas datos personales sensibles en una vista que se va a compartir); "recordEditable":[keys] deja editar esos campos desde la ficha (sólo tablas propias; necesita "editing").
-EN LA RAÍZ, OPCIONALES: "filtersBar":[{"id","label","source": tabla que algún bloque lee,"field","kind":"select"|"date_range"|"search"}] (≤6) — controles arriba que filtran TODOS los bloques de esa tabla («por sede», «entre fechas», «buscar cliente»); date_range sólo sobre fechas. "pages":[{"id","title","blockIds":[ids]}] (≤8) — pestañas cuando la vista tiene más de ~8 bloques o partes muy distintas («Resumen», «Detalle», «Agenda»); un bloque puede ir en varias; los que no estén en ninguna salen en la primera. "theme":{"accent"?:tono,"density"?:"comfortable"|"compact","header"?:"plain"|"hero","cover"?:imagen https} — "hero" para portales y vistas para clientes (banda grande con el nombre y el subtítulo); "compact" para tableros densos de operación.
+EN LA RAÍZ, OPCIONALES: "filtersBar":[{"id","label","source": tabla que algún bloque lee,"field","kind":"select"|"date_range"|"search"}] (≤6) — controles arriba que filtran TODOS los bloques de esa tabla («por sede», «entre fechas», «buscar cliente»); date_range sólo sobre fechas. "pages":[{"id","title","blockIds":[ids]}] (≤8) — pestañas cuando la vista tiene más de ~8 bloques o partes muy distintas («Resumen», «Detalle», «Agenda»); un bloque puede ir en varias; los que no estén en ninguna salen en la primera. "theme":{"accent"?:tono,"density"?:"comfortable"|"compact","header"?:"plain"|"hero","layout"?:"dashboard"|"operator","style"?:"clean"|"bold"|"dark-panel","cover"?:imagen https} — "hero" para portales y vistas para clientes (banda grande con el nombre y el subtítulo); "compact" para tableros densos de operación. "layout":"operator" es la pantalla de planta para el celular: una sola columna, el formulario arriba, controles grandes, tablas como tarjetas con el estado bien visible, métricas pequeñas de a tres por fila y alto contraste; úsalo SIEMPRE que la vista la use gente de planta, bodega, recepción o campo, o cuando el pedido diga «celular», «operarios», «registrar rápido»; ahí el formulario (con dictado si la tabla lo permite) es la pieza principal y va primero en blocks, seguido de 2–3 métricas y una tabla con "searchable":true. Sin esas señales deja "dashboard" (por defecto). "style": "clean" (por defecto), "bold" (títulos fuertes y tarjetas con borde del color del acento: tableros comerciales o de cara al cliente) o "dark-panel" (panel oscuro para pantallas de planta o TV que se miran de lejos; con pocas cifras grandes).
 INTERACTIVIDAD (sólo tablas propias, nunca fuentes de la plataforma ni tablas del Feed): en "table" puedes poner "editable":[keys] (se editan en el sitio) y "actions":[botones]; en "board", "draggable":true (arrastrar tarjetas cambia el campo de opciones) y "actions"; en "gallery" y "calendar", "actions". Botón: {"id","label"(≤32),"kind":"set_field" con "field" y "value" (p. ej. estado=Pagada; en campos de opciones el valor debe ser una opción) | "notify" (avisa en la campana a quien creó la vista y a los administradores),"confirm"?:bool,"tone"?}. Si hay algo editable, arrastrable o con botones, pon en la raíz "editing":"team" (sólo el equipo en la app) o "public" (también quien tenga el enlace; úsalo sólo si lo piden explícitamente). Por defecto "off".
 EN VIVO Y AVISOS: en la raíz "refreshSeconds": 0|10|30|60 (por defecto 30; usa 10 si piden «en tiempo real»). "alerts":[{"id","source": slug o fuente,"filters"?,"message"?,"sound"?:bool (por defecto true),"desktop"?:bool,"bell"?:bool}] — avisan cuando aparece una fila nueva que cumple los filtros mientras la vista está abierta; "bell" además suena en la campana de quien creó la vista cuando entra una fila por un formulario de esta vista. Úsalas cuando pidan «que suene», «que avise», «que me notifique».
 Diseño: primero 2-4 cifras clave en third (con compare cuando hay una fecha y tiene sentido la tendencia), luego gráficos o avances en half, luego la tabla, el tablero, la galería o el calendario en full. Agrega una barra de filtros cuando la vista mezcla sedes, vendedores o fechas. Sirve a cualquier negocio: ventas, logística, talento humano, clínicas, colegios, inmobiliarias. Títulos cortos en español de Colombia, sin emojis. Usa money para campos de dinero. line sólo sobre fechas; donut sólo con pocas categorías. No repitas la misma cifra dos veces.

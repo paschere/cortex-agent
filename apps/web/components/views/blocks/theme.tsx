@@ -26,6 +26,8 @@ export const DEFAULT_THEME: ComputedTheme = {
   accent: 'primary',
   density: 'comfortable',
   header: 'plain',
+  layout: 'dashboard',
+  style: 'clean',
   cover: null,
 };
 

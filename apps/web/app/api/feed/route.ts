@@ -1,13 +1,12 @@
-import { createHash, randomUUID } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
-import { registerFeedSourceCapture } from '@/lib/feed/api-source';
 import { feedFingerprint } from '@/lib/feed/fingerprint';
+import { FeedCaptureError, persistFeedCapture } from '@/lib/feed/google-sheet-capture';
 import { googleSpreadsheetId, readGoogleSheetFeed } from '@/lib/feed/google-sheets';
 import { FEED_MAX_BYTES, FEED_MAX_TEXT, feedMime } from '@/lib/feed/shared';
-import { FEED_COLUMNS, ownedFeed } from '@/lib/feed/store';
+import { ownedFeed } from '@/lib/feed/store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { parseDocument, putFile, removeFiles } from '@cortex/agent-tools';
+import { parseDocument } from '@cortex/agent-tools';
 import type { SheetData } from '@cortex/agent-tools/src/kb/spreadsheets';
 import { webScrape } from '@cortex/agent-tools/src/web/scrape';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -173,119 +172,33 @@ export async function POST(req: NextRequest) {
     sourceUrl: url,
     truncated,
   });
-  const findDuplicate = () =>
-    ownedFeed(db, user.id).eq('feed_content_hash', fingerprint).maybeSingle();
-  const duplicate = await findDuplicate();
-  if (duplicate.error)
-    return NextResponse.json(
-      { error: 'No se pudo comprobar si la fuente ya existe.' },
-      { status: 503 },
-    );
-  if (duplicate.data) {
-    await registerFeedSourceCapture({
-      db,
-      actorId: user.id,
-      kind: sourceKind,
-      name,
-      config: Object.keys(sourceConfig).length ? sourceConfig : { contentHash: fingerprint },
-      attachmentId: duplicate.data.id,
-      targetSourceId,
-    });
-    return NextResponse.json({ entry: duplicate.data, deduplicated: true });
-  }
-  // Older entries have no semantic identity yet; exact original bytes remain a safe match.
-  const rawHash = createHash('sha256').update(bytes).digest('hex');
-  const legacy = await ownedFeed(db, user.id)
-    .eq('sha256', rawHash)
-    .eq('mime', mime)
-    .is('feed_content_hash', null)
-    .order('created_at', { ascending: false })
-    .limit(1);
-  if (legacy.error)
-    return NextResponse.json(
-      { error: 'No se pudo comprobar el historial de la fuente.' },
-      { status: 503 },
-    );
-  if (legacy.data?.[0] && kind !== 'url') {
-    if (targetSourceId)
-      await registerFeedSourceCapture({
-        db,
-        actorId: user.id,
-        kind: sourceKind,
-        name,
-        config: { contentHash: fingerprint },
-        attachmentId: legacy.data[0].id,
-        targetSourceId,
-      });
-    return NextResponse.json({ entry: legacy.data[0], deduplicated: true });
-  }
-  if ((count ?? 0) >= 100)
-    return NextResponse.json(
-      { error: 'Tu Feed tiene 100 entradas. Elimina alguna para añadir una fuente nueva.' },
-      { status: 409 },
-    );
-  const id = randomUUID();
-  const path = `${user.id}/${id}/${name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+  // Deduplicar, topar en 100, subir el archivo y registrar la fuente vive en
+  // `persistFeedCapture` (paquete de herramientas), la misma ruta que usa el chat
+  // al conectar una hoja con `feed.connect_google_sheet`.
   try {
-    await putFile(db, { bucket: 'chat-uploads', path, content: bytes, contentType: mime });
-    const { data, error } = await db
-      .from('chat_attachments')
-      .insert({
-        id,
-        conversation_id: null,
-        disposition: 'turn',
-        filename: name,
-        mime,
-        byte_size: bytes.length,
-        sha256: rawHash,
-        feed_content_hash: fingerprint,
-        extracted_text: text,
-        file_path: path,
-        created_by: user.id,
-        feed_kind: kind,
-        source_url: url,
-        feed_tables: tables ?? null,
-        feed_truncated: truncated,
-      })
-      .select(FEED_COLUMNS)
-      .single();
-    if (error?.code === '23505') {
-      await removeFiles(db, 'chat-uploads', [path]);
-      const winner = await findDuplicate();
-      if (winner.error || !winner.data)
-        throw new Error('No se pudo recuperar la entrada existente.');
-      await registerFeedSourceCapture({
-        db,
-        actorId: user.id,
-        kind: sourceKind,
-        name,
-        config: Object.keys(sourceConfig).length ? sourceConfig : { contentHash: fingerprint },
-        attachmentId: winner.data.id,
-        targetSourceId,
-      });
-      return NextResponse.json({ entry: winner.data, deduplicated: true });
-    }
-    if (error || !data) throw new Error('No se pudo guardar la entrada.');
-    await registerFeedSourceCapture({
+    const saved = await persistFeedCapture({
       db,
       actorId: user.id,
-      kind: sourceKind,
+      count: count ?? 0,
+      kind: kind as 'file' | 'text' | 'url',
+      sourceKind,
       name,
-      config: Object.keys(sourceConfig).length ? sourceConfig : { contentHash: fingerprint },
-      attachmentId: data.id,
+      mime,
+      bytes,
+      text,
+      tables,
+      url,
+      truncated,
+      fingerprint,
+      sourceConfig,
       targetSourceId,
     });
-    return NextResponse.json({ entry: data }, { status: 201 });
-  } catch {
-    try {
-      await db.from('chat_attachments').delete().eq('id', id).eq('created_by', user.id);
-    } catch {
-      // Best effort rollback; the seven-day purge remains the final safety net.
-    }
-    await removeFiles(db, 'chat-uploads', [path]).catch(() => {});
-    return NextResponse.json(
-      { error: 'No se pudo añadir a Feed. Inténtalo otra vez.' },
-      { status: 500 },
-    );
+    return saved.deduplicated
+      ? NextResponse.json({ entry: saved.entry, deduplicated: true })
+      : NextResponse.json({ entry: saved.entry }, { status: 201 });
+  } catch (err) {
+    if (err instanceof FeedCaptureError)
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    throw err;
   }
 }

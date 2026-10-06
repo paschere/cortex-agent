@@ -28,6 +28,8 @@ export function Showcase({
   hero,
   inApp,
   panel,
+  layout = null,
+  look = null,
 }: {
   dark: boolean;
   brand: string;
@@ -38,12 +40,30 @@ export function Showcase({
   inApp: boolean;
   /** `marca`: la pantalla de la marca de /company; `cargando`: el esqueleto. */
   panel: string | null;
+  /** `diseno=operario`: el diseño de una columna para la planta. */
+  layout?: string | null;
+  /** `estilo=fuerte|panel`: los estilos visuales. */
+  look?: string | null;
 }) {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   }, [dark]);
   const view = useMemo(() => {
-    const v = showcaseView({ pages, empty });
+    const base = showcaseView({ pages, empty });
+    const v = base.theme
+      ? {
+          ...base,
+          theme: {
+            ...base.theme,
+            ...(layout === 'operario' ? { layout: 'operator' as const } : {}),
+            ...(look === 'fuerte'
+              ? { style: 'bold' as const }
+              : look === 'panel'
+                ? { style: 'dark-panel' as const }
+                : {}),
+          },
+        }
+      : base;
     if (!hero || !v.theme) return v;
     return {
       ...v,
@@ -54,7 +74,7 @@ export function Showcase({
           'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&q=70&auto=format&fit=crop',
       },
     };
-  }, [pages, empty, hero]);
+  }, [pages, empty, hero, layout, look]);
   const chosen = BRANDS[brand] ?? (BRANDS.andina as ViewBrand);
   const canvas = (
     <LiveViewCanvas

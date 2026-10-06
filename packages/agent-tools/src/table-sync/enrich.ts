@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SheetData } from '../kb/spreadsheets';
+import { applyDuplicateRule } from '../trackers/duplicates';
 import { type TrackerField, rowLabel, trackerFieldsSchema } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, defineTracker, shapeValues } from '../trackers/store';
 import { dayOfCell, headerKey } from '../views/feed-sources';
@@ -138,6 +139,9 @@ export async function applyUpdateOnly(
     outcome.updated += 1;
     outcome.changedLabels.push(label);
   }
+  // Una hoja sincronizada puede traer la misma guía con otra fecha: la
+  // regla de duplicados de la tabla (si tiene) se revisa una vez al final.
+  if (outcome.inserted || outcome.updated) await applyDuplicateRule(db, tracker.id);
   return outcome;
 }
 

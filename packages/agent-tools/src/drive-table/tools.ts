@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { getDuplicateRule } from '../trackers/duplicates';
 import {
   FIELD_TYPES,
   type TrackerField,
@@ -221,6 +222,9 @@ export const trackersSyncFromDriveFolder = registerTool({
             ),
             fields: parsedFields,
             userId: ctx.userId,
+            // Una tabla NUEVA desde un preset nace con su regla de duplicados;
+            // a una que ya existe no se le pone una regla que nadie pidió.
+            ...(!existing && preset?.duplicates ? { duplicates: preset.duplicates } : {}),
           })
         ).tracker
       : existing;
@@ -243,6 +247,18 @@ export const trackersSyncFromDriveFolder = registerTool({
         );
       return key;
     });
+
+    // 3b. Si la tabla marca duplicados «misma clave, distinta fecha», la fecha
+    // tiene que ser parte de la clave del documento: si no, la segunda guía
+    // con otra fecha pisa la primera y nunca hay dos filas que marcar.
+    const rule = (await getDuplicateRule(ctx.db, tracker.id))?.rule;
+    if (
+      rule?.distinctBy &&
+      keyFields.includes(rule.key) &&
+      !keyFields.includes(rule.distinctBy) &&
+      extractable.some((e) => e.key === rule.distinctBy)
+    )
+      keyFields.push(rule.distinctBy);
 
     // 4. Los valores con que nace una fila, contra el tipo de cada campo.
     for (const [key, value] of Object.entries(defaults)) {

@@ -554,6 +554,8 @@ describe('páginas y aspecto', () => {
       accent: 'primary',
       density: 'comfortable',
       header: 'plain',
+      layout: 'dashboard',
+      style: 'clean',
       cover: null,
     });
     expect(plain.pages).toEqual([]);
@@ -566,5 +568,13 @@ describe('páginas y aspecto', () => {
     );
     expect(hero.theme).toMatchObject({ header: 'hero', accent: 'emerald' });
     expect(hero.theme?.cover).toBe('https://cdn.example.com/c.jpg');
+    const planta = computeView(
+      spec([{ id: 'a', type: 'text', markdown: 'A' }], {
+        theme: { layout: 'operator', style: 'dark-panel' },
+      }),
+      new Map(),
+      NOW,
+    );
+    expect(planta.theme).toMatchObject({ layout: 'operator', style: 'dark-panel' });
   });
 });

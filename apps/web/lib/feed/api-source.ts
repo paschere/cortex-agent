@@ -12,6 +12,10 @@ import {
   runTool,
 } from '@cortex/agent-tools';
 import type { SheetData, SheetValue } from '@cortex/agent-tools/src/kb/spreadsheets';
+import {
+  hashConfig,
+  registerFeedSourceCapture,
+} from '@cortex/agent-tools/src/table-sync/feed-capture';
 import { webScrape } from '@cortex/agent-tools/src/web/scrape';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
@@ -21,6 +25,9 @@ import {
   feedPaginationSchema,
   valueAtPath,
 } from './pagination';
+
+// `registerFeedSourceCapture` vive en el paquete de herramientas (lo comparte el chat).
+export { registerFeedSourceCapture };
 
 const MAX_ROWS = 1000;
 const MAX_COLUMNS = 50;
@@ -166,115 +173,6 @@ export function normalizeApiFeed(
   }
   const serialized = typeof data === 'string' ? data : (JSON.stringify(data, null, 2) ?? '');
   return { text: serialized.slice(0, MAX_TEXT), truncated: serialized.length > MAX_TEXT };
-}
-
-function hashConfig(config: object) {
-  return createHash('sha256').update(JSON.stringify(config)).digest('hex');
-}
-
-export async function registerFeedSourceCapture(options: {
-  db: SupabaseClient;
-  actorId: string;
-  kind: 'file' | 'text' | 'url' | 'google_sheet';
-  name: string;
-  config: Record<string, unknown>;
-  attachmentId: string;
-  targetSourceId?: string;
-}) {
-  const now = new Date().toISOString();
-  const configHash = hashConfig(options.config);
-  if (options.targetSourceId) {
-    if (!['file', 'text'].includes(options.kind))
-      throw new Error('Sólo archivos y textos aceptan versiones manuales.');
-    const target = await options.db
-      .from('feed_sources')
-      .select('id,kind')
-      .eq('id', options.targetSourceId)
-      .eq('actor_id', options.actorId)
-      .maybeSingle();
-    if (target.error || !target.data) throw new Error('La fuente de destino no existe.');
-    if (target.data.kind !== options.kind)
-      throw new Error('La nueva versión debe ser del mismo tipo que la fuente.');
-    const updated = await options.db
-      .from('feed_sources')
-      .update({
-        latest_attachment_id: options.attachmentId,
-        enabled: true,
-        last_checked_at: now,
-        last_changed_at: now,
-        status: 'ok',
-        error: null,
-        updated_at: now,
-      })
-      .eq('id', options.targetSourceId)
-      .eq('actor_id', options.actorId);
-    if (updated.error) throw new Error('No se pudo guardar la nueva versión.');
-    const attachment = await options.db
-      .from('chat_attachments')
-      .select('feed_source_id')
-      .eq('id', options.attachmentId)
-      .eq('created_by', options.actorId)
-      .maybeSingle();
-    if (attachment.error || !attachment.data)
-      throw new Error('No se pudo comprobar la captura de la nueva versión.');
-    if (!attachment.data.feed_source_id) {
-      const linked = await options.db
-        .from('chat_attachments')
-        .update({ feed_source_id: options.targetSourceId })
-        .eq('id', options.attachmentId)
-        .eq('created_by', options.actorId)
-        .is('feed_source_id', null);
-      if (linked.error) throw new Error('No se pudo enlazar la nueva versión.');
-    }
-    return options.targetSourceId;
-  }
-  const existing = await options.db
-    .from('feed_sources')
-    .select('id')
-    .eq('actor_id', options.actorId)
-    .eq('kind', options.kind)
-    .eq('config_hash', configHash)
-    .maybeSingle();
-  if (existing.error) throw new Error('No se pudo comprobar el registro de la fuente.');
-  let id = existing.data?.id as string | undefined;
-  if (!id) {
-    const inserted = await options.db
-      .from('feed_sources')
-      .insert({
-        actor_id: options.actorId,
-        kind: options.kind,
-        name: options.name.slice(0, 240),
-        config: options.config,
-        config_hash: configHash,
-        latest_attachment_id: options.attachmentId,
-        last_checked_at: now,
-        last_changed_at: now,
-        status: 'ok',
-      })
-      .select('id')
-      .single();
-    if (inserted.error || !inserted.data) throw new Error('No se pudo registrar la fuente.');
-    id = inserted.data.id as string;
-  } else {
-    const updated = await options.db
-      .from('feed_sources')
-      .update({
-        latest_attachment_id: options.attachmentId,
-        last_checked_at: now,
-        status: 'ok',
-        error: null,
-        updated_at: now,
-      })
-      .eq('id', id);
-    if (updated.error) throw new Error('No se pudo actualizar la conexión de Feed.');
-  }
-  const linked = await options.db
-    .from('chat_attachments')
-    .update({ feed_source_id: id })
-    .eq('id', options.attachmentId)
-    .eq('created_by', options.actorId);
-  if (linked.error) throw new Error('No se pudo enlazar la captura de Feed.');
-  return id;
 }
 
 function rejectCredentialInputs(input: Record<string, unknown>) {

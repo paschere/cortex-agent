@@ -41,7 +41,7 @@ function opsFor(type: string | undefined): EditorFilterOp[] {
   if (type === 'number' || type === 'money') return NUMBER_OPS;
   if (type === 'date') return DATE_OPS;
   if (type === 'select') return SELECT_OPS;
-  if (type === 'text') return TEXT_OPS;
+  if (type === 'text' || type === 'longtext' || type === 'time') return TEXT_OPS;
   return [...FILTER_OPS];
 }
 

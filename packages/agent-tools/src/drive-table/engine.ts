@@ -6,6 +6,7 @@ import { driveGet, driveGetBytes, driveGetText } from '../gdrive/client';
 import { parseDocument } from '../kb/parsers';
 import { XLSX_MIME } from '../kb/spreadsheets';
 import { utilityModel } from '../model';
+import { applyDuplicateRule } from '../trackers/duplicates';
 import { type TrackerField, rowLabel } from '../trackers/schema';
 import { type TrackerRow, getTrackerById } from '../trackers/store';
 import type { ToolContext } from '../types';
@@ -504,6 +505,14 @@ export async function processDriveFile(
       } else if (written.action === 'updated') result.updated += 1;
       if (planned.review.length) result.needsReview += 1;
     }
+    // La regla de duplicados de la tabla (p. ej. una guía repetida con otra
+    // fecha) se aplica una vez por archivo, sobre las claves que acaba de tocar.
+    if (plan.rows.length)
+      await applyDuplicateRule(
+        db,
+        tracker.id,
+        plan.rows.map((r) => r.values),
+      );
     const review = plan.notes.length > 0 || plan.rows.some((r) => r.review.length > 0);
     if (!plan.rows.length) result.needsReview += 1;
     result.status = review ? 'needs_review' : 'ok';

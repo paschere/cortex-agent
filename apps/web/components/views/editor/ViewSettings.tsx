@@ -11,12 +11,16 @@ import {
   FILTER_BAR_KIND_LABEL,
   HEADER_LABEL,
   HEADER_STYLES,
+  LAYOUTS,
+  LAYOUT_LABEL,
   MAX_FILTER_BAR,
   MAX_VIEW_PAGES,
   REFRESH_CHOICES,
   REFRESH_LABEL,
   TONES,
   TONE_LABEL,
+  VIEW_STYLES,
+  VIEW_STYLE_LABEL,
 } from '@/lib/views/editor-shape';
 import {
   type EditorDraft,
@@ -333,6 +337,18 @@ function AppearanceSection({ spec, setSpec }: { spec: ViewSpec; setSpec: SetSpec
         value={theme.density ?? 'comfortable'}
         options={DENSITIES.map((d) => ({ value: d, label: DENSITY_LABEL[d] }))}
         onChange={(density) => setTheme({ density })}
+      />
+      <Segmented
+        label="Diseño"
+        value={theme.layout ?? 'dashboard'}
+        options={LAYOUTS.map((l) => ({ value: l, label: LAYOUT_LABEL[l] }))}
+        onChange={(layout) => setTheme({ layout })}
+      />
+      <Segmented
+        label="Estilo"
+        value={theme.style ?? 'clean'}
+        options={VIEW_STYLES.map((v) => ({ value: v, label: VIEW_STYLE_LABEL[v] }))}
+        onChange={(style) => setTheme({ style })}
       />
       <Segmented
         label="Cabecera"

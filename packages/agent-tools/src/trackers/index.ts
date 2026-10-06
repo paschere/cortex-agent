@@ -16,10 +16,22 @@ export {
 } from './tools';
 
 export {
+  applyDuplicateRule,
+  computeDuplicateFlags,
+  duplicateMessage,
+  duplicateRuleSchema,
+  getDuplicateRule,
+  normalizeDuplicateKey,
+  validateDuplicateRule,
+} from './duplicates';
+export type { DuplicateRule } from './duplicates';
+
+export {
   FIELD_KEY_RE,
   FIELD_TYPES,
   TRACKER_SLUG_RE,
   coerceValue,
+  parseCheckbox,
   fieldByKey,
   rowLabel,
   trackerFieldSchema,

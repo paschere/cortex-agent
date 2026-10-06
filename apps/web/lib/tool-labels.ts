@@ -441,6 +441,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
 
   // Tablas que esta empresa se inventa.
   kb_propose_memory: { label: 'Proponer un recuerdo para la empresa', icon: 'BookmarkPlus' },
+  feed_connect_google_sheet: { label: 'Conectar una hoja de Google', icon: 'Sheet' },
   trackers_sync_from_source: { label: 'Llenar una tabla sola desde una fuente', icon: 'RefreshCw' },
   trackers_update_from_source: {
     label: 'Actualizar una tabla desde una fuente',
