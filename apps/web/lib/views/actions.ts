@@ -241,7 +241,12 @@ export async function submitViewFormAction(
     const user = await requireSession();
     const db = getOrgScopedClient(user.organization.id);
     const view = await mustGetView(db, viewId);
-    const res = await submitViewForm(db, view, { blockId, values, submittedBy: user.id });
+    const res = await submitViewForm(db, view, {
+      blockId,
+      values,
+      submittedBy: user.id,
+      viewer: user.name || user.email,
+    });
     await bellForSubmission(db, view, blockId, user.name || user.email);
     revalidatePath(`/views/${view.slug}`);
     return { ok: true, message: res.message, duplicate: res.duplicate };

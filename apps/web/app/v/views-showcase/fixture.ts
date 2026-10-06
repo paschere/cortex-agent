@@ -78,6 +78,16 @@ const record: ComputedRecords = {
   ),
 };
 
+const HEAT_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'] as const;
+/** Pedidos por día (lunes…domingo) y hora (0–23): pico a media mañana y a media tarde. */
+const HEAT: number[][] = HEAT_DAYS.map((_, d) =>
+  Array.from({ length: 24 }, (_, h) => {
+    const work = d < 5 ? 1 : d === 5 ? 0.5 : 0.15;
+    const peak = Math.exp(-((h - 10) ** 2) / 8) + 0.8 * Math.exp(-((h - 15) ** 2) / 6);
+    return h < 6 || h > 21 ? 0 : Math.round(work * peak * 14);
+  }),
+);
+
 const SALES_SERIES = [
   { label: 'may', value: 182_000_000 },
   { label: 'jun', value: 201_500_000 },
@@ -127,7 +137,7 @@ const blocks: ComputedBlock[] = [
     value: 14,
     display: '14',
     rows: 14,
-    goal: null,
+    goal: { value: 10, display: '10', ratio: 1.4, direction: 'down', status: 'bad' },
     tone: 'rose',
     caption: 'Pedidos devueltos por el cliente.',
     source: 'Despachos',
@@ -158,7 +168,13 @@ const blocks: ComputedBlock[] = [
     value: 96_500_000,
     display: money(96_500_000),
     rows: 38,
-    goal: { value: 120_000_000, display: money(120_000_000), ratio: 0.804 },
+    goal: {
+      value: 120_000_000,
+      display: money(120_000_000),
+      ratio: 0.804,
+      direction: 'up',
+      status: 'warn',
+    },
     tone: 'emerald',
     caption: null,
     source: 'Pagos',
@@ -196,6 +212,41 @@ const blocks: ComputedBlock[] = [
     total: '142',
     tone: 'primary',
     source: 'Ventas',
+  },
+  {
+    id: 'embudo',
+    width: 'half',
+    type: 'chart',
+    title: 'Embudo de ventas',
+    chart: 'funnel',
+    points: [
+      { label: 'Contacto', value: 480, display: '480' },
+      { label: 'Cotización', value: 212, display: '212' },
+      { label: 'Negociación', value: 96, display: '96' },
+      { label: 'Cierre', value: 41, display: '41' },
+    ],
+    total: '829',
+    tone: 'primary',
+    source: 'Oportunidades',
+  },
+  {
+    id: 'picos',
+    width: 'full',
+    type: 'chart',
+    title: 'Pedidos por día y hora',
+    chart: 'heatmap',
+    points: HEAT.map((row, d) => {
+      const sum = row.reduce((a, v) => a + v, 0);
+      return { label: HEAT_DAYS[d] ?? '', value: sum, display: String(sum) };
+    }),
+    heat: {
+      rows: [...HEAT_DAYS],
+      max: Math.max(...HEAT.flat()),
+      cells: HEAT.map((row) => row.map((v) => ({ value: v, display: v ? String(v) : '' }))),
+    },
+    total: String(HEAT.flat().reduce((a, v) => a + v, 0)),
+    tone: 'sky',
+    source: 'Pedidos',
   },
   {
     id: 'tendencia',

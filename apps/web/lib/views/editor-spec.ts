@@ -61,6 +61,11 @@ export interface EditorCatalog {
    * lienzo no promete un bloque que el guardado rechazaría.
    */
   blockTypes: string[];
+  /**
+   * La gente del espacio que puede recibir el resumen periódico (`spec.digest`).
+   * Opcional: un servidor viejo no la manda y los ajustes lo dicen.
+   */
+  team?: Array<{ id: string; name: string }>;
 }
 
 export interface EditorProblem {

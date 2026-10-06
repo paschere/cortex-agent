@@ -117,7 +117,7 @@ export default async function TrackerPage({ params }: { params: Promise<{ slug: 
           updatedAt: tracker.updated_at,
         },
         columns,
-        rows: entries.map(trackerGridRow),
+        rows: entries.map((e) => trackerGridRow(e, tracker.fields)),
         total,
         savedViews,
         syncs: syncs.map(({ trackerId: _t, createdBy: _c, ...s }) => s),

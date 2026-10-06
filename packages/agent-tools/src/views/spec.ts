@@ -193,6 +193,12 @@ export const metricBlockSchema = z.object({
   format: z.enum(['number', 'money', 'percent']).default('number'),
   /** Meta opcional: la cifra se pinta contra ella. */
   goal: z.number().finite().optional(),
+  /**
+   * Hacia dónde es bueno ir con la meta. `up` (por defecto): la meta es un
+   * piso («vender 120 M»); `down`: es un techo («devoluciones, máx. 5»). Con
+   * meta, la cifra lleva semáforo (verde / ámbar / rojo) según esta dirección.
+   */
+  goalDirection: z.enum(['up', 'down']).optional(),
   tone: z.enum(TONES).default('primary'),
   caption: z.string().trim().max(200).optional(),
   /**
@@ -280,14 +286,25 @@ export const tableBlockSchema = z.object({
   actions: z.array(rowActionSchema).max(3).default([]),
 });
 
+export const CHART_KINDS = ['bar', 'line', 'donut', 'funnel', 'heatmap'] as const;
+export type ChartKind = (typeof CHART_KINDS)[number];
+
 export const chartBlockSchema = z.object({
   ...base,
   ...source,
   type: z.literal('chart'),
   title,
-  chart: z.enum(['bar', 'line', 'donut']).default('bar'),
+  /**
+   * `funnel`: embudo por etapas — `groupBy` es un campo de opciones y las
+   * etapas salen en el orden de sus opciones (con las vacías en cero).
+   * `heatmap`: día de la semana × hora; `groupBy` es una fecha (o created_at /
+   * updated_at, que traen la hora) y, si la fecha no trae hora, `hourField`
+   * nombra un campo de hora del día.
+   */
+  chart: z.enum(CHART_KINDS).default('bar'),
   /** Campo por el que se agrupa; las fechas se agrupan por `bucket`. */
   groupBy: fieldRef,
+  hourField: fieldRef.optional(),
   bucket: z.enum(['day', 'week', 'month']).default('month'),
   aggregate: z.enum(AGGREGATES).default('count'),
   field: fieldRef.optional(),
@@ -588,6 +605,22 @@ export const viewThemeSchema = z.object({
 });
 export type ViewTheme = z.infer<typeof viewThemeSchema>;
 
+/**
+ * EL RESUMEN PERIÓDICO (migración 0203 guarda lo último que se envió). Cada
+ * día o cada semana, a `hour` (hora de Bogotá), Cortex manda por correo a los
+ * `recipients` —ids de usuario, sólo miembros del espacio— las cifras de la
+ * vista, las filas nuevas desde el último envío y las novedades. Opcional y
+ * sin valor por defecto: los specs ya guardados no cambian.
+ * `weekday`: 1 lunes … 7 domingo; sólo cuenta si la cadencia es semanal.
+ */
+export const digestSchema = z.object({
+  cadence: z.enum(['daily', 'weekly']),
+  hour: z.number().int().min(0).max(23),
+  weekday: z.number().int().min(1).max(7).optional(),
+  recipients: z.array(z.string().trim().min(1).max(64)).min(1).max(20),
+});
+export type ViewDigest = z.infer<typeof digestSchema>;
+
 export const viewSpecSchema = z
   .object({
     version: z.literal(1),
@@ -610,6 +643,7 @@ export const viewSpecSchema = z
     filtersBar: z.array(filterBarItemSchema).max(MAX_FILTER_BAR).optional(),
     pages: z.array(viewPageSchema).max(MAX_VIEW_PAGES).optional(),
     theme: viewThemeSchema.optional(),
+    digest: digestSchema.optional(),
   })
   .superRefine((spec, ctx) => {
     const issue = (message: string, path: Array<string | number>) =>
@@ -632,6 +666,8 @@ export const viewSpecSchema = z
           i,
           'target',
         ]);
+      if (block.type === 'metric' && block.goalDirection && !block.goal)
+        issue('goalDirection necesita una meta (goal).', ['blocks', i, 'goal']);
       if (block.type === 'metric' && block.compare && !block.dateField)
         issue('Comparar con el período anterior necesita un campo de fecha (dateField).', [
           'blocks',
@@ -827,7 +863,21 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
               `${where}: «${block.field}» no es numérico; usa count o un campo de número o dinero.`,
             );
         }
-        if (block.type === 'chart') need(block.groupBy, 'agrupar');
+        if (block.type === 'chart') {
+          need(block.groupBy, 'agrupar');
+          if (block.chart === 'funnel')
+            needType(block.groupBy, 'etapas del embudo', isSelect, 'un campo de opciones');
+          if (block.chart === 'heatmap') {
+            needType(block.groupBy, 'día del mapa de calor', isDate, 'un campo de fecha');
+            if (block.hourField)
+              needType(
+                block.hourField,
+                'hora del mapa de calor',
+                (t) => t === 'time',
+                'un campo de hora',
+              );
+          }
+        }
         if (block.type === 'metric' && block.compare && block.dateField)
           needType(block.dateField, 'período', isDate, 'un campo de fecha');
         break;

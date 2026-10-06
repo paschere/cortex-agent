@@ -309,6 +309,17 @@ function TypeFields({
               onChange={(goal) => onChange({ ...block, goal }, `${block.id}:goal`)}
             />
           </Field>
+          {block.goal !== undefined && (
+            <Segmented
+              label="La meta es"
+              value={block.goalDirection ?? 'up'}
+              options={[
+                { value: 'up', label: 'Un piso (llegar)' },
+                { value: 'down', label: 'Un techo (no pasar)' },
+              ]}
+              onChange={(goalDirection) => onChange({ ...block, goalDirection })}
+            />
+          )}
           <ToneSwatches value={block.tone} onChange={(tone) => onChange({ ...block, tone })} />
           <Field label="Nota bajo la cifra (opcional)">
             <input
@@ -619,6 +630,17 @@ function TypeFields({
               options={BUCKETS.map((b) => ({ value: b, label: BUCKET_LABEL[b] }))}
               onChange={(bucket) => onChange({ ...block, bucket })}
             />
+          )}
+          {block.chart === 'funnel' && groupType !== 'select' && (
+            <p className="text-micro text-amber">
+              El embudo agrupa por un campo de opciones: cada opción es una etapa.
+            </p>
+          )}
+          {block.chart === 'heatmap' && (
+            <p className="text-micro text-ink-faint">
+              Agrupa por «Creado» o «Actualizado» (traen la hora), o por una fecha y elige su campo
+              de hora en la conversación.
+            </p>
           )}
           {block.chart === 'line' && groupType !== 'date' && (
             <p className="text-micro text-amber">La línea se lee mejor agrupando por una fecha.</p>

@@ -522,9 +522,15 @@ async function writeRow(
     ...Object.fromEntries(Object.entries(changes).map(([k, c]) => [k, c.to])),
   };
   // Valida antes de escribir: un valor que la columna no acepta falla aquí.
-  shapeValues(tracker.fields, next);
+  shapeValues(tracker.fields, next, { lenient: true });
   const started = Date.now();
-  await upsertRow(db, { tracker, rowId, values: next, userId: lookup.created_by });
+  await upsertRow(db, {
+    tracker,
+    rowId,
+    values: next,
+    userId: lookup.created_by,
+    lenient: true,
+  });
   await writeAuditEvent({
     db,
     userId: lookup.created_by as UUID,

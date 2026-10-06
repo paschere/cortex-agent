@@ -36,7 +36,7 @@ import {
 } from '@/lib/views/editor-spec';
 import type { FilterBarItem, ViewAlert, ViewPage, ViewSpec } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { AlertTriangle, BellRing, Check, Filter, Layers, Plus } from 'lucide-react';
+import { AlertTriangle, BellRing, Check, Filter, Layers, Mail, Plus } from 'lucide-react';
 import { FiltersEditor } from './FiltersEditor';
 import {
   AddButton,
@@ -69,11 +69,14 @@ type Change = (next: EditorDraft, coalesce?: string) => void;
 export function ViewSettings({
   draft,
   sources,
+  team,
   problems,
   onChange,
 }: {
   draft: EditorDraft;
   sources: EditorSource[];
+  /** La gente del espacio a quien se le puede mandar el resumen. */
+  team: Array<{ id: string; name: string }>;
   /** Los problemas que no son de un bloque: de la vista o de sus avisos. */
   problems: EditorProblem[];
   onChange: Change;
@@ -178,6 +181,8 @@ export function ViewSettings({
 
       <LiveAlertSection spec={spec} setSpec={setSpec} sources={sources} />
 
+      <DigestSection spec={spec} setSpec={setSpec} team={team} />
+
       <Section
         title="Avisos"
         action={
@@ -271,6 +276,122 @@ function LiveAlertSection({
             checked={live.bell}
             onChange={(bell) => patch({ bell })}
           />
+        </div>
+      )}
+    </Section>
+  );
+}
+
+const WEEKDAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+/**
+ * «ENVIAR UN RESUMEN»: por correo, a miembros del equipo, cada día o cada
+ * semana a una hora de Bogotá. Lleva las cifras de la vista, lo que entró
+ * desde el último envío y las novedades. WhatsApp no está: el canal saliente
+ * no tiene un módulo común todavía.
+ */
+function DigestSection({
+  spec,
+  setSpec,
+  team,
+}: {
+  spec: ViewSpec;
+  setSpec: SetSpec;
+  team: Array<{ id: string; name: string }>;
+}) {
+  const digest = spec.digest;
+  const patch = (next: Partial<NonNullable<ViewSpec['digest']>>, coalesce?: string) =>
+    digest && setSpec({ digest: { ...digest, ...next } }, coalesce);
+  return (
+    <Section title="Resumen por correo">
+      <Toggle
+        label="Enviar un resumen"
+        hint="Las cifras, las filas nuevas desde el último envío y las novedades, al correo de quien elijas. Sólo las fuentes del equipo; nada personal."
+        checked={Boolean(digest)}
+        onChange={(on) =>
+          setSpec({
+            digest: on
+              ? { cadence: 'daily', hour: 8, recipients: team.slice(0, 1).map((p) => p.id) }
+              : undefined,
+          })
+        }
+      />
+      {digest && (
+        <div className="space-y-2.5 pl-1">
+          <Segmented
+            label="Cada"
+            value={digest.cadence}
+            options={[
+              { value: 'daily', label: 'Día' },
+              { value: 'weekly', label: 'Semana' },
+            ]}
+            onChange={(cadence) =>
+              patch({ cadence, weekday: cadence === 'weekly' ? (digest.weekday ?? 1) : undefined })
+            }
+          />
+          <div className="grid grid-cols-2 gap-2">
+            {digest.cadence === 'weekly' && (
+              <Field label="El día">
+                <select
+                  value={digest.weekday ?? 1}
+                  onChange={(e) => patch({ weekday: Number(e.target.value) })}
+                  className={INPUT}
+                >
+                  {WEEKDAYS.map((d, i) => (
+                    <option key={d} value={i + 1}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            <Field label="A las (hora de Bogotá)">
+              <select
+                value={digest.hour}
+                onChange={(e) => patch({ hour: Number(e.target.value) })}
+                className={INPUT}
+              >
+                {Array.from({ length: 24 }, (_, h) => h).map((h) => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, '0')}:00
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <fieldset>
+            <legend className="field-label mb-1 flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5" aria-hidden /> Para quién
+            </legend>
+            {team.length === 0 ? (
+              <p className="text-micro text-ink-faint">No se pudo leer el equipo del espacio.</p>
+            ) : (
+              <ul className="max-h-44 space-y-1 overflow-y-auto">
+                {team.map((p) => (
+                  <li key={p.id}>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-ink">
+                      <input
+                        type="checkbox"
+                        checked={digest.recipients.includes(p.id)}
+                        onChange={(e) =>
+                          patch({
+                            recipients: e.target.checked
+                              ? [...digest.recipients, p.id].slice(0, 20)
+                              : digest.recipients.filter((id) => id !== p.id),
+                          })
+                        }
+                        className="h-4 w-4 accent-[rgb(var(--primary))]"
+                      />
+                      <span className="truncate">{p.name}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {digest.recipients.length === 0 && (
+              <p className="mt-1 text-micro text-amber">Elige al menos una persona.</p>
+            )}
+          </fieldset>
         </div>
       )}
     </Section>

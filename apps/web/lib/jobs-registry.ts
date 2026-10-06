@@ -90,6 +90,7 @@ import {
   tableSyncSetupJob,
 } from '@/inngest/functions/table-sync';
 import { turnContextPurgeJob, turnLatencyPurgeJob } from '@/inngest/functions/turn-context-purge';
+import { viewDigestDispatchJob, viewDigestRunJob } from '@/inngest/functions/view-digest';
 import {
   weeklyReportDispatchJob,
   weeklyReportWorkspaceJob,
@@ -125,6 +126,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'management/follow-up.workspace': managementFollowUpWorkspaceJob,
   'goals/watch.dispatch': goalsWatchDispatchJob,
   'reports/weekly.dispatch': weeklyReportDispatchJob,
+  // Resumen periódico de una vista (0203): cada hora decide qué vistas tocan.
+  'views/digest.dispatch': viewDigestDispatchJob,
   // Cobro (0187): estado efectivo y recordatorios, una vez al día.
   'billing/renewals': billingRenewalsJob,
   'work/sync.dispatch': workSyncDispatchJob,
@@ -155,6 +158,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'gmail/backfill.user': gmailBackfillUserJob,
   'gmail/sweep.user': gmailSweepUserJob,
   'reports/weekly.workspace': weeklyReportWorkspaceJob,
+  'views/digest.run': viewDigestRunJob,
   'work/sync.workspace': workSyncWorkspaceJob,
   'work/assigned': workAssignedJob,
   'clients/link-workspace': clientsLinkWorkspaceJob,

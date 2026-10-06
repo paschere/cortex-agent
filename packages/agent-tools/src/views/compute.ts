@@ -1,9 +1,10 @@
-import type { TrackerField } from '../trackers/schema';
+import { type TrackerField, displayTrackerValue } from '../trackers/schema';
 import { type EmbedProvider, embedSrc, httpsUrl, safeHref } from './embeds';
 import {
   type Aggregate,
   BLOCK_LABEL,
   type CatalogTracker,
+  type ChartKind,
   type Period,
   type RowAction,
   type Tone,
@@ -119,7 +120,15 @@ export type ComputedBlock =
       value: number | null;
       display: string;
       rows: number;
-      goal: { value: number; display: string; ratio: number } | null;
+      goal: {
+        value: number;
+        display: string;
+        ratio: number;
+        /** Hacia dónde es bueno ir: piso (`up`) o techo (`down`). */
+        direction?: 'up' | 'down';
+        /** Semáforo: verde, ámbar, rojo. Null si la cifra no tiene valor. */
+        status?: GoalStatus | null;
+      } | null;
       tone: Tone;
       caption: string | null;
       source: string;
@@ -134,7 +143,7 @@ export type ComputedBlock =
         label: string;
         kind: 'text' | 'number' | 'date';
         /** Presente sólo si la columna se edita Y quien mira puede escribir. */
-        edit?: { type: TrackerField['type']; options: string[]; required: boolean };
+        edit?: ComputedEditMeta;
       }>;
       rows: Array<{
         id: string;
@@ -152,8 +161,10 @@ export type ComputedBlock =
   | (BlockBase & {
       type: 'chart';
       title: string;
-      chart: 'bar' | 'line' | 'donut';
+      chart: ChartKind;
       points: Array<{ label: string; value: number; display: string }>;
+      /** Sólo en `heatmap`: filas lunes…domingo, columnas 0–23 h. */
+      heat?: ComputedHeat;
       total: string;
       tone: Tone;
       source: string;
@@ -172,13 +183,7 @@ export type ComputedBlock =
       tracker: string;
       submitLabel: string;
       successMessage: string;
-      fields: Array<{
-        key: string;
-        label: string;
-        type: TrackerField['type'];
-        required: boolean;
-        options: string[];
-      }>;
+      fields: ComputedFormField[];
     })
   | (BlockBase & {
       type: 'gallery';
@@ -265,6 +270,65 @@ export type ComputedBlock =
     })
   | (BlockBase & { type: 'problem'; title: string; message: string });
 
+export type GoalStatus = 'good' | 'warn' | 'bad';
+
+export interface ComputedHeat {
+  rows: string[];
+  max: number;
+  cells: Array<Array<{ value: number; display: string }>>;
+}
+
+/**
+ * El semáforo de una meta. Con la meta como piso (`up`): verde al llegar,
+ * ámbar desde el 70 %, rojo debajo. Como techo (`down`): verde mientras no la
+ * pase, ámbar hasta un 20 % por encima, rojo más allá.
+ */
+export function goalStatus(
+  value: number | null,
+  goal: number,
+  direction: 'up' | 'down',
+): GoalStatus | null {
+  if (value === null || !Number.isFinite(value) || goal === 0) return null;
+  if (direction === 'up') {
+    const ratio = value / goal;
+    return ratio >= 1 ? 'good' : ratio >= 0.7 ? 'warn' : 'bad';
+  }
+  return value <= goal ? 'good' : value <= goal * 1.2 ? 'warn' : 'bad';
+}
+
+/** Lunes = 0 … domingo = 6, y la hora, en Bogotá. Null si no se puede leer. */
+export function weekdayHour(
+  value: string,
+  hourFrom?: string,
+): { weekday: number; hour: number } | null {
+  let weekday: number;
+  let hour = 0;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    weekday = (new Date(`${value}T12:00:00Z`).getUTCDay() + 6) % 7;
+  } else {
+    const t = Date.parse(value);
+    if (Number.isNaN(t)) return null;
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: VIEW_TIMEZONE,
+      weekday: 'short',
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(t));
+    const wd = parts.find((p) => p.type === 'weekday')?.value ?? '';
+    weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(wd);
+    if (weekday < 0) return null;
+    hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0) % 24;
+  }
+  if (hourFrom !== undefined) {
+    const m = /^(\d{1,2}):\d{2}/.exec(hourFrom);
+    if (!m) return null;
+    hour = Number(m[1]);
+  }
+  return { weekday, hour };
+}
+
+export const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'] as const;
+
 /** El KPI contra el período anterior. */
 export interface ComputedCompare {
   period: Period;
@@ -293,7 +357,7 @@ export interface ComputedRecords {
     label: string;
     kind: 'text' | 'number' | 'date';
     /** Presente sólo si el campo se edita desde la ficha Y quien mira puede escribir. */
-    edit?: { type: TrackerField['type']; options: string[]; required: boolean };
+    edit?: ComputedEditMeta;
   }>;
   rows: Record<
     string,
@@ -351,6 +415,40 @@ export interface ComputedAlertFeed {
   /** `rev` es la huella de la fila (su última actualización): si cambia, la fila cambió. */
   rows: Array<{ id: string; label: string; createdAt: string; rev: string }>;
 }
+
+/** Lo que el navegador necesita para validar una celda que se edita en el sitio. */
+export type ComputedEditMeta = Pick<
+  TrackerField,
+  'type' | 'min' | 'max' | 'minLength' | 'maxLength' | 'format' | 'pattern' | 'message'
+> & { options: string[]; required: boolean };
+
+/**
+ * Un campo del formulario con todo lo que el navegador necesita para validar,
+ * mostrar u ocultar y pre-llenar. `unique` no viaja: sólo el servidor puede
+ * saber si el valor ya existe.
+ */
+export type ComputedFormField = Pick<
+  TrackerField,
+  | 'key'
+  | 'label'
+  | 'type'
+  | 'min'
+  | 'max'
+  | 'minLength'
+  | 'maxLength'
+  | 'format'
+  | 'pattern'
+  | 'message'
+  | 'default'
+  | 'help'
+  | 'placeholder'
+  | 'example'
+  | 'showIf'
+  | 'accept'
+  | 'multiple'
+  | 'tracker'
+  | 'scan'
+> & { required: boolean; options: string[] };
 
 export interface ComputedView {
   blocks: ComputedBlock[];
@@ -431,6 +529,7 @@ function displayValue(tracker: CatalogTracker, row: ViewRow, key: string): strin
   if (v === undefined) return '—';
   const type = fieldType(tracker, key);
   if (type === 'checkbox') return Number(v) === 1 ? 'Sí' : 'No';
+  if (type === 'file' || type === 'relation') return displayTrackerValue({ type }, v) || '—';
   if (type === 'money') return formatValue(Number(v), 'money');
   if (type === 'number') return formatValue(Number(v), 'number');
   if (
@@ -652,9 +751,15 @@ function columnKind(tracker: CatalogTracker, key: string): 'text' | 'number' | '
 
 function editMeta(tracker: CatalogTracker, key: string) {
   const field = tracker.fields.find((f) => f.key === key);
-  return field
-    ? { type: field.type, options: field.options ?? [], required: field.required }
-    : undefined;
+  if (!field) return undefined;
+  const meta: ComputedEditMeta = {
+    type: field.type,
+    options: field.options ?? [],
+    required: field.required,
+  };
+  for (const k of ['min', 'max', 'minLength', 'maxLength', 'format', 'pattern', 'message'] as const)
+    if (field[k] !== undefined) (meta as Record<string, unknown>)[k] = field[k];
+  return meta;
 }
 
 function sortRows(
@@ -894,6 +999,7 @@ function computeBlock(
       ? [block.field]
       : []),
     ...(block.type === 'metric' && block.compare ? opt(block.dateField) : []),
+    ...(block.type === 'chart' ? opt(block.hourField) : []),
     ...(block.type === 'progress' ? opt(block.groupBy) : []),
     ...(block.type === 'gallery'
       ? [
@@ -943,6 +1049,8 @@ function computeBlock(
                 value: block.goal,
                 display: formatValue(block.goal, format),
                 ratio: value === null ? 0 : value / block.goal,
+                direction: block.goalDirection ?? 'up',
+                status: goalStatus(value, block.goal, block.goalDirection ?? 'up'),
               }
             : null,
         tone: block.tone,
@@ -994,6 +1102,61 @@ function computeBlock(
       const format = formatOf(tracker, block.field, block.format);
       const type = fieldType(tracker, block.groupBy);
       const isDate = type === 'date' || type === 'builtin_date';
+      if (block.chart === 'heatmap') {
+        if (!isDate)
+          return problem(
+            block,
+            `El mapa de calor necesita un campo de fecha; «${block.groupBy}» no lo es.`,
+          );
+        const builtin = block.groupBy === 'created_at' || block.groupBy === 'updated_at';
+        if (!builtin && !block.hourField)
+          return problem(
+            block,
+            `«${block.groupBy}» sólo trae el día. Para el mapa de calor usa created_at / updated_at o indica un campo de hora (hourField).`,
+          );
+        const lists: ViewRow[][][] = Array.from({ length: 7 }, () =>
+          Array.from({ length: 24 }, () => [] as ViewRow[]),
+        );
+        for (const r of rows) {
+          const stamp =
+            block.groupBy === 'created_at'
+              ? r.created_at
+              : block.groupBy === 'updated_at'
+                ? r.updated_at
+                : r.values[block.groupBy];
+          if (typeof stamp !== 'string' || !stamp) continue;
+          const hv = block.hourField ? r.values[block.hourField] : undefined;
+          if (block.hourField && typeof hv !== 'string') continue;
+          const wh = weekdayHour(stamp, block.hourField ? (hv as string) : undefined);
+          if (wh) lists[wh.weekday]?.[wh.hour]?.push(r);
+        }
+        let max = 0;
+        const cells = lists.map((day) =>
+          day.map((list) => {
+            const value = list.length ? (aggregate(list, block.aggregate, block.field) ?? 0) : 0;
+            max = Math.max(max, value);
+            return { value, display: list.length ? formatValue(value, format) : '' };
+          }),
+        );
+        const perDay = cells.map((day, i) => {
+          const list = lists[i]?.flat() ?? [];
+          const value = list.length ? (aggregate(list, block.aggregate, block.field) ?? 0) : 0;
+          return { label: WEEKDAY_LABELS[i] ?? '', value, display: formatValue(value, format) };
+        });
+        const any = rows.length > 0 && max > 0;
+        return {
+          type: 'chart',
+          id: block.id,
+          width: block.width,
+          title: block.title,
+          chart: 'heatmap',
+          points: any ? perDay : [],
+          heat: { rows: [...WEEKDAY_LABELS], max, cells },
+          total: formatValue(aggregate(rows, block.aggregate, block.field), format),
+          tone: block.tone,
+          source: tracker.name,
+        };
+      }
       const groups = new Map<string, ViewRow[]>();
       for (const r of rows) {
         const v = rawValue(r, block.groupBy);
@@ -1014,7 +1177,19 @@ function computeBlock(
         list,
         value: aggregate(list, block.aggregate, block.field) ?? 0,
       }));
-      if (isDate) {
+      if (block.chart === 'funnel') {
+        // Las etapas, en el orden de las opciones y con las vacías en cero: un
+        // embudo sin su etapa vacía miente sobre dónde se cae la gente.
+        const order = tracker.fields.find((f) => f.key === block.groupBy)?.options ?? [];
+        entries = order.slice(0, block.limit).map((key) => {
+          const list = groups.get(key) ?? [];
+          return {
+            key,
+            list,
+            value: list.length ? (aggregate(list, block.aggregate, block.field) ?? 0) : 0,
+          };
+        });
+      } else if (isDate) {
         entries.sort((a, b) => a.key.localeCompare(b.key));
         entries = entries.slice(-block.limit);
       } else if (type === 'select') {
@@ -1302,17 +1477,44 @@ function computeBlock(
         fields: keys
           .map((key) => tracker.fields.find((f) => f.key === key))
           .filter((f): f is TrackerField => Boolean(f))
-          .map((f) => ({
-            key: f.key,
-            label: f.label,
-            type: f.type,
-            required: f.required,
-            options: f.options ?? [],
-          })),
+          .map(formField),
       };
     }
   }
 }
+
+/** Sólo las opciones que están puestas: el JSON del bloque no carga `undefined`. */
+function formField(f: TrackerField): ComputedFormField {
+  const out: ComputedFormField = {
+    key: f.key,
+    label: f.label,
+    type: f.type,
+    required: f.required,
+    options: f.options ?? [],
+  };
+  for (const k of FORM_FIELD_EXTRAS)
+    if (f[k] !== undefined) (out as Record<string, unknown>)[k] = f[k];
+  return out;
+}
+
+const FORM_FIELD_EXTRAS = [
+  'min',
+  'max',
+  'minLength',
+  'maxLength',
+  'format',
+  'pattern',
+  'message',
+  'default',
+  'help',
+  'placeholder',
+  'example',
+  'showIf',
+  'accept',
+  'multiple',
+  'tracker',
+  'scan',
+] as const;
 
 // ---------------------------------------------------------------------------
 // La barra de filtros, las páginas y el aspecto

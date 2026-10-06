@@ -180,6 +180,8 @@ export async function editTrackerCell(
       values: merged(tracker.fields, entry.values, { [key]: value }),
       label: keptLabel(tracker.fields, entry),
       userId: user.id,
+      // Se juzga sólo lo que se tocó: una fila vieja no se bloquea por otra celda.
+      only: new Set([key]),
     });
     await audit(db, user.id, 'trackers.upsert', started, {
       tracker: tracker.slug,
@@ -188,7 +190,7 @@ export async function editTrackerCell(
       changes: { [key]: { from: before, to: saved.values[key] ?? null } },
     });
     await resyncWork(db, user.organization.id, tracker.slug);
-    return { ok: true, row: trackerGridRow(saved) };
+    return { ok: true, row: trackerGridRow(saved, tracker.fields) };
   } catch (err) {
     return { ok: false, error: message(err, 'No se pudo guardar el cambio.') };
   }
@@ -268,7 +270,7 @@ export async function createTrackerRow(
       created: true,
     });
     await resyncWork(db, user.organization.id, tracker.slug);
-    return { ok: true, row: trackerGridRow(saved) };
+    return { ok: true, row: trackerGridRow(saved, tracker.fields) };
   } catch (err) {
     return { ok: false, error: message(err, 'No se pudo crear la fila.') };
   }
@@ -539,7 +541,11 @@ export async function queryTrackerRows(
     const tracker = await mustTracker(db, trackerId);
     const columns = trackerColumns(tracker.fields);
     const entries = await readTrackerEntries(db, tracker.id, { limit: QUERY_CAP });
-    const result = applyView(entries.map(trackerGridRow), columns, normalizeView(columns, view));
+    const result = applyView(
+      entries.map((e) => trackerGridRow(e, tracker.fields)),
+      columns,
+      normalizeView(columns, view),
+    );
     const offset = Math.max(0, Math.floor(page?.offset ?? 0));
     const limit = Math.max(1, Math.min(Math.floor(page?.limit ?? 500), 2000));
     return { ok: true, rows: result.rows.slice(offset, offset + limit), total: result.rows.length };

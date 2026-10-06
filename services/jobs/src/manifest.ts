@@ -92,6 +92,9 @@ export const JOBS: JobSpec[] = [
   { name: 'management/follow-up.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'goals/watch.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'reports/weekly.dispatch', cron: '0 12 * * 1', retryLimit: 1, concurrency: 1 },
+  // Resumen periódico de una vista (0203): cada hora en punto decide qué vistas
+  // con spec.digest tocan. Ver apps/web/inngest/functions/view-digest.ts.
+  { name: 'views/digest.dispatch', cron: '0 * * * *', retryLimit: 1, concurrency: 1 },
   // Cobro (0187): 13:00 UTC = 8:00 en Bogotá, para que el recordatorio llegue en horario.
   { name: 'billing/renewals', cron: '0 13 * * *', retryLimit: 1, concurrency: 1 },
   // El registro de trabajo (0174): 06:45 de Bogotá todos los días, después de
@@ -147,6 +150,7 @@ export const JOBS: JobSpec[] = [
   { name: 'gmail/backfill.user', retryLimit: 1, concurrency: 3, singletonKeyFrom: 'userId' },
   { name: 'gmail/sweep.user', retryLimit: 1, concurrency: 5, singletonKeyFrom: 'userId' },
   { name: 'reports/weekly.workspace', retryLimit: 1, concurrency: 5 },
+  { name: 'views/digest.run', retryLimit: 1, concurrency: 5 },
   { name: 'work/sync.workspace', retryLimit: 1, concurrency: 5 },
   // El aviso de trabajo reasignado (work.assign): la campana de quien lo recibe.
   { name: 'work/assigned', retryLimit: 1, concurrency: 5 },

@@ -18,8 +18,9 @@ import {
 } from '@/lib/views/filter-param';
 import type { ComputedView } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { Bell, BellOff, Printer, X } from 'lucide-react';
+import { Bell, BellOff, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ExportMenu } from './ExportMenu';
 import { type SubmitTarget, ViewCanvas } from './ViewCanvas';
 import { LiveStatus, ViewCover } from './blocks/ViewChrome';
 import { useBrandScope, useViewBrand } from './blocks/brand';
@@ -344,14 +345,11 @@ export function LiveViewCanvas({
           ))}
         </select>
       </label>
-      <button
-        type="button"
-        onClick={() => window.print()}
-        title="Imprimir o guardar en PDF"
-        className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-border bg-surface px-3 text-micro font-semibold text-ink-muted shadow-card transition-colors hover:text-ink"
-      >
-        <Printer className="h-3.5 w-3.5" aria-hidden /> Imprimir
-      </button>
+      <ExportMenu
+        dataUrl={dataUrl}
+        filterParam={filterParam.current}
+        title={heading?.title ?? 'Vista'}
+      />
     </>
   );
 

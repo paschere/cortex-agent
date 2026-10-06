@@ -120,8 +120,12 @@ async function formFields(
   if (!data) throw new NotFoundError('La tabla de este formulario ya no existe.');
   const fields = ((data as { fields: DictField[] }).fields ?? []).filter(Boolean);
   const allowed = new Set(block.fields.length ? block.fields : fields.map((f) => f.key));
-  return fields.filter((f) => allowed.has(f.key));
+  // Una foto, una ubicación o una fila de otra tabla no se dictan: se toman o se
+  // eligen en el formulario. Ni se le piden al modelo ni se señalan como faltantes.
+  return fields.filter((f) => allowed.has(f.key) && !NOT_DICTATED.has(f.type));
 }
+
+const NOT_DICTATED: ReadonlySet<string> = new Set(['file', 'location', 'relation']);
 
 /**
  * Un número como lo escribe el modelo o la persona en Colombia: «1.200.000»
@@ -174,6 +178,10 @@ export function shapeDictated(
         if (hit) out[f.key] = hit;
         break;
       }
+      case 'file':
+      case 'location':
+      case 'relation':
+        break;
       default:
         out[f.key] = s.slice(0, f.type === 'longtext' ? 2000 : 400);
     }

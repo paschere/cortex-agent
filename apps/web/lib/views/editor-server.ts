@@ -6,7 +6,9 @@ import {
   checkSpecAgainst,
   computeView,
   getView,
+  listDirectory,
   loadViewSources,
+  personLabel,
   trackerFieldsSchema,
   trackerSlugSchema,
   trackersOf,
@@ -74,6 +76,10 @@ export async function editorCatalog(
         rowCount: t.rowCount,
       })),
     blockTypes: blockSchema.options.map((o) => o.shape.type.value as string),
+    // Sólo quien tiene correo: el resumen sale por correo.
+    team: (await listDirectory(db).catch(() => []))
+      .filter((p) => p.email.includes('@'))
+      .map((p) => ({ id: p.id, name: personLabel(p) })),
   };
 }
 

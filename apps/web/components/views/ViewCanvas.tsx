@@ -2,7 +2,13 @@
 
 import { submitViewFormAction } from '@/lib/views/actions';
 import type { FilterState } from '@/lib/views/filter-param';
-import type { ComputedBlock, ComputedView } from '@cortex/agent-tools';
+import type { ComputedBlock, ComputedView, TrackerField } from '@cortex/agent-tools';
+import {
+  defaultValues,
+  validateRowValues,
+  violationsByKey,
+  visibleKeys,
+} from '@cortex/agent-tools/src/trackers/validation';
 import { clsx } from 'clsx';
 import {
   AlertTriangle,
@@ -24,6 +30,7 @@ import { DictateRecord, type Dictated } from './DictateRecord';
 import { ViewChart } from './ViewChart';
 import { ViewZones } from './ViewZones';
 import { CalendarBlock } from './blocks/Calendar';
+import { FileInput, LocationInput, RelationInput, ScanInput } from './blocks/FieldInputs';
 import { GalleryBlock } from './blocks/Gallery';
 import { LinksBlock, MediaBlock } from './blocks/Media';
 import { MetricBlock } from './blocks/Metric';
@@ -842,7 +849,15 @@ function Form({
   target: SubmitTarget;
   submit?: SubmitFn;
 }) {
-  const [values, setValues] = useState<Record<string, string>>({});
+  // El formulario valida con las MISMAS reglas que el servidor (`validateRowValues`):
+  // el mensaje sale debajo del campo al salir de él y al enviar; el servidor las
+  // vuelve a comprobar de todos modos.
+  const fields = block.fields as unknown as TrackerField[];
+  const baseId = useId().replace(/:/g, '');
+  const initialValues = () =>
+    Object.fromEntries(Object.entries(defaultValues(fields)).map(([k, v]) => [k, String(v)]));
+  const [values, setValues] = useState<Record<string, string>>(initialValues);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -851,6 +866,32 @@ function Form({
   const disabled = target.kind === 'preview' || !submit;
   const operator = useViewTheme().layout === 'operator';
   const INPUT = operator ? INPUT_OPERATOR : INPUT_BASE;
+  const visible = visibleKeys(fields, values);
+  // «viewer» lo llena el servidor con el nombre de quien envía (en un enlace
+  // público queda vacío): aquí no puede contar como «falta».
+  const check = () =>
+    violationsByKey(
+      validateRowValues(
+        fields.map((f) => (f.default === 'viewer' ? { ...f, required: false } : f)),
+        values,
+      ),
+    );
+  const setValue = (key: string, next: string) => {
+    setValues((v) => ({ ...v, [key]: next }));
+    setErrors((e) => {
+      if (!(key in e)) return e;
+      const { [key]: _gone, ...rest } = e;
+      return rest;
+    });
+  };
+  const blurField = (key: string) =>
+    setErrors((e) => {
+      const msg = check()[key];
+      if (msg) return { ...e, [key]: msg };
+      if (!(key in e)) return e;
+      const { [key]: _gone, ...rest } = e;
+      return rest;
+    });
 
   if (done) {
     return (
@@ -877,7 +918,8 @@ function Form({
             onClick={() => {
               setDone(null);
               setDuplicate(null);
-              setValues({});
+              setValues(initialValues());
+              setErrors({});
               setHeard(null);
             }}
           >
@@ -916,13 +958,27 @@ function Form({
         </p>
       )}
       <form
+        noValidate
         className={clsx('grid', operator ? 'gap-5' : 'gap-4 sm:grid-cols-2')}
         onSubmit={(e) => {
           e.preventDefault();
           if (disabled || !submit) return;
           setError(null);
+          const found = check();
+          if (Object.keys(found).length) {
+            setErrors(found);
+            const first = fields.find((f) => found[f.key]);
+            if (first) document.getElementById(`${baseId}-${first.key}`)?.focus();
+            return;
+          }
+          // Sólo lo que se muestra y tiene algo: lo oculto por `showIf` no viaja.
+          const payload: Record<string, string> = {};
+          for (const f of fields) {
+            const v = values[f.key];
+            if (visible.has(f.key) && v !== undefined && v !== '') payload[f.key] = v;
+          }
           start(async () => {
-            const res = await submit(block.id, values);
+            const res = await submit(block.id, payload);
             if (res.ok) {
               setDone(res.message);
               setDuplicate(res.duplicate ?? null);
@@ -930,96 +986,174 @@ function Form({
           });
         }}
       >
-        {block.fields.map((f) => (
-          // biome-ignore lint/a11y/noLabelWithoutControl: el control está dentro, en una rama del ternario.
-          <label
-            key={f.key}
-            className={clsx(
-              'block',
-              (f.type === 'text' || f.type === 'longtext') && 'sm:col-span-2',
-            )}
-          >
-            <span
-              className={clsx(
-                'flex items-baseline justify-between gap-2 font-semibold text-ink',
-                operator ? 'mb-2 text-base' : 'mb-1.5 text-xs',
-              )}
-            >
-              <span>
-                {f.label}
-                {f.required && (
-                  <span className="text-rose" aria-hidden>
-                    {' '}
-                    *
-                  </span>
+        {block.fields
+          .filter((f) => visible.has(f.key))
+          .map((f) => {
+            const id = `${baseId}-${f.key}`;
+            const msg = errors[f.key];
+            const describedBy =
+              [f.help ? `${id}-help` : null, msg ? `${id}-err` : null].filter(Boolean).join(' ') ||
+              undefined;
+            const value = values[f.key] ?? '';
+            const common = {
+              id,
+              'aria-invalid': msg ? (true as const) : undefined,
+              'aria-describedby': describedBy,
+              onBlur: () => blurField(f.key),
+            };
+            const inputClass = clsx(INPUT, msg && 'border-rose focus:border-rose');
+            const placeholder =
+              f.placeholder ??
+              (f.example ? `Ej. ${f.example}` : f.type === 'money' ? '$ 0' : undefined);
+            const shared = {
+              field: f,
+              id,
+              value,
+              onChange: (next: string) => setValue(f.key, next),
+              onBlur: () => blurField(f.key),
+              invalid: Boolean(msg),
+              describedBy,
+              className: inputClass,
+              target,
+              blockId: block.id,
+            };
+            return (
+              <div
+                key={f.key}
+                className={clsx(
+                  'block',
+                  (f.type === 'text' ||
+                    f.type === 'longtext' ||
+                    f.type === 'location' ||
+                    f.type === 'relation' ||
+                    f.type === 'file') &&
+                    'sm:col-span-2',
                 )}
-              </span>
-              {!f.required && (
-                <span className="text-micro font-normal text-ink-faint">Opcional</span>
-              )}
-            </span>
-            {f.type === 'select' ? (
-              <select
-                required={f.required}
-                value={values[f.key] ?? ''}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                className={INPUT}
               >
-                <option value="">Elige…</option>
-                {f.options.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            ) : f.type === 'longtext' ? (
-              <textarea
-                required={f.required}
-                rows={3}
-                maxLength={4000}
-                value={values[f.key] ?? ''}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                className={clsx(INPUT, 'h-auto min-h-[5.5rem] py-2.5')}
-              />
-            ) : f.type === 'checkbox' ? (
-              <span className={clsx('flex items-center gap-3', operator ? 'h-14' : 'h-11')}>
-                <input
-                  type="checkbox"
-                  required={f.required}
-                  checked={values[f.key] === '1' || values[f.key] === 'true'}
-                  onChange={(e) =>
-                    setValues((v) => ({ ...v, [f.key]: e.target.checked ? '1' : '0' }))
-                  }
+                <label
+                  htmlFor={id}
                   className={clsx(
-                    'rounded-sm border-border-strong accent-primary',
-                    operator ? 'h-7 w-7' : 'h-5 w-5',
+                    'flex items-baseline justify-between gap-2 font-semibold text-ink',
+                    operator ? 'mb-2 text-base' : 'mb-1.5 text-xs',
                   )}
-                />
-                <span className={clsx('text-ink-muted', operator ? 'text-lg' : 'text-sm')}>Sí</span>
-              </span>
-            ) : (
-              <input
-                required={f.required}
-                type={
-                  f.type === 'date'
-                    ? 'date'
-                    : f.type === 'time'
-                      ? 'time'
-                      : f.type === 'number' || f.type === 'money'
-                        ? 'number'
-                        : 'text'
-                }
-                inputMode={f.type === 'number' || f.type === 'money' ? 'decimal' : undefined}
-                step="any"
-                maxLength={400}
-                placeholder={f.type === 'money' ? '$ 0' : undefined}
-                value={values[f.key] ?? ''}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                className={clsx(INPUT, f.type !== 'text' && 'tabular font-mono')}
-              />
-            )}
-          </label>
-        ))}
+                >
+                  <span>
+                    {f.label}
+                    {f.required && (
+                      <span className="text-rose" aria-hidden>
+                        {' '}
+                        *
+                      </span>
+                    )}
+                  </span>
+                  {!f.required && (
+                    <span className="text-micro font-normal text-ink-faint">Opcional</span>
+                  )}
+                </label>
+                {f.type === 'select' ? (
+                  <select
+                    {...common}
+                    value={value}
+                    onChange={(e) => setValue(f.key, e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Elige…</option>
+                    {f.options.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                ) : f.type === 'longtext' ? (
+                  <textarea
+                    {...common}
+                    rows={3}
+                    maxLength={f.maxLength ?? 4000}
+                    placeholder={placeholder}
+                    value={value}
+                    onChange={(e) => setValue(f.key, e.target.value)}
+                    className={clsx(inputClass, 'h-auto min-h-[5.5rem] py-2.5')}
+                  />
+                ) : f.type === 'checkbox' ? (
+                  <span className={clsx('flex items-center gap-3', operator ? 'h-14' : 'h-11')}>
+                    <input
+                      {...common}
+                      type="checkbox"
+                      checked={value === '1' || value === 'true'}
+                      onChange={(e) => setValue(f.key, e.target.checked ? '1' : '0')}
+                      className={clsx(
+                        'rounded-sm border-border-strong accent-primary',
+                        operator ? 'h-7 w-7' : 'h-5 w-5',
+                      )}
+                    />
+                    <span className={clsx('text-ink-muted', operator ? 'text-lg' : 'text-sm')}>
+                      Sí
+                    </span>
+                  </span>
+                ) : f.type === 'location' ? (
+                  <LocationInput {...shared} />
+                ) : f.type === 'relation' ? (
+                  <RelationInput {...shared} />
+                ) : f.type === 'file' ? (
+                  <FileInput {...shared} />
+                ) : f.type === 'text' && f.scan ? (
+                  <ScanInput {...shared} />
+                ) : (
+                  <input
+                    {...common}
+                    type={
+                      f.type === 'date'
+                        ? 'date'
+                        : f.type === 'time'
+                          ? 'time'
+                          : f.type === 'number' || f.type === 'money'
+                            ? 'number'
+                            : f.format === 'email'
+                              ? 'email'
+                              : 'text'
+                    }
+                    inputMode={
+                      f.type === 'number' || f.type === 'money'
+                        ? 'decimal'
+                        : f.format === 'phone'
+                          ? 'tel'
+                          : f.format === 'digits'
+                            ? 'numeric'
+                            : undefined
+                    }
+                    step="any"
+                    min={typeof f.min === 'number' ? f.min : undefined}
+                    max={typeof f.max === 'number' ? f.max : undefined}
+                    maxLength={f.maxLength ?? 400}
+                    placeholder={placeholder}
+                    value={value}
+                    onChange={(e) => setValue(f.key, e.target.value)}
+                    className={clsx(inputClass, f.type !== 'text' && 'tabular font-mono')}
+                  />
+                )}
+                {f.help && (
+                  <p
+                    id={`${id}-help`}
+                    className={clsx('mt-1 text-ink-muted', operator ? 'text-sm' : 'text-micro')}
+                  >
+                    {f.help}
+                  </p>
+                )}
+                {msg && (
+                  <p
+                    id={`${id}-err`}
+                    role="alert"
+                    className={clsx(
+                      'mt-1 font-semibold text-rose',
+                      operator ? 'text-sm' : 'text-micro',
+                    )}
+                  >
+                    {msg}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         {error && (
           <p
             role="alert"

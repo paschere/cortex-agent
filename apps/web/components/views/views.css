@@ -298,6 +298,31 @@ html:root
   .cortex-view .view-grow-x {
     animation: none;
   }
+  /* PDF: fondo blanco liso, tablas que repiten su encabezado en cada página y
+     filas que no se parten, gráficos sin sombras y la barra pegajosa del
+     enlace público como una cabecera normal. */
+  html,
+  body {
+    background: #fff !important;
+  }
+  .cortex-view .view-table thead {
+    display: table-header-group;
+  }
+  .cortex-view .view-table tr {
+    break-inside: avoid;
+  }
+  .cortex-view h1,
+  .cortex-view h2 {
+    break-after: avoid;
+  }
+  .cortex-view svg,
+  .cortex-view figure {
+    break-inside: avoid;
+  }
+  .cortex-view .view-heat-cell {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 .view-print-only {
   display: none;

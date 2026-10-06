@@ -8,7 +8,7 @@ import { enabledModules, moduleOffMessage } from '../modules/store';
 import { appBaseUrl } from '../reports/store';
 import { applyDuplicateRule, duplicateMessage, getDuplicateRule } from '../trackers/duplicates';
 import { rowLabel } from '../trackers/schema';
-import { TRACKER_COLUMNS, type TrackerRow, listTrackers, shapeValues } from '../trackers/store';
+import { TRACKER_COLUMNS, type TrackerRow, listTrackers, prepareValues } from '../trackers/store';
 import { type ViewRow, type ViewSource, blockWriteFields } from './compute';
 import {
   FEED_NO_VIEWER_MESSAGE,
@@ -913,6 +913,8 @@ export async function submitViewForm(
     blockId: string;
     values: Record<string, unknown>;
     submittedBy: string | null;
+    /** Nombre de quien llena (para `default: 'viewer'`); sin sesión, vacío. */
+    viewer?: string | null;
   },
 ): Promise<{ rowId: string; message: string; duplicate: string | null }> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
@@ -948,7 +950,14 @@ export async function submitViewForm(
   const asked = tracker.fields.filter((f) => allowed.has(f.key));
   const raw: Record<string, unknown> = {};
   for (const f of asked) raw[f.key] = input.values[f.key];
-  const values = shapeValues(asked, raw);
+  // Defaults, campos ocultos (showIf), reglas de cada campo y relaciones. Una
+  // relación de un enlace público sólo puede apuntar a las tablas de ESTA vista:
+  // el resto del espacio no se asoma por un select de la página pública.
+  const values = await prepareValues(db, { ...tracker, fields: asked }, raw, {
+    applyDefaults: true,
+    viewer: input.viewer,
+    allowedRelationTrackers: input.submittedBy ? undefined : new Set(trackersOf(view.spec)),
+  });
 
   const { data: row, error } = await db
     .from('tracker_rows')
@@ -984,6 +993,49 @@ export async function submitViewForm(
   }
 
   return { rowId, message: block.successMessage, duplicate };
+}
+
+/**
+ * Las filas que un campo de relación de un formulario puede elegir, con
+ * búsqueda. La tabla relacionada la decide el ESQUEMA (campo `tracker`), no la
+ * petición, y desde un enlace público sólo se lee si esa tabla es una fuente de
+ * la misma vista: una página pública no se asoma al resto del espacio. Sólo se
+ * devuelven id y nombre de la fila (lo que `shapeValues` guardaría igual).
+ */
+export async function searchRelationOptions(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: { blockId: string; field: string; q: string; audience: 'team' | 'public' },
+): Promise<Array<{ id: string; label: string }>> {
+  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (!block || block.type !== 'form')
+    throw new NotFoundError('Ese formulario no está en esta vista.');
+  const source = await trackerForBlock(db, block.tracker);
+  const asked = new Set(block.fields.length ? block.fields : source.fields.map((f) => f.key));
+  const field = source.fields.find((f) => f.key === input.field);
+  if (!field || field.type !== 'relation' || !field.tracker || !asked.has(field.key))
+    throw new NotFoundError('Ese campo no es una relación de este formulario.');
+  if (input.audience === 'public' && !trackersOf(view.spec).includes(field.tracker))
+    throw new ValidationError('Esta vista no comparte esa tabla.');
+  const target = await trackerForBlock(db, field.tracker);
+  const { data, error } = await db
+    .from('tracker_rows')
+    .select('id, label')
+    .eq('tracker_id', target.id)
+    .order('updated_at', { ascending: false })
+    .limit(400);
+  if (error) throw error;
+  // Sin tildes ni mayúsculas, en memoria: «peña» encuentra «Pena» (ver clients/store.ts).
+  const fold = (t: string) =>
+    t
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase();
+  const needle = fold(input.q.trim().slice(0, 60));
+  return ((data ?? []) as Array<{ id: string; label: string }>)
+    .filter((r) => !needle || fold(String(r.label)).includes(needle))
+    .slice(0, 20)
+    .map((r) => ({ id: String(r.id), label: String(r.label) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,7 +1140,18 @@ async function patchRow(
   const known = Object.fromEntries(
     Object.entries(before).filter(([k]) => input.tracker.fields.some((f) => f.key === k)),
   );
-  const values = shapeValues(input.tracker.fields, { ...known, ...input.patch });
+  // Las reglas se juzgan sólo en lo que se cambia (`only`): una fila vieja con un
+  // valor que hoy no cumple no puede bloquear la edición de otra celda.
+  const values = await prepareValues(
+    db,
+    input.tracker,
+    { ...known, ...input.patch },
+    {
+      selfId: input.rowId,
+      only: new Set(keys),
+      allowedRelationTrackers: input.actor ? undefined : new Set(trackersOf(view.spec)),
+    },
+  );
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   for (const k of keys)
     if (before[k] !== values[k]) changes[k] = { from: before[k] ?? null, to: values[k] ?? null };

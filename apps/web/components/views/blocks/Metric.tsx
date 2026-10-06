@@ -27,11 +27,22 @@ import { Card, TONE_BAR, TONE_COLOR, TONE_SOFT } from './theme';
 
 type Metric = Extract<ComputedBlock, { type: 'metric' }>;
 
+const STATUS_TONE = { good: 'emerald', warn: 'amber', bad: 'rose' } as const;
+const STATUS_TEXT = { good: 'En meta', warn: 'Cerca', bad: 'Lejos' } as const;
+
+const STATUS_TEXT_DOWN = {
+  good: 'Bajo el tope',
+  warn: 'Pasó el tope',
+  bad: 'Muy sobre el tope',
+} as const;
+
 const PERCENT = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 
 export function MetricBlock({ block }: { block: Metric }) {
   const pct = block.goal ? Math.max(0, Math.min(block.goal.ratio, 1)) : 0;
   const compare = block.compare;
+  // El semáforo sólo existe con meta: verde, ámbar o rojo, y siempre con texto.
+  const status = block.goal?.status ?? null;
   // El tamaño sigue el ANCHO DE LA TARJETA, no la longitud del texto sola: una
   // cifra como «$ 168.200.000» cabe en media fila pero no en un tercio de un
   // teléfono. La tarjeta es contenedor (`container-type`) y la cifra toma lo
@@ -71,9 +82,28 @@ export function MetricBlock({ block }: { block: Metric }) {
       {block.goal ? (
         <div className="mt-auto pt-5">
           <div className="mb-1.5 flex items-center justify-between gap-2 text-micro">
-            <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
-              <Target className="h-3.5 w-3.5" aria-hidden />
-              {Math.round(block.goal.ratio * 100)} % de la meta
+            <span className="inline-flex flex-wrap items-center gap-1.5 font-semibold text-ink-muted">
+              <span className="inline-flex items-center gap-1">
+                <Target className="h-3.5 w-3.5" aria-hidden />
+                {Math.round(block.goal.ratio * 100)} %{' '}
+                {block.goal.direction === 'down' ? 'del tope' : 'de la meta'}
+              </span>
+              {status && (
+                <span
+                  className={clsx(
+                    'inline-flex items-center gap-1 rounded-pill px-2 py-0.5',
+                    TONE_SOFT[STATUS_TONE[status]],
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={clsx('h-1.5 w-1.5 rounded-pill', TONE_BAR[STATUS_TONE[status]])}
+                  />
+                  {block.goal?.direction === 'down'
+                    ? STATUS_TEXT_DOWN[status]
+                    : STATUS_TEXT[status]}
+                </span>
+              )}
             </span>
             <span className="tabular font-mono text-ink-faint">{block.goal.display}</span>
           </div>
@@ -89,7 +119,7 @@ export function MetricBlock({ block }: { block: Metric }) {
             <div
               className={clsx(
                 'view-grow-x h-full rounded-pill',
-                block.goal.ratio >= 1 ? 'bg-emerald' : TONE_BAR[block.tone],
+                status ? TONE_BAR[STATUS_TONE[status]] : TONE_BAR[block.tone],
               )}
               style={{ width: `${pct * 100}%` }}
             />

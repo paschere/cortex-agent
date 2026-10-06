@@ -51,6 +51,8 @@ export {
 
 export * from './spec';
 export * from './compute';
+export * from './export';
+export * from './digest';
 export * from './store';
 export * from './sources';
 export * from './feed-sources';

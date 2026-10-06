@@ -1355,6 +1355,7 @@ export function ViewEditor({
                 <ViewSettings
                   draft={draft}
                   sources={sources}
+                  team={catalog?.team ?? []}
                   problems={viewProblems.concat(problems.filter((p) => p.alertId))}
                   onChange={commit}
                 />

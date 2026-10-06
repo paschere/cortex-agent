@@ -27,8 +27,42 @@ export {
 export type { DuplicateRule } from './duplicates';
 
 export {
+  FIELD_FORMATS,
+  FORMAT_LABEL,
+  checkFormat,
+  compilePattern,
+  isSafePattern,
+  isValidAwb,
+  isValidNit,
+  normalizeFormatted,
+} from './formats';
+export type { FieldFormat } from './formats';
+
+export {
+  defaultValues,
+  isFieldVisible,
+  nowBogota,
+  resolveBound,
+  todayBogota,
+  uniqueKey,
+  validateRowValues,
+  violationsByKey,
+  visibleKeys,
+  withDefaults,
+} from './validation';
+export type { ValidateOptions, Violation } from './validation';
+
+export {
+  FILE_MAX_COUNT,
   FIELD_KEY_RE,
   FIELD_TYPES,
+  displayTrackerValue,
+  formatLocation,
+  mapsUrl,
+  parseFileValue,
+  parseLocation,
+  parseRelationValue,
+  showIfSchema,
   TRACKER_SLUG_RE,
   coerceValue,
   parseCheckbox,
@@ -38,7 +72,14 @@ export {
   trackerFieldsSchema,
   trackerSlugSchema,
 } from './schema';
-export type { FieldType, TrackerField } from './schema';
+export type {
+  FieldType,
+  FileValueRef,
+  GeoPoint,
+  RelationRef,
+  ShowIf,
+  TrackerField,
+} from './schema';
 
 export {
   TRACKER_COLUMNS,
@@ -47,10 +88,13 @@ export {
   getTrackerById,
   getTrackerBySlug,
   listTrackers,
+  markForReview,
+  prepareValues,
   queryRows,
   removeRow,
   removeTracker,
   shapeValues,
+  shapeValuesDetailed,
   upsertRow,
 } from './store';
-export type { TrackerEntryRow, TrackerRow } from './store';
+export type { ShapeOptions, TrackerEntryRow, TrackerRow } from './store';

@@ -3,7 +3,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SheetData } from '../kb/spreadsheets';
 import { applyDuplicateRule } from '../trackers/duplicates';
 import { type TrackerField, rowLabel, trackerFieldsSchema } from '../trackers/schema';
-import { TRACKER_COLUMNS, type TrackerRow, defineTracker, shapeValues } from '../trackers/store';
+import {
+  TRACKER_COLUMNS,
+  type TrackerRow,
+  defineTracker,
+  markForReview,
+  shapeValuesDetailed,
+} from '../trackers/store';
 import { dayOfCell, headerKey } from '../views/feed-sources';
 import {
   SYNC_COLUMNS,
@@ -124,7 +130,8 @@ export async function applyUpdateOnly(
     );
     let values: Record<string, string | number>;
     try {
-      values = shapeValues(tracker.fields, { ...known, ...patch });
+      const shaped = shapeValuesDetailed(tracker.fields, { ...known, ...patch }, { lenient: true });
+      values = markForReview(tracker, shaped.values, shaped.violations);
     } catch {
       outcome.skipped += 1;
       continue;

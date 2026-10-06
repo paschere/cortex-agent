@@ -7,7 +7,15 @@ import {
   getDuplicateRule,
   validateDuplicateRule,
 } from './duplicates';
-import { type TrackerField, coerceValue, rowLabel, trackerFieldsSchema } from './schema';
+import {
+  TEXT_MAX,
+  type TrackerField,
+  coerceValue,
+  parseRelationValue,
+  rowLabel,
+  trackerFieldsSchema,
+} from './schema';
+import { type Violation, validateRowValues, visibleKeys, withDefaults } from './validation';
 
 /**
  * Lectura y escritura de las tablas inventadas. `db` es siempre un handle con
@@ -204,19 +212,153 @@ export async function removeTracker(db: SupabaseClient, slug: string): Promise<b
   return Boolean(data);
 }
 
-export function shapeValues(
+export interface ShapeOptions {
+  /**
+   * Sincronizaciones: las reglas del campo (rango, formato, único…) NO
+   * bloquean la fila —un Sheet ajeno no se puede rechazar entero por una
+   * placa mal escrita—; las violaciones vuelven aparte para marcarla. Los
+   * errores de tipo y los obligatorios sí siguen siendo errores, como siempre.
+   */
+  lenient?: boolean;
+  /** Rellena con `default` lo que venga vacío (filas nuevas). */
+  applyDefaults?: boolean;
+  /** Nombre de quien llena, para `default: 'viewer'`. */
+  viewer?: string | null;
+  /** Filas existentes, para `unique`. */
+  existing?: Array<{ id?: string; values: Record<string, unknown> }>;
+  selfId?: string;
+  /** Edición parcial: sólo se reportan las reglas de estos campos (lo viejo no se juzga). */
+  only?: ReadonlySet<string>;
+}
+
+/**
+ * Valida y normaliza una fila entera: tipo de cada campo, campos ocultos por
+ * `showIf` (se descartan y no se exigen) y las reglas de `validateRowValues`.
+ */
+export function shapeValuesDetailed(
   fields: TrackerField[],
-  raw: Record<string, unknown>,
-): Record<string, string | number> {
-  const values: Record<string, string | number> = {};
-  const unknown = Object.keys(raw).filter((key) => !fields.some((f) => f.key === key));
+  input: Record<string, unknown>,
+  options: ShapeOptions = {},
+): { values: Record<string, string | number>; violations: Violation[] } {
+  const unknown = Object.keys(input).filter((key) => !fields.some((f) => f.key === key));
   if (unknown.length > 0) {
     throw new ValidationError(`Estos campos no existen en la tabla: ${unknown.join(', ')}.`);
   }
+  const raw = options.applyDefaults
+    ? withDefaults(fields, input, { viewer: options.viewer })
+    : input;
+  const visible = visibleKeys(fields, raw);
+  const values: Record<string, string | number> = {};
   for (const field of fields) {
+    if (!visible.has(field.key)) continue;
     const coerced = coerceValue(field, raw[field.key]);
     if (!coerced.ok) throw new ValidationError(coerced.message);
     if (coerced.value !== '') values[field.key] = coerced.value;
+  }
+  let violations = validateRowValues(fields, values, {
+    existing: options.existing,
+    selfId: options.selfId,
+  });
+  const only = options.only;
+  if (only) violations = violations.filter((v) => only.has(v.key));
+  if (violations.length > 0 && !options.lenient) {
+    throw new ValidationError(violations.map((v) => v.message).join(' '));
+  }
+  return { values, violations };
+}
+
+export function shapeValues(
+  fields: TrackerField[],
+  raw: Record<string, unknown>,
+  options: ShapeOptions = {},
+): Record<string, string | number> {
+  return shapeValuesDetailed(fields, raw, options).values;
+}
+
+/**
+ * Sincronizaciones: una fila que no cumple las reglas entra igual, pero queda
+ * a la vista. Si la tabla tiene un campo de revisión (clave `revision`,
+ * `revisar`, `para_revisar`; texto, o select con una opción que diga «revis…»)
+ * se escribe ahí; si no, se deja en el registro del servidor.
+ */
+export function markForReview(
+  tracker: Pick<TrackerRow, 'slug' | 'fields'>,
+  values: Record<string, string | number>,
+  violations: Violation[],
+): Record<string, string | number> {
+  if (violations.length === 0) return values;
+  const field = tracker.fields.find((f) => /^(revision|revisar|para_revisar)$/.test(f.key));
+  const note = `Revisar: ${violations.map((v) => v.message).join(' ')}`.slice(0, TEXT_MAX);
+  if (field?.type === 'text') return { ...values, [field.key]: note };
+  const option =
+    field?.type === 'select' ? field.options?.find((o) => /revis/i.test(o)) : undefined;
+  if (field && option) return { ...values, [field.key]: option };
+  console.warn(
+    `[trackers] fila de ${tracker.slug} entró con ${violations.length} regla(s) incumplida(s): ${note}`,
+  );
+  return values;
+}
+
+const UNIQUE_SCAN_LIMIT = 5000;
+
+/**
+ * Prepara los valores de una escritura de ESTE lado del servidor: defaults,
+ * campos ocultos, reglas (incluido `unique`, que necesita leer la tabla) y
+ * relaciones. Es lo que usan upsertRow, el formulario y la edición en celda.
+ *
+ * Relaciones: el id tiene que ser de una fila de la tabla relacionada y la
+ * etiqueta que se guarda es la REAL de esa fila, no la que mandó el navegador.
+ * `allowedRelationTrackers` limita a qué tablas puede apuntar quien escribe
+ * (la página pública sólo apunta a las fuentes de su vista).
+ */
+export async function prepareValues(
+  db: SupabaseClient,
+  tracker: Pick<TrackerRow, 'id' | 'slug' | 'fields'>,
+  raw: Record<string, unknown>,
+  options: {
+    selfId?: string;
+    applyDefaults?: boolean;
+    viewer?: string | null;
+    only?: ReadonlySet<string>;
+    lenient?: boolean;
+    allowedRelationTrackers?: ReadonlySet<string>;
+  } = {},
+): Promise<Record<string, string | number>> {
+  let existing: ShapeOptions['existing'];
+  if (tracker.fields.some((f) => f.unique)) {
+    const { data, error } = await db
+      .from('tracker_rows')
+      .select('id, values')
+      .eq('tracker_id', tracker.id)
+      .limit(UNIQUE_SCAN_LIMIT);
+    if (error) throw error;
+    existing = (data ?? []) as Array<{ id: string; values: Record<string, unknown> }>;
+  }
+  const values = shapeValues(tracker.fields, raw, { ...options, existing });
+  for (const field of tracker.fields) {
+    const v = values[field.key];
+    if (field.type !== 'relation' || v === undefined) continue;
+    if (options.only && !options.only.has(field.key)) continue;
+    const rel = parseRelationValue(v);
+    const target = field.tracker;
+    if (!rel || !target) throw new ValidationError(`«${field.label}» no es una relación válida.`);
+    if (options.allowedRelationTrackers && !options.allowedRelationTrackers.has(target))
+      throw new ValidationError(`«${field.label}» apunta a una tabla que aquí no está permitida.`);
+    const other = await getTrackerBySlug(db, target);
+    if (!other) throw new ValidationError(`La tabla «${target}» de «${field.label}» ya no existe.`);
+    const { data, error } = await db
+      .from('tracker_rows')
+      .select('id, label')
+      .eq('id', rel.id)
+      .eq('tracker_id', other.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data)
+      throw new ValidationError(`«${field.label}»: esa fila no existe en «${other.name}».`);
+    values[field.key] = JSON.stringify({
+      id: rel.id,
+      label: String((data as { label: string }).label),
+    });
   }
   return values;
 }
@@ -229,9 +371,18 @@ export async function upsertRow(
     values: Record<string, unknown>;
     label?: string;
     userId: string;
+    /** Escrituras automáticas (consultas programadas): las reglas del campo no bloquean. */
+    lenient?: boolean;
+    /** Edición parcial: las reglas sólo se juzgan en estos campos. */
+    only?: ReadonlySet<string>;
   },
 ): Promise<TrackerEntryRow> {
-  const values = shapeValues(input.tracker.fields, input.values);
+  const values = await prepareValues(db, input.tracker, input.values, {
+    selfId: input.rowId,
+    applyDefaults: !input.rowId,
+    lenient: input.lenient,
+    only: input.only,
+  });
   const label = rowLabel(input.tracker.fields, values, input.label);
 
   if (input.rowId) {

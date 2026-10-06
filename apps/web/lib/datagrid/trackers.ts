@@ -1,11 +1,13 @@
 import type { GridColumn, GridOption, GridRow } from '@/components/datagrid/types';
+import { displayTrackerValue, mapsUrl } from '@cortex/agent-tools/src/trackers/schema';
 import { foldText, isEmptyValue, parseDay, parseNumber } from './format';
 
 /**
  * LAS TABLAS DE LA EMPRESA EN LA GRILLA, Y DE VUELTA.
  *
- * Una tabla inventada (`trackers`, 0115) tiene ocho tipos de campo: texto,
- * texto largo, número, fecha, hora, plata, opciones y casilla sí/no. Aquí se traducen a columnas de la grilla, y
+ * Una tabla inventada (`trackers`, 0115) tiene once tipos de campo: texto,
+ * texto largo, número, fecha, hora, plata, opciones, casilla sí/no, archivo,
+ * ubicación y relación. Aquí se traducen a columnas de la grilla, y
  * lo que la grilla edita se traduce al valor que `upsertRow` acepta — que es la
  * validación de verdad: esto solo prepara, no decide.
  *
@@ -21,7 +23,10 @@ export type TrackerFieldType =
   | 'time'
   | 'money'
   | 'select'
-  | 'checkbox';
+  | 'checkbox'
+  | 'file'
+  | 'location'
+  | 'relation';
 export const TRACKER_FIELD_TYPES: TrackerFieldType[] = [
   'text',
   'longtext',
@@ -31,6 +36,9 @@ export const TRACKER_FIELD_TYPES: TrackerFieldType[] = [
   'time',
   'select',
   'checkbox',
+  'file',
+  'location',
+  'relation',
 ];
 
 export const TRACKER_TYPE_LABEL: Record<TrackerFieldType, string> = {
@@ -42,6 +50,9 @@ export const TRACKER_TYPE_LABEL: Record<TrackerFieldType, string> = {
   money: 'Plata',
   date: 'Fecha',
   select: 'Opciones',
+  file: 'Archivo',
+  location: 'Ubicación',
+  relation: 'Relación',
 };
 
 export interface TrackerFieldLike {
@@ -50,6 +61,8 @@ export interface TrackerFieldLike {
   type: TrackerFieldType;
   required?: boolean;
   options?: string[];
+  /** Otras opciones del campo (validaciones, ayudas…): la grilla no las usa, pasan de largo. */
+  [extra: string]: unknown;
 }
 
 export interface TrackerEntryLike {
@@ -113,6 +126,11 @@ const GRID_TYPE: Record<TrackerFieldType, GridColumn['type']> = {
   money: 'money',
   select: 'select',
   checkbox: 'boolean',
+  // Se muestran como texto legible (`trackerGridRow` los traduce) y no se editan
+  // en la celda: un archivo se sube, una relación se elige y una ubicación se toma en el formulario.
+  file: 'text',
+  location: 'link',
+  relation: 'text',
 };
 
 export function trackerColumns(
@@ -128,7 +146,7 @@ export function trackerColumns(
       label: f.label,
       // La grilla no tiene «hora»: se ve y se edita como texto (HH:MM).
       type: GRID_TYPE[f.type],
-      editable,
+      editable: editable && f.type !== 'file' && f.type !== 'relation' && f.type !== 'location',
       required: Boolean(f.required),
       ...(isName ? { pinned: true, primary: true, width: 240 } : {}),
     };
@@ -157,10 +175,19 @@ export function trackerColumns(
   return columns;
 }
 
-export function trackerGridRow(entry: TrackerEntryLike): GridRow {
+export function trackerGridRow(entry: TrackerEntryLike, fields?: TrackerFieldLike[]): GridRow {
+  // Archivo y relación guardan JSON; la grilla muestra el nombre / la etiqueta.
+  // La ubicación va como enlace a Google Maps.
+  const shown: Record<string, string | number> = { ...entry.values };
+  for (const f of fields ?? []) {
+    const v = entry.values[f.key];
+    if (v === undefined || v === '') continue;
+    if (f.type === 'file' || f.type === 'relation') shown[f.key] = displayTrackerValue(f, v);
+    else if (f.type === 'location') shown[f.key] = mapsUrl(v) ?? String(v);
+  }
   return {
     id: entry.id,
-    values: { ...entry.values, [UPDATED_KEY]: entry.updated_at },
+    values: { ...shown, [UPDATED_KEY]: entry.updated_at },
     ...(entry.duplicate_flagged ? { alert: true } : {}),
   };
 }

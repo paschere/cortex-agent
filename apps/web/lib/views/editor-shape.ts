@@ -114,11 +114,13 @@ export const EDITING_LABEL: Record<EditorEditingMode, { title: string; body: str
   },
 };
 
-export const CHART_KINDS = ['bar', 'line', 'donut'] as const;
+export const CHART_KINDS = ['bar', 'line', 'donut', 'funnel', 'heatmap'] as const;
 export const CHART_LABEL: Record<(typeof CHART_KINDS)[number], string> = {
   bar: 'Barras',
   line: 'Línea',
   donut: 'Dona',
+  funnel: 'Embudo',
+  heatmap: 'Calor',
 };
 
 export const BUCKETS = ['day', 'week', 'month'] as const;

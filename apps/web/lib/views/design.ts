@@ -64,6 +64,43 @@ export const designInput = z.object({
     .optional(),
 });
 
+/** Las opciones de un campo que el diseñador puede pedir en `extra`; lo demás se ignora. */
+const FIELD_EXTRA_KEYS = [
+  'min',
+  'max',
+  'minLength',
+  'maxLength',
+  'format',
+  'pattern',
+  'unique',
+  'message',
+  'default',
+  'help',
+  'placeholder',
+  'example',
+  'showIf',
+  'accept',
+  'multiple',
+  'tracker',
+  'scan',
+] as const;
+
+/** «{"max":"today"}» → {max:'today'}; texto roto o vacío → nada. La forma la valida el esquema del campo. */
+export function parseFieldExtra(extra: string | undefined): Record<string, unknown> {
+  if (!extra?.trim()) return {};
+  try {
+    const parsed: unknown = JSON.parse(extra);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([k, v]) => (FIELD_EXTRA_KEYS as readonly string[]).includes(k) && v !== null && v !== '',
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
 export const modelDesignSchema = z.object({
   name: z.string().max(80),
   description: z.string().max(500),
@@ -84,6 +121,12 @@ export const modelDesignSchema = z.object({
               type: z.enum(FIELD_TYPES),
               required: z.boolean(),
               options: z.array(z.string().max(80)).max(30),
+              /**
+               * Reglas y ayudas del campo como un JSON en texto («» si no lleva
+               * ninguna): min, max, format, showIf, default… Va en texto, como
+               * `specJson`, para no hacer un esquema de salida enorme.
+               */
+              extra: z.string().max(1000).optional(),
             }),
           )
           .max(20),
@@ -175,11 +218,13 @@ export function checkDesign(
     const fields = trackerFieldsSchema.safeParse(
       // Un campo de opciones sin opciones no se puede llenar: queda como texto
       // en vez de tumbar la tabla entera.
-      t.fields.map((f) =>
-        f.type === 'select' && f.options.length
-          ? f
-          : { ...f, type: f.type === 'select' ? ('text' as const) : f.type, options: undefined },
-      ),
+      t.fields.map(({ extra, ...f }) => {
+        const base =
+          f.type === 'select' && f.options.length
+            ? f
+            : { ...f, type: f.type === 'select' ? ('text' as const) : f.type, options: undefined };
+        return { ...base, ...parseFieldExtra(extra) };
+      }),
     );
     if (!slug.success)
       problems.push(`La tabla nueva «${t.slug}» necesita un slug en minúsculas_con_guiones_bajos.`);
@@ -438,17 +483,19 @@ Fuentes de los módulos de operación (todas internal y de sólo lectura; usa la
 
 Las fuentes con sensitivity "personal" (cortex.activaciones, cortex.seguimientos, cortex.operaciones, cortex.rutinas) muestran a cada quien SUS propias activaciones, seguimientos, operaciones y rutinas: sirven para un tablero de operación («qué reglas corrieron, cuántas coincidencias, qué acciones se verificaron, qué rutinas fallaron»). Tampoco se comparten por enlace.
 
+CAMPOS INTELIGENTES (en newTrackers, dentro de "extra" de cada campo; "" si no lleva nada). extra es un JSON con cualquiera de estas claves: "min"/"max" (número o dinero: números; fecha: "today", "today-30", "today+7" o AAAA-MM-DD; hora: "now" o HH:MM — un max "today" en una fecha es «no futura»); "minLength"/"maxLength" (texto); "format": "email"|"phone"|"nit" (NIT colombiano con dígito de verificación)|"plate" (placa colombiana)|"awb" (guía aérea: 3 dígitos, guion, 8 dígitos con dígito de control)|"digits"; o "pattern" (regex corto SIN cuantificadores anidados como (a+)+); "unique":true (bloquea el envío si ese valor ya existe — no es lo mismo que duplicates, que sólo marca); "message" (el error que ve quien llena, en vez del genérico); "default": "today"|"now"|"viewer" (nombre de quien llena)|un valor fijo; "help" (una línea bajo el campo), "placeholder", "example"; "showIf":{"field": clave de OTRO campo, "equals": "valor" o ["a","b"] | "notEmpty": true} — el campo sólo se pide cuando se cumple y, oculto, no es obligatorio; "scan":true (texto que se llena leyendo un código de barras o QR); "tracker" (en relation: el slug de la otra tabla, obligatorio); "accept":"image"|"any" y "multiple" (en file, hasta 5). Ejemplos: inspección con resultado select ["Conforme","Con novedad"] y descripcion longtext required:true con extra {"showIf":{"field":"resultado","equals":"Con novedad"}}; fecha_recibo date con extra {"max":"today","default":"today","message":"La fecha no puede ser futura."}; nit text con extra {"format":"nit","help":"Con dígito de verificación, ej. 900123456-7"}; guia text con extra {"format":"awb","unique":true,"scan":true}; evidencia file con extra {"accept":"image"}; sede relation con extra {"tracker":"sedes"}. Úsalos cuando pidan «obligatorio si…», «no futura», «que no se repita», «con formato de…», «que ya venga con la fecha de hoy», «foto», «ubicación», «escanear». No puedes cambiar los campos de una tabla que ya existe desde aquí; sus reglas ya definidas se aplican solas en el formulario.
+
 Si te dan la vista actual, devuelve la vista COMPLETA ya cambiada (no un diff), conservando los ids y bloques que la persona no pidió tocar.
 
-Si lo que piden necesita datos que no existen en ninguna tabla, puedes proponer hasta 2 tablas nuevas en newTrackers (slug en minúsculas_con_guion_bajo, 1-20 campos; type text|longtext|number|date|time|money|select|checkbox; select necesita options; options vacío en los demás; longtext es texto largo, time una hora HH:MM, checkbox sí/no) y usarlas en la vista. Si hay que detectar repetidos (p. ej. una guía con el mismo número y otra fecha), la tabla nueva puede llevar duplicates {key, distinctBy ("" si cualquier repetición cuenta), flagField (select con flagValue entre sus options), flagValue}; en las demás, null. Nunca propongas una tabla que duplique una existente. No inventes filas.
+Si lo que piden necesita datos que no existen en ninguna tabla, puedes proponer hasta 2 tablas nuevas en newTrackers (slug en minúsculas_con_guion_bajo, 1-20 campos; type text|longtext|number|date|time|money|select|checkbox|file|location|relation; select necesita options; options vacío en los demás; longtext es texto largo, time una hora HH:MM, checkbox sí/no, file una foto o archivo, location una ubicación GPS, relation una fila de otra tabla; extra es un JSON en texto con reglas del campo, "" si no lleva ninguna — ver CAMPOS INTELIGENTES) y usarlas en la vista. Si hay que detectar repetidos (p. ej. una guía con el mismo número y otra fecha), la tabla nueva puede llevar duplicates {key, distinctBy ("" si cualquier repetición cuenta), flagField (select con flagValue entre sus options), flagValue}; en las demás, null. Nunca propongas una tabla que duplique una existente. No inventes filas.
 
 specJson es JSON con esta forma exacta:
 {"version":1,"subtitle"?:string,"accent"?:"primary"|"emerald"|"amber"|"sky"|"rose","blocks":[...]}
 Entre 1 y 24 bloques. Cada bloque: "id" (corto, único, a-z0-9_-) y "width": "full"|"half"|"third". Tipos:
 - {"type":"text","markdown":string} — encabezados y explicación breve.
-- {"type":"metric","title","tracker","aggregate":"count"|"sum"|"avg"|"min"|"max","field"?(numérico; obligatorio salvo count),"filters"?,"format"?:"number"|"money"|"percent","goal"?:number,"tone"?,"caption"?}
+- {"type":"metric","title","tracker","aggregate":"count"|"sum"|"avg"|"min"|"max","field"?(numérico; obligatorio salvo count),"filters"?,"format"?:"number"|"money"|"percent","goal"?:number,"goalDirection"?:"up"|"down","tone"?,"caption"?} — con "goal" la cifra lleva barra y semáforo (verde en meta, ámbar cerca, rojo lejos). goalDirection "up" (por defecto) cuando la meta es un piso (ventas, recaudo, citas atendidas); "down" cuando es un techo (devoluciones, días de mora, quejas, ausencias)
 - {"type":"table","title","tracker","columns"?:[keys],"filters"?,"sort"?:{"field","dir":"asc"|"desc"},"limit"?(≤200),"searchable"?:boolean}
-- {"type":"chart","title","tracker","chart":"bar"|"line"|"donut","groupBy":key,"bucket"?:"day"|"week"|"month" (si groupBy es fecha),"aggregate","field"?,"filters"?,"limit"?(2-24),"tone"?}
+- {"type":"chart","title","tracker","chart":"bar"|"line"|"donut"|"funnel"|"heatmap","groupBy":key,"hourField"?:key de un campo time,"bucket"?:"day"|"week"|"month" (si groupBy es fecha),"aggregate","field"?,"filters"?,"limit"?(2-24),"tone"?} — "funnel" es un EMBUDO: groupBy es un campo select y cada opción es una etapa, en el orden de sus opciones (las vacías salen en cero) con el % que pasa a la siguiente; úsalo para pipelines de ventas, selección de personal, admisiones, solicitudes («cuántos llegan a cada etapa»); pon las opciones del select en el orden del proceso. "heatmap" es un MAPA DE CALOR día de la semana × hora: groupBy es "created_at" o "updated_at" (traen la hora) o una fecha junto con hourField (un campo time); úsalo para «a qué hora llegan los pedidos/llamadas/consultas», turnos y picos de demanda
 - {"type":"board","title","tracker","groupBy":key de un campo select,"cardFields"?:[keys],"filters"?}
 - {"type":"form","title","tracker","intro"?,"fields"?:[keys de la tabla],"submitLabel"?,"successMessage"?} — agrega una fila a la tabla; úsalo para portales de captura, solicitudes o reportes.
 filters: [{"field":key,"op":"eq"|"neq"|"contains"|"gt"|"gte"|"lt"|"lte"|"empty"|"not_empty"|"before_today"|"after_today"|"next_days"|"last_days","value"?}]. empty/not_empty/before_today/after_today sin value; next_days/last_days con un número de días; fechas AAAA-MM-DD.
@@ -461,10 +508,10 @@ filters: [{"field":key,"op":"eq"|"neq"|"contains"|"gt"|"gte"|"lt"|"lte"|"empty"|
 - {"type":"media","title"?,"kind":"image"|"embed","url":dirección https,"alt"?,"caption"?,"aspect"?:"16:9"|"4:3"|"1:1"|"3:4"} — una imagen, o un video/mapa/presentación SÓLO de YouTube, Loom, Google Maps («Insertar un mapa», /maps/embed?pb=…) o Google Slides/Docs publicados en la web. Nunca otras páginas ni HTML. Úsalo sólo si la persona te da el enlace; no inventes direcciones.
 - {"type":"links","title"?,"links":[{"label"(≤40),"href":ruta interna como /views/cartera o https,"description"?,"tone"?}](1-8),"style"?:"buttons"|"cards"} — botones de navegación a otras vistas o páginas (un portal, un índice).
 FICHA DE CADA FILA: en table, board, zones, gallery y calendar, tocar una fila abre su ficha con sus campos (por defecto todos los de una tabla propia dentro de Cortex; por enlace público, sólo los que el bloque ya muestra). "openRecord":false la apaga; "detailFields":[≤16 keys] elige qué muestra (ponlo si piden mostrar más campos afuera, y nunca incluyas datos personales sensibles en una vista que se va a compartir); "recordEditable":[keys] deja editar esos campos desde la ficha (sólo tablas propias; necesita "editing").
-EN LA RAÍZ, OPCIONALES: "filtersBar":[{"id","label","source": tabla que algún bloque lee,"field","kind":"select"|"date_range"|"search"}] (≤6) — controles arriba que filtran TODOS los bloques de esa tabla («por sede», «entre fechas», «buscar cliente»); date_range sólo sobre fechas. "pages":[{"id","title","blockIds":[ids]}] (≤8) — pestañas cuando la vista tiene más de ~8 bloques o partes muy distintas («Resumen», «Detalle», «Agenda»); un bloque puede ir en varias; los que no estén en ninguna salen en la primera. "theme":{"accent"?:tono,"density"?:"comfortable"|"compact","header"?:"plain"|"hero","layout"?:"dashboard"|"operator","style"?:"clean"|"bold"|"dark-panel","cover"?:imagen https} — "hero" para portales y vistas para clientes (banda grande con el nombre y el subtítulo); "compact" para tableros densos de operación. "layout":"operator" es la pantalla de planta para el celular: una sola columna, el formulario arriba, controles grandes, tablas como tarjetas con el estado bien visible, métricas pequeñas de a tres por fila y alto contraste; úsalo SIEMPRE que la vista la use gente de planta, bodega, recepción o campo, o cuando el pedido diga «celular», «operarios», «registrar rápido»; ahí el formulario (con dictado si la tabla lo permite) es la pieza principal y va primero en blocks, seguido de 2–3 métricas y una tabla con "searchable":true. Sin esas señales deja "dashboard" (por defecto). "style": "clean" (por defecto), "bold" (títulos fuertes y tarjetas con borde del color del acento: tableros comerciales o de cara al cliente) o "dark-panel" (panel oscuro para pantallas de planta o TV que se miran de lejos; con pocas cifras grandes).
+EN LA RAÍZ, OPCIONALES: "digest":{cadence,hour,weekday?,recipients} — el resumen periódico por correo que se configura en los ajustes de la vista: NO lo inventes (los destinatarios son ids de personas); si la vista actual ya lo trae, cópialo tal cual en el specJson. "filtersBar":[{"id","label","source": tabla que algún bloque lee,"field","kind":"select"|"date_range"|"search"}] (≤6) — controles arriba que filtran TODOS los bloques de esa tabla («por sede», «entre fechas», «buscar cliente»); date_range sólo sobre fechas. "pages":[{"id","title","blockIds":[ids]}] (≤8) — pestañas cuando la vista tiene más de ~8 bloques o partes muy distintas («Resumen», «Detalle», «Agenda»); un bloque puede ir en varias; los que no estén en ninguna salen en la primera. "theme":{"accent"?:tono,"density"?:"comfortable"|"compact","header"?:"plain"|"hero","layout"?:"dashboard"|"operator","style"?:"clean"|"bold"|"dark-panel","cover"?:imagen https} — "hero" para portales y vistas para clientes (banda grande con el nombre y el subtítulo); "compact" para tableros densos de operación. "layout":"operator" es la pantalla de planta para el celular: una sola columna, el formulario arriba, controles grandes, tablas como tarjetas con el estado bien visible, métricas pequeñas de a tres por fila y alto contraste; úsalo SIEMPRE que la vista la use gente de planta, bodega, recepción o campo, o cuando el pedido diga «celular», «operarios», «registrar rápido»; ahí el formulario (con dictado si la tabla lo permite) es la pieza principal y va primero en blocks, seguido de 2–3 métricas y una tabla con "searchable":true. Sin esas señales deja "dashboard" (por defecto). "style": "clean" (por defecto), "bold" (títulos fuertes y tarjetas con borde del color del acento: tableros comerciales o de cara al cliente) o "dark-panel" (panel oscuro para pantallas de planta o TV que se miran de lejos; con pocas cifras grandes).
 INTERACTIVIDAD (sólo tablas propias, nunca fuentes de la plataforma ni tablas del Feed): en "table" puedes poner "editable":[keys] (se editan en el sitio) y "actions":[botones]; en "board", "draggable":true (arrastrar tarjetas cambia el campo de opciones) y "actions"; en "gallery" y "calendar", "actions". Botón: {"id","label"(≤32),"kind":"set_field" con "field" y "value" (p. ej. estado=Pagada; en campos de opciones el valor debe ser una opción) | "notify" (avisa en la campana a quien creó la vista y a los administradores),"confirm"?:bool,"tone"?}. Si hay algo editable, arrastrable o con botones, pon en la raíz "editing":"team" (sólo el equipo en la app) o "public" (también quien tenga el enlace; úsalo sólo si lo piden explícitamente). Por defecto "off".
 EN VIVO Y AVISOS: en la raíz "refreshSeconds": 0|10|30|60 (por defecto 30; usa 10 si piden «en tiempo real»). "alerts":[{"id","source": slug o fuente,"filters"?,"message"?,"sound"?:bool (por defecto true),"desktop"?:bool,"bell"?:bool}] — avisan cuando aparece una fila nueva que cumple los filtros mientras la vista está abierta; "bell" además suena en la campana de quien creó la vista cuando entra una fila por un formulario de esta vista. Úsalas cuando pidan «que suene», «que avise», «que me notifique». "on": "new" (por defecto, sólo filas nuevas) | "change" (una fila ya vista que cambió, p. ej. pasó a «Duplicado») | "both". Además de la alerta, toda vista abierta hace titilar sola las filas y tarjetas nuevas o cambiadas. Las vistas de operación y registro (theme.layout "operator", o un formulario que alimenta una tabla) llevan POR DEFECTO una alerta {"on":"both","sound":true} sobre esa tabla y "refreshSeconds":10, aunque no la pidan.
-Diseño: primero 2-4 cifras clave en third (con compare cuando hay una fecha y tiene sentido la tendencia), luego gráficos o avances en half, luego la tabla, el tablero, la galería o el calendario en full. Agrega una barra de filtros cuando la vista mezcla sedes, vendedores o fechas. Sirve a cualquier negocio: ventas, logística, talento humano, clínicas, colegios, inmobiliarias. Títulos cortos en español de Colombia, sin emojis. Usa money para campos de dinero. line sólo sobre fechas; donut sólo con pocas categorías. No repitas la misma cifra dos veces.
+Diseño: primero 2-4 cifras clave en third (con compare cuando hay una fecha y tiene sentido la tendencia), luego gráficos o avances en half, luego la tabla, el tablero, la galería o el calendario en full. Agrega una barra de filtros cuando la vista mezcla sedes, vendedores o fechas. Sirve a cualquier negocio: ventas, logística, talento humano, clínicas, colegios, inmobiliarias. Títulos cortos en español de Colombia, sin emojis. Usa money para campos de dinero. line sólo sobre fechas; donut sólo con pocas categorías; funnel sólo sobre un campo select que sea un proceso por etapas. Si hay una meta conocida, ponla en goal de la cifra. No repitas la misma cifra dos veces.
 
 PULSO DE LA EMPRESA. Si piden «cómo va la empresa», un tablero ejecutivo, un resumen del negocio o «el pulso»: no preguntes qué cifras quieren; ármalo sólo con las fuentes que tienen datos (sample no vacío o rowCount mayor que cero). Primero un bloque text con id "resumen_hoy" y markdown «### Resumen de hoy» más una línea que diga que Cortex lo escribe cada mañana con las cifras de la vista (no inventes cifras en ese texto). Luego, en third y con compare "previous_period" por mes donde haya fecha: ventas del mes (la tabla <programa>_facturas de Siigo, Alegra o QuickBooks, sum de total por fecha sin estado Anulada; si no existe, cortex.ventas sum de total por emitida), cartera vencida (cortex.cartera sum de saldo, tone rose), recuperado con Cortex (cortex.recuperado sum de valor por fecha), pagos recibidos (cortex.pagos sum de valor por fecha), metas cumplidas (cortex.metas) y pendientes de Gerencia (cortex.gestion sin Cerrado con evidencia ni Descartado). Después las ventas por mes (line), los clientes que más compran (bar) y la tabla «Quién debe más» (cortex.cartera ordenada por saldo). En explanation di en una frase qué no pudiste mostrar y cómo conectarlo («Conecta Siigo para ver facturación»), y que para que el resumen se escriba solo cada mañana se lo pidan a Cortex en el chat.
 

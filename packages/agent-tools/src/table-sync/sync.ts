@@ -3,7 +3,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SheetData, SheetValue } from '../kb/spreadsheets';
 import { applyDuplicateRule } from '../trackers/duplicates';
 import { type TrackerField, rowLabel, trackerFieldsSchema } from '../trackers/schema';
-import { TRACKER_COLUMNS, type TrackerRow, defineTracker, shapeValues } from '../trackers/store';
+import {
+  TRACKER_COLUMNS,
+  type TrackerRow,
+  defineTracker,
+  markForReview,
+  shapeValuesDetailed,
+} from '../trackers/store';
 import { dayOfCell, headerKey, inferSheetFields } from '../views/feed-sources';
 
 /**
@@ -285,7 +291,10 @@ export async function applyTrackerSync(
     for (const row of chunk) {
       let values: Record<string, string | number>;
       try {
-        values = shapeValues(tracker.fields, row.values);
+        // Una hoja ajena no se rechaza por una regla del campo: la fila entra y
+        // queda marcada para revisar (o anotada en el registro).
+        const shaped = shapeValuesDetailed(tracker.fields, row.values, { lenient: true });
+        values = markForReview(tracker, shaped.values, shaped.violations);
       } catch {
         outcome.skipped += 1;
         continue;

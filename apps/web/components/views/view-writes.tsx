@@ -1,7 +1,8 @@
 'use client';
 
 import { editViewRowAction, runViewActionAction } from '@/lib/views/actions';
-import type { ComputedAction } from '@cortex/agent-tools';
+import type { ComputedAction, ComputedEditMeta, TrackerField } from '@cortex/agent-tools';
+import { validateRowValues } from '@cortex/agent-tools/src/trackers/validation';
 import { clsx } from 'clsx';
 import { Check, Loader2, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -111,6 +112,16 @@ export function ViewWriterProvider({
 // Una celda que se edita en el sitio
 // ---------------------------------------------------------------------------
 
+/**
+ * Las reglas del campo antes de pedirle nada al servidor: el mismo
+ * `validateRowValues` que corre allá, así el mensaje sale en la celda sin ir y
+ * volver. Lo que sólo el servidor sabe (que un valor ya existe) lo dice él.
+ */
+function checkCell(edit: ComputedEditMeta, label: string, value: string): string | null {
+  const field = { key: 'v', label, ...edit } as TrackerField;
+  return validateRowValues([field], { v: value })[0]?.message ?? null;
+}
+
 const EDIT_INPUT =
   'w-full min-w-[7rem] rounded-sm border border-primary bg-surface px-2 py-1 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary/30';
 
@@ -118,7 +129,7 @@ interface EditableProps {
   blockId: string;
   rowId: string;
   field: string;
-  edit: { type: string; options: string[]; required: boolean };
+  edit: ComputedEditMeta;
   raw: string | number | null;
   display: string;
   className?: string;
@@ -164,8 +175,18 @@ export function EditableValue({
   if (!writer) return <Tag className={className}>{display}</Tag>;
 
   async function commit(next: string) {
+    if (next === (raw == null ? '' : String(raw))) {
+      setEditing(false);
+      return;
+    }
+    const problem = checkCell(edit, label ?? field, next);
+    if (problem) {
+      // Se queda editando con el motivo a la vista; Esc descarta el cambio.
+      setState('error');
+      setError(problem);
+      return;
+    }
     setEditing(false);
-    if (next === (raw == null ? '' : String(raw))) return;
     setState('saving');
     const res = await writer?.edit(blockId, rowId, { [field]: next });
     if (res?.ok) {
@@ -209,6 +230,8 @@ export function EditableValue({
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 setValue(raw == null ? '' : String(raw));
+                setState('idle');
+                setError(null);
                 setEditing(false);
               }
             }}
@@ -235,6 +258,8 @@ export function EditableValue({
               if (e.key === 'Enter') void commit(value);
               if (e.key === 'Escape') {
                 setValue(raw == null ? '' : String(raw));
+                setState('idle');
+                setError(null);
                 setEditing(false);
               }
             }}

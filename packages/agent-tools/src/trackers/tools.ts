@@ -2,7 +2,12 @@ import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { duplicateRuleSchema, getDuplicateRule } from './duplicates';
-import { trackerFieldSchema, trackerFieldsSchema, trackerSlugSchema } from './schema';
+import {
+  displayTrackerValue,
+  trackerFieldSchema,
+  trackerFieldsSchema,
+  trackerSlugSchema,
+} from './schema';
 import {
   defineTracker,
   getTrackerBySlug,
@@ -41,13 +46,23 @@ const entrySchema = z.object({
 });
 
 function fieldsMarkdown(fields: z.infer<typeof trackerFieldsSchema>): string {
-  return fields.map((f) => `${f.label} (${f.key}, ${f.type})`).join(', ');
+  return fields
+    .map((f) => {
+      const rules = [
+        f.required ? 'obligatorio' : null,
+        f.unique ? 'único' : null,
+        f.format ?? null,
+        f.showIf ? `solo si ${f.showIf.field}` : null,
+      ].filter(Boolean);
+      return `${f.label} (${f.key}, ${f.type}${rules.length ? `; ${rules.join(', ')}` : ''})`;
+    })
+    .join(', ');
 }
 
 export const trackersDefine = registerTool({
   id: 'trackers.define',
   description:
-    'Create or update a company-specific table the first-class modules do not cover. Use this when the person needs to track something this workspace has no screen for — remates, container numbers, a custom plate list, a board of invoices that are not in Siigo. Do NOT use it for clients (clients.register), due dates (commitments.record), receivables (payments.*), or fleet plates (vehicles.register). Pass a slug, a name, and the fields. Creating or changing the schema requires confirmation.',
+    'Create or update a company-specific table the first-class modules do not cover. Use this when the person needs to track something this workspace has no screen for — remates, container numbers, a custom plate list, a board of invoices that are not in Siigo. Do NOT use it for clients (clients.register), due dates (commitments.record), receivables (payments.*), or fleet plates (vehicles.register). Pass a slug, a name, and the fields; add validations (min/max, format, unique), defaults and showIf conditions when the person describes rules like "required only if there is a problem", "not a future date" or "valid NIT". Creating or changing the schema requires confirmation.',
   inputSchema: z.object({
     slug: trackerSlugSchema.describe('Stable id, e.g. "remates" or "contenedores".'),
     name: z.string().trim().min(1).max(80).describe('What people call it out loud.'),
@@ -58,7 +73,7 @@ export const trackersDefine = registerTool({
       .default('')
       .describe('One line on what belongs here, so a later turn does not invent a second table.'),
     fields: trackerFieldsSchema.describe(
-      'The columns. key is snake_case. type is text, longtext (multi-line notes), number, date (YYYY-MM-DD), time (HH:MM, 24h), money, select or checkbox (yes/no, stored as 1/0). select needs options.',
+      'The columns. key is snake_case. type is text, longtext (multi-line notes), number, date (YYYY-MM-DD), time (HH:MM, 24h), money, select, checkbox (yes/no, stored as 1/0), file (photo/upload; accept "image"|"any", multiple up to 5), location (GPS "lat,lng") or relation (a row of another table; needs tracker: its slug). select needs options. Every field may also carry, all optional: min/max (number or money; for date "today"/"today-30"/"2026-01-01", for time "now"/"HH:MM" — a date with max "today" cannot be in the future); minLength/maxLength (text); format "email"|"phone"|"nit" (Colombian NIT with check digit)|"plate"|"awb" (air waybill 3-8 digits with mod-7 check digit)|"digits", or pattern (short regex, no nested quantifiers like (a+)+); unique true (blocks a value that already exists in another row — unlike duplicates, which only flags); message (custom error text); default "today"|"now"|"viewer"|fixed value; help, placeholder, example (guidance shown in forms); showIf {field, equals: string|string[] | notEmpty: true} (the field only applies when ANOTHER field matches; hidden fields are not required and are not saved); scan true on a text field (filled by barcode/QR). Examples: inspection with resultado select ["Conforme","Con novedad"] and descripcion longtext required with showIf {field:"resultado",equals:"Con novedad"}; fecha_recibo date with max "today" and default "today"; nit text with format "nit"; guia text with format "awb" and unique true.',
     ),
     duplicates: duplicateRuleSchema
       .nullish()
@@ -204,7 +219,9 @@ export const trackersQuery = registerTool({
               const bits = tracker.fields
                 .map((f) => {
                   const v = r.values[f.key];
-                  return v === undefined || v === '' ? null : `${f.label}: ${v}`;
+                  return v === undefined || v === ''
+                    ? null
+                    : `${f.label}: ${displayTrackerValue(f, v)}`;
                 })
                 .filter(Boolean);
               return `- **${r.label}**${bits.length ? ` — ${bits.join(' · ')}` : ''}`;
@@ -224,7 +241,7 @@ export const trackersUpsert = registerTool({
     values: z
       .record(z.union([z.string(), z.number(), z.boolean()]))
       .describe(
-        'Map of field key to value. Keys must exist on the table. checkbox takes true/false (or "sí"/"no"); time takes "HH:MM". If the table has a duplicate rule, a row that repeats a key with a different date comes back flagged — tell the person.',
+        'Map of field key to value. Keys must exist on the table. checkbox takes true/false (or "sí"/"no"); time takes "HH:MM"; location takes "lat,lng"; relation takes the target row id; file takes a JSON {url,name,mime,size}. Rules of the field (min/max, format, unique, showIf) are enforced: a rejected value comes back as an error to fix. If the table has a duplicate rule, a row that repeats a key with a different date comes back flagged — tell the person.',
       ),
     label: z
       .string()

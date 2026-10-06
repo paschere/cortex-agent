@@ -33,6 +33,7 @@ import { scheduleDispatch } from './schedule-dispatch';
 import { scheduleRun } from './schedule-run';
 import { tableSyncDispatch, tableSyncRun, tableSyncSetup } from './table-sync';
 import { turnContextPurge, turnLatencyPurge } from './turn-context-purge';
+import { viewDigestDispatch, viewDigestRun } from './view-digest';
 import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
 import { workAssigned, workSyncDispatch, workSyncWorkspace } from './work-sync';
 
@@ -85,6 +86,8 @@ export {
   errandSweep,
   turnContextPurge,
   turnLatencyPurge,
+  viewDigestDispatch,
+  viewDigestRun,
   weeklyReportDispatch,
   weeklyReportWorkspace,
   workSyncDispatch,
@@ -152,6 +155,8 @@ export const functions = [
   errandSweep,
   turnContextPurge,
   turnLatencyPurge,
+  viewDigestDispatch,
+  viewDigestRun,
   weeklyReportDispatch,
   weeklyReportWorkspace,
 ];

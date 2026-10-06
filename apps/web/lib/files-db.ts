@@ -146,3 +146,17 @@ export async function removeFilesDirect(bucket: string, paths: string[]): Promis
     paths,
   ]);
 }
+
+/** Cuántos archivos de un prefijo se guardaron en la última hora (el tope de subidas por vista). */
+export async function countRecentFilesDirect(
+  bucket: string,
+  pathPrefix: string,
+  sinceMs: number,
+): Promise<number> {
+  const result = await pool.query<{ n: string }>(
+    `select count(*)::text as n from public.app_files
+      where bucket = $1 and left(path, length($2)) = $2 and created_at > now() - ($3 || ' milliseconds')::interval`,
+    [bucket, pathPrefix, String(sinceMs)],
+  );
+  return Number(result.rows[0]?.n ?? 0);
+}

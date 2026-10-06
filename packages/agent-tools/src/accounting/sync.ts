@@ -7,7 +7,8 @@ import {
   defineTracker,
   getTrackerById,
   getTrackerBySlug,
-  shapeValues,
+  markForReview,
+  shapeValuesDetailed,
 } from '../trackers/store';
 import { getAccountingProvider } from './providers';
 import type {
@@ -242,7 +243,8 @@ export async function upsertAccountingRows(
         : {};
       let values: Record<string, string | number>;
       try {
-        values = shapeValues(table.fields, { ...base, ...ours });
+        const shaped = shapeValuesDetailed(table.fields, { ...base, ...ours }, { lenient: true });
+        values = markForReview(table, shaped.values, shaped.violations);
       } catch {
         counts.skipped += 1;
         continue;

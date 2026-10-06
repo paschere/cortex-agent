@@ -41,9 +41,160 @@ export function ViewChart({ block }: { block: Chart }) {
       />
     );
   }
+  if (block.chart === 'funnel') return <Funnel block={block} />;
+  if (block.chart === 'heatmap' && block.heat) return <Heatmap block={block} heat={block.heat} />;
   if (block.chart === 'donut') return <Donut block={block} />;
   if (block.chart === 'line') return <Line block={block} />;
   return <Bars block={block} />;
+}
+
+/**
+ * EMBUDO. Una barra centrada por etapa, cada una proporcional a la primera, y
+ * entre etapa y etapa el porcentaje que pasó a la siguiente: dice dónde se cae
+ * la gente, que es para lo que se mira un embudo. Las etapas vacías se
+ * muestran (con su cero), no se esconden.
+ */
+function Funnel({ block }: { block: Chart }) {
+  const color = TONE_COLOR[block.tone];
+  const top = Math.max(...block.points.map((p) => p.value), 0) || 1;
+  return (
+    <ol className="space-y-2" aria-label={`${block.title}: embudo por etapas`}>
+      {block.points.map((p, i) => {
+        const prev = i > 0 ? block.points[i - 1] : undefined;
+        const step = prev && prev.value > 0 ? (p.value / prev.value) * 100 : null;
+        return (
+          <li key={p.label}>
+            {step !== null && (
+              <p className="tabular py-0.5 text-center font-mono text-micro text-ink-faint">
+                <span aria-hidden>↓ </span>
+                {SHARE.format(step)} % pasa a «{p.label}»
+              </p>
+            )}
+            <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
+              <span className="min-w-0 truncate font-medium text-ink">{p.label}</span>
+              <span className="tabular shrink-0 font-mono font-semibold text-ink">{p.display}</span>
+            </div>
+            <div
+              className="view-grow-x mx-auto h-7 rounded-sm"
+              title={`${p.label}: ${p.display}`}
+              style={{
+                width: `${Math.max((Math.max(p.value, 0) / top) * 100, p.value > 0 ? 6 : 2)}%`,
+                background: color,
+                opacity: Math.max(0.45, 1 - i * 0.13),
+              }}
+            />
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * MAPA DE CALOR: día de la semana × hora. La intensidad es la del valor sobre
+ * el máximo; las celdas vacías quedan en el fondo. El texto equivalente (el
+ * rato más cargado y el total por día) va para el lector de pantalla.
+ */
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+
+function Heatmap({ block, heat }: { block: Chart; heat: NonNullable<Chart['heat']> }) {
+  const color = TONE_COLOR[block.tone];
+  let best: { day: string; hour: number; display: string; value: number } | null = null;
+  heat.cells.forEach((row, d) =>
+    row.forEach((c, h) => {
+      if (c.value > (best?.value ?? 0))
+        best = { day: heat.rows[d] ?? '', hour: h, display: c.display, value: c.value };
+    }),
+  );
+  const peak = best as { day: string; hour: number; display: string } | null;
+  return (
+    <figure className="m-0">
+      <div className="overflow-x-auto pb-1">
+        <div className="min-w-[26rem]">
+          <div
+            className="grid items-center gap-[3px]"
+            style={{ gridTemplateColumns: 'auto repeat(24, minmax(0, 1fr))' }}
+            role="img"
+            aria-label={
+              peak
+                ? `${block.title}: mapa de calor por día y hora. Lo más alto: ${peak.day} a las ${peak.hour} h, ${peak.display}.`
+                : `${block.title}: mapa de calor sin datos`
+            }
+          >
+            <span aria-hidden />
+            {HOURS.map((h) => (
+              <span
+                key={`h${h}`}
+                aria-hidden
+                className="text-center text-[0.6rem] leading-none text-ink-faint"
+              >
+                {h % 3 === 0 ? h : ''}
+              </span>
+            ))}
+            {heat.cells.map((row, d) => (
+              <HeatRow
+                key={heat.rows[d]}
+                label={heat.rows[d] ?? ''}
+                row={row}
+                max={heat.max}
+                color={color}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      <figcaption className="mt-2 flex items-center justify-between text-micro text-ink-faint">
+        <span>Horas del día (0–23)</span>
+        <span className="inline-flex items-center gap-1.5" aria-hidden>
+          menos
+          {[0.15, 0.4, 0.65, 0.9].map((o) => (
+            <span
+              key={o}
+              className="view-heat-cell h-2.5 w-4 rounded-[3px]"
+              style={{ background: color, opacity: o }}
+            />
+          ))}
+          más
+        </span>
+        <span className="sr-only">
+          {block.points.map((p) => `${p.label}: ${p.display}`).join('; ')}
+        </span>
+      </figcaption>
+    </figure>
+  );
+}
+
+function HeatRow({
+  label,
+  row,
+  max,
+  color,
+}: {
+  label: string;
+  row: Array<{ value: number; display: string }>;
+  max: number;
+  color: string;
+}) {
+  return (
+    <>
+      <span aria-hidden className="pr-1.5 text-right text-micro text-ink-faint">
+        {label}
+      </span>
+      {row.map((c, h) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: la hora ES la posición.
+          key={h}
+          className="view-heat-cell aspect-square rounded-[3px] bg-surface-2"
+          title={c.value ? `${label} ${h}:00 — ${c.display}` : `${label} ${h}:00 — sin datos`}
+          style={
+            c.value > 0
+              ? { background: color, opacity: 0.15 + 0.85 * Math.min(c.value / (max || 1), 1) }
+              : undefined
+          }
+        />
+      ))}
+    </>
+  );
 }
 
 const SHARE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
