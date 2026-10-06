@@ -280,6 +280,11 @@ const VOYAGE: EmbeddingProvider = {
         retryable: false,
       };
     }
+    // 429 va primero y es pasajero aunque el cuerpo hable de pagos: sin tarjeta
+    // registrada, el plan gratuito de Voyage limita a 3 consultas por minuto y
+    // el 429 dice «add your payment method…». Leerlo como «sin crédito» daba
+    // por perdido (sin reintento) todo documento de una ráfaga.
+    if (status === 429) return genericFailure('Voyage', status);
     if (status === 402 || /quota|credit|billing|payment/i.test(body)) {
       return {
         reason:
@@ -605,6 +610,7 @@ const COHERE: EmbeddingProvider = {
     }
     // Cohere is the one provider that separates these cleanly: 402 is billing,
     // 429 is speed. No body sniffing required.
+    if (status === 429) return genericFailure('Cohere', status);
     if (status === 402 || /quota|credit|billing|payment/i.test(body)) {
       return {
         reason:

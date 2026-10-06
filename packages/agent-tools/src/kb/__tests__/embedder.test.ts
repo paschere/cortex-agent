@@ -358,6 +358,31 @@ describe('a spent quota is not a transient failure', () => {
     expect(result.reason).toMatch(/credit/i);
   });
 
+  it('reads Voyage’s free-tier 429 as a rate limit, even though it talks about payment', async () => {
+    let attempts = 0;
+    server.use(
+      http.post(ENDPOINT, async () => {
+        attempts += 1;
+        if (attempts === 1)
+          return HttpResponse.json(
+            {
+              detail:
+                'You have not yet added your payment method in the billing page and will have reduced rate limits of 3 RPM and 10K TPM.',
+            },
+            { status: 429 },
+          );
+        return HttpResponse.json({ data: [{ embedding: vector(0), index: 0 }] });
+      }),
+    );
+
+    vi.useFakeTimers();
+    const pending = embedDocuments(['a']);
+    await vi.advanceTimersByTimeAsync(70_000);
+
+    await expect(pending).resolves.toMatchObject({ ok: true });
+    expect(attempts).toBe(2);
+  });
+
   it('reads OpenAI’s quota 429 as fatal but its plain 429 as transient', async () => {
     process.env.EMBEDDING_PROVIDER = 'openai';
     process.env.OPENAI_API_KEY = 'test-openai-key';
