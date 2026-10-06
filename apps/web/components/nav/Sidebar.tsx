@@ -2,6 +2,7 @@
 
 import { usePanel } from '@/components/panel/PanelHost';
 import { CortexSignature } from '@/components/ui/cortex-signature';
+import { authClient } from '@/lib/auth-client';
 import {
   type NavItem,
   type PrimaryItem,
@@ -25,6 +26,7 @@ import {
   Bell,
   ChevronDown,
   LayoutDashboard,
+  LogOut,
   MessagesSquare,
   MoreHorizontal,
   PanelLeftClose,
@@ -124,10 +126,25 @@ function Navigation({
     waiting: boolean;
     more: boolean;
   } | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
   const current = selection?.path === path ? selection : null;
   const waitingOpen = !collapsed && (current ? current.waiting : waitingActive);
   const moreOpen = !collapsed && (current ? current.more : moreActive);
   const scope = onNavigate ? 'mobile' : 'desktop';
+
+  async function signOut() {
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      const { error } = await authClient.signOut();
+      if (error) throw new Error(error.message);
+      window.location.replace('/login');
+    } catch {
+      setSignOutError('No se pudo cerrar sesión. Inténtalo de nuevo.');
+      setSigningOut(false);
+    }
+  }
 
   function hrefFor(item: NavItem) {
     const global = globalItems.some((entry) => entry.href === item.href);
@@ -394,6 +411,25 @@ function Navigation({
             )}
           <ThemeToggle icon />
         </div>
+        <button
+          type="button"
+          disabled={signingOut}
+          onClick={signOut}
+          aria-label={collapsed ? 'Cerrar sesión' : undefined}
+          title={collapsed ? 'Cerrar sesión' : undefined}
+          className={clsx(
+            'workspace-nav-link flex min-h-10 w-full items-center rounded-pill text-sm font-medium text-rail-ink-muted transition-colors hover:bg-rail-2 hover:text-rail-ink disabled:opacity-60',
+            collapsed ? 'justify-center' : 'gap-2.5 px-3',
+          )}
+        >
+          <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={2} aria-hidden />
+          {!collapsed && <span>{signingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}</span>}
+        </button>
+        {signOutError && (
+          <p role="alert" className={clsx('text-xs text-rose', collapsed ? 'sr-only' : 'px-3')}>
+            {signOutError}
+          </p>
+        )}
         {!collapsed && organization?.kind === 'company' && (
           <CorporateSupervisionNotice kind={organization.kind} />
         )}
