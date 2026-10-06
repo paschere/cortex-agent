@@ -7,6 +7,19 @@ import { listTrackers, readWorkSettings } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { TrackersIndex } from './TrackersIndex';
 import { createTracker, importTrackerRows, readSpreadsheetFile } from './actions';
+import {
+  analyzeSchemaChange,
+  createTableFromSheet,
+  createTrackerWithSchema,
+  listSheetSources,
+  listTrackerChoices,
+  loadSchemaEditor,
+  proposeFromSheet,
+  runSyncNow,
+  saveTrackerSchema,
+  updateSyncSettings,
+} from './schema-actions';
+import type { SchemaActions } from './schema-types';
 import type { TrackerCardData, TrackersIndexActions } from './types';
 
 export const dynamic = 'force-dynamic';
@@ -73,10 +86,24 @@ export default async function TrackersPage() {
     readSpreadsheet: readSpreadsheetFile,
   };
 
+  const schemaActions: SchemaActions = {
+    load: loadSchemaEditor,
+    analyze: analyzeSchemaChange,
+    save: saveTrackerSchema,
+    create: createTrackerWithSchema,
+    listTrackers: listTrackerChoices,
+    listSheets: listSheetSources,
+    proposeFromSheet,
+    createFromSheet: createTableFromSheet,
+    updateSync: updateSyncSettings,
+    syncNow: runSyncNow,
+  };
+
   return (
     <TrackersIndex
       cards={cards}
       actions={actions}
+      schemaActions={schemaActions}
       canCreate={!isToolDenied('trackers.define', denied)}
       links={{
         base: workspaceHref(user.organization.id, '/trackers'),

@@ -32,3 +32,15 @@ export {
 } from './sync';
 export type { PlannedRow, SyncOutcome, TrackerSyncRow } from './sync';
 export * from './lookups';
+export {
+  SYNC_INSTRUCTIONS_MAX,
+  SYNC_KEY_FIELDS_MAX,
+  SYNC_MAX_INTERVAL,
+  SYNC_MIN_INTERVAL,
+  pruneSyncFields,
+  readSyncSettings,
+  syncPatchSchema,
+  updateDriveFolderSync,
+  updateTrackerSync,
+} from './settings';
+export type { SyncPatch, SyncSettings } from './settings';

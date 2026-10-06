@@ -1,6 +1,7 @@
 'use client';
 
 import { compressImage } from '@/lib/views/compress-image';
+import { isPendingUrl, previewUrl, stashBlob } from '@/lib/views/offline-files';
 import {
   type FileAccept,
   MAX_FILES_PER_FIELD,
@@ -37,7 +38,10 @@ export interface FileInputProps {
   large?: boolean;
 }
 
-function upload(
+/** La subida falló por falta de red (no porque el servidor la rechazara). */
+export class OfflineUploadError extends Error {}
+
+export function uploadFile(
   target: SubmitTarget,
   blockId: string,
   field: string,
@@ -63,7 +67,8 @@ function upload(
     xhr.open('POST', url);
     xhr.upload.onprogress = (e) =>
       e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
-    xhr.onerror = () => reject(new Error('Sin conexión. Revisa tu internet e inténtalo otra vez.'));
+    xhr.onerror = () =>
+      reject(new OfflineUploadError('Sin conexión. Revisa tu internet e inténtalo otra vez.'));
     xhr.onload = () => {
       let body: (Partial<UploadedFile> & { error?: string }) | null = null;
       try {
@@ -116,15 +121,30 @@ export function FileInput({
       }
       const slot = { name: file.name, pct: 0 };
       setBusy((b) => [...b, slot]);
+      // Sin señal: la foto se guarda en el teléfono y sube al enviar el registro.
+      const saveHere = async () => {
+        const kept = await stashBlob(file as File);
+        current = multiple ? [...current, kept] : [kept];
+        onChange(serializeFileValue(current, multiple));
+      };
       try {
-        const done = await upload(target, blockId, field, file, (pct) => {
+        if (
+          (target.kind === 'app' || target.kind === 'public') &&
+          typeof navigator !== 'undefined' &&
+          !navigator.onLine
+        ) {
+          await saveHere();
+          continue;
+        }
+        const done = await uploadFile(target, blockId, field, file, (pct) => {
           slot.pct = pct;
           setBusy((b) => [...b]);
         });
         current = multiple ? [...current, done] : [done];
         onChange(serializeFileValue(current, multiple));
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'No se pudo subir el archivo.');
+        if (e instanceof OfflineUploadError) await saveHere();
+        else setError(e instanceof Error ? e.message : 'No se pudo subir el archivo.');
       } finally {
         setBusy((b) => b.filter((x) => x !== slot));
       }
@@ -213,14 +233,14 @@ export function FileInput({
         <ul className="flex flex-wrap gap-2">
           {files.map((f) => (
             <li key={f.url} className="relative">
-              {f.mime.startsWith('image/') ? (
+              {f.mime.startsWith('image/') && (previewUrl(f.url) ?? !isPendingUrl(f.url)) ? (
                 <img
-                  src={f.url}
+                  src={previewUrl(f.url) ?? f.url}
                   alt={f.name}
-                  className="h-20 w-20 rounded-lg border border-line object-cover"
+                  className="h-20 w-20 rounded-lg border border-border object-cover"
                 />
               ) : (
-                <span className="flex h-20 w-28 flex-col items-center justify-center gap-1 rounded-lg border border-line p-1 text-center text-xs">
+                <span className="flex h-20 w-28 flex-col items-center justify-center gap-1 rounded-lg border border-border p-1 text-center text-xs">
                   <FileText className="h-6 w-6" aria-hidden />
                   <span className="w-full truncate">{f.name}</span>
                 </span>
@@ -234,12 +254,17 @@ export function FileInput({
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
+              {isPendingUrl(f.url) && (
+                <span className="mt-1 block max-w-[5rem] text-micro leading-tight text-amber">
+                  Se sube al enviar
+                </span>
+              )}
             </li>
           ))}
           {busy.map((b) => (
             <li
               key={b.name + b.pct}
-              className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-line text-xs"
+              className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border border-border text-xs"
               aria-live="polite"
             >
               <Loader2 className="h-5 w-5 animate-spin" aria-hidden />

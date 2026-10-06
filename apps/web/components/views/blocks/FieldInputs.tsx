@@ -6,6 +6,8 @@ import { clsx } from 'clsx';
 import { Loader2, LocateFixed, Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { SubmitTarget } from '../ViewCanvas';
+import { FileInput as RealFileInput } from '../inputs/FileInput';
+import { ScanInput as RealScanInput } from '../inputs/ScanInput';
 
 /**
  * Los inputs de los campos «grandes» de un formulario: ubicación, relación,
@@ -298,82 +300,33 @@ export function RelationInput({
 // Archivo y escáner: las piezas que otro agente reemplaza por la cámara y el lector
 // ---------------------------------------------------------------------------
 
-const MIME_BY_EXT: Record<string, string> = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-  gif: 'image/gif',
-  pdf: 'application/pdf',
-};
-
-/**
- * PLACEHOLDER de archivo: por ahora se pega el enlace `https://` de un archivo
- * ya subido y se arma el valor con su nombre. Cuando haya subida real, este
- * componente se reemplaza entero respetando el contrato del encabezado.
- */
+/** Subida real (inputs/FileInput): foto con cámara o galería, comprimida en el navegador. */
 export function FileInput({
   field,
-  id,
   value,
   onChange,
   onBlur,
-  invalid,
-  describedBy,
+  target,
+  blockId,
   className,
 }: FieldInputProps) {
-  const [text, setText] = useState(() => {
-    try {
-      const v = JSON.parse(value) as { url?: string } | Array<{ url?: string }>;
-      return (Array.isArray(v) ? v : [v]).map((f) => f.url ?? '').join(' ');
-    } catch {
-      return '';
-    }
-  });
-
-  function commit(next: string) {
-    setText(next);
-    const urls = next
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, field.multiple ? 5 : 1);
-    if (urls.length === 0) return onChange('');
-    const files = urls.map((url) => {
-      const name = decodeURIComponent(url.split('?')[0]?.split('/').pop() || 'archivo');
-      const ext = name.split('.').pop()?.toLowerCase() ?? '';
-      return {
-        url,
-        name,
-        mime:
-          MIME_BY_EXT[ext] ??
-          (field.accept === 'image' ? 'image/jpeg' : 'application/octet-stream'),
-        size: 0,
-      };
-    });
-    onChange(JSON.stringify(field.multiple ? files : files[0]));
-  }
-
   return (
-    <input
-      id={id}
-      type="url"
-      value={text}
-      onChange={(e) => commit(e.target.value)}
-      onBlur={onBlur}
-      aria-invalid={invalid || undefined}
-      aria-describedby={describedBy}
-      placeholder={
-        field.placeholder ??
-        (field.accept === 'image'
-          ? 'Enlace de la foto (https://…)'
-          : 'Enlace del archivo (https://…)')
-      }
-      className={className}
-    />
+    <div onBlur={onBlur}>
+      <RealFileInput
+        value={value}
+        onChange={onChange}
+        accept={field.accept === 'any' ? 'any' : 'image'}
+        multiple={field.multiple}
+        target={target}
+        blockId={blockId}
+        field={field.key}
+        large={className.includes('h-14')}
+      />
+    </div>
   );
 }
 
-/** PLACEHOLDER del escáner: hoy es un texto normal; el lector de códigos lo reemplaza. */
+/** Texto con lector de códigos de barras y QR (inputs/ScanInput). */
 export function ScanInput({
   field,
   id,
@@ -385,19 +338,15 @@ export function ScanInput({
   className,
 }: FieldInputProps) {
   return (
-    <input
+    <RealScanInput
       id={id}
-      type="text"
-      data-scan="true"
-      autoComplete="off"
-      maxLength={400}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={onChange}
       onBlur={onBlur}
-      aria-invalid={invalid || undefined}
-      aria-describedby={describedBy}
+      invalid={invalid}
+      describedBy={describedBy}
+      inputClassName={className}
       placeholder={field.placeholder ?? 'Escribe o escanea el código'}
-      className={clsx(className, 'tabular font-mono')}
     />
   );
 }

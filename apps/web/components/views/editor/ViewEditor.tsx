@@ -221,6 +221,8 @@ export function ViewEditor({
 
   const [catalog, setCatalog] = useState<EditorCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  // Sube cuando cambian los campos de una tabla (o se crea una): el catálogo se vuelve a leer.
+  const [catalogTick, setCatalogTick] = useState(0);
   const [preview, setPreview] = useState<ComputedView | null>(initialPreview);
   const [problems, setProblems] = useState<EditorProblem[]>([]);
   const [previewing, setPreviewing] = useState(false);
@@ -312,6 +314,7 @@ export function ViewEditor({
 
   // ---- Catálogo y vista previa -------------------------------------------
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: catalogTick es el disparador de la recarga.
   useEffect(() => {
     let alive = true;
     services
@@ -325,7 +328,7 @@ export function ViewEditor({
     return () => {
       alive = false;
     };
-  }, [services, viewId]);
+  }, [services, viewId, catalogTick]);
 
   const specJson = JSON.stringify(spec);
   const trackersJson = JSON.stringify(draft.newTrackers);
@@ -448,11 +451,14 @@ export function ViewEditor({
     setAnnouncement('Bloque duplicado.');
   }
 
-  function addBlock(type: PaletteType, options: { at?: number; source?: string | null } = {}) {
+  function addBlock(
+    type: PaletteType,
+    options: { at?: number; source?: string | null; sources?: typeof sources } = {},
+  ) {
     const block = newBlock(
       type,
       spec,
-      sources,
+      options.sources ?? sources,
       options.source ?? (selected ? sourceOf(selected) : null),
     );
     setPaletteOpen(false);
@@ -466,6 +472,17 @@ export function ViewEditor({
     select(block.id, { sheet: false });
     setAnnouncement(`${BLOCK_LABEL[type] ?? blockLabel(type)} agregado.`);
     reveal(block.id);
+  }
+
+  /** Una tabla recién creada desde la paleta: leer el catálogo con ella y poner el formulario encima. */
+  async function tableCreated(slug: string) {
+    try {
+      const fresh = await services.loadCatalog(viewId);
+      setCatalog(fresh);
+      addBlock('form', { source: slug, sources: withDraftSources(fresh, draft) });
+    } catch {
+      setCatalogTick((t) => t + 1);
+    }
   }
 
   function remove(id: string) {
@@ -1349,6 +1366,7 @@ export function ViewEditor({
                       setSpec(updateBlock(spec, selected.id, next), coalesce)
                     }
                     onAllowEditing={() => setSpec({ ...spec, editing: 'team' })}
+                    onSchemaChanged={() => setCatalogTick((t) => t + 1)}
                   />
                 </>
               ) : (
@@ -1393,6 +1411,7 @@ export function ViewEditor({
         prefer={selected ? sourceOf(selected) : null}
         loading={!catalog && !catalogError}
         onPick={(type) => addBlock(type)}
+        onTableCreated={tableCreated}
       />
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
 

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useFlashClass } from '../flash-context';
 import { RowActions } from '../view-writes';
 import { useRecordOpener } from './RecordDrawer';
+import { RichValue } from './RichValue';
 import { Card, EmptyState, StatusChip, useViewTheme } from './theme';
 
 /**
@@ -128,7 +129,9 @@ export function GalleryBlock({ block }: { block: Gallery }) {
                     {card.meta.map((m) => (
                       <div key={m.label} className="flex justify-between gap-3 text-micro">
                         <dt className="shrink-0 text-ink-faint">{m.label}</dt>
-                        <dd className="tabular truncate font-mono text-ink">{m.value}</dd>
+                        <dd className="tabular truncate font-mono text-ink">
+                          <RichValue kind={m.kind} raw={m.raw} text={m.value} size={28} />
+                        </dd>
                       </div>
                     ))}
                   </dl>

@@ -1,5 +1,6 @@
 'use client';
 
+import { CreateTableDialog } from '@/components/trackers/CreateTableDialog';
 import { KNOWN_BLOCK_TYPES } from '@/lib/views/editor-shape';
 import {
   type EditorSource,
@@ -9,7 +10,8 @@ import {
 } from '@/lib/views/editor-spec';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
+import { useState } from 'react';
 import { BLOCK_PITCH, blockIcon, blockLabel } from './block-meta';
 
 /**
@@ -41,7 +43,7 @@ const ORDER: PaletteType[] = [
 ];
 
 const WHY_NOT: Partial<Record<PaletteType, string>> = {
-  form: 'Necesitas una tabla de tu empresa: pídele a Cortex que cree una.',
+  form: 'Necesitas una tabla de tu empresa: créala aquí abajo con «Crear tabla nueva».',
   board: 'Necesitas una tabla con un campo de opciones (un estado, una etapa).',
   zones: 'Necesitas una tabla con un campo de opciones (una zona, un muelle).',
   calendar: 'Necesitas una tabla con un campo de fecha (una cita, una entrega).',
@@ -55,6 +57,7 @@ export function AddBlockPalette({
   prefer,
   loading,
   onPick,
+  onTableCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -63,7 +66,11 @@ export function AddBlockPalette({
   prefer: string | null;
   loading: boolean;
   onPick: (type: PaletteType) => void;
+  /** Se creó una tabla desde aquí: quien llama la lee y pone un formulario sobre ella. */
+  onTableCreated?: (slug: string) => void;
 }) {
+  const [creating, setCreating] = useState(false);
+  const hasTables = sources.some((s) => s.kind === 'tracker' && !s.readOnly);
   const types = ORDER.filter(
     (t) => (KNOWN_BLOCK_TYPES as readonly string[]).includes(t) || blockTypes.includes(t),
   );
@@ -128,8 +135,33 @@ export function AddBlockPalette({
               Leyendo tus tablas…
             </p>
           )}
+          {onTableCreated && !loading && (
+            <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3">
+              <p className="text-xs text-ink-muted">
+                {hasTables
+                  ? '¿Falta la tabla? Créala con sus campos y reglas y sale un formulario sobre ella.'
+                  : 'Todavía no tienes tablas: créala aquí, con sus campos y reglas, o desde una hoja conectada.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-primary/50 bg-primary-soft px-4 py-1.5 text-xs font-semibold text-primary"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden /> Crear tabla nueva
+              </button>
+            </div>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
+      <CreateTableDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onCreated={(created) => {
+          setCreating(false);
+          onOpenChange(false);
+          onTableCreated?.(created.slug);
+        }}
+      />
     </Dialog.Root>
   );
 }

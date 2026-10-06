@@ -11,6 +11,7 @@ import {
   defineTracker,
   duplicateRuleSchema,
   editViewRow,
+  editViewSubmission,
   getTrackerBySlug,
   mustGetView,
   restoreViewVersion,
@@ -234,8 +235,17 @@ export async function submitViewFormAction(
   viewId: string,
   blockId: string,
   values: Record<string, string>,
+  clientId?: string,
 ): Promise<
-  { ok: true; message: string; duplicate?: string | null } | { ok: false; error: string }
+  | {
+      ok: true;
+      message: string;
+      duplicate?: string | null;
+      rowId?: string;
+      editToken?: string | null;
+      editUntil?: string | null;
+    }
+  | { ok: false; error: string }
 > {
   try {
     const user = await requireSession();
@@ -246,13 +256,42 @@ export async function submitViewFormAction(
       values,
       submittedBy: user.id,
       viewer: user.name || user.email,
+      clientId,
     });
-    await bellForSubmission(db, view, blockId, user.name || user.email);
+    if (!res.replayed) await bellForSubmission(db, view, blockId, user.name || user.email);
     revalidatePath(`/views/${view.slug}`);
-    return { ok: true, message: res.message, duplicate: res.duplicate };
+    return {
+      ok: true,
+      message: res.message,
+      duplicate: res.duplicate,
+      rowId: res.rowId,
+      editToken: res.editToken,
+      editUntil: res.editUntil,
+    };
   } catch (err) {
     if (err instanceof SubmissionLimitError) return { ok: false, error: err.message };
     return { ok: false, error: describe(err, 'No se pudo enviar el formulario.') };
+  }
+}
+
+/** Corregir lo que se envió por un formulario, dentro de su ventana (quien lo envió). */
+export async function editViewSubmissionAction(
+  viewId: string,
+  blockId: string,
+  rowId: string,
+  values: Record<string, string>,
+): Promise<
+  { ok: true; message: string; duplicate?: string | null } | { ok: false; error: string }
+> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId);
+    const res = await editViewSubmission(db, view, { blockId, rowId, values, actor: user.id });
+    revalidatePath(`/views/${view.slug}`);
+    return { ok: true, message: 'Corregido.', duplicate: res.duplicate };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo corregir el envío.') };
   }
 }
 
@@ -281,12 +320,19 @@ export async function runViewActionAction(
   blockId: string,
   actionId: string,
   rowId: string,
+  reason?: string,
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   try {
     const user = await requireSession();
     const db = getOrgScopedClient(user.organization.id);
     const view = await mustGetView(db, viewId);
-    const res = await runViewAction(db, view, { blockId, actionId, rowId, actor: user.id });
+    const res = await runViewAction(db, view, {
+      blockId,
+      actionId,
+      rowId,
+      reason,
+      actor: user.id,
+    });
     if (res.kind === 'notify')
       await notifyViewActivity(db, view, {
         title: `${res.actionLabel}: ${res.label}`,

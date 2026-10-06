@@ -20,6 +20,13 @@ export interface ScanInputProps {
   /** Modo operario: 56 px. */
   large?: boolean;
   placeholder?: string;
+  /** Para que el formulario lo ate a su etiqueta, su error y su validación. */
+  id?: string;
+  onBlur?: () => void;
+  invalid?: boolean;
+  describedBy?: string;
+  /** Estilo del input del formulario; sin él, el propio. */
+  inputClassName?: string;
 }
 
 interface Detector {
@@ -39,7 +46,18 @@ function cameraError(e: unknown): string {
   return 'No pude abrir la cámara. Escribe el código.';
 }
 
-export function ScanInput({ value, onChange, disabled, large, placeholder }: ScanInputProps) {
+export function ScanInput({
+  value,
+  onChange,
+  disabled,
+  large,
+  placeholder,
+  id,
+  onBlur,
+  invalid,
+  describedBy,
+  inputClassName,
+}: ScanInputProps) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [torch, setTorch] = useState<boolean | null>(null); // null = sin linterna
@@ -145,18 +163,27 @@ export function ScanInput({ value, onChange, disabled, large, placeholder }: Sca
     <>
       <div className="flex gap-2">
         <input
+          id={id}
+          data-scan="true"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
           disabled={disabled}
           placeholder={placeholder}
           inputMode="text"
           autoCapitalize="characters"
           autoCorrect="off"
           spellCheck={false}
-          className={clsx(
-            'min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 text-ink outline-none focus:border-primary',
-            large ? 'min-h-14 text-lg' : 'min-h-11 text-sm',
-          )}
+          className={
+            inputClassName
+              ? clsx(inputClassName, 'min-w-0 flex-1 tabular font-mono')
+              : clsx(
+                  'min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 text-ink outline-none focus:border-primary',
+                  large ? 'min-h-14 text-lg' : 'min-h-11 text-sm',
+                )
+          }
         />
         <button
           ref={openerRef}

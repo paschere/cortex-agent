@@ -21,6 +21,8 @@ export const runtime = 'nodejs';
 const input = z.object({
   token: z.string().min(32).max(64),
   blockId: z.string().min(1).max(40),
+  /** Id del envío (cola sin internet): un reintento no escribe otra fila. */
+  clientId: z.string().min(8).max(64).optional(),
   values: z.record(z.string().max(4000)).refine((v) => Object.keys(v).length <= 30),
 });
 
@@ -47,10 +49,19 @@ export async function POST(req: NextRequest) {
       blockId: parsed.data.blockId,
       values: parsed.data.values,
       submittedBy: null,
+      clientId: parsed.data.clientId,
     });
-    await bellForSubmission(db, view, parsed.data.blockId, 'Alguien con el enlace');
+    // Un reintento (`replayed`) ya sonó la campana la primera vez.
+    if (!res.replayed)
+      await bellForSubmission(db, view, parsed.data.blockId, 'Alguien con el enlace');
     // `duplicate` viaja aparte para que la pantalla lo pinte como alerta, no como éxito.
-    return NextResponse.json({ message: res.message, duplicate: res.duplicate });
+    return NextResponse.json({
+      message: res.message,
+      duplicate: res.duplicate,
+      rowId: res.rowId,
+      editToken: res.editToken,
+      editUntil: res.editUntil,
+    });
   } catch (err) {
     if (err instanceof SubmissionLimitError)
       return NextResponse.json({ error: err.message }, { status: 429 });

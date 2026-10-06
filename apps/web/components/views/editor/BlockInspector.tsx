@@ -1,5 +1,6 @@
 'use client';
 
+import { TrackerSchemaSheet } from '@/components/trackers/TrackerSchemaSheet';
 import {
   AGGREGATES,
   AGGREGATE_LABEL,
@@ -37,10 +38,11 @@ import {
 import { normalizeLayout } from '@/lib/views/zone-layout';
 import type { RowAction, ViewBlock, ViewFilter } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { AlertTriangle, Lock, Plus } from 'lucide-react';
-import { useId } from 'react';
+import { AlertTriangle, Lock, Plus, SlidersHorizontal } from 'lucide-react';
+import { useId, useState } from 'react';
 import { ActionsEditor } from './ActionsEditor';
 import { FiltersEditor } from './FiltersEditor';
+import { FormOptions } from './FormOptions';
 import { ZoneDrawer } from './ZoneDrawer';
 import {
   AddButton,
@@ -94,6 +96,7 @@ export function BlockInspector({
   editing,
   onChange,
   onAllowEditing,
+  onSchemaChanged,
 }: {
   block: ViewBlock;
   sources: EditorSource[];
@@ -101,7 +104,10 @@ export function BlockInspector({
   editing: Editing;
   onChange: Change;
   onAllowEditing: () => void;
+  /** Se guardó un cambio en los campos de la tabla: recargar el catálogo del lienzo. */
+  onSchemaChanged?: () => void;
 }) {
+  const [schemaOpen, setSchemaOpen] = useState(false);
   const ref = sourceOf(block);
   const source = ref ? sources.find((s) => s.slug === ref) : undefined;
   const key = (prop: string) => `${block.id}:${prop}`;
@@ -195,6 +201,25 @@ export function BlockInspector({
             />
           </Field>
           <TypeFields block={block} source={source} onChange={onChange} />
+          {/* Los campos y las reglas de la tabla se editan aquí mismo, sin pasar por el chat. */}
+          {source && !source.readOnly && !source.opaque && !source.name.endsWith('(nueva)') && (
+            <>
+              <button
+                type="button"
+                onClick={() => setSchemaOpen(true)}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-sm border border-border-strong px-3 py-2 text-xs font-semibold text-ink-muted transition-colors hover:border-primary/50 hover:text-ink"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+                Editar campos y reglas de {source.name}
+              </button>
+              <TrackerSchemaSheet
+                slug={source.slug}
+                open={schemaOpen}
+                onOpenChange={setSchemaOpen}
+                onSaved={() => onSchemaChanged?.()}
+              />
+            </>
+          )}
         </Section>
       )}
 
@@ -221,14 +246,6 @@ export function BlockInspector({
 
       {block.type === 'form' && (
         <Section title="Formulario">
-          <FieldChips
-            label="Campos que pide"
-            fields={fieldOptions(source).filter((f) => !f.builtin)}
-            value={block.fields}
-            max={20}
-            emptyHint="Todos los campos de la tabla."
-            onChange={(fields) => onChange({ ...block, fields })}
-          />
           <Field label="Introducción">
             <textarea
               rows={3}
@@ -259,6 +276,17 @@ export function BlockInspector({
             />
           </Field>
         </Section>
+      )}
+
+      {block.type === 'form' && (
+        <FormOptions
+          block={block}
+          source={source}
+          editing={editing}
+          onChange={onChange}
+          onAllowEditing={onAllowEditing}
+          onSchemaChanged={onSchemaChanged}
+        />
       )}
     </div>
   );

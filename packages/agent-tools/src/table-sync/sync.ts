@@ -1,7 +1,7 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SheetData, SheetValue } from '../kb/spreadsheets';
-import { applyDuplicateRule } from '../trackers/duplicates';
+import { type DuplicateRule, applyDuplicateRule } from '../trackers/duplicates';
 import { type TrackerField, rowLabel, trackerFieldsSchema } from '../trackers/schema';
 import {
   TRACKER_COLUMNS,
@@ -366,6 +366,32 @@ export async function latestSourceSheet(
   return sheet ? { sheet, sourceName: s.name } : null;
 }
 
+/**
+ * Los campos aprobados, sin la columna de origen, y el mapeo campo → encabezado.
+ * Un campo sin columna (p.ej. «Estado» para marcar duplicados) existe en la
+ * tabla pero la hoja no lo llena. Una columna que no está en la hoja es un
+ * error: se llenaría siempre vacía y nadie lo notaría.
+ */
+export function approvedFields(
+  fields: Array<TrackerField & { sourceColumn?: string }>,
+  header: string[],
+): { fields: TrackerField[]; mapping: Record<string, string> } {
+  const mapping: Record<string, string> = {};
+  const clean = fields.map(({ sourceColumn, ...field }) => {
+    const col = sourceColumn?.trim();
+    if (col) {
+      const h = header.find((x) => x.toLowerCase() === col.toLowerCase());
+      if (!h)
+        throw new ValidationError(
+          `«${col}» no es una columna de la hoja. Columnas: ${header.slice(0, 30).join(', ')}.`,
+        );
+      mapping[field.key] = h;
+    }
+    return field as TrackerField;
+  });
+  return { fields: clean, mapping };
+}
+
 export async function createTrackerSync(
   db: SupabaseClient,
   input: {
@@ -376,6 +402,13 @@ export async function createTrackerSync(
     keyColumns: string[];
     intervalMinutes: number;
     notify: boolean;
+    /**
+     * Los campos que la persona aprobó (trackers.propose_from_source, quizá
+     * corregidos), cada uno con su columna de la hoja. Sin ellos, la tabla
+     * nueva sale de la inferencia a ciegas (sólo el camino viejo del job).
+     */
+    fields?: Array<TrackerField & { sourceColumn?: string }>;
+    duplicates?: DuplicateRule | null;
   },
 ): Promise<{
   sync: TrackerSyncRow;
@@ -416,7 +449,9 @@ export async function createTrackerSync(
         `Ninguna columna de la fuente coincide con los campos de «${tracker.name}». Crea una tabla nueva desde la fuente.`,
       );
   } else {
-    const inferred = fieldsFromSheet(found.sheet);
+    const inferred = input.fields?.length
+      ? approvedFields(input.fields, header)
+      : fieldsFromSheet(found.sheet);
     if (!inferred.fields.length) throw new ValidationError('La fuente no tiene columnas legibles.');
     const { tracker: created } = await defineTracker(db, {
       slug: input.tracker.slug,
@@ -424,6 +459,7 @@ export async function createTrackerSync(
       description: input.tracker.description ?? `Se llena sola desde «${found.sourceName}».`,
       fields: trackerFieldsSchema.parse(inferred.fields),
       userId: input.actorId,
+      ...(input.duplicates ? { duplicates: input.duplicates } : {}),
     });
     tracker = created;
     mapping = inferred.mapping;

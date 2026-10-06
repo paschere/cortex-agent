@@ -4,8 +4,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { fetchCustomToolById } from '../custom-tools/store';
 import { registerTool } from '../index';
-import { trackerSlugSchema } from '../trackers/schema';
+import { duplicateRuleSchema } from '../trackers/duplicates';
+import { trackerFieldSchema, trackerSlugSchema } from '../trackers/schema';
+import { getTrackerBySlug } from '../trackers/store';
 import { FeedCaptureError, captureGoogleSheetFeed, parseGoogleSheetRef } from './feed-capture';
+import { proposalMarkdown, proposeTableFromSheet } from './propose';
 import { createTrackerSync, latestSourceSheet, listTrackerSyncs } from './sync';
 
 /**
@@ -113,10 +116,51 @@ export async function setSourceQuery(
   if (error) throw error;
 }
 
+/**
+ * Leer la hoja y PROPONER la tabla, sin crear nada. Es el paso obligado antes
+ * de trackers.sync_from_source con una tabla nueva (ver propose.ts).
+ */
+export const trackersProposeFromSource = registerTool({
+  id: 'trackers.propose_from_source',
+  description:
+    'Read a connected source (a Google Sheet connected with feed_connect_google_sheet, or another Feed source) and PROPOSE the company table that will be filled from it, without creating anything: fields with type (text, long text, number, money, date, time, yes/no, list with its options), which ones are required, formats it detected (email, phone, NIT, plate, AWB), which column(s) identify each row, and a duplicate rule when the same code appears with different dates. ALWAYS call this before trackers.sync_from_source creates a new table (and before building a view on a sheet), show the returned markdown to the person and wait for their approval or changes; then pass the approved fields to trackers.sync_from_source. Read-only.',
+  inputSchema: z.object({
+    source: z.string().trim().min(1).max(240).describe('Name or id of the connected Feed source.'),
+    sheet: z.number().int().min(0).max(19).default(0).describe('Tab index.'),
+  }),
+  outputSchema: z.object({
+    sourceId: z.string(),
+    fields: z.array(z.record(z.unknown())),
+    keyColumns: z.array(z.string()),
+    duplicates: z.record(z.unknown()).nullable(),
+    rows: z.number().int(),
+    markdown: z.string(),
+  }),
+  rateLimit: { perMinute: 20 },
+  handler: async (input, ctx) => {
+    const source = await resolveSource(ctx.db, ctx.userId, input.source);
+    const found = await latestSourceSheet(ctx.db, source.id, ctx.userId, input.sheet ?? 0);
+    if (!found)
+      throw new ValidationError(
+        'Esa fuente no tiene una captura vigente con esa pestaña. Si es una hoja de Google, vuelve a llamar a feed_connect_google_sheet con su enlace para leerla de nuevo.',
+      );
+    const proposal = proposeTableFromSheet(found.sheet);
+    const { why: _why, ...duplicates } = proposal.duplicates ?? { why: '' };
+    return {
+      sourceId: source.id,
+      fields: proposal.fields as unknown as Record<string, unknown>[],
+      keyColumns: proposal.keyColumns,
+      duplicates: proposal.duplicates ? (duplicates as Record<string, unknown>) : null,
+      rows: proposal.rows,
+      markdown: proposalMarkdown(proposal, found.sourceName),
+    };
+  },
+});
+
 export const trackersSyncFromSource = registerTool({
   id: 'trackers.sync_from_source',
   description:
-    'Make a company table fill itself from a connected Feed source (a Google Sheet — if the person gave a Google Sheets link and it is not connected yet, connect it first with feed_connect_google_sheet and pass the returned source id here — a web page table or an API such as a flights API): every few minutes it re-reads the source, adds new rows and updates changed ones, identified by key columns (e.g. flight number + date). Creates the table from the source columns if it does not exist. Use it when the person wants a table/view to stay updated from a sheet or an API, or to be alerted when new rows arrive. If the API needs fixed query parameters (airport, date) pass query (values may use {hoy:YYYY-MM-DD}). If an API returns its list inside a field ("data", "arrivals", "flights") pass recordsPath; if it returns rows as arrays without names (OpenSky "states"), pass recordsPath and columns (names in order). Only the owner of the source can do this. Requires confirmation.',
+    'Make a company table fill itself from a connected Feed source (a Google Sheet — if the person gave a Google Sheets link and it is not connected yet, connect it first with feed_connect_google_sheet and pass the returned source id here — a web page table or an API such as a flights API): every few minutes it re-reads the source, adds new rows and updates changed ones, identified by key columns (e.g. flight number + date). For a table that does not exist yet you MUST first call trackers.propose_from_source, show the proposal and pass the approved fields here. Use it when the person wants a table/view to stay updated from a sheet or an API, or to be alerted when new rows arrive. If the API needs fixed query parameters (airport, date) pass query (values may use {hoy:YYYY-MM-DD}). If an API returns its list inside a field ("data", "arrivals", "flights") pass recordsPath; if it returns rows as arrays without names (OpenSky "states"), pass recordsPath and columns (names in order). Only the owner of the source can do this. Requires confirmation.',
   inputSchema: z.object({
     source: z.string().trim().min(1).max(240).describe('Name or id of the connected Feed source.'),
     table: trackerSlugSchema.describe(
@@ -131,6 +175,19 @@ export const trackersSyncFromSource = registerTool({
     intervalMinutes: z.number().int().min(5).max(1440).default(15),
     notify: z.boolean().default(true).describe('Ring the bell when rows are added or change.'),
     sheet: z.number().int().min(0).max(19).default(0),
+    fields: z
+      .array(
+        trackerFieldSchema.and(z.object({ sourceColumn: z.string().trim().max(120).optional() })),
+      )
+      .min(1)
+      .max(20)
+      .optional()
+      .describe(
+        'REQUIRED when the table does not exist yet: the fields the person approved from trackers.propose_from_source (with any changes they asked for), each with its sourceColumn (sheet header; omit for a field the sheet does not fill, e.g. a status used to flag duplicates).',
+      ),
+    duplicates: duplicateRuleSchema
+      .optional()
+      .describe('Duplicate rule the person approved (from the proposal), for a new table.'),
     recordsPath: z.string().trim().max(160).optional(),
     columns: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
     query: z
@@ -197,8 +254,21 @@ export const trackersSyncFromSource = registerTool({
     // Con una captura que ya trae la tabla, la primera carga va de una vez.
     const ready =
       !reshape && (await latestSourceSheet(ctx.db, source.id, ctx.userId, common.sheetIndex));
+    // Una tabla NUEVA no se crea a ciegas: primero se lee la hoja y se le
+    // propone a la persona (trackers.propose_from_source). Sin campos
+    // aprobados, esta llamada se devuelve al modelo con el paso que falta.
+    if (ready && !input.fields?.length && !(await getTrackerBySlug(ctx.db, input.table)))
+      throw new ValidationError(
+        `La tabla «${input.table}» no existe todavía. Primero llama a trackers.propose_from_source con esta fuente, muéstrale la propuesta a la persona y, cuando la apruebe (o la corrija), vuelve aquí con fields (y duplicates si aplica).`,
+      );
     if (ready) {
-      const { tracker, createdTracker, outcome } = await createTrackerSync(ctx.db, common);
+      const { tracker, createdTracker, outcome } = await createTrackerSync(ctx.db, {
+        ...common,
+        ...(input.fields?.length
+          ? { fields: input.fields.map((f) => ({ ...f, required: f.required ?? false })) }
+          : {}),
+        ...(input.duplicates ? { duplicates: duplicateRuleSchema.parse(input.duplicates) } : {}),
+      });
       return {
         status: 'ready' as const,
         table: tracker.slug,

@@ -26,6 +26,13 @@ export interface ViewWriter {
   act(blockId: string, action: ComputedAction, rowId: string, rowLabel: string): Promise<Result>;
 }
 
+/** Rechazar pide un motivo opcional; `null` = la persona canceló. */
+function askReason(action: ComputedAction, rowLabel: string): string | null {
+  if (!action.askReason) return '';
+  const answer = window.prompt(`Motivo del rechazo de «${rowLabel}» (opcional)`, '');
+  return answer === null ? null : answer.trim().slice(0, 300);
+}
+
 const WriterContext = createContext<ViewWriter | null>(null);
 
 export function useViewWriter(): ViewWriter | null {
@@ -71,7 +78,9 @@ export function ViewWriterProvider({
       async act(blockId, action, rowId, rowLabel) {
         if (action.confirm && !window.confirm(`¿${action.label} en «${rowLabel}»?`))
           return { ok: false, error: 'Cancelado.' };
-        const res = await runViewActionAction(target.viewId, blockId, action.id, rowId);
+        const reason = askReason(action, rowLabel);
+        if (reason === null) return { ok: false, error: 'Cancelado.' };
+        const res = await runViewActionAction(target.viewId, blockId, action.id, rowId, reason);
         if (res.ok) onChanged?.();
         return res;
       },
@@ -86,12 +95,15 @@ export function ViewWriterProvider({
       async act(blockId, action, rowId, rowLabel) {
         if (action.confirm && !window.confirm(`¿${action.label} en «${rowLabel}»?`))
           return { ok: false, error: 'Cancelado.' };
+        const reason = askReason(action, rowLabel);
+        if (reason === null) return { ok: false, error: 'Cancelado.' };
         const res = await publicWrite({
           op: 'action',
           token: target.token,
           blockId,
           rowId,
           actionId: action.id,
+          ...(reason ? { reason } : {}),
         });
         if (res.ok) onChanged?.();
         return res;
@@ -313,10 +325,12 @@ export function RowActions({
   const writer = useViewWriter();
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
-  if (!writer || !actions.length) return null;
+  // Aprobar / Rechazar sólo salen en las filas que esperan revisión (`rowIds`).
+  const shown = actions.filter((a) => !a.rowIds || a.rowIds.includes(rowId));
+  if (!writer || !shown.length) return null;
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
-      {actions.map((a) => (
+      {shown.map((a) => (
         <button
           key={a.id}
           type="button"

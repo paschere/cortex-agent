@@ -29,6 +29,8 @@ const input = z.discriminatedUnion('op', [
     blockId: z.string().min(1).max(40),
     rowId: z.string().uuid(),
     actionId: z.string().min(1).max(40),
+    /** Motivo opcional al rechazar (Aprobar / Rechazar). */
+    reason: z.string().max(300).optional(),
   }),
 ]);
 
@@ -66,6 +68,7 @@ export async function POST(req: NextRequest) {
       blockId: parsed.data.blockId,
       actionId: parsed.data.actionId,
       rowId: parsed.data.rowId,
+      reason: parsed.data.reason,
       actor: null,
     });
     if (res.kind === 'notify')

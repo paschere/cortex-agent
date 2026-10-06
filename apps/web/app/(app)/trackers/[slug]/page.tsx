@@ -25,6 +25,19 @@ import {
   trackerRowHistory,
 } from '../actions';
 import { createLookupAction, previewLookupAction, updateLookupAction } from '../lookup-actions';
+import {
+  analyzeSchemaChange,
+  createTableFromSheet,
+  createTrackerWithSchema,
+  listSheetSources,
+  listTrackerChoices,
+  loadSchemaEditor,
+  proposeFromSheet,
+  runSyncNow,
+  saveTrackerSchema,
+  updateSyncSettings,
+} from '../schema-actions';
+import type { SchemaActions } from '../schema-types';
 import type { LookupActions, TrackerActions } from '../types';
 import { type TrackerLinks, TrackerScreen } from './TrackerScreen';
 
@@ -101,6 +114,18 @@ export default async function TrackerPage({ params }: { params: Promise<{ slug: 
     create: createLookupAction,
     update: updateLookupAction,
   };
+  const schemaActions: SchemaActions = {
+    load: loadSchemaEditor,
+    analyze: analyzeSchemaChange,
+    save: saveTrackerSchema,
+    create: createTrackerWithSchema,
+    listTrackers: listTrackerChoices,
+    listSheets: listSheetSources,
+    proposeFromSheet,
+    createFromSheet: createTableFromSheet,
+    updateSync: updateSyncSettings,
+    syncNow: runSyncNow,
+  };
   const columns = trackerColumns(tracker.fields);
   const now = Date.now();
 
@@ -131,6 +156,7 @@ export default async function TrackerPage({ params }: { params: Promise<{ slug: 
       }}
       actions={actions}
       lookupActions={lookupActions}
+      schemaActions={schemaActions}
       links={
         {
           chatBase: ws('/chat'),

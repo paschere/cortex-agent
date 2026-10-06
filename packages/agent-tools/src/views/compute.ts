@@ -1,16 +1,20 @@
 import { type TrackerField, displayTrackerValue } from '../trackers/schema';
 import { type EmbedProvider, embedSrc, httpsUrl, safeHref } from './embeds';
 import {
+  APPROVE_ACTION_ID,
   type Aggregate,
   BLOCK_LABEL,
   type CatalogTracker,
   type ChartKind,
+  type FormApproval,
   type Period,
+  REJECT_ACTION_ID,
   type RowAction,
   type Tone,
   type ViewBlock,
   type ViewFilter,
   type ViewSpec,
+  editWindowOf,
   fieldType,
   isReadOnlySource,
 } from './spec';
@@ -105,7 +109,7 @@ export interface BoardBody {
     cards: Array<{
       id: string;
       label: string;
-      details: Array<{ label: string; value: string }>;
+      details: ComputedDetail[];
       alert?: boolean;
     }>;
   }>;
@@ -142,6 +146,8 @@ export type ComputedBlock =
         key: string;
         label: string;
         kind: 'text' | 'number' | 'date';
+        /** `file` o `location`: la pantalla pinta miniatura o enlace al mapa con el valor crudo (`sort`). */
+        rich?: RichKind;
         /** Presente sólo si la columna se edita Y quien mira puede escribir. */
         edit?: ComputedEditMeta;
       }>;
@@ -183,6 +189,10 @@ export type ComputedBlock =
       tracker: string;
       submitLabel: string;
       successMessage: string;
+      /** Minutos para «Corregir» lo enviado; 0 = no se corrige. */
+      editWindowMinutes?: number;
+      /** Pasos con los campos que pide cada uno; null/ausente = una sola pantalla. */
+      steps?: Array<{ title: string; fields: string[] }> | null;
       fields: ComputedFormField[];
     })
   | (BlockBase & {
@@ -193,7 +203,7 @@ export type ComputedBlock =
         id: string;
         title: string;
         subtitle: string | null;
-        meta: Array<{ label: string; value: string }>;
+        meta: ComputedDetail[];
         badge: { label: string; tone: Tone } | null;
         alert?: boolean;
         /** Sólo una dirección `https:` pública; cualquier otra cosa llega null. */
@@ -391,6 +401,17 @@ export interface ComputedTheme {
   cover: string | null;
 }
 
+/** Valores que la pantalla pinta distinto a un texto: fotos/archivos y ubicaciones. */
+export type RichKind = 'file' | 'location';
+
+/** Un renglón de tarjeta; `kind` + `raw` sólo en archivos y ubicaciones. */
+export interface ComputedDetail {
+  label: string;
+  value: string;
+  kind?: RichKind;
+  raw?: string;
+}
+
 /** Un botón por fila, sin el valor que escribe: ése lo decide el servidor. */
 export interface ComputedAction {
   id: string;
@@ -398,6 +419,10 @@ export interface ComputedAction {
   kind: 'set_field' | 'notify';
   confirm: boolean;
   tone: Tone;
+  /** Si viene, el botón sólo aparece en estas filas (Aprobar / Rechazar: las pendientes). */
+  rowIds?: string[];
+  /** Pide un motivo (opcional) antes de ejecutar. */
+  askReason?: boolean;
 }
 
 /**
@@ -728,7 +753,50 @@ function toAction(a: RowAction): ComputedAction {
   return { id: a.id, label: a.label, kind: a.kind, confirm: a.confirm, tone: a.tone };
 }
 
+/**
+ * Los botones de un bloque: los del spec y, si un formulario con aprobación
+ * alimenta la MISMA tabla, Aprobar / Rechazar — sólo en las filas que siguen
+ * en el estado pendiente (`rowIds`). Sólo con quien puede escribir.
+ */
+function actionsFor(
+  opts: ComputeOptions,
+  actions: RowAction[],
+  tracker: CatalogTracker,
+  shown: ViewRow[],
+): ComputedAction[] {
+  if (!opts.writable) return [];
+  const out = actions.map(toAction);
+  const approval = opts.approval?.get(tracker.slug);
+  if (approval) {
+    const rowIds = shown
+      .filter((r) => String(r.values[approval.field] ?? '') === approval.pending)
+      .map((r) => r.id);
+    out.push(
+      {
+        id: APPROVE_ACTION_ID,
+        label: 'Aprobar',
+        kind: 'set_field',
+        confirm: false,
+        tone: 'emerald',
+        rowIds,
+      },
+      {
+        id: REJECT_ACTION_ID,
+        label: 'Rechazar',
+        kind: 'set_field',
+        confirm: false,
+        tone: 'rose',
+        rowIds,
+        askReason: Boolean(approval.notesField),
+      },
+    );
+  }
+  return out;
+}
+
 interface ComputeOptions {
+  /** Aprobación por tabla (slug → formulario con `approval`); la arma `computeView`. */
+  approval?: Map<string, FormApproval>;
   /** Quien mira puede editar y usar botones (lo decide el servidor, no el spec). */
   writable: boolean;
   /**
@@ -738,6 +806,23 @@ interface ComputeOptions {
   audience: 'team' | 'public';
   /** Lo elegido en la barra de filtros, ya validado (`parseViewFilterParam`). */
   filters: ViewFilterState;
+}
+
+/** Si el campo se pinta con algo más que texto (foto, mapa). */
+function richKind(tracker: CatalogTracker, key: string): RichKind | null {
+  const t = fieldType(tracker, key);
+  return t === 'file' || t === 'location' ? t : null;
+}
+
+/** Renglón de tarjeta: el texto y, si es archivo o ubicación, el valor crudo. */
+function detailOf(tracker: CatalogTracker, row: ViewRow, key: string): ComputedDetail {
+  const kind = richKind(tracker, key);
+  const raw = kind ? rawValue(row, key) : undefined;
+  return {
+    label: fieldLabel(tracker, key),
+    value: displayValue(tracker, row, key),
+    ...(kind && raw !== undefined ? { kind, raw: String(raw) } : {}),
+  };
 }
 
 function columnKind(tracker: CatalogTracker, key: string): 'text' | 'number' | 'date' {
@@ -1076,6 +1161,7 @@ function computeBlock(
             key,
             label: fieldLabel(tracker, key),
             kind: columnKind(tracker, key),
+            ...(richKind(tracker, key) ? { rich: richKind(tracker, key) as RichKind } : {}),
             ...(opts.writable && field && block.editable.includes(key)
               ? { edit: editMeta(tracker, key) }
               : {}),
@@ -1093,7 +1179,7 @@ function computeBlock(
         total: rows.length,
         searchable: block.searchable,
         source: tracker.name,
-        actions: opts.writable ? block.actions.map(toAction) : [],
+        actions: actionsFor(opts, block.actions, tracker, shown),
         record: buildRecords(block, tracker, shown, keys, writes, opts),
       };
     }
@@ -1257,7 +1343,7 @@ function computeBlock(
         width: block.width,
         title: block.title,
         dragField: opts.writable && block.draggable ? block.groupBy : null,
-        actions: opts.writable ? block.actions.map(toAction) : [],
+        actions: actionsFor(opts, block.actions, tracker, visible),
         record: buildRecords(block, tracker, visible, [block.groupBy, ...details], writes, opts),
         columns: columns.map((c) => ({
           key: c.key,
@@ -1267,12 +1353,7 @@ function computeBlock(
             id: r.id,
             label: r.label,
             ...(isAlertRow(tracker, r) ? { alert: true } : {}),
-            details: details
-              .map((key) => ({
-                label: fieldLabel(tracker, key),
-                value: displayValue(tracker, r, key),
-              }))
-              .filter((d) => d.value !== '—'),
+            details: details.map((key) => detailOf(tracker, r, key)).filter((d) => d.value !== '—'),
           })),
         })),
         source: tracker.name,
@@ -1315,10 +1396,7 @@ function computeBlock(
             title: text(r, block.titleField) ?? r.label,
             subtitle: text(r, block.subtitleField),
             meta: block.metaFields
-              .map((key) => ({
-                label: fieldLabel(tracker, key),
-                value: displayValue(tracker, r, key),
-              }))
+              .map((key) => detailOf(tracker, r, key))
               .filter((m) => m.value !== '—'),
             badge:
               badge === undefined
@@ -1329,7 +1407,7 @@ function computeBlock(
         }),
         total: rows.length,
         source: tracker.name,
-        actions: opts.writable ? block.actions.map(toAction) : [],
+        actions: actionsFor(opts, block.actions, tracker, shown),
         record: buildRecords(
           block,
           tracker,
@@ -1391,7 +1469,12 @@ function computeBlock(
         legend: colorOptions.map((label, i) => ({ label, tone: toneAt(i) })),
         hidden: dated.length - kept.length,
         source: tracker.name,
-        actions: opts.writable ? block.actions.map(toAction) : [],
+        actions: actionsFor(
+          opts,
+          block.actions,
+          tracker,
+          kept.map((k) => k.row),
+        ),
         record: buildRecords(
           block,
           tracker,
@@ -1474,7 +1557,11 @@ function computeBlock(
         tracker: tracker.slug,
         submitLabel: block.submitLabel,
         successMessage: block.successMessage,
+        editWindowMinutes: editWindowOf(block),
+        steps: block.steps?.length ? block.steps : null,
+        // El campo de estado de la aprobación lo pone el servidor: no se pide.
         fields: keys
+          .filter((key) => key !== block.approval?.field)
           .map((key) => tracker.fields.find((f) => f.key === key))
           .filter((f): f is TrackerField => Boolean(f))
           .map(formField),
@@ -1658,6 +1745,11 @@ export function computeView(
     writable: Boolean(opts.writable),
     audience: opts.audience ?? 'team',
     filters: opts.filters ?? {},
+    approval: new Map(
+      spec.blocks.flatMap((b) =>
+        b.type === 'form' && b.approval ? ([[b.tracker, b.approval]] as const) : [],
+      ),
+    ),
   };
   const sources = applyFilterBar(spec, unfiltered, options.filters);
   const alerts: ComputedAlertFeed[] = [];

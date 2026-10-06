@@ -2,6 +2,7 @@
 
 import { DataGrid } from '@/components/datagrid/DataGrid';
 import type { GridColumn, GridRow, GridView } from '@/components/datagrid/types';
+import { TrackerSchemaSheet } from '@/components/trackers/TrackerSchemaSheet';
 import { PageHeader } from '@/components/ui/page-header';
 import { formatDateTime } from '@/lib/datagrid/format';
 import {
@@ -33,12 +34,14 @@ import {
   RefreshCw,
   Ruler,
   ScanSearch,
+  SlidersHorizontal,
   Table2,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { SchemaActions } from '../schema-types';
 import type {
   ActionResult,
   HistoryEntry,
@@ -231,12 +234,15 @@ export function TrackerScreen({
   data,
   actions,
   lookupActions,
+  schemaActions,
   links,
 }: {
   data: TrackerScreenData;
   actions: TrackerActions;
   /** Consultas automáticas por fila (0198); sin ellas el panel no aparece. */
   lookupActions?: LookupActions;
+  /** Editor de campos y reglas; sin él el botón no aparece (la pantalla de muestra no tiene sesión). */
+  schemaActions?: SchemaActions;
   links: TrackerLinks;
 }) {
   const { viewHref, teamHref, backHref } = links;
@@ -247,6 +253,7 @@ export function TrackerScreen({
   const [columns, setColumns] = useState<GridColumn[]>(data.columns);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [lookupOpen, setLookupOpen] = useState(false);
+  const [schemaOpen, setSchemaOpen] = useState(false);
   const lookups = data.lookups ?? [];
   const canLookups = Boolean(lookupActions && data.canManageLookups);
   useEffect(() => setColumns(data.columns), [data.columns]);
@@ -556,6 +563,12 @@ export function TrackerScreen({
         icon={<Table2 className="h-5 w-5" />}
         actions={
           <>
+            {schemaActions ? (
+              <button type="button" onClick={() => setSchemaOpen(true)} className={pill}>
+                <SlidersHorizontal className="h-4 w-4" aria-hidden />
+                Campos y reglas
+              </button>
+            ) : null}
             {canLookups && !lookups.length ? (
               <button type="button" onClick={() => setLookupOpen(true)} className={pill}>
                 <ScanSearch className="h-4 w-4" aria-hidden />
@@ -582,6 +595,16 @@ export function TrackerScreen({
           </>
         }
       />
+
+      {schemaActions ? (
+        <TrackerSchemaSheet
+          slug={tracker.slug}
+          open={schemaOpen}
+          onOpenChange={setSchemaOpen}
+          actions={schemaActions}
+          onSaved={() => router.refresh()}
+        />
+      ) : null}
 
       {lookupActions && lookups.length ? (
         <div className="-mt-3 mb-5 flex flex-col gap-3">

@@ -1,6 +1,5 @@
 'use client';
 
-import { submitViewFormAction } from '@/lib/views/actions';
 import type { FilterState } from '@/lib/views/filter-param';
 import type { ComputedBlock, ComputedView, TrackerField } from '@cortex/agent-tools';
 import {
@@ -30,7 +29,7 @@ import { DictateRecord, type Dictated } from './DictateRecord';
 import { ViewChart } from './ViewChart';
 import { ViewZones } from './ViewZones';
 import { CalendarBlock } from './blocks/Calendar';
-import { FileInput, LocationInput, RelationInput, ScanInput } from './blocks/FieldInputs';
+import { FormBlock } from './blocks/FormBlock';
 import { GalleryBlock } from './blocks/Gallery';
 import { LinksBlock, MediaBlock } from './blocks/Media';
 import { MetricBlock } from './blocks/Metric';
@@ -41,8 +40,10 @@ import {
   recordBlockOf,
   useRecordOpener,
 } from './blocks/RecordDrawer';
+import { RichValue } from './blocks/RichValue';
 import { FilterBar, PageTabs } from './blocks/ViewChrome';
 import { useBrandScope } from './blocks/brand';
+import { type SubmitFn, submitterFor } from './blocks/form-transport';
 import {
   Card,
   EmptyState,
@@ -90,45 +91,7 @@ export type SubmitTarget =
   /** El escaparate de desarrollo (/v/views-showcase): escribe de mentira, sin red. */
   | { kind: 'demo' };
 
-export type SubmitFn = (
-  blockId: string,
-  values: Record<string, string>,
-) => Promise<
-  /** `duplicate`: la regla de duplicados de la tabla marcó lo enviado (se pinta como alerta). */
-  { ok: true; message: string; duplicate?: string | null } | { ok: false; error: string }
->;
-
-/** Adentro por server action (con sesión); afuera por la ruta pública (con token). */
-function submitterFor(target: SubmitTarget): SubmitFn | undefined {
-  if (target.kind === 'app')
-    return (blockId, values) => submitViewFormAction(target.viewId, blockId, values);
-  if (target.kind === 'public')
-    return async (blockId, values) => {
-      try {
-        const res = await fetch('/api/views/public/submit', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ token: target.token, blockId, values }),
-        });
-        const body = (await res.json().catch(() => null)) as {
-          message?: string;
-          duplicate?: string | null;
-          error?: string;
-        } | null;
-        return res.ok && body?.message
-          ? { ok: true, message: body.message, duplicate: body.duplicate ?? null }
-          : { ok: false, error: body?.error ?? 'No se pudo enviar. Inténtalo otra vez.' };
-      } catch {
-        return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
-      }
-    };
-  if (target.kind === 'demo')
-    return async () => {
-      await new Promise((r) => setTimeout(r, 500));
-      return { ok: true, message: 'Recibido. Gracias.' };
-    };
-  return undefined;
-}
+export type { SubmitFn } from './blocks/form-transport';
 
 const SPAN: Record<ComputedBlock['width'], string> = {
   full: 'md:col-span-6',
@@ -335,7 +298,7 @@ function Block({
     case 'zones':
       return <ViewZones block={block} Card={Card} />;
     case 'form':
-      return <Form block={block} target={target} submit={submit} />;
+      return <FormBlock block={block} target={target} submit={submit} />;
     case 'gallery':
       return <GalleryBlock block={block} />;
     case 'calendar':
@@ -417,8 +380,11 @@ function Table({ block }: { block: TableBlock }) {
   }, [block, query, sort]);
 
   /** Lo que se ve en una celda: chip de estado, o el valor tal cual. */
-  const show = (cell: string, i: number) =>
-    chips.has(i) && cell ? <StatusChip value={cell} tone={statusTone(cell)} /> : cell;
+  const show = (cell: string, i: number, raw?: string | number | null) => {
+    const rich = block.columns[i]?.rich;
+    if (rich) return <RichValue kind={rich} raw={raw} text={cell} />;
+    return chips.has(i) && cell ? <StatusChip value={cell} tone={statusTone(cell)} /> : cell;
+  };
 
   return (
     <Card
@@ -525,7 +491,7 @@ function Table({ block }: { block: TableBlock }) {
                           label={column.label}
                         />
                       ) : (
-                        show(cell, i)
+                        show(cell, i, r.sort[i])
                       )}
                     </dd>
                   </div>
@@ -641,7 +607,7 @@ function Table({ block }: { block: TableBlock }) {
                   ) : (
                     // biome-ignore lint/suspicious/noArrayIndexKey: las columnas son fijas por bloque.
                     <td key={i} className={className}>
-                      {show(cell, i)}
+                      {show(cell, i, r.sort[i])}
                     </td>
                   );
                 })}
@@ -782,7 +748,9 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                       {card.details.map((d) => (
                         <div key={d.label} className="flex justify-between gap-2 text-micro">
                           <dt className="shrink-0 text-ink-faint">{d.label}</dt>
-                          <dd className="tabular truncate font-mono text-ink">{d.value}</dd>
+                          <dd className="tabular truncate font-mono text-ink">
+                            <RichValue kind={d.kind} raw={d.raw} text={d.value} size={28} />
+                          </dd>
                         </div>
                       ))}
                     </dl>
@@ -831,364 +799,6 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
         ))}
       </div>
       {moveError && <p className="mt-2 text-xs text-rose">{moveError}</p>}
-    </Card>
-  );
-}
-
-const INPUT_OPERATOR =
-  'h-14 w-full rounded-sm border-2 border-border-strong bg-surface px-4 text-lg text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary focus-visible:ring-4 focus-visible:ring-primary/20';
-const INPUT_BASE =
-  'h-11 w-full rounded-sm border border-border-strong bg-surface px-3.5 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint hover:border-ink-faint/50 focus:border-primary focus-visible:ring-4 focus-visible:ring-primary/15';
-
-function Form({
-  block,
-  target,
-  submit,
-}: {
-  block: Extract<ComputedBlock, { type: 'form' }>;
-  target: SubmitTarget;
-  submit?: SubmitFn;
-}) {
-  // El formulario valida con las MISMAS reglas que el servidor (`validateRowValues`):
-  // el mensaje sale debajo del campo al salir de él y al enviar; el servidor las
-  // vuelve a comprobar de todos modos.
-  const fields = block.fields as unknown as TrackerField[];
-  const baseId = useId().replace(/:/g, '');
-  const initialValues = () =>
-    Object.fromEntries(Object.entries(defaultValues(fields)).map(([k, v]) => [k, String(v)]));
-  const [values, setValues] = useState<Record<string, string>>(initialValues);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [done, setDone] = useState<string | null>(null);
-  const [duplicate, setDuplicate] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [heard, setHeard] = useState<Dictated | null>(null);
-  const [pending, start] = useTransition();
-  const disabled = target.kind === 'preview' || !submit;
-  const operator = useViewTheme().layout === 'operator';
-  const INPUT = operator ? INPUT_OPERATOR : INPUT_BASE;
-  const visible = visibleKeys(fields, values);
-  // «viewer» lo llena el servidor con el nombre de quien envía (en un enlace
-  // público queda vacío): aquí no puede contar como «falta».
-  const check = () =>
-    violationsByKey(
-      validateRowValues(
-        fields.map((f) => (f.default === 'viewer' ? { ...f, required: false } : f)),
-        values,
-      ),
-    );
-  const setValue = (key: string, next: string) => {
-    setValues((v) => ({ ...v, [key]: next }));
-    setErrors((e) => {
-      if (!(key in e)) return e;
-      const { [key]: _gone, ...rest } = e;
-      return rest;
-    });
-  };
-  const blurField = (key: string) =>
-    setErrors((e) => {
-      const msg = check()[key];
-      if (msg) return { ...e, [key]: msg };
-      if (!(key in e)) return e;
-      const { [key]: _gone, ...rest } = e;
-      return rest;
-    });
-
-  if (done) {
-    return (
-      <Card>
-        <output className="flex flex-col items-center gap-3 py-8 text-center">
-          <span className="grid h-14 w-14 place-items-center rounded-pill bg-emerald-soft text-emerald ring-8 ring-emerald-soft/40">
-            <Check className="h-7 w-7" strokeWidth={2.5} aria-hidden />
-          </span>
-          <p className="text-base font-bold text-ink">{done}</p>
-          {duplicate && (
-            <p
-              role="alert"
-              className="max-w-sm rounded-sm border border-rose/30 bg-rose-soft px-3 py-2 text-sm font-semibold text-rose"
-            >
-              {duplicate}
-            </p>
-          )}
-          <p className="max-w-xs text-xs leading-relaxed text-ink-muted">
-            Lo enviado ya está en «{block.title}».
-          </p>
-          <button
-            type="button"
-            className="mt-1 rounded-pill border border-border px-4 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-surface-2"
-            onClick={() => {
-              setDone(null);
-              setDuplicate(null);
-              setValues(initialValues());
-              setErrors({});
-              setHeard(null);
-            }}
-          >
-            Enviar otro
-          </button>
-        </output>
-      </Card>
-    );
-  }
-
-  return (
-    <Card title={block.title}>
-      {block.intro && (
-        <p className="-mt-1 mb-5 text-sm leading-relaxed text-ink-muted">{block.intro}</p>
-      )}
-      {!disabled && (
-        <DictateRecord
-          className="mb-5"
-          target={target}
-          blockId={block.id}
-          onDictated={(d) => {
-            setValues((v) => ({ ...v, ...d.values }));
-            setHeard(d);
-            setError(null);
-          }}
-        />
-      )}
-      {heard && (
-        <p className="-mt-2 mb-5 rounded-sm bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-muted">
-          Oí: «{heard.heard}». Revisa antes de enviar
-          {heard.missing.length
-            ? `; falta: ${heard.missing
-                .map((k) => block.fields.find((f) => f.key === k)?.label ?? k)
-                .join(', ')}.`
-            : '.'}
-        </p>
-      )}
-      <form
-        noValidate
-        className={clsx('grid', operator ? 'gap-5' : 'gap-4 sm:grid-cols-2')}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (disabled || !submit) return;
-          setError(null);
-          const found = check();
-          if (Object.keys(found).length) {
-            setErrors(found);
-            const first = fields.find((f) => found[f.key]);
-            if (first) document.getElementById(`${baseId}-${first.key}`)?.focus();
-            return;
-          }
-          // Sólo lo que se muestra y tiene algo: lo oculto por `showIf` no viaja.
-          const payload: Record<string, string> = {};
-          for (const f of fields) {
-            const v = values[f.key];
-            if (visible.has(f.key) && v !== undefined && v !== '') payload[f.key] = v;
-          }
-          start(async () => {
-            const res = await submit(block.id, payload);
-            if (res.ok) {
-              setDone(res.message);
-              setDuplicate(res.duplicate ?? null);
-            } else setError(res.error);
-          });
-        }}
-      >
-        {block.fields
-          .filter((f) => visible.has(f.key))
-          .map((f) => {
-            const id = `${baseId}-${f.key}`;
-            const msg = errors[f.key];
-            const describedBy =
-              [f.help ? `${id}-help` : null, msg ? `${id}-err` : null].filter(Boolean).join(' ') ||
-              undefined;
-            const value = values[f.key] ?? '';
-            const common = {
-              id,
-              'aria-invalid': msg ? (true as const) : undefined,
-              'aria-describedby': describedBy,
-              onBlur: () => blurField(f.key),
-            };
-            const inputClass = clsx(INPUT, msg && 'border-rose focus:border-rose');
-            const placeholder =
-              f.placeholder ??
-              (f.example ? `Ej. ${f.example}` : f.type === 'money' ? '$ 0' : undefined);
-            const shared = {
-              field: f,
-              id,
-              value,
-              onChange: (next: string) => setValue(f.key, next),
-              onBlur: () => blurField(f.key),
-              invalid: Boolean(msg),
-              describedBy,
-              className: inputClass,
-              target,
-              blockId: block.id,
-            };
-            return (
-              <div
-                key={f.key}
-                className={clsx(
-                  'block',
-                  (f.type === 'text' ||
-                    f.type === 'longtext' ||
-                    f.type === 'location' ||
-                    f.type === 'relation' ||
-                    f.type === 'file') &&
-                    'sm:col-span-2',
-                )}
-              >
-                <label
-                  htmlFor={id}
-                  className={clsx(
-                    'flex items-baseline justify-between gap-2 font-semibold text-ink',
-                    operator ? 'mb-2 text-base' : 'mb-1.5 text-xs',
-                  )}
-                >
-                  <span>
-                    {f.label}
-                    {f.required && (
-                      <span className="text-rose" aria-hidden>
-                        {' '}
-                        *
-                      </span>
-                    )}
-                  </span>
-                  {!f.required && (
-                    <span className="text-micro font-normal text-ink-faint">Opcional</span>
-                  )}
-                </label>
-                {f.type === 'select' ? (
-                  <select
-                    {...common}
-                    value={value}
-                    onChange={(e) => setValue(f.key, e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">Elige…</option>
-                    {f.options.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
-                ) : f.type === 'longtext' ? (
-                  <textarea
-                    {...common}
-                    rows={3}
-                    maxLength={f.maxLength ?? 4000}
-                    placeholder={placeholder}
-                    value={value}
-                    onChange={(e) => setValue(f.key, e.target.value)}
-                    className={clsx(inputClass, 'h-auto min-h-[5.5rem] py-2.5')}
-                  />
-                ) : f.type === 'checkbox' ? (
-                  <span className={clsx('flex items-center gap-3', operator ? 'h-14' : 'h-11')}>
-                    <input
-                      {...common}
-                      type="checkbox"
-                      checked={value === '1' || value === 'true'}
-                      onChange={(e) => setValue(f.key, e.target.checked ? '1' : '0')}
-                      className={clsx(
-                        'rounded-sm border-border-strong accent-primary',
-                        operator ? 'h-7 w-7' : 'h-5 w-5',
-                      )}
-                    />
-                    <span className={clsx('text-ink-muted', operator ? 'text-lg' : 'text-sm')}>
-                      Sí
-                    </span>
-                  </span>
-                ) : f.type === 'location' ? (
-                  <LocationInput {...shared} />
-                ) : f.type === 'relation' ? (
-                  <RelationInput {...shared} />
-                ) : f.type === 'file' ? (
-                  <FileInput {...shared} />
-                ) : f.type === 'text' && f.scan ? (
-                  <ScanInput {...shared} />
-                ) : (
-                  <input
-                    {...common}
-                    type={
-                      f.type === 'date'
-                        ? 'date'
-                        : f.type === 'time'
-                          ? 'time'
-                          : f.type === 'number' || f.type === 'money'
-                            ? 'number'
-                            : f.format === 'email'
-                              ? 'email'
-                              : 'text'
-                    }
-                    inputMode={
-                      f.type === 'number' || f.type === 'money'
-                        ? 'decimal'
-                        : f.format === 'phone'
-                          ? 'tel'
-                          : f.format === 'digits'
-                            ? 'numeric'
-                            : undefined
-                    }
-                    step="any"
-                    min={typeof f.min === 'number' ? f.min : undefined}
-                    max={typeof f.max === 'number' ? f.max : undefined}
-                    maxLength={f.maxLength ?? 400}
-                    placeholder={placeholder}
-                    value={value}
-                    onChange={(e) => setValue(f.key, e.target.value)}
-                    className={clsx(inputClass, f.type !== 'text' && 'tabular font-mono')}
-                  />
-                )}
-                {f.help && (
-                  <p
-                    id={`${id}-help`}
-                    className={clsx('mt-1 text-ink-muted', operator ? 'text-sm' : 'text-micro')}
-                  >
-                    {f.help}
-                  </p>
-                )}
-                {msg && (
-                  <p
-                    id={`${id}-err`}
-                    role="alert"
-                    className={clsx(
-                      'mt-1 font-semibold text-rose',
-                      operator ? 'text-sm' : 'text-micro',
-                    )}
-                  >
-                    {msg}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        {error && (
-          <p
-            role="alert"
-            className={clsx(
-              'rounded-sm border border-rose/30 bg-rose-soft px-3 py-2 text-rose sm:col-span-2',
-              operator ? 'text-base font-semibold' : 'text-xs',
-            )}
-          >
-            {error}
-          </p>
-        )}
-        <div
-          className={clsx(
-            'flex flex-col gap-3 pt-1 sm:col-span-2',
-            !operator && 'sm:flex-row sm:items-center',
-          )}
-        >
-          <button
-            type="submit"
-            disabled={disabled || pending}
-            className={clsx(
-              operator ? 'h-14 w-full text-lg' : 'h-11 px-6 text-sm',
-              'cortex-primary-button inline-flex items-center justify-center gap-2 rounded-pill bg-primary font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong hover:shadow-pop disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
-            )}
-          >
-            {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-            {block.submitLabel}
-          </button>
-          {target.kind === 'preview' && (
-            <span className="text-micro text-ink-faint">
-              Vista previa: guarda para recibir envíos.
-            </span>
-          )}
-        </div>
-      </form>
     </Card>
   );
 }

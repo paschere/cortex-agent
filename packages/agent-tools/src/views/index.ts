@@ -54,6 +54,7 @@ export * from './compute';
 export * from './export';
 export * from './digest';
 export * from './store';
+export * from './form-extras';
 export * from './sources';
 export * from './feed-sources';
 export * from './embeds';

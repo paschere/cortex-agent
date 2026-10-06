@@ -393,6 +393,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.remove': 'Borra de la tabla ',
   'trackers.upsert': 'Anota en la tabla ',
   'feed.connect_google_sheet': 'Conecta esta hoja de Google: ',
+  'trackers.propose_from_source': 'Lee la hoja y propón la tabla: ',
   'trackers.sync_from_source': 'Haz que la tabla se llene sola desde la fuente ',
   'trackers.update_from_source': 'Que la fuente actualice la tabla ',
   'trackers.syncs': 'Muéstrame las tablas que se llenan solas',

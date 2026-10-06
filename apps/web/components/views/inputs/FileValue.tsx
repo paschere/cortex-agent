@@ -36,7 +36,7 @@ export function FileValue({
               type="button"
               onClick={() => setOpen(f.url)}
               aria-label={`Ver ${f.name}`}
-              className="overflow-hidden rounded-md border border-line"
+              className="overflow-hidden rounded-md border border-border"
               style={{ width: size, height: size }}
             >
               <img src={f.url} alt={f.name} loading="lazy" className="h-full w-full object-cover" />

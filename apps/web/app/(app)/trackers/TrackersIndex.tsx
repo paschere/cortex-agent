@@ -8,6 +8,7 @@ import {
   selectClass,
   toolbarButton,
 } from '@/components/datagrid/primitives';
+import { CreateTableDialog } from '@/components/trackers/CreateTableDialog';
 import { PageHeader } from '@/components/ui/page-header';
 import { parseCsv } from '@/lib/datagrid/csv';
 import { foldText, formatNumber } from '@/lib/datagrid/format';
@@ -33,6 +34,7 @@ import {
   Plus,
   Ruler,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Table2,
   Trash2,
@@ -42,6 +44,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { chatWith, timeAgo } from './[slug]/TrackerScreen';
+import type { SchemaActions } from './schema-types';
 import type { SyncBadge, TrackerCardData, TrackersIndexActions } from './types';
 
 /**
@@ -72,6 +75,7 @@ export function TrackersIndex({
   canCreate,
   links,
   hrefForTable,
+  schemaActions,
 }: {
   cards: TrackerCardData[];
   actions: TrackersIndexActions;
@@ -79,7 +83,11 @@ export function TrackersIndex({
   links: { base: string; chatBase: string };
   /** Solo la vitrina: a dónde lleva una tabla (por defecto `<base>/<slug>`). */
   hrefForTable?: (slug: string) => string;
+  /** Crear con campos y reglas (o desde una hoja conectada); sin él, el botón no aparece. */
+  schemaActions?: SchemaActions;
 }) {
+  const pageRouter = useRouter();
+  const [schemaOpen, setSchemaOpen] = useState(false);
   const href = hrefForTable ?? ((slug: string) => tableHref(links.base, slug));
   const [query, setQuery] = useState('');
   const [newOpen, setNewOpen] = useState(false);
@@ -148,6 +156,12 @@ export function TrackersIndex({
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden />
                 Descríbela a Cortex
               </Link>
+              {schemaActions ? (
+                <button type="button" onClick={() => setSchemaOpen(true)} className={toolbarButton}>
+                  <SlidersHorizontal className="h-4 w-4" aria-hidden />
+                  Con campos y reglas
+                </button>
+              ) : null}
               <button type="button" onClick={() => setNewOpen(true)} className={primaryButton}>
                 <Plus className="h-4 w-4" aria-hidden />
                 Nueva tabla
@@ -246,6 +260,17 @@ export function TrackersIndex({
         </ul>
       )}
 
+      {schemaActions ? (
+        <CreateTableDialog
+          open={schemaOpen}
+          onOpenChange={setSchemaOpen}
+          actions={schemaActions}
+          onCreated={(created) => {
+            setSchemaOpen(false);
+            pageRouter.push(href(created.slug));
+          }}
+        />
+      ) : null}
       <NewTableDialog
         open={newOpen}
         onOpenChange={setNewOpen}

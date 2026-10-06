@@ -17,15 +17,26 @@ import {
   readFeedSource,
 } from './feed-sources';
 import {
+  EDIT_MESSAGES,
+  canEditSubmission,
+  editDeadline,
+  isPendingReview,
+  reviewPatch,
+} from './form-extras';
+import {
   PLATFORM_SOURCES,
   type SourceSensitivity,
   internalShareRefusal,
   internalSourcesOf,
 } from './sources';
 import {
+  APPROVE_ACTION_ID,
   type CatalogTracker,
+  REJECT_ACTION_ID,
   type ViewSpec,
+  approvalFor,
   checkSpecAgainst,
+  editWindowOf,
   isFeedSourceId,
   isPlatformSourceId,
   isReadOnlySource,
@@ -894,6 +905,18 @@ export async function unlockView(
 // Formularios
 // ---------------------------------------------------------------------------
 
+/** Lo que devuelve un envío: la fila y, si el formulario deja corregir, con qué token y hasta cuándo. */
+export interface SubmitOutcome {
+  rowId: string;
+  message: string;
+  duplicate: string | null;
+  /** Para corregir sin sesión; null si el formulario no deja corregir. */
+  editToken: string | null;
+  editUntil: string | null;
+  /** True si era un reintento de un envío que ya había llegado. */
+  replayed?: boolean;
+}
+
 export class SubmissionLimitError extends Error {
   constructor() {
     super('Este formulario recibió demasiados envíos en la última hora. Intenta más tarde.');
@@ -915,8 +938,13 @@ export async function submitViewForm(
     submittedBy: string | null;
     /** Nombre de quien llena (para `default: 'viewer'`); sin sesión, vacío. */
     viewer?: string | null;
+    /**
+     * Id que el navegador inventó para ESTE envío (cola sin internet): si ya
+     * llegó uno igual, no se escribe otra fila — se devuelve la de la primera vez.
+     */
+    clientId?: string | null;
   },
-): Promise<{ rowId: string; message: string; duplicate: string | null }> {
+): Promise<SubmitOutcome> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
@@ -924,6 +952,34 @@ export async function submitViewForm(
     throw new ValidationError(
       'Este formulario apunta a una fuente de sólo lectura; no recibe filas.',
     );
+
+  const clientId = input.clientId?.trim().slice(0, 64) || null;
+  const replay = async (): Promise<SubmitOutcome | null> => {
+    if (!clientId) return null;
+    const { data, error } = await db
+      .from('custom_view_submissions')
+      .select('tracker_row_id, edit_token, created_at')
+      .eq('view_id', view.id)
+      .eq('client_id', clientId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const d = data as {
+      tracker_row_id: string | null;
+      edit_token: string | null;
+      created_at: string;
+    };
+    return {
+      rowId: String(d.tracker_row_id ?? ''),
+      message: block.successMessage,
+      duplicate: null,
+      editToken: d.edit_token,
+      editUntil: d.edit_token ? editDeadline(d.created_at, editWindowOf(block)) : null,
+      replayed: true,
+    };
+  };
+  const earlier = await replay();
+  if (earlier) return earlier;
 
   if (!input.submittedBy) {
     const since = new Date(Date.now() - 3_600_000).toISOString();
@@ -947,9 +1003,12 @@ export async function submitViewForm(
   const tracker = t as unknown as TrackerRow;
 
   const allowed = new Set(block.fields.length ? block.fields : tracker.fields.map((f) => f.key));
+  // El campo de estado de la aprobación no se pide: lo pone el servidor.
+  if (block.approval) allowed.add(block.approval.field);
   const asked = tracker.fields.filter((f) => allowed.has(f.key));
   const raw: Record<string, unknown> = {};
   for (const f of asked) raw[f.key] = input.values[f.key];
+  if (block.approval) raw[block.approval.field] = block.approval.pending;
   // Defaults, campos ocultos (showIf), reglas de cada campo y relaciones. Una
   // relación de un enlace público sólo puede apuntar a las tablas de ESTA vista:
   // el resto del espacio no se asoma por un select de la página pública.
@@ -972,12 +1031,28 @@ export async function submitViewForm(
   if (error) throw error;
   const rowId = String((row as { id: string }).id);
 
-  await db.from('custom_view_submissions').insert({
-    view_id: view.id,
-    block_id: block.id,
-    tracker_row_id: rowId,
-    submitted_by: input.submittedBy,
-  });
+  const editToken = editWindowOf(block) > 0 ? randomBytes(18).toString('base64url') : null;
+  const { data: sub, error: subError } = await db
+    .from('custom_view_submissions')
+    .insert({
+      view_id: view.id,
+      block_id: block.id,
+      tracker_row_id: rowId,
+      submitted_by: input.submittedBy,
+      client_id: clientId,
+      edit_token: editToken,
+    })
+    .select('created_at')
+    .single();
+  if (subError) {
+    // Dos reintentos a la vez del mismo envío: gana el primero; esta fila sobra.
+    if ((subError as { code?: string }).code === '23505' && clientId) {
+      await db.from('tracker_rows').delete().eq('id', rowId).eq('tracker_id', tracker.id);
+      const first = await replay();
+      if (first) return first;
+    }
+    throw subError;
+  }
 
   // La regla de duplicados de la tabla (si tiene): si esta fila chocó con otra,
   // se avisa a quien la mandó para que corrija ya, no después de despachar.
@@ -992,7 +1067,91 @@ export async function submitViewForm(
     );
   }
 
-  return { rowId, message: block.successMessage, duplicate };
+  return {
+    rowId,
+    message: block.successMessage,
+    duplicate,
+    editToken,
+    editUntil: editToken
+      ? editDeadline((sub as { created_at: string }).created_at, editWindowOf(block))
+      : null,
+  };
+}
+
+/**
+ * Corrige lo que ya se envió, dentro de la ventana del formulario
+ * (`editWindowMinutes`) y sólo por quien lo envió: con sesión, el mismo
+ * usuario; sin sesión, con el token de edición del envío. Escribe por
+ * `patchRow` con la lista blanca del formulario (sin el campo de estado de la
+ * aprobación), y si el envío ya fue aprobado o rechazado, no se toca.
+ */
+export async function editViewSubmission(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: {
+    blockId: string;
+    rowId: string;
+    values: Record<string, string>;
+    actor: string | null;
+    token?: string | null;
+  },
+): Promise<{ label: string; duplicate: string | null }> {
+  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (!block || block.type !== 'form')
+    throw new NotFoundError('Ese formulario no está en esta vista.');
+  if (editWindowOf(block) <= 0) throw new ValidationError(EDIT_MESSAGES.off);
+  const { data, error } = await db
+    .from('custom_view_submissions')
+    .select('created_at, submitted_by, edit_token')
+    .eq('view_id', view.id)
+    .eq('block_id', block.id)
+    .eq('tracker_row_id', input.rowId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new NotFoundError('Ese envío ya no existe.');
+  const decision = canEditSubmission({
+    submission: data as {
+      created_at: string;
+      submitted_by: string | null;
+      edit_token: string | null;
+    },
+    minutes: editWindowOf(block),
+    actor: input.actor,
+    token: input.token,
+  });
+  if (!decision.ok) throw new ValidationError(EDIT_MESSAGES[decision.reason]);
+  if (!input.actor) await assertPublicBudget(db, view.id);
+
+  const tracker = await trackerForBlock(db, block.tracker);
+  if (block.approval) {
+    const { data: cur, error: curError } = await db
+      .from('tracker_rows')
+      .select('values')
+      .eq('id', input.rowId)
+      .eq('tracker_id', tracker.id)
+      .maybeSingle();
+    if (curError) throw curError;
+    if (!cur) throw new NotFoundError('Esa fila ya no está en la tabla.');
+    if (!isPendingReview(block.approval, (cur as { values: Record<string, unknown> }).values))
+      throw new ValidationError(EDIT_MESSAGES.reviewed);
+  }
+  const allowed = new Set(
+    (block.fields.length ? block.fields : tracker.fields.map((f) => f.key)).filter(
+      (k) => k !== block.approval?.field,
+    ),
+  );
+  const patch: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input.values)) if (allowed.has(k)) patch[k] = v;
+  const { label, duplicate } = await patchRow(db, view, {
+    blockId: block.id,
+    tracker,
+    rowId: input.rowId,
+    patch,
+    allowed,
+    kind: 'edit',
+    actor: input.actor,
+  });
+  return { label, duplicate };
 }
 
 /**
@@ -1238,13 +1397,53 @@ export type ViewActionOutcome =
 export async function runViewAction(
   db: SupabaseClient,
   view: CustomViewRow,
-  input: { blockId: string; actionId: string; rowId: string; actor: string | null },
+  input: {
+    blockId: string;
+    actionId: string;
+    rowId: string;
+    actor: string | null;
+    /** Motivo opcional de un rechazo (Aprobar / Rechazar). */
+    reason?: string | null;
+  },
 ): Promise<ViewActionOutcome> {
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Los botones de esta vista no están activos.');
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || !ROW_BLOCKS.has(block.type) || !('actions' in block) || !('tracker' in block))
     throw new NotFoundError('Ese bloque no está en esta vista.');
+  if (input.actionId === APPROVE_ACTION_ID || input.actionId === REJECT_ACTION_ID) {
+    const found = approvalFor(view.spec, block.tracker);
+    if (!found) throw new NotFoundError('Esta tabla no tiene aprobación en esta vista.');
+    if (!input.actor) await assertPublicBudget(db, view.id);
+    const tracker = await trackerForBlock(db, block.tracker);
+    const { data: cur, error: curError } = await db
+      .from('tracker_rows')
+      .select('values')
+      .eq('id', input.rowId)
+      .eq('tracker_id', tracker.id)
+      .maybeSingle();
+    if (curError) throw curError;
+    if (!cur) throw new NotFoundError('Esa fila ya no está en la tabla.');
+    if (!isPendingReview(found.approval, (cur as { values: Record<string, unknown> }).values))
+      throw new ValidationError('Esa fila ya fue revisada.');
+    const approve = input.actionId === APPROVE_ACTION_ID;
+    const patch = reviewPatch(found.approval, approve ? 'approve' : 'reject', input.reason);
+    const { label } = await patchRow(db, view, {
+      blockId: block.id,
+      tracker,
+      rowId: input.rowId,
+      patch,
+      allowed: new Set(Object.keys(patch)),
+      kind: 'action',
+      actionId: input.actionId,
+      actor: input.actor,
+    });
+    return {
+      kind: 'set_field',
+      label,
+      message: `${approve ? 'Aprobado' : 'Rechazado'}: «${label}».`,
+    };
+  }
   const action = block.actions.find((a) => a.id === input.actionId);
   if (!action) throw new NotFoundError('Ese botón ya no está en la vista.');
   if (!input.actor) await assertPublicBudget(db, view.id);

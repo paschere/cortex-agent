@@ -357,6 +357,28 @@ export const zonesBlockSchema = z.object({
   layout: z.array(zoneLayoutSchema).max(30).default([]),
 });
 
+/** Minutos para corregir lo enviado cuando el formulario no dice. */
+export const DEFAULT_EDIT_WINDOW_MINUTES = 10;
+
+export const formApprovalSchema = z.object({
+  field: fieldRef,
+  pending: z.string().trim().min(1).max(60),
+  approved: z.string().trim().min(1).max(60),
+  rejected: z.string().trim().min(1).max(60),
+  notesField: fieldRef.optional(),
+});
+export type FormApproval = z.infer<typeof formApprovalSchema>;
+
+export const formStepSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  fields: z.array(fieldRef).min(1).max(20),
+});
+export type FormStep = z.infer<typeof formStepSchema>;
+
+/** Las acciones que Aprobar / Rechazar agregan a los bloques de la misma tabla. */
+export const APPROVE_ACTION_ID = '__approve';
+export const REJECT_ACTION_ID = '__reject';
+
 export const formBlockSchema = z.object({
   ...base,
   type: z.literal('form'),
@@ -370,6 +392,20 @@ export const formBlockSchema = z.object({
   fields: z.array(fieldRef).max(20).default([]),
   submitLabel: z.string().trim().min(1).max(40).default('Enviar'),
   successMessage: z.string().trim().min(1).max(200).default('Recibido. Gracias.'),
+  /**
+   * Minutos tras el envío en que quien lo mandó puede «Corregir» (0 = no; sin
+   * valor = 10, ver `editWindowOf`). En el
+   * enlace público lo valida un token de edición que el envío devuelve.
+   */
+  editWindowMinutes: z.number().int().min(0).max(1440).optional(),
+  /**
+   * Aprobación: los envíos nacen en `pending` (un campo de opciones de la
+   * tabla); quien puede escribir ve Aprobar / Rechazar en las tablas y
+   * tarjetas de la vista. `notesField` (opcional, de texto) guarda el motivo.
+   */
+  approval: formApprovalSchema.optional(),
+  /** Formulario por pasos: cada paso pide algunos de los campos (máx. 10 pasos). */
+  steps: z.array(formStepSchema).max(10).optional(),
 });
 
 /**
@@ -695,6 +731,7 @@ export const viewSpecSchema = z
     }
   });
 export type ViewSpec = z.infer<typeof viewSpecSchema>;
+export type FormBlock = z.infer<typeof formBlockSchema>;
 
 export const viewSlugSchema = z.string().trim().regex(VIEW_SLUG_RE);
 
@@ -747,6 +784,74 @@ const NUMERIC = new Set(['number', 'money']);
 
 const readOnlyWhat = (ref: string) =>
   isFeedSourceId(ref) ? 'una tabla del Feed' : 'una fuente de la plataforma';
+
+/** La ventana efectiva para corregir un envío de este formulario, en minutos. */
+export function editWindowOf(block: Pick<FormBlock, 'editWindowMinutes'>): number {
+  return block.editWindowMinutes ?? DEFAULT_EDIT_WINDOW_MINUTES;
+}
+
+/** El formulario con aprobación que alimenta una tabla, si hay uno. */
+export function approvalFor(
+  spec: Pick<ViewSpec, 'blocks'>,
+  trackerSlug: string,
+): { block: FormBlock; approval: FormApproval } | null {
+  for (const b of spec.blocks)
+    if (b.type === 'form' && b.tracker === trackerSlug && b.approval)
+      return { block: b, approval: b.approval };
+  return null;
+}
+
+/**
+ * Lo propio de un formulario con aprobación y/o pasos: el campo de estado es
+ * un select de la tabla que ofrece los tres estados, las notas son texto, y
+ * los pasos sólo nombran campos que el formulario pide, una vez cada uno.
+ */
+export function checkFormExtras(
+  block: FormBlock,
+  tracker: CatalogTracker,
+  problems: string[],
+  where: string,
+): void {
+  if (tracker.opaque) return;
+  const a = block.approval;
+  if (a) {
+    const f = tracker.fields.find((x) => x.key === a.field);
+    if (!f || f.type !== 'select')
+      problems.push(
+        `${where}: la aprobación necesita un campo de opciones (select) de la tabla; «${a.field}» no lo es.`,
+      );
+    else {
+      const missing = [a.pending, a.approved, a.rejected].filter(
+        (o) => !(f.options ?? []).includes(o),
+      );
+      if (missing.length)
+        problems.push(
+          `${where}: el campo «${a.field}» no tiene la${missing.length > 1 ? 's' : ''} opci${missing.length > 1 ? 'ones' : 'ón'} ${missing.map((m) => `«${m}»`).join(', ')}. Opciones: ${(f.options ?? []).join(', ')}.`,
+        );
+      if (new Set([a.pending, a.approved, a.rejected]).size < 3)
+        problems.push(`${where}: pending, approved y rejected deben ser tres opciones distintas.`);
+    }
+    if (a.notesField) {
+      const n = tracker.fields.find((x) => x.key === a.notesField);
+      if (!n || (n.type !== 'text' && n.type !== 'longtext'))
+        problems.push(
+          `${where}: las notas de la aprobación van en un campo de texto; «${a.notesField}» no lo es.`,
+        );
+    }
+  }
+  if (block.steps) {
+    const asked = block.fields.length ? block.fields : tracker.fields.map((f) => f.key);
+    const seen = new Set<string>();
+    for (const [i, step] of block.steps.entries()) {
+      for (const k of step.fields) {
+        if (!asked.includes(k))
+          problems.push(`${where}: el paso ${i + 1} nombra «${k}», que el formulario no pide.`);
+        else if (seen.has(k)) problems.push(`${where}: «${k}» está en dos pasos.`);
+        seen.add(k);
+      }
+    }
+  }
+}
 
 /**
  * Qué del spec nombra cosas que no existen. Devuelve una lista de problemas en
@@ -939,6 +1044,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
             problems.push(`${where}: el formulario sólo pide campos de la tabla, no «${c}».`);
           else need(c, 'formulario');
         }
+        checkFormExtras(block, tracker, problems, where);
         break;
     }
   }
@@ -993,6 +1099,8 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
 export function specWrites(spec: Pick<ViewSpec, 'blocks'>): boolean {
   return spec.blocks.some((b) => {
     if ('recordEditable' in b && (b.recordEditable?.length ?? 0) > 0) return true;
+    // Aprobar / Rechazar escribe en la tabla: la vista tiene que dejar escribir.
+    if (b.type === 'form' && b.approval) return true;
     if ('actions' in b && b.actions.length > 0) return true;
     if (b.type === 'table') return b.editable.length > 0;
     if (b.type === 'board' || b.type === 'zones') return b.draggable;

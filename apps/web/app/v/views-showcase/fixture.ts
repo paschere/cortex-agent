@@ -556,6 +556,11 @@ const blocks: ComputedBlock[] = [
     tracker: 'novedades',
     submitLabel: 'Enviar novedad',
     successMessage: 'Recibido. Gracias.',
+    editWindowMinutes: 10,
+    steps: [
+      { title: 'Qué pasó', fields: ['guia', 'tipo', 'detalle'] },
+      { title: 'Datos', fields: ['fecha', 'valor'] },
+    ],
     fields: [
       { key: 'guia', label: 'Número de guía', type: 'text', required: true, options: [] },
       {

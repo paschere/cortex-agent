@@ -77,7 +77,10 @@ export function ViewCover({
     </div>
   ) : null;
   const print = printedAt ? (
-    <p className="view-print-only mt-2 text-micro text-ink-faint">
+    // Sólo se ve al imprimir. El servidor (ICU de Node) y el navegador escriben
+    // la fecha con conectores distintos («, » contra « a las »): no vale un
+    // error de hidratación por una línea que en pantalla no existe.
+    <p className="view-print-only mt-2 text-micro text-ink-faint" suppressHydrationWarning>
       Datos al {printedAt.replace(/\.$/, '')}.
     </p>
   ) : null;
