@@ -223,6 +223,15 @@ Para que cualquier equipo en terreno (planta, bodega, recepción, inspección, c
 - **Plantillas** (Operación): Registro con control de duplicados, Recepción de mercancía, Inspección con lista de chequeo, Conteo de inventario.
 - **Escaparate**: `/v/views-showcase?diseno=operario&estilo=panel|fuerte`.
 
+## Formularios completos y reglas configurables (0203, 0204)
+
+- **Reglas por campo** (esquema de la tabla, `trackers/schema.ts`, validador único `trackers/validation.ts`): mínimo/máximo (fechas relativas a hoy, horas a ahora), largo, formato (correo, teléfono, NIT con dígito de verificación, placa, AWB), patrón propio seguro, único, mensaje propio, valor por defecto (hoy, ahora, quien llena, fijo), ayuda y ejemplo, y «mostrar sólo si». Corre en el formulario, en la celda y en el servidor; las sincronizaciones marcan para revisar en vez de rechazar.
+- **Tipos**: foto/archivo (`/api/views/[id]/upload`, `/api/views/public/upload`, comprimidas en el navegador), ubicación, relación con otra tabla, texto con escáner de código de barras/QR.
+- **Editor «Campos y reglas»** en Tablas y en el inspector de la vista; crear tabla desde cero o desde una hoja conectada (prellenada con la propuesta). Quitar un campo que usa una vista, una sincronización o una regla se bloquea con la lista.
+- **Hojas como fuente**: siempre se propone la tabla primero (`trackers.propose_from_source`); `trackers.sync_from_source` exige los campos aprobados para una tabla nueva.
+- **Formulario**: cola sin internet (IndexedDB, `clientId` idempotente), corregir después de enviar (`editWindowMinutes`), aprobación (`approval`), por pasos (`steps`).
+- **Vista**: exportar a Excel/PDF, resumen por correo (`digest`, 0203), embudo, mapa de calor, metas con semáforo, avisos en vivo (`alerts.on`).
+
 ## Límites
 
 - Cada vista lee hasta 2.000 filas por tabla; si hay más, las cifras se marcan como parciales.
