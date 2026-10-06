@@ -625,6 +625,7 @@ export function showcaseView(opts: { pages?: boolean; empty?: boolean } = {}): C
         message: 'Entró un pedido',
         sound: true,
         desktop: false,
+        on: 'both',
         rows: [],
       },
     ],

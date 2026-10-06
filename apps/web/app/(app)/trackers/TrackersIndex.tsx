@@ -11,6 +11,7 @@ import {
 import { PageHeader } from '@/components/ui/page-header';
 import { parseCsv } from '@/lib/datagrid/csv';
 import { foldText, formatNumber } from '@/lib/datagrid/format';
+import { hasNewSince, seenKey } from '@/lib/datagrid/tracker-live';
 import {
   MAX_TRACKER_FIELDS,
   TRACKER_FIELD_TYPES,
@@ -25,6 +26,7 @@ import {
 import { DOT_TONE, type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import {
+  ExternalLink,
   FileSpreadsheet,
   FolderSync,
   LoaderCircle,
@@ -38,7 +40,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { chatWith, timeAgo } from './[slug]/TrackerScreen';
 import type { SyncBadge, TrackerCardData, TrackersIndexActions } from './types';
 
@@ -82,10 +84,51 @@ export function TrackersIndex({
   const [query, setQuery] = useState('');
   const [newOpen, setNewOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [onlyConnected, setOnlyConnected] = useState(false);
+  const connectedCount = useMemo(() => cards.filter((c) => c.syncs.length).length, [cards]);
+  // Lo último que se tocó de cada tabla, al día sin recargar (punto «nuevo»).
+  const [live, setLive] = useState<Record<string, string>>({});
+  const [seen, setSeen] = useState<Record<string, string | null>>({});
+  // biome-ignore lint/correctness/useExhaustiveDependencies: se relee al traer actividad nueva.
+  useEffect(() => {
+    const next: Record<string, string | null> = {};
+    for (const c of cards) {
+      try {
+        next[c.slug] = window.localStorage.getItem(seenKey(c.slug));
+      } catch {
+        next[c.slug] = null;
+      }
+    }
+    setSeen(next);
+  }, [cards, live]);
+  useEffect(() => {
+    // La grilla de demostración no tiene API: no hay nada que preguntar.
+    if (hrefForTable) return;
+    let alive = true;
+    const load = async () => {
+      if (document.visibilityState === 'hidden') return;
+      try {
+        const res = await fetch('/api/trackers/activity', { cache: 'no-store' });
+        if (!res.ok || !alive) return;
+        const body = (await res.json()) as { latest?: Record<string, string> };
+        if (body.latest) setLive(body.latest);
+      } catch {
+        // Sin red un momento: la próxima vuelta.
+      }
+    };
+    const id = window.setInterval(load, 45_000);
+    document.addEventListener('visibilitychange', load);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', load);
+    };
+  }, [hrefForTable]);
   const shown = useMemo(() => {
     const q = foldText(query);
-    return q ? cards.filter((c) => foldText(`${c.name} ${c.description}`).includes(q)) : cards;
-  }, [cards, query]);
+    const base = onlyConnected ? cards.filter((c) => c.syncs.length) : cards;
+    return q ? base.filter((c) => foldText(`${c.name} ${c.description}`).includes(q)) : base;
+  }, [cards, query, onlyConnected]);
   const describeHref = chatWith(links.chatBase, DESCRIBE_PROMPT);
 
   return (
@@ -131,6 +174,34 @@ export function TrackersIndex({
         </label>
       ) : null}
 
+      {connectedCount ? (
+        <fieldset className="mb-5 flex min-w-0 flex-wrap gap-2 border-0 p-0">
+          <legend className="sr-only">Filtrar tablas</legend>
+          {(
+            [
+              [false, `Todas (${cards.length})`],
+              [true, `Conectadas (${connectedCount})`],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={String(value)}
+              type="button"
+              aria-pressed={onlyConnected === value}
+              onClick={() => setOnlyConnected(value)}
+              className={clsx(
+                'inline-flex min-h-8 items-center gap-1.5 rounded-pill border px-3 py-1 text-xs font-bold transition-colors',
+                onlyConnected === value
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-border-strong bg-surface text-ink-muted hover:bg-surface-2',
+              )}
+            >
+              {value ? <FolderSync className="h-3.5 w-3.5" aria-hidden /> : null}
+              {label}
+            </button>
+          ))}
+        </fieldset>
+      ) : null}
+
       {!cards.length ? (
         <div className="rounded-card border border-dashed border-border-strong bg-surface px-6 py-14 text-center">
           <Table2 className="mx-auto h-8 w-8 text-primary" aria-hidden />
@@ -165,7 +236,11 @@ export function TrackersIndex({
         <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {shown.map((c) => (
             <li key={c.id}>
-              <TrackerCard card={c} href={href(c.slug)} />
+              <TrackerCard
+                card={c}
+                href={href(c.slug)}
+                hasNew={hasNewSince(seen[c.slug] ?? null, live[c.id] ?? c.updatedAt)}
+              />
             </li>
           ))}
         </ul>
@@ -189,13 +264,20 @@ export function TrackersIndex({
   );
 }
 
-function TrackerCard({ card, href }: { card: TrackerCardData; href: string }) {
+function TrackerCard({
+  card,
+  href,
+  hasNew,
+}: { card: TrackerCardData; href: string; hasNew: boolean }) {
   const failing = card.syncs.some((s) => s.state === 'error');
+  const primary = card.syncs.find((s) => s.state === 'error') ?? card.syncs[0];
+  const openLinks = card.syncs.filter((s) => s.openUrl);
+  // La tarjeta entera es clicable con un enlace estirado; los enlaces a Google
+  // quedan encima (z-10) porque un enlace no puede ir dentro de otro.
   return (
-    <Link
-      href={href}
+    <div
       className={clsx(
-        'group flex h-full flex-col rounded-card border bg-surface p-5 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong motion-reduce:transform-none',
+        'group relative flex h-full flex-col rounded-card border bg-surface p-5 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong motion-reduce:transform-none',
         failing ? 'border-rose/30' : 'border-border',
       )}
     >
@@ -204,8 +286,22 @@ function TrackerCard({ card, href }: { card: TrackerCardData; href: string }) {
           <Table2 className="h-5 w-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-bold text-ink group-hover:text-primary">
-            {card.name}
+          <h2 className="flex items-center gap-2 text-base font-bold text-ink group-hover:text-primary">
+            <Link
+              href={href}
+              className="min-w-0 truncate after:absolute after:inset-0 after:content-['']"
+            >
+              {card.name}
+            </Link>
+            {hasNew ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-primary-soft px-2 py-0.5 text-micro font-bold text-primary-ink"
+                title="Cambió desde la última vez que la abriste"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                nuevo
+              </span>
+            ) : null}
           </h2>
           <p className="tabular text-micro text-ink-faint">{card.slug}</p>
         </div>
@@ -231,7 +327,26 @@ function TrackerCard({ card, href }: { card: TrackerCardData; href: string }) {
           </dd>
         </div>
       </dl>
-      <div className="mt-4 flex flex-wrap gap-1.5 border-t border-border pt-3">
+      <p className="mt-4 flex items-center gap-1.5 text-micro font-semibold text-ink-muted">
+        <FolderSync className="h-3 w-3 shrink-0 text-ink-faint" aria-hidden />
+        {primary ? (
+          <span suppressHydrationWarning>
+            {primary.origin ?? 'Fuente conectada'} · {timeAgo(primary.lastRunAt)}
+          </span>
+        ) : (
+          <span>Manual</span>
+        )}
+      </p>
+      {primary?.state === 'error' ? (
+        <p
+          className="mt-1.5 rounded-sm bg-rose-soft px-2.5 py-1.5 text-micro font-semibold text-rose"
+          title={primary.lastError ?? undefined}
+        >
+          Falló la última sincronización
+          {primary.lastError ? `: ${primary.lastError.slice(0, 90)}` : ''}
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border pt-3">
         {card.syncs.map((s) => (
           <span
             key={s.id}
@@ -256,7 +371,23 @@ function TrackerCard({ card, href }: { card: TrackerCardData; href: string }) {
           </span>
         ) : null}
       </div>
-    </Link>
+      {openLinks.length ? (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+          {openLinks.map((s) => (
+            <a
+              key={s.id}
+              href={s.openUrl ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="relative z-10 inline-flex items-center gap-1 text-micro font-bold text-primary hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" aria-hidden />
+              {s.kind === 'drive_folder' ? 'Abrir carpeta' : 'Abrir en Google Sheets'}
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

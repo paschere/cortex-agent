@@ -141,6 +141,8 @@ export const trackersSyncFromDriveFolder = registerTool({
     status: z.literal('scheduled'),
     table: z.string(),
     fields: z.array(z.string()),
+    /** Dónde quedó la tabla en la app (ruta relativa: «Quedó en Tablas → …»). */
+    url: z.string(),
     markdown: z.string(),
   }),
   requiresConfirmation: true,
@@ -307,6 +309,7 @@ export const trackersSyncFromDriveFolder = registerTool({
       status: 'scheduled' as const,
       table: tracker.slug,
       fields: tracker.fields.map((f) => f.key),
+      url: `/trackers/${tracker.slug}`,
       markdown: lines.join('\n'),
     };
   },

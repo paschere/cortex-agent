@@ -505,6 +505,11 @@ export const viewAlertSchema = z.object({
   id: z.string().regex(BLOCK_ID_RE),
   source: sourceRef,
   filters: z.array(filterSchema).max(4).default([]),
+  /**
+   * Qué cuenta como noticia: 'new' una fila que no estaba, 'change' una fila
+   * ya vista cuyo contenido cambió (pasó a «Duplicado»), 'both' las dos.
+   */
+  on: z.enum(['new', 'change', 'both']).default('new'),
   message: z.string().trim().max(120).optional(),
   sound: z.boolean().default(true),
   desktop: z.boolean().default(false),

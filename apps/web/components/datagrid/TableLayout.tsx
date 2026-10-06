@@ -4,6 +4,7 @@ import type { GridAggregate, GridColumn, GridRow, GridView } from '@/components/
 import { AGGREGATES, aggregate, aggregateOf, formatAggregate } from '@/lib/datagrid/aggregate';
 import { asBoolean, formatValue, isNumericType } from '@/lib/datagrid/format';
 import type { GridGroup } from '@/lib/datagrid/view';
+import { LIVE_FLASH_CLASS } from '@/lib/live-signal';
 import { clsx } from 'clsx';
 import { ArrowDown, ArrowUp, ChevronRight, PanelRightOpen, Plus } from 'lucide-react';
 import Link from 'next/link';
@@ -89,6 +90,8 @@ export interface TableLayoutProps {
   noun: { one: string; many: string };
   totalLabel: string;
   onCopy?: (text: string) => void;
+  /** Filas que acaban de llegar o cambiar: titilan unos segundos. */
+  flashIds?: ReadonlySet<string>;
 }
 
 export function TableLayout(props: TableLayoutProps) {
@@ -581,6 +584,7 @@ export function TableLayout(props: TableLayoutProps) {
                 columns={columns}
                 widths={widths}
                 selected={selected.has(item.row.id)}
+                flash={props.flashIds?.has(item.row.id) ?? false}
                 activeCol={active?.row === rowIndex ? active.col : -1}
                 editing={editing?.row === rowIndex ? editing : null}
                 canEdit={canEdit}
@@ -622,6 +626,7 @@ const Row = memo(function Row({
   columns,
   widths,
   selected,
+  flash,
   activeCol,
   editing,
   canEdit,
@@ -639,6 +644,7 @@ const Row = memo(function Row({
   columns: GridColumn[];
   widths: number[];
   selected: boolean;
+  flash: boolean;
   activeCol: number;
   editing: { col: number; seed?: string } | null;
   canEdit: boolean;
@@ -649,7 +655,14 @@ const Row = memo(function Row({
   onCommit: (row: number, col: number, value: unknown, move?: 'next' | 'prev' | 'down') => void;
   onCancel: () => void;
 }) {
-  const bg = selected ? 'bg-primary-soft' : 'bg-surface group-hover/r:bg-surface-2';
+  // Una fila en alerta (duplicado) se pinta rosa; la selección manda sobre ella.
+  const bg = selected
+    ? 'bg-primary-soft'
+    : row.alert
+      ? 'bg-rose-soft group-hover/r:brightness-95'
+      : 'bg-surface group-hover/r:bg-surface-2';
+  // El titileo va en cada celda: son ellas las que tienen fondo propio.
+  const flashCls = flash ? LIVE_FLASH_CLASS : undefined;
   return (
     // biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: fila de la grilla ARIA; el foco lo lleva la grilla (aria-activedescendant).
     <div
@@ -665,6 +678,7 @@ const Row = memo(function Row({
         className={clsx(
           'sticky left-0 z-10 grid shrink-0 place-items-center border-r border-border',
           bg,
+          flashCls,
         )}
         style={{ width: CHECK_W }}
       >
@@ -700,6 +714,7 @@ const Row = memo(function Row({
             className={clsx(
               'relative flex shrink-0 items-center border-r border-border px-3 text-xs text-ink',
               bg,
+              flashCls,
               i === 0 && 'sticky z-10 font-semibold shadow-[1px_0_0_rgb(var(--border))]',
               numeric && 'justify-end',
               isActive && 'z-[15] outline outline-2 -outline-offset-2 outline-primary',

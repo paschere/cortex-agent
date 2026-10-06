@@ -68,6 +68,8 @@ export interface GridRow {
   href?: string | null;
   /** Solo lectura para esta fila aunque la columna sea editable. */
   locked?: boolean;
+  /** Fila para mirar con cuidado (p. ej. un duplicado): se pinta en tono de alerta. */
+  alert?: boolean;
 }
 
 export type GridFilterOp =
@@ -181,4 +183,6 @@ export interface DataGridProps {
    * edición de los campos.
    */
   renderRowExtra?: (row: GridRow) => React.ReactNode;
+  /** (opcional) Filas que acaban de llegar o cambiar: titilan (LIVE_FLASH_CLASS). */
+  flashIds?: ReadonlySet<string>;
 }

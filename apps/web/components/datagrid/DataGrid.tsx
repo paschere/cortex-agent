@@ -813,10 +813,12 @@ export function DataGrid(props: DataGridProps) {
               : null
           }
           mobile={mobile}
+          flashIds={props.flashIds}
         />
       );
     return (
       <TableLayout
+        flashIds={props.flashIds}
         gridId={gridId}
         columns={visibleCols}
         rows={result.rows}

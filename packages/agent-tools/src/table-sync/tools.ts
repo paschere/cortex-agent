@@ -144,6 +144,8 @@ export const trackersSyncFromSource = registerTool({
     status: z.enum(['ready', 'scheduled']),
     table: z.string(),
     inserted: z.number().int(),
+    /** Dónde quedó la tabla en la app (ruta relativa: «Quedó en Tablas → …»). */
+    url: z.string(),
     markdown: z.string(),
   }),
   requiresConfirmation: true,
@@ -201,6 +203,7 @@ export const trackersSyncFromSource = registerTool({
         status: 'ready' as const,
         table: tracker.slug,
         inserted: outcome.inserted,
+        url: `/trackers/${tracker.slug}`,
         markdown: `${createdTracker ? `Creé la tabla **${tracker.name}** (\`${tracker.slug}\`)` : `La tabla **${tracker.name}** ahora`} se llena sola desde «${source.name}» cada ${common.intervalMinutes} minutos. Primera carga: ${outcome.inserted} filas nuevas, ${outcome.updated} actualizadas${outcome.skipped ? `, ${outcome.skipped} sin clave (saltadas)` : ''}. Puedo hacerle una vista con aviso cuando entre algo nuevo.`,
       };
     }
@@ -217,6 +220,7 @@ export const trackersSyncFromSource = registerTool({
       status: 'scheduled' as const,
       table: input.table,
       inserted: 0,
+      url: `/trackers/${input.table}`,
       markdown: `Listo: vuelvo a leer «${source.name}»${reshape ? ' con la forma nueva' : ''}, creo la tabla \`${input.table}\` y la dejo llenándose sola cada ${common.intervalMinutes} minutos. Te aviso en la campana cuando termine la primera carga.`,
     };
   },
@@ -238,7 +242,7 @@ export const trackersSyncFromSource = registerTool({
 export const feedConnectGoogleSheet = registerTool({
   id: 'feed.connect_google_sheet',
   description:
-    "Connect a Google Sheet to the person's Feed in one step and return its tabs with headers and row counts plus the source id. Use it as soon as the person pastes a docs.google.com/spreadsheets link (or sheet id) to analyse it, build a table or a view from it, or keep it synced — never tell them to go to the Feed to connect it. Safe to repeat: an already connected sheet is refreshed, not duplicated. Next steps: trackers.sync_from_source (source = the returned sourceId, sheet = tab index) to fill a company table from it, or feed_table_query. Needs the company Google connection (Datos y conexiones). For a Google Drive FOLDER use trackers.sync_from_drive_folder instead. Requires confirmation.",
+    "Connect a Google Sheet to the person's Feed in one step and return its tabs with headers and row counts plus the source id. Use it as soon as the person pastes a docs.google.com/spreadsheets link (or sheet id) to analyse it, build a table or a view from it, or keep it synced — never tell them to go to the Feed to connect it. Safe to repeat: an already connected sheet is refreshed, not duplicated. Next steps: by default OFFER to keep it up to date — trackers.sync_from_source (source = the returned sourceId, sheet = tab index) creates a company table in Tablas that re-reads the sheet every 15 minutes, instead of leaving it as a one-off snapshot — or feed_table_query. Needs the company Google connection (Datos y conexiones). For a Google Drive FOLDER use trackers.sync_from_drive_folder instead. Requires confirmation.",
   inputSchema: z.object({
     sheet: z
       .string()

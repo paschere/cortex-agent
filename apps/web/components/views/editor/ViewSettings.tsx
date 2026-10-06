@@ -27,9 +27,12 @@ import {
   type EditorProblem,
   type EditorSource,
   fieldOptions,
+  liveAlertOf,
+  mainAlertSource,
   newAlert,
   sourceOf,
   titleOf,
+  withLiveAlert,
 } from '@/lib/views/editor-spec';
 import type { FilterBarItem, ViewAlert, ViewPage, ViewSpec } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
@@ -173,6 +176,8 @@ export function ViewSettings({
         </fieldset>
       </Section>
 
+      <LiveAlertSection spec={spec} setSpec={setSpec} sources={sources} />
+
       <Section
         title="Avisos"
         action={
@@ -207,6 +212,68 @@ export function ViewSettings({
         ))}
       </Section>
     </div>
+  );
+}
+
+/**
+ * AVISOS EN VIVO, SIN FILTROS. Un interruptor que crea (o apaga) un aviso
+ * sobre la tabla principal de la vista; el detalle fino sigue en «Avisos».
+ */
+function LiveAlertSection({
+  spec,
+  setSpec,
+  sources,
+}: {
+  spec: ViewSpec;
+  setSpec: SetSpec;
+  sources: EditorSource[];
+}) {
+  const live = liveAlertOf(spec);
+  const slug = mainAlertSource(spec);
+  const name = sources.find((s) => s.slug === slug)?.name ?? slug;
+  const patch = (next: Partial<ViewAlert>) =>
+    setSpec({ alerts: spec.alerts.map((a) => (a.id === live?.id ? { ...a, ...next } : a)) });
+  return (
+    <Section title="Avisos en vivo">
+      <Toggle
+        label="Pitar cuando llegue algo nuevo"
+        hint={
+          slug
+            ? `Suena, titila y sale un aviso en pantalla con cada fila nueva de ${name}. La vista se refresca cada 10 segundos.`
+            : 'Agrega primero una tabla o un formulario a la vista.'
+        }
+        checked={Boolean(live)}
+        onChange={(on) => {
+          if (on) {
+            const next = withLiveAlert(spec);
+            if (next) setSpec(next);
+          } else setSpec({ alerts: spec.alerts.filter((a) => a.id !== live?.id) });
+        }}
+      />
+      {live && (
+        <div className="space-y-2 pl-1">
+          <Toggle
+            label="…y cuando algo cambie"
+            hint="Una fila que ya estaba y cambió, por ejemplo pasó a «Duplicado»."
+            checked={live.on !== 'new'}
+            onChange={(c) => patch({ on: c ? 'both' : 'new' })}
+          />
+          <Toggle label="Sonido" checked={live.sound} onChange={(sound) => patch({ sound })} />
+          <Toggle
+            label="Notificación del sistema"
+            hint="Si quien mira la permite en su navegador."
+            checked={live.desktop}
+            onChange={(desktop) => patch({ desktop })}
+          />
+          <Toggle
+            label="Aviso en la campana"
+            hint="Cuando la fila entra por un formulario de esta vista, aunque nadie la tenga abierta."
+            checked={live.bell}
+            onChange={(bell) => patch({ bell })}
+          />
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -255,6 +322,17 @@ function AlertCard({
           onChange={(filters) => onChange({ ...alert, filters }, `${alert.id}:filters`)}
         />
       </div>
+      <Segmented
+        label="Avisar cuando"
+        value={alert.on}
+        options={[
+          { value: 'new', label: 'llegue algo nuevo' },
+          { value: 'change', label: 'algo cambie' },
+          { value: 'both', label: 'las dos' },
+        ]}
+        onChange={(on) => onChange({ ...alert, on })}
+        size="sm"
+      />
       <Field label="Mensaje (opcional)">
         <input
           value={alert.message ?? ''}

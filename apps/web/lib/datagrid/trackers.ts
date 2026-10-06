@@ -59,6 +59,7 @@ export interface TrackerEntryLike {
   created_at?: string;
   updated_at: string;
   external_key?: string | null;
+  duplicate_flagged?: boolean;
 }
 
 export const TRACKER_SLUG_PATTERN = /^[a-z][a-z0-9_]{1,47}$/;
@@ -160,6 +161,7 @@ export function trackerGridRow(entry: TrackerEntryLike): GridRow {
   return {
     id: entry.id,
     values: { ...entry.values, [UPDATED_KEY]: entry.updated_at },
+    ...(entry.duplicate_flagged ? { alert: true } : {}),
   };
 }
 

@@ -51,6 +51,8 @@ export default async function TrackerPage({ params }: { params: Promise<{ slug: 
   const tracker = await getTrackerBySlug(db, slug);
   if (!tracker) notFound();
 
+  // Antes de leer: lo que cambie mientras se arma la página lo recoge el polling.
+  const loadedAt = new Date().toISOString();
   const total = await countTrackerRows(db, tracker.id);
   const paged = total > CLIENT_LIMIT;
   const [entries, syncs, settings, savedViews, denied, lookupRows, lookupCredentials] =
@@ -121,6 +123,7 @@ export default async function TrackerPage({ params }: { params: Promise<{ slug: 
         syncs: syncs.map(({ trackerId: _t, createdBy: _c, ...s }) => s),
         workType: mapping?.workType ?? null,
         syncedRows,
+        loadedAt,
         canChangeSchema: !isToolDenied('trackers.define', denied),
         lookups: lookupRows.map((l) => lookupCardFrom(l, columns, now)),
         lookupCredentials,

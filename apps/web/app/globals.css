@@ -705,3 +705,16 @@ body {
 .conversation-starts__examples > button:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .conversation-starts__footer { font-size: 12px; }
 @media (max-width: 760px) { .conversation-starts__tabs button { font-size: 13px; } }
+
+/* Una fila o tarjeta que acaba de llegar o cambiar (lib/live-signal.ts):
+   titila tres veces con el color de aviso y se queda un momento marcada.
+   Sin animación si la persona la pidió así: sólo el fondo, quieto. */
+@keyframes live-flash {
+  0%, 40%, 80% { background-color: rgb(var(--amber-soft, 254 243 199)); box-shadow: inset 3px 0 0 rgb(var(--amber, 217 119 6)); }
+  20%, 60% { background-color: transparent; }
+  100% { background-color: transparent; box-shadow: inset 3px 0 0 rgb(var(--amber, 217 119 6)); }
+}
+.live-flash { animation: live-flash 6s ease-out 1; }
+@media (prefers-reduced-motion: reduce) {
+  .live-flash { animation: none; background-color: rgb(var(--amber-soft, 254 243 199)); }
+}

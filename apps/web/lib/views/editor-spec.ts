@@ -637,9 +637,53 @@ export function newAlert(spec: ViewSpec, sources: EditorSource[]): ViewAlert | n
     id: `aviso_${n}`,
     source: (spec.blocks.map(sourceOf).find(Boolean) as string | undefined) ?? source.slug,
     filters: [],
+    on: 'new',
     sound: true,
     desktop: false,
     bell: false,
+  };
+}
+
+/** Id del aviso sencillo de «Avisos en vivo»: uno solo, sobre la tabla principal. */
+export const LIVE_ALERT_ID = 'aviso_vivo';
+
+/**
+ * La tabla principal de la vista, para el aviso sencillo: la que alimenta un
+ * formulario; si no hay, la de la primera tabla; si no, la del primer bloque
+ * con fuente. Nunca una fuente de sólo lectura sin filas que mirar.
+ */
+export function mainAlertSource(spec: ViewSpec): string | null {
+  const form = spec.blocks.find((b) => b.type === 'form') as { tracker?: string } | undefined;
+  if (form?.tracker) return form.tracker;
+  const table = spec.blocks.find((b) => b.type === 'table');
+  const src = table ? sourceOf(table) : undefined;
+  if (src) return src;
+  return (spec.blocks.map(sourceOf).find(Boolean) as string | undefined) ?? null;
+}
+
+/** El aviso sencillo ya creado, si hay. */
+export function liveAlertOf(spec: ViewSpec): ViewAlert | undefined {
+  return spec.alerts.find((a) => a.id === LIVE_ALERT_ID);
+}
+
+/** Enciende el aviso sencillo: pita con lo nuevo y la vista se refresca cada 10 s. */
+export function withLiveAlert(spec: ViewSpec): Partial<ViewSpec> | null {
+  const source = mainAlertSource(spec);
+  if (!source || spec.alerts.length >= 5 || liveAlertOf(spec)) return null;
+  return {
+    alerts: [
+      ...spec.alerts,
+      {
+        id: LIVE_ALERT_ID,
+        source,
+        filters: [],
+        on: 'new',
+        sound: true,
+        desktop: false,
+        bell: false,
+      },
+    ],
+    ...(spec.refreshSeconds === 0 || spec.refreshSeconds > 30 ? { refreshSeconds: 10 } : {}),
   };
 }
 

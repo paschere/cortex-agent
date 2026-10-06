@@ -1,5 +1,15 @@
 'use client';
 
+import { LIVE_FLASH_MS, beep, desktopNotify, unlockAudio } from '@/lib/live-signal';
+import {
+  WATCH_MODES,
+  type WatchMode,
+  blockFingerprints,
+  detectAlertHits,
+  flashKeys,
+  parseWatchMode,
+} from '@/lib/views/live-diff';
+
 import {
   type FilterState,
   encodeFilterState,
@@ -13,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { type SubmitTarget, ViewCanvas } from './ViewCanvas';
 import { LiveStatus, ViewCover } from './blocks/ViewChrome';
 import { useBrandScope, useViewBrand } from './blocks/brand';
+import { FlashProvider } from './flash-context';
 
 /**
  * UNA VISTA QUE SE MANTIENE AL DÍA SOLA, Y QUE AVISA.
@@ -60,22 +71,6 @@ interface Toast {
   body: string;
 }
 
-function beep(ctx: AudioContext) {
-  const now = ctx.currentTime;
-  for (const [i, freq] of [880, 1318].entries()) {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.0001, now + i * 0.14);
-    gain.gain.exponentialRampToValueAtTime(0.18, now + i * 0.14 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.14 + 0.22);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(now + i * 0.14);
-    osc.stop(now + i * 0.14 + 0.25);
-  }
-}
-
 function ago(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 5) return 'ahora';
@@ -117,27 +112,49 @@ export function LiveViewCanvas({
   const [, tick] = useState(0);
   const [failing, setFailing] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [alertsOn, setAlertsOn] = useState(false);
-  const seen = useRef(new Map<string, Set<string>>());
-  const audio = useRef<AudioContext | null>(null);
+  const [mode, setMode] = useState<WatchMode | null>(null);
+  const [flashing, setFlashing] = useState<ReadonlySet<string>>(new Set());
+  const seen = useRef(new Map<string, Map<string, string>>());
+  const prints = useRef<Map<string, string> | null>(null);
+  const flashTimer = useRef<number | undefined>(undefined);
   const inFlight = useRef(false);
 
   const hasAlerts = view.alerts.length > 0;
   const wantsDesktop = view.alerts.some((a) => a.desktop);
+  // Mientras no se lee la preferencia, la de por defecto.
+  const watch: WatchMode = mode ?? (hasAlerts ? 'toast' : 'flash');
 
   // Lo que ya estaba al abrir no es nuevo.
   useEffect(() => {
-    for (const a of initial.alerts) seen.current.set(a.id, new Set(a.rows.map((r) => r.id)));
+    for (const a of initial.alerts)
+      seen.current.set(a.id, new Map(a.rows.map((r) => [r.id, r.rev])));
+    prints.current = blockFingerprints(initial.blocks);
   }, [initial]);
 
   // La preferencia de avisos de esta persona, en este navegador.
   useEffect(() => {
     try {
-      setAlertsOn(window.localStorage.getItem('cortex:view-alerts') === 'on');
+      setMode(parseWatchMode(window.localStorage.getItem('cortex:view-alerts'), hasAlerts));
     } catch {
-      /* Sin almacenamiento: los avisos arrancan apagados. */
+      /* Sin almacenamiento: vale el modo por defecto. */
     }
-  }, []);
+  }, [hasAlerts]);
+
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  // Lo que llegó o cambió titila unos segundos, haya o no alertas.
+  const flashChanges = useCallback(
+    (next: ComputedView) => {
+      const now = blockFingerprints(next.blocks);
+      const keys = flashKeys(prints.current, now);
+      prints.current = now;
+      if (!keys.size || watch === 'off') return;
+      setFlashing(keys);
+      window.clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => setFlashing(new Set()), LIVE_FLASH_MS);
+    },
+    [watch],
+  );
 
   const announce = useCallback(
     (next: ComputedView) => {
@@ -146,30 +163,27 @@ export function LiveViewCanvas({
       let desktop = false;
       for (const alert of next.alerts) {
         const known = seen.current.get(alert.id);
-        const ids = new Set(alert.rows.map((r) => r.id));
-        if (known) {
-          const added = alert.rows.filter((r) => !known.has(r.id));
-          for (const row of added.slice(0, 3)) {
-            fresh.push({
-              id: Date.now() + Math.random(),
-              title: alert.message ?? `Nuevo en ${alert.source}`,
-              body: row.label,
-            });
-            sound ||= alert.sound;
-            desktop ||= alert.desktop;
-          }
+        const hits = detectAlertHits(known, alert.rows, alert.on ?? 'new');
+        for (const hit of hits.slice(0, 3)) {
+          fresh.push({
+            id: Date.now() + Math.random(),
+            title:
+              hit.kind === 'change'
+                ? `Cambió: ${hit.row.label}`
+                : (alert.message ?? `Nuevo en ${alert.source}`),
+            body: hit.kind === 'change' ? alert.source : hit.row.label,
+          });
+          sound ||= alert.sound;
+          desktop ||= alert.desktop;
         }
-        seen.current.set(alert.id, ids);
+        seen.current.set(alert.id, new Map(alert.rows.map((r) => [r.id, r.rev])));
       }
-      if (!fresh.length) return;
+      if (!fresh.length || watch === 'off' || watch === 'flash') return;
       setToasts((t) => [...fresh, ...t].slice(0, 4));
-      if (!alertsOn) return;
-      if (sound && audio.current) beep(audio.current);
-      if (desktop && typeof Notification !== 'undefined' && Notification.permission === 'granted')
-        for (const t of fresh.slice(0, 2))
-          new Notification(t.title, { body: t.body, tag: t.title });
+      if (sound && watch === 'sound') beep(unlockAudio());
+      if (desktop) for (const t of fresh.slice(0, 2)) desktopNotify(t.title, t.body);
     },
-    [alertsOn],
+    [watch],
   );
 
   /**
@@ -194,6 +208,7 @@ export function LiveViewCanvas({
         setView(body.view);
         setUpdatedAt(Date.now());
         setFailing(false);
+        flashChanges(body.view);
         announce(body.view);
       } catch {
         if (mine === seq.current) setFailing(true);
@@ -204,7 +219,7 @@ export function LiveViewCanvas({
         }
       }
     },
-    [dataUrl, announce],
+    [dataUrl, announce, flashChanges],
   );
 
   /** Escribe `?f=` / `?p=` sin recargar ni agregar pasos al historial. */
@@ -279,22 +294,16 @@ export function LiveViewCanvas({
     return () => window.clearTimeout(id);
   }, [toasts]);
 
-  async function toggleAlerts() {
-    const next = !alertsOn;
-    setAlertsOn(next);
+  async function chooseMode(next: WatchMode) {
+    setMode(next);
     try {
-      window.localStorage.setItem('cortex:view-alerts', next ? 'on' : 'off');
+      window.localStorage.setItem('cortex:view-alerts', next);
     } catch {
       /* Preferencia local: si no se guarda, vale por esta visita. */
     }
-    if (!next) return;
-    const Ctx =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (Ctx && !audio.current) audio.current = new Ctx();
-    await audio.current?.resume().catch(() => undefined);
-    if (audio.current) beep(audio.current);
+    if (next === 'sound') beep(unlockAudio());
     if (
+      (next === 'toast' || next === 'sound') &&
       wantsDesktop &&
       typeof Notification !== 'undefined' &&
       Notification.permission === 'default'
@@ -312,22 +321,29 @@ export function LiveViewCanvas({
           }
         />
       )}
-      {hasAlerts && (
-        <button
-          type="button"
-          onClick={() => void toggleAlerts()}
-          aria-pressed={alertsOn}
-          className={clsx(
-            'inline-flex h-8 items-center gap-1.5 rounded-pill border px-3 text-micro font-semibold transition-colors',
-            alertsOn
-              ? 'border-primary/40 bg-primary-soft text-primary-ink'
-              : 'border-border bg-surface text-ink-muted shadow-card hover:text-ink',
-          )}
+      <label
+        className={clsx(
+          'inline-flex h-8 items-center gap-1.5 rounded-pill border px-3 text-micro font-semibold transition-colors',
+          watch === 'off'
+            ? 'border-border bg-surface text-ink-muted shadow-card'
+            : 'border-primary/40 bg-primary-soft text-primary-ink',
+        )}
+      >
+        {watch === 'off' ? <BellOff className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
+        <span>Avisos:</span>
+        <select
+          aria-label="Avisos de lo nuevo"
+          value={watch}
+          onChange={(e) => void chooseMode(e.target.value as WatchMode)}
+          className="cursor-pointer bg-transparent font-semibold outline-none"
         >
-          {alertsOn ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
-          {alertsOn ? 'Avisos con sonido' : 'Activar avisos'}
-        </button>
-      )}
+          {WATCH_MODES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         type="button"
         onClick={() => window.print()}
@@ -358,19 +374,21 @@ export function LiveViewCanvas({
         </div>
       )}
 
-      <ViewCanvas
-        view={view}
-        target={target}
-        onChanged={() => void refresh(true)}
-        filters={{ state: filters, onChange: changeFilters, pending: filtering }}
-        page={{
-          current: page,
-          onSelect: (id) => {
-            setPage(id);
-            writeUrl('p', id === view.pages?.[0]?.id ? null : id);
-          },
-        }}
-      />
+      <FlashProvider value={flashing}>
+        <ViewCanvas
+          view={view}
+          target={target}
+          onChanged={() => void refresh(true)}
+          filters={{ state: filters, onChange: changeFilters, pending: filtering }}
+          page={{
+            current: page,
+            onSelect: (id) => {
+              setPage(id);
+              writeUrl('p', id === view.pages?.[0]?.id ? null : id);
+            },
+          }}
+        />
+      </FlashProvider>
 
       <div
         aria-live="polite"

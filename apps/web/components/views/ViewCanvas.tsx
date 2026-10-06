@@ -46,6 +46,7 @@ import {
   statusTone,
   useViewTheme,
 } from './blocks/theme';
+import { useFlashClass } from './flash-context';
 import {
   EditableCell,
   EditableValue,
@@ -380,6 +381,7 @@ function statusColumns(block: TableBlock): Set<number> {
 }
 
 function Table({ block }: { block: TableBlock }) {
+  const flash = useFlashClass();
   const { layout } = useViewTheme();
   const operator = layout === 'operator';
   const open = useRecordOpener(block.id, block.record);
@@ -451,6 +453,7 @@ function Table({ block }: { block: TableBlock }) {
           <li
             key={r.id}
             className={clsx(
+              flash(block.id, r.id),
               'rounded-sm border shadow-card',
               operator ? 'border-2 p-4' : 'p-3.5',
               r.alert
@@ -602,6 +605,7 @@ function Table({ block }: { block: TableBlock }) {
                     : undefined
                 }
                 className={clsx(
+                  flash(block.id, r.id),
                   'group/row transition-colors duration-100 [&>td]:border-b [&>td]:border-border/60 [&:last-child>td]:border-0',
                   // Fila con la marca de duplicado: tono de alerta para corregirla antes de despachar.
                   r.alert ? 'bg-rose-soft hover:bg-rose-soft/70' : 'hover:bg-surface-2/60',
@@ -687,6 +691,7 @@ function columnDot(label: string, i: number): string {
 }
 
 function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) {
+  const flash = useFlashClass();
   const writer = useViewWriter();
   const open = useRecordOpener(block.id, block.record);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -746,6 +751,7 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                   }}
                   onDragEnd={() => setDragging(null)}
                   className={clsx(
+                    flash(block.id, card.id),
                     card.alert
                       ? 'rounded-sm border border-rose/50 bg-rose-soft p-3 shadow-card transition-all duration-150'
                       : 'rounded-sm border border-border bg-surface p-3 shadow-card transition-all duration-150 hover:border-border-strong',

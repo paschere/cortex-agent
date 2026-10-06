@@ -4,6 +4,7 @@ import type { ComputedBlock } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { LayoutGrid } from 'lucide-react';
 import { useState } from 'react';
+import { useFlashClass } from '../flash-context';
 import { RowActions } from '../view-writes';
 import { useRecordOpener } from './RecordDrawer';
 import { Card, EmptyState, StatusChip, useViewTheme } from './theme';
@@ -44,6 +45,7 @@ function initialsOf(text: string): string {
 
 export function GalleryBlock({ block }: { block: Gallery }) {
   const open = useRecordOpener(block.id, block.record);
+  const flash = useFlashClass();
   const { density } = useViewTheme();
   // Si ninguna tarjeta trae foto, cada una lleva sus iniciales: una rejilla de
   // huecos grises no es una galería.
@@ -71,6 +73,7 @@ export function GalleryBlock({ block }: { block: Gallery }) {
             <li
               key={card.id}
               className={clsx(
+                flash(block.id, card.id),
                 'group relative flex flex-col overflow-hidden rounded-sm border shadow-card transition-all duration-150',
                 card.alert ? 'border-rose/50 bg-rose-soft' : 'border-border bg-surface',
                 open &&

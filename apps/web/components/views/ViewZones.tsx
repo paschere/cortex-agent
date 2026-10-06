@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { MapPin } from 'lucide-react';
 import { useState } from 'react';
 import { useRecordOpener } from './blocks/RecordDrawer';
+import { useFlashClass } from './flash-context';
 import { RowActions, useViewWriter } from './view-writes';
 
 /**
@@ -34,6 +35,7 @@ export function ViewZones({
   Card: (props: { title?: string; source?: string; children: React.ReactNode }) => React.ReactNode;
 }) {
   const writer = useViewWriter();
+  const flash = useFlashClass();
   const open = useRecordOpener(block.id, block.record);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -134,6 +136,7 @@ export function ViewZones({
                     onDragEnd={() => setDragging(null)}
                     title={card.details.map((d) => `${d.label}: ${d.value}`).join(' · ')}
                     className={clsx(
+                      flash(block.id, card.id),
                       'max-w-full rounded-pill border border-border bg-surface-2/70 px-2.5 py-1 text-xs transition-colors hover:border-border-strong',
                       canDrag && 'cursor-grab active:cursor-grabbing',
                       dragging === card.id && 'opacity-50',

@@ -25,6 +25,10 @@ export interface SyncBadge {
   lastError: string | null;
   lastInserted: number;
   lastUpdated: number;
+  /** De dónde viene: «Google Sheets», «Carpeta de Drive»… */
+  origin?: string;
+  /** Enlace para abrir la hoja o la carpeta en Google. */
+  openUrl?: string | null;
 }
 
 export interface TrackerCardData {
@@ -60,6 +64,10 @@ export interface TrackerScreenData {
   workType: string | null;
   /** Hay filas que trae una sincronización (las puede sobrescribir la próxima corrida). */
   syncedRows: number;
+  /** Filas que la regla de duplicados tiene marcadas ahora. */
+  duplicateCount?: number;
+  /** Hora del servidor al leer la tabla: desde ahí se piden los cambios en vivo. */
+  loadedAt?: string;
   canChangeSchema: boolean;
   /** Consultas automáticas por fila (0198). Opcional: no todas las pantallas las traen. */
   lookups?: LookupCard[];

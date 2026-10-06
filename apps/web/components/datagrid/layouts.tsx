@@ -13,6 +13,7 @@ import {
   toLocalInput,
 } from '@/lib/datagrid/format';
 import { type GridGroup, boardGroups } from '@/lib/datagrid/view';
+import { LIVE_FLASH_CLASS } from '@/lib/live-signal';
 import { clsx } from 'clsx';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import Link from 'next/link';
@@ -74,6 +75,7 @@ export function RowCard({
   draggable,
   onKeyMove,
   dense,
+  flash,
 }: {
   row: GridRow;
   columns: GridColumn[];
@@ -84,6 +86,7 @@ export function RowCard({
   draggable?: boolean;
   onKeyMove?: (dir: -1 | 1) => void;
   dense?: boolean;
+  flash?: boolean;
 }) {
   const title = titleColumn(columns);
   const fields = cardFields(columns, [...exclude, title?.key ?? '']);
@@ -120,8 +123,14 @@ export function RowCard({
     </>
   );
   const shell = clsx(
-    'group relative block w-full rounded-sm border bg-surface p-3 text-left shadow-card transition-colors',
-    selected ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-border-strong',
+    'group relative block w-full rounded-sm border p-3 text-left shadow-card transition-colors',
+    selected
+      ? 'border-primary ring-1 ring-primary'
+      : row.alert
+        ? 'border-rose/40 bg-rose-soft'
+        : 'border-border hover:border-border-strong',
+    !row.alert && 'bg-surface',
+    flash && LIVE_FLASH_CLASS,
     draggable && 'cursor-grab active:cursor-grabbing',
   );
   return (
@@ -327,6 +336,7 @@ export function CardsLayout({
   selected,
   onToggle,
   mobile,
+  flashIds,
 }: {
   columns: GridColumn[];
   rows: GridRow[];
@@ -334,6 +344,7 @@ export function CardsLayout({
   selected: Set<string>;
   onToggle: ((id: string) => void) | null;
   mobile?: boolean;
+  flashIds?: ReadonlySet<string>;
 }) {
   const { limit, sentinel } = useProgressive(rows.length, mobile ? 40 : 60);
   return (
@@ -352,6 +363,7 @@ export function CardsLayout({
               onOpen={onOpen}
               selected={selected.has(r.id)}
               onToggle={onToggle ? () => onToggle(r.id) : undefined}
+              flash={flashIds?.has(r.id)}
             />
           </li>
         ))}

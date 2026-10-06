@@ -347,7 +347,9 @@ export interface ComputedAlertFeed {
   message: string | null;
   sound: boolean;
   desktop: boolean;
-  rows: Array<{ id: string; label: string; createdAt: string }>;
+  on: 'new' | 'change' | 'both';
+  /** `rev` es la huella de la fila (su última actualización): si cambia, la fila cambió. */
+  rows: Array<{ id: string; label: string; createdAt: string; rev: string }>;
 }
 
 export interface ComputedView {
@@ -1467,13 +1469,19 @@ export function computeView(
       // que caber entre las recientes para que el navegador la vea.
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, ALERT_FEED_ROWS)
-      .map((r) => ({ id: r.id, label: r.label, createdAt: r.created_at }));
+      .map((r) => ({
+        id: r.id,
+        label: r.label,
+        createdAt: r.created_at,
+        rev: r.updated_at,
+      }));
     alerts.push({
       id: alert.id,
       source: src.tracker.name,
       message: alert.message ?? null,
       sound: alert.sound,
       desktop: alert.desktop,
+      on: alert.on,
       rows,
     });
   }

@@ -13,7 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  */
 
 export const ENTRY_COLUMNS =
-  'id, tracker_id, label, values, created_by, created_at, updated_at, external_key';
+  'id, tracker_id, label, values, created_by, created_at, updated_at, external_key, duplicate_flagged';
 
 export interface TrackerEntry {
   id: string;
@@ -24,6 +24,8 @@ export interface TrackerEntry {
   created_at: string;
   updated_at: string;
   external_key: string | null;
+  /** La regla de duplicados de la tabla la marcó (`tracker_rows.duplicate_flagged`). */
+  duplicate_flagged: boolean;
 }
 
 function adapt(row: Record<string, unknown>): TrackerEntry {
@@ -40,6 +42,7 @@ function adapt(row: Record<string, unknown>): TrackerEntry {
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     external_key: typeof row.external_key === 'string' ? row.external_key : null,
+    duplicate_flagged: row.duplicate_flagged === true,
   };
 }
 
@@ -112,6 +115,10 @@ export interface TableSyncInfo {
   lastInserted: number;
   lastUpdated: number;
   createdBy: string | null;
+  /** «Google Sheets», «Carpeta de Drive» o el tipo de fuente del Feed. */
+  origin: string;
+  /** Enlace a la hoja o a la carpeta de Google, si se conoce su id. */
+  openUrl: string | null;
 }
 
 function every(minutes: number): string {
@@ -128,6 +135,34 @@ function stateOf(enabled: boolean, status: string | null): TableSyncState {
   return 'waiting';
 }
 
+/** De dónde viene y, si se puede, el enlace para abrirlo en Google. */
+export function originOf(
+  kind: TableSyncInfo['kind'],
+  r: {
+    folder_id?: string;
+    feed_sources?:
+      | { kind: string | null; config: Record<string, unknown> | null }
+      | Array<{ kind: string | null; config: Record<string, unknown> | null }>
+      | null;
+  },
+): { origin: string; openUrl: string | null } {
+  if (kind === 'drive_folder') {
+    const id = r.folder_id?.trim();
+    return {
+      origin: 'Carpeta de Drive',
+      openUrl: id && /^[\w-]+$/.test(id) ? `https://drive.google.com/drive/folders/${id}` : null,
+    };
+  }
+  const src = one(r.feed_sources);
+  const sheetId = src?.config?.spreadsheetId;
+  if (typeof sheetId === 'string' && /^[\w-]+$/.test(sheetId))
+    return {
+      origin: 'Google Sheets',
+      openUrl: `https://docs.google.com/spreadsheets/d/${sheetId}`,
+    };
+  return { origin: src?.kind === 'api' ? 'API' : 'Fuente conectada', openUrl: null };
+}
+
 const one = <T>(rel: T | T[] | null | undefined): T | null =>
   Array.isArray(rel) ? (rel[0] ?? null) : (rel ?? null);
 
@@ -138,14 +173,14 @@ export async function readTableSyncs(
   let syncQ = db
     .from('tracker_syncs')
     .select(
-      'id, tracker_id, interval_minutes, enabled, last_run_at, last_status, last_error, last_inserted, last_updated, created_by, feed_sources(name)',
+      'id, tracker_id, interval_minutes, enabled, last_run_at, last_status, last_error, last_inserted, last_updated, created_by, feed_sources(name, kind, config)',
     )
     .order('created_at', { ascending: false })
     .limit(200);
   let driveQ = db
     .from('drive_folder_syncs')
     .select(
-      'id, tracker_id, folder_name, interval_minutes, enabled, last_run_at, last_status, last_error, last_inserted, last_updated, created_by',
+      'id, tracker_id, folder_id, folder_name, interval_minutes, enabled, last_run_at, last_status, last_error, last_inserted, last_updated, created_by',
     )
     .order('created_at', { ascending: false })
     .limit(200);
@@ -156,6 +191,11 @@ export async function readTableSyncs(
   const [syncs, drive] = await Promise.all([syncQ, driveQ]);
   if (syncs.error) throw syncs.error;
   if (drive.error) throw drive.error;
+  type FeedSourceRel = {
+    name: string | null;
+    kind: string | null;
+    config: Record<string, unknown> | null;
+  };
   type SyncRow = {
     id: string;
     tracker_id: string;
@@ -167,8 +207,9 @@ export async function readTableSyncs(
     last_inserted: number;
     last_updated: number;
     created_by: string | null;
-    feed_sources?: { name: string | null } | Array<{ name: string | null }> | null;
+    feed_sources?: FeedSourceRel | FeedSourceRel[] | null;
     folder_name?: string;
+    folder_id?: string;
   };
   const shape = (r: SyncRow, kind: TableSyncInfo['kind']): TableSyncInfo => ({
     id: r.id,
@@ -185,6 +226,7 @@ export async function readTableSyncs(
     lastInserted: r.last_inserted ?? 0,
     lastUpdated: r.last_updated ?? 0,
     createdBy: r.created_by,
+    ...originOf(kind, r),
   });
   return [
     ...((syncs.data ?? []) as unknown as SyncRow[]).map((r) => shape(r, 'table_sync')),

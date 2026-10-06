@@ -69,6 +69,8 @@ export const trackersDefine = registerTool({
   outputSchema: z.object({
     tracker: trackerSummary,
     created: z.boolean(),
+    /** Dónde está la tabla en la app (ruta relativa). */
+    url: z.string(),
     markdown: z.string(),
   }),
   requiresConfirmation: true,
@@ -97,6 +99,7 @@ export const trackersDefine = registerTool({
         duplicates: rule,
       },
       created,
+      url: `/trackers/${tracker.slug}`,
       markdown: created
         ? `Tabla **${tracker.name}** creada (\`${tracker.slug}\`). Campos: ${fieldsMarkdown(tracker.fields)}.${ruleNote} Para llenarla usa trackers.upsert; para verla, trackers.query.`
         : `Tabla **${tracker.name}** actualizada (\`${tracker.slug}\`). Campos ahora: ${fieldsMarkdown(tracker.fields)}.${ruleNote}`,

@@ -4,10 +4,27 @@ import { DataGrid } from '@/components/datagrid/DataGrid';
 import type { GridColumn, GridRow, GridView } from '@/components/datagrid/types';
 import { PageHeader } from '@/components/ui/page-header';
 import { formatDateTime } from '@/lib/datagrid/format';
+import {
+  ALERT_MODES,
+  type AlertMode,
+  type AlertPrefs,
+  type ChangesResponse,
+  DEFAULT_ALERTS,
+  alertsKey,
+  markSeen,
+  mergeChanges,
+  nextSince,
+  parseAlerts,
+  summarizeChanges,
+} from '@/lib/datagrid/tracker-live';
+import { LIVE_FLASH_MS, beep, desktopNotify, unlockAudio } from '@/lib/live-signal';
 import { DOT_TONE, type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import {
   ArrowLeft,
+  Bell,
+  CopyX,
+  ExternalLink,
   FolderSync,
   History,
   LayoutPanelTop,
@@ -17,10 +34,11 @@ import {
   Ruler,
   ScanSearch,
   Table2,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ActionResult,
   HistoryEntry,
@@ -233,28 +251,245 @@ export function TrackerScreen({
   const canLookups = Boolean(lookupActions && data.canManageLookups);
   useEffect(() => setColumns(data.columns), [data.columns]);
 
+  // --- En vivo -----------------------------------------------------------------
+  // Las filas viven aquí (no sólo en la grilla) para poder mezclarles lo que
+  // llega sin recargar. Una recarga del servidor (router.refresh) las reemplaza.
+  const [rows, setRows] = useState<GridRow[]>(data.rows);
+  const [total, setTotal] = useState(data.total);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  useEffect(() => {
+    setRows(data.rows);
+    setTotal(data.total);
+  }, [data.rows, data.total]);
+  const applyRows = useCallback((next: GridRow[]) => {
+    rowsRef.current = next;
+    setRows(next);
+  }, []);
+  // Lo que esta persona acaba de escribir: se integra, pero no avisa.
+  const mine = useRef(new Map<string, number>());
+  const markMine = useCallback((ids: string[]) => {
+    const until = Date.now() + 45_000;
+    for (const id of ids) mine.current.set(id, until);
+  }, []);
+
+  const [flashIds, setFlashIds] = useState<ReadonlySet<string>>(new Set());
+  const [prefs, setPrefs] = useState<AlertPrefs>(DEFAULT_ALERTS);
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+  const [liveToast, setLiveToast] = useState<{ text: string; ids: string[] } | null>(null);
+  // Lo que la grilla muestra: todo, sólo duplicados, o sólo lo que llegó.
+  const [focus, setFocus] = useState<'duplicates' | { ids: Set<string> } | null>(null);
+
+  // La preferencia es de cada persona y de cada tabla: vive en su navegador.
+  useEffect(() => {
+    try {
+      setPrefs(parseAlerts(window.localStorage.getItem(alertsKey(tracker.slug))));
+    } catch {
+      // Sin localStorage (ventana privada): se queda el default.
+    }
+  }, [tracker.slug]);
+  const savePrefs = (next: AlertPrefs) => {
+    setPrefs(next);
+    try {
+      window.localStorage.setItem(alertsKey(tracker.slug), JSON.stringify(next));
+    } catch {
+      // No se pudo guardar: vale para esta sesión.
+    }
+  };
+  const onMode = (mode: AlertMode) => {
+    // El navegador sólo deja sonar tras un gesto: este clic es ese gesto.
+    if (mode === 'sound') unlockAudio();
+    savePrefs({ ...prefs, mode });
+  };
+  const onSystem = async (on: boolean) => {
+    if (!on) return savePrefs({ ...prefs, system: false });
+    if (typeof Notification === 'undefined') {
+      setNotice({ tone: 'error', text: 'Este navegador no muestra notificaciones del sistema.' });
+      return;
+    }
+    const perm =
+      Notification.permission === 'default'
+        ? await Notification.requestPermission()
+        : Notification.permission;
+    if (perm !== 'granted') {
+      setNotice({
+        tone: 'error',
+        text: 'El navegador no dio permiso para notificaciones. Se activa en los ajustes del sitio.',
+      });
+      return;
+    }
+    savePrefs({ ...prefs, system: true });
+  };
+  // Con sonido guardado de otra visita no hay gesto todavía: el primer toque lo destraba.
+  useEffect(() => {
+    if (prefs.mode !== 'sound') return;
+    const unlock = () => unlockAudio();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, [prefs.mode]);
+
+  const flashTimers = useRef(new Set<number>());
+  const pendingFlash = useRef<string[]>([]);
+  const flash = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    setFlashIds((cur) => new Set([...cur, ...ids]));
+    const t = window.setTimeout(() => {
+      flashTimers.current.delete(t);
+      setFlashIds((cur) => {
+        const next = new Set(cur);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    }, LIVE_FLASH_MS);
+    flashTimers.current.add(t);
+  }, []);
+  useEffect(() => {
+    const timers = flashTimers.current;
+    return () => {
+      for (const t of timers) window.clearTimeout(t);
+    };
+  }, []);
+
+  const sinceRef = useRef(nextSince(data.loadedAt ?? new Date().toISOString()));
+  useEffect(() => {
+    sinceRef.current = nextSince(data.loadedAt ?? new Date().toISOString());
+  }, [data.loadedAt]);
+  const toastTimer = useRef<number | undefined>(undefined);
+
+  // Pregunta qué cambió y lo integra. Una sola a la vez.
+  const polling = useRef(false);
+  const slug = tracker.slug;
+  const trackerName = tracker.name;
+  const poll = useCallback(async () => {
+    if (polling.current) return;
+    polling.current = true;
+    try {
+      for (let guard = 0; guard < 5; guard++) {
+        const res = await fetch(
+          `/api/trackers/${encodeURIComponent(slug)}/changes?since=${encodeURIComponent(sinceRef.current)}`,
+          { cache: 'no-store' },
+        );
+        if (!res.ok) return;
+        const body = (await res.json()) as ChangesResponse;
+        const nowMs = Date.now();
+        for (const [id, until] of mine.current) if (until < nowMs) mine.current.delete(id);
+        const merged = mergeChanges(rowsRef.current, body.rows, new Set(mine.current.keys()));
+        sinceRef.current = nextSince(body.now);
+        if (merged.rows !== rowsRef.current && body.rows.length) applyRows(merged.rows);
+        if (merged.created) setTotal((t) => t + merged.created);
+        const p = prefsRef.current;
+        if (merged.fresh.length && p.mode !== 'off') {
+          if (document.visibilityState === 'visible') flash(merged.fresh);
+          else pendingFlash.current.push(...merged.fresh);
+          const text = summarizeChanges(merged, trackerName);
+          if (p.mode === 'toast' || p.mode === 'sound') {
+            setLiveToast({ text, ids: merged.fresh });
+            window.clearTimeout(toastTimer.current);
+            toastTimer.current = window.setTimeout(() => setLiveToast(null), 9000);
+          }
+          if (p.mode === 'sound') beep();
+          if (p.system) desktopNotify(trackerName, text);
+        }
+        if (!body.truncated) return;
+      }
+    } catch {
+      // Sin red un momento: la próxima vuelta lo reintenta.
+    } finally {
+      polling.current = false;
+    }
+  }, [slug, trackerName, applyRows, flash]);
+
+  useEffect(() => {
+    const tick = () => {
+      // Oculta no se pregunta, salvo que pidan notificación del sistema:
+      // esa es justo para cuando la pestaña no se ve.
+      if (document.visibilityState === 'hidden' && !prefsRef.current.system) return;
+      void poll();
+    };
+    const id = window.setInterval(tick, 15_000);
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (pendingFlash.current.length) {
+        flash(pendingFlash.current);
+        pendingFlash.current = [];
+      }
+      void poll();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(id);
+      window.clearTimeout(toastTimer.current);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [poll, flash]);
+
+  // Visitada: el índice deja de marcarla «nueva» hasta el próximo cambio.
+  useEffect(() => {
+    markSeen(slug);
+    const onHide = () => markSeen(slug);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      markSeen(slug);
+    };
+  }, [slug]);
+
+  const duplicateCount = useMemo(() => rows.filter((r) => r.alert).length, [rows]);
+  const shownRows = useMemo(() => {
+    if (!focus) return rows;
+    if (focus === 'duplicates') return rows.filter((r) => r.alert);
+    return rows.filter((r) => focus.ids.has(r.id));
+  }, [rows, focus]);
+  // Con un recorte activo la grilla trabaja sobre lo cargado, no sobre el servidor.
+  useEffect(() => {
+    if (focus === 'duplicates' && !duplicateCount) setFocus(null);
+  }, [focus, duplicateCount]);
+
   const onEdit = useCallback(
     async (rowId: string, key: string, value: unknown) => {
-      await unwrap(actions.edit(tracker.id, rowId, key, value));
+      const out = await unwrap(actions.edit(tracker.id, rowId, key, value));
+      markMine([rowId]);
+      // La fila que devuelve el servidor es la verdad: así una mezcla en vivo
+      // no deshace la edición con una copia vieja.
+      if (out.row) applyRows(rowsRef.current.map((r) => (r.id === rowId ? out.row : r)));
     },
-    [actions, tracker.id],
+    [actions, tracker.id, markMine, applyRows],
   );
   const onCreate = useCallback(
-    async (values: Record<string, unknown>) =>
-      (await unwrap(actions.create(tracker.id, values))).row,
-    [actions, tracker.id],
+    async (values: Record<string, unknown>) => {
+      const { row } = await unwrap(actions.create(tracker.id, values));
+      markMine([row.id]);
+      if (!rowsRef.current.some((r) => r.id === row.id)) {
+        applyRows([row, ...rowsRef.current]);
+        setTotal((t) => t + 1);
+      }
+      return row;
+    },
+    [actions, tracker.id, markMine, applyRows],
   );
   const onDelete = useCallback(
     async (ids: string[]) => {
       await unwrap(actions.remove(tracker.id, ids));
+      const gone = new Set(ids);
+      const left = rowsRef.current.filter((r) => !gone.has(r.id));
+      setTotal((t) => Math.max(0, t - (rowsRef.current.length - left.length)));
+      applyRows(left);
     },
-    [actions, tracker.id],
+    [actions, tracker.id, applyRows],
   );
   const onBulkEdit = useCallback(
     async (ids: string[], key: string, value: unknown) => {
       await unwrap(actions.bulkEdit(tracker.id, ids, key, value));
+      markMine(ids);
+      const set = new Set(ids);
+      applyRows(
+        rowsRef.current.map((r) =>
+          set.has(r.id) ? { ...r, values: { ...r.values, [key]: value } } : r,
+        ),
+      );
     },
-    [actions, tracker.id],
+    [actions, tracker.id, markMine, applyRows],
   );
   const onAddColumn = useCallback(
     async (col: Omit<GridColumn, 'key'> & { key?: string }) => {
@@ -286,6 +521,21 @@ export function TrackerScreen({
     if (r.ok) window.setTimeout(() => router.refresh(), 4000);
   };
 
+  // «Abrir en Google Sheets» / «Abrir carpeta», uno por fuente con enlace conocido.
+  const sheetLinks = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ href: string; label: string }> = [];
+    for (const sy of data.syncs) {
+      if (!sy.openUrl || seen.has(sy.openUrl)) continue;
+      seen.add(sy.openUrl);
+      out.push({
+        href: sy.openUrl,
+        label: sy.kind === 'drive_folder' ? 'Abrir carpeta' : 'Abrir en Google Sheets',
+      });
+    }
+    return out;
+  }, [data.syncs]);
+
   const describe = useMemo(
     () => `Sobre la tabla «${tracker.name}» (${tracker.fields.map((f) => f.label).join(', ')}):`,
     [tracker.name, tracker.fields],
@@ -312,6 +562,12 @@ export function TrackerScreen({
                 Consultar una API por fila
               </button>
             ) : null}
+            {sheetLinks.map((l) => (
+              <a key={l.href} href={l.href} target="_blank" rel="noreferrer" className={pill}>
+                <ExternalLink className="h-4 w-4" aria-hidden />
+                {l.label}
+              </a>
+            ))}
             <Link href={viewHref} className={pill}>
               <LayoutPanelTop className="h-4 w-4" aria-hidden />
               Crear una vista con esta tabla
@@ -406,14 +662,73 @@ export function TrackerScreen({
         />
       ) : null}
 
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {duplicateCount ? (
+          <button
+            type="button"
+            aria-pressed={focus === 'duplicates'}
+            onClick={() => setFocus((f) => (f === 'duplicates' ? null : 'duplicates'))}
+            className={clsx(
+              'inline-flex min-h-8 items-center gap-1.5 rounded-pill border px-3 py-1 text-xs font-bold transition-colors',
+              focus === 'duplicates'
+                ? 'border-rose bg-rose text-white'
+                : 'border-rose/30 bg-rose-soft text-rose hover:brightness-95',
+            )}
+          >
+            <CopyX className="h-3.5 w-3.5" aria-hidden />
+            {duplicateCount} {duplicateCount === 1 ? 'duplicado' : 'duplicados'}
+          </button>
+        ) : null}
+        {focus && focus !== 'duplicates' ? (
+          <button
+            type="button"
+            onClick={() => setFocus(null)}
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-pill border border-primary/20 bg-primary-soft px-3 py-1 text-xs font-bold text-primary-ink"
+          >
+            Mostrando lo que llegó ({focus.ids.size})
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        ) : null}
+        <div className="ml-auto flex flex-wrap items-center gap-3 text-xs text-ink-muted">
+          <label className="inline-flex items-center gap-1.5 font-semibold">
+            <Bell className="h-3.5 w-3.5" aria-hidden />
+            Avisos
+            <select
+              value={prefs.mode}
+              onChange={(e) => onMode(e.target.value as AlertMode)}
+              aria-label="Avisos cuando llegan filas nuevas"
+              className="rounded-pill border border-border-strong bg-surface px-2.5 py-1 text-xs font-semibold text-ink"
+            >
+              {ALERT_MODES.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {prefs.mode !== 'off' ? (
+            <label className="inline-flex cursor-pointer items-center gap-1.5 font-semibold">
+              <input
+                type="checkbox"
+                checked={prefs.system}
+                onChange={(e) => void onSystem(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[rgb(var(--primary))]"
+              />
+              Notificación del sistema
+            </label>
+          ) : null}
+        </div>
+      </div>
+
       <DataGrid
         columns={columns}
-        rows={data.rows}
-        total={data.total}
+        rows={shownRows}
+        total={focus ? shownRows.length : total}
+        flashIds={flashIds}
         savedViews={data.savedViews}
         onSaveView={onSaveView}
         onDeleteView={onDeleteView}
-        onQuery={data.total > data.rows.length ? onQuery : undefined}
+        onQuery={!focus && total > rows.length ? onQuery : undefined}
         onEdit={onEdit}
         onCreate={onCreate}
         onDelete={onDelete}
@@ -435,6 +750,35 @@ export function TrackerScreen({
           <RowHistory trackerId={tracker.id} row={row} load={actions.history} />
         )}
       />
+
+      {liveToast ? (
+        <div
+          aria-live="polite"
+          className="pointer-events-none fixed inset-x-0 bottom-20 z-[80] flex justify-center px-4"
+        >
+          <output className="pointer-events-auto flex max-w-md items-center gap-3 rounded-card border border-border bg-surface px-4 py-3 text-xs font-semibold text-ink shadow-pop">
+            <span className="min-w-0 flex-1">{liveToast.text}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setFocus({ ids: new Set(liveToast.ids) });
+                setLiveToast(null);
+              }}
+              className="rounded-pill px-2.5 py-1 font-bold text-primary hover:bg-primary-soft"
+            >
+              Ver
+            </button>
+            <button
+              type="button"
+              onClick={() => setLiveToast(null)}
+              className="-m-1 rounded-pill p-1 opacity-70 hover:opacity-100"
+              aria-label="Cerrar aviso"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </output>
+        </div>
+      ) : null}
     </>
   );
 }
