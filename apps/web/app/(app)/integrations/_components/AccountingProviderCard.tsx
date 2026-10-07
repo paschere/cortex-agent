@@ -238,6 +238,9 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
           ))}
         </ul>
       )}
+      {card.connected && mode === 'view' && card.purchaseStatus && (
+        <p className="text-xs leading-snug text-ink-muted">{card.purchaseStatus}</p>
+      )}
 
       {mode === 'connect' && oauth && (
         <form

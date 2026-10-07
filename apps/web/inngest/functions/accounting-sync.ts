@@ -3,16 +3,18 @@ import type { JobContext, JobHandler } from '@/lib/jobs';
 import { notify } from '@/lib/notifications/notify';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
+  type PurchaseCursor,
   accountingNoticeFor,
   accountingTableSpec,
-  addDays,
   bogotaToday,
   claimAccountingConnection,
   getAccountingProvider,
   importAccountingProducts,
   importAccountingPurchases,
   markAccountingRun,
+  nextPurchaseCursor,
   openAccountingSession,
+  planPurchaseSync,
   providerName,
   runAccountingSync,
   syncLedger,
@@ -150,39 +152,83 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
 
   // 0181: las compras (facturas de proveedor) que el programa expone entran a
   // cuentas por pagar, con dedupe contra las que llegaron por correo o por la
-  // Bandeja. Sólo lectura en el programa. Su propio paso: si falla, lo demás
-  // ya quedó y se reintenta en la próxima corrida.
+  // Bandeja. Siigo carga todo el historial en páginas reanudables; los otros
+  // programas conservan la ventana móvil de 90 días. Sólo lectura.
+  let purchasesPartial = false;
   if ('status' in outcome && outcome.status !== 'error')
-    await step.run('supplier-invoices', async () => {
+    purchasesPartial = await step.run('supplier-invoices', async () => {
       try {
         const { data: conn, error } = await db
           .from('accounting_connections')
-          .select('provider')
+          .select('provider, cursors')
           .eq('id', connectionId)
           .maybeSingle();
         if (error) throw error;
         const system = (conn as { provider?: string } | null)?.provider;
-        if (!system) return { skipped: 'sin conexión' };
+        if (!system) return false;
         const session = await openAccountingSession(db, connectionId);
-        if (!session.listPurchases) return { skipped: 'el programa no expone compras' };
+        if (!session.listPurchases) return false;
         const today = bogotaToday();
-        const since = addDays(today, -90);
-        const purchases = [];
-        for (let page = 1; page <= 10; page++) {
-          const r = await session.listPurchases(since, page);
-          purchases.push(...r.records);
-          if (!r.hasMore) break;
+        const cursors = ((conn as { cursors?: Record<string, unknown> }).cursors ?? {}) as Record<
+          string,
+          unknown
+        > & { purchases?: PurchaseCursor };
+        const previous = cursors.purchases;
+        const provider = getAccountingProvider(system);
+        if (!provider) return false;
+        const plan = planPurchaseSync(provider.id, previous, new Date());
+        const firstPage = plan.page;
+        let page = firstPage;
+        let hasMore = false;
+        let seen = 0;
+        let created = 0;
+        let paid = 0;
+        let importErrors = 0;
+        for (; page < firstPage + 10; page++) {
+          const r = await session.listPurchases(plan.since, page);
+          seen += r.records.length;
+          const imported = await importAccountingPurchases(db, r.records, { system, today });
+          created += imported.created;
+          paid += imported.paid;
+          importErrors += imported.errors.length;
+          if (imported.errors.length > 0)
+            throw new Error(`${imported.errors.length} compra(s) no se pudieron guardar.`);
+          hasMore = r.hasMore;
+          if (!hasMore) break;
         }
-        const r = await importAccountingPurchases(db, purchases, { system, today });
-        return {
-          seen: purchases.length,
-          created: r.created,
-          paid: r.paid,
-          errors: r.errors.length,
-        };
+        const partial = hasMore;
+        const nextPurchaseState = nextPurchaseCursor(
+          previous,
+          plan,
+          partial ? page : null,
+          new Date(),
+        );
+        const { error: updateError } = await db
+          .from('accounting_connections')
+          .update({
+            cursors: { ...cursors, purchases: nextPurchaseState },
+            ...(partial ? { last_status: 'partial', next_run_at: new Date().toISOString() } : {}),
+          })
+          .eq('id', connectionId);
+        if (updateError) throw updateError;
+        logger.info(
+          { organizationId, system, mode: plan.mode, seen, created, paid, importErrors, partial },
+          'accounting purchases synced',
+        );
+        return partial;
       } catch (err) {
         logger.warn({ err, organizationId }, 'accounting purchases into payables failed');
-        return { failed: true as const };
+        await db
+          .from('accounting_connections')
+          .update({
+            last_status: 'error',
+            last_error:
+              err instanceof Error
+                ? `No pude traer las compras: ${err.message}`.slice(0, 500)
+                : 'No pude traer las compras.',
+          })
+          .eq('id', connectionId);
+        return false;
       }
     });
 
@@ -197,6 +243,11 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
   // Una carga a medias sigue enseguida, sin esperar al próximo barrido.
   if ('status' in outcome && outcome.status === 'partial')
     await step.sendEvent('continue', {
+      name: 'accounting/run' as const,
+      data: { organizationId, connectionId },
+    });
+  else if (purchasesPartial)
+    await step.sendEvent('continue-purchases', {
       name: 'accounting/run' as const,
       data: { organizationId, connectionId },
     });

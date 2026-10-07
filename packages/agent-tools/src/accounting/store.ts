@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError, decryptToken, encryptToken } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAccountingProvider } from './providers';
+import type { PurchaseCursor } from './purchase-plan';
 import {
   ACCOUNTING_ENTITIES,
   type AccountingEntity,
@@ -30,6 +31,8 @@ export const CONNECTION_COLUMNS =
   'id, provider, created_by, account_label, entities, trackers, cursors, interval_minutes, notify, enabled, next_run_at, last_run_at, last_status, last_error, last_counts, created_at, updated_at';
 
 export interface EntityCursor {
+  /** Bump when a provider's initial query coverage expands. */
+  coverage_version?: number;
   /** Hasta cuándo se trajo (ISO). La próxima corrida pide lo creado o cambiado desde aquí. */
   since?: string;
   /** Último repaso de las facturas recientes (por los abonos). */
@@ -74,7 +77,7 @@ export interface AccountingConnectionRow {
   account_label: string;
   entities: AccountingEntity[];
   trackers: Partial<Record<AccountingEntity, string>>;
-  cursors: Partial<Record<AccountingEntity, EntityCursor>>;
+  cursors: Partial<Record<AccountingEntity, EntityCursor>> & { purchases?: PurchaseCursor };
   interval_minutes: number;
   notify: boolean;
   enabled: boolean;

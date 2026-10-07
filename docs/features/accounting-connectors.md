@@ -1,6 +1,6 @@
 # Programas contables conectados directo
 
-Un administrador conecta el programa de contabilidad de la empresa una vez y Cortex trae solo clientes, productos, facturas de venta y pagos recibidos a tablas de la empresa, y las facturas con saldo a la cartera y a «plata en riesgo». Hoy: **Siigo Nube**, **Alegra** y **QuickBooks Online**, los tres sobre la misma capa (mismo motor, mismas tablas, misma cartera). Migración `0165_accounting_connectors.sql`; no hay migración nueva: `provider` ya aceptaba `alegra` y `quickbooks`.
+Un administrador conecta el programa de contabilidad de la empresa una vez y Cortex trae terceros, productos, facturas de venta y pagos recibidos a tablas de la empresa, y las facturas con saldo a la cartera y a «plata en riesgo». Siigo también trae facturas de compra a cuentas por pagar. Hoy: **Siigo Nube**, **Alegra** y **QuickBooks Online**, los tres sobre la misma capa (mismo motor, mismas tablas, misma cartera). La conexión usa la migración `0165_accounting_connectors.sql`.
 
 ## Cómo se usa
 - **Integraciones → Programas contables** (`/integrations#programas-contables`, sólo dueños y administradores). En cada tarjeta: qué traer, cada cuánto (60 min por defecto, de 15 min a un día) y si avisa, más:
@@ -15,10 +15,11 @@ Un administrador conecta el programa de contabilidad de la empresa una vez y Cor
 ## Qué llega a dónde
 | Siigo | Tabla de la empresa | Además |
 |---|---|---|
-| Clientes (`/v1/customers`) | «Clientes (Siigo)» `siigo_clientes` | nombres para facturas y pagos |
+| Terceros (`/v1/customers`) | «Clientes (Siigo)» `siigo_clientes`, con relación Cliente / Proveedor / Otro | los clientes se vinculan al CRM; proveedores no se crean como clientes |
 | Productos (`/v1/products`) | «Productos (Siigo)» `siigo_productos` | — |
 | Facturas de venta (`/v1/invoices`) | «Facturas (Siigo)» `siigo_facturas` (número, cliente, NIT, fecha, vence, total, saldo, estado, factura electrónica…) | `accounting_invoices` → cartera y plata en riesgo |
 | Recibos de caja (`/v1/vouchers`) | «Recibos de caja (Siigo)» `siigo_pagos` | Pagos, por `importSystemPayments` con `source_system = 'siigo'` |
+| Facturas de compra (`/v1/purchases`) | — | Cuentas por pagar; historial reanudable |
 
 | Alegra | Tabla de la empresa | Además |
 |---|---|---|
@@ -41,7 +42,7 @@ Un administrador conecta el programa de contabilidad de la empresa una vez y Cor
 
 ## Cómo corre
 - `accounting/dispatch` cada 15 min (pg-boss en `services/jobs` + Inngest de respaldo) → `accounting/run` por conexión vencida. La toma (`claimAccountingConnection`) impide dos corridas a la vez.
-- Primera vez: el último año de facturas y pagos y todos los clientes y productos. Una vez al día, además, las facturas de los últimos 6 meses, porque un abono no siempre marca la factura como modificada. Después, lo incremental depende del programa (10 min de margen en todos):
+- Primera vez: Siigo recorre todos los terceros (incluidos proveedores e inactivos), los productos, el historial de facturas de venta, recibos de caja y facturas de compra disponible por API. Las compras se reanudan por página y tienen un repaso histórico cada 30 días. Alegra y QuickBooks conservan el último año inicial de facturas y pagos. Una vez al día se repasan las facturas de los últimos 6 meses, porque un abono no siempre marca la factura como modificada. Después, lo incremental depende del programa (10 min de margen en todos):
   - **Siigo**: lo creado **y** lo modificado desde la corrida anterior (`created_start` / `updated_start`).
   - **QuickBooks**: `MetaData.LastUpdatedTime >= …` en orden de modificación (una consulta cubre lo nuevo y lo cambiado).
   - **Alegra** no tiene filtro de «cambiado desde»: facturas con fecha desde 3 días antes de la corrida anterior (`date_afterOrNow`); pagos del más reciente al más viejo hasta 7 días antes (Alegra no filtra pagos por fecha, así que se corta al pasar la fecha); clientes y productos completos una vez al día (la primera corrida de cada día en Bogotá). Consecuencia: un abono a una factura vieja se ve en la tabla de pagos en la hora, pero el saldo de esa factura en la cartera se corrige en el repaso diario (hasta 24 h).
@@ -70,8 +71,8 @@ Un administrador conecta el programa de contabilidad de la empresa una vez y Cor
 Escribir `packages/agent-tools/src/accounting/providers/<programa>.ts` (y su `-client.ts`) con la forma de `siigo.ts`, `alegra.ts` o `quickbooks.ts` — credenciales, `open()` (autenticar, listar por páginas) y la traducción a la forma común de `accounting/types.ts` — registrarlo en `providers/index.ts` y ampliar el `check` de `provider` en `accounting_connections` (migración nueva). El motor, las tablas, la cartera, los pagos, las herramientas y la tarjeta no cambian. Un programa con OAuth declara `connect: 'oauth'` y `setupMissing()`, guarda su refresh token con `tokenStore.saveCredentials` y necesita sus rutas de inicio y vuelta como las de QuickBooks.
 
 ## Límites
-- Sólo lectura: Cortex no crea ni modifica nada en Siigo, Alegra ni QuickBooks.
-- Facturas de venta y pagos recibidos; no notas crédito, compras, cuentas por pagar ni comprobantes contables (todavía).
+- La sincronización sólo lee. Otras acciones del producto que escriben en el programa necesitan una aprobación independiente.
+- La primera carga de compras de Siigo llega a cuentas por pagar; notas crédito, egresos, cotizaciones y comprobantes contables aún no tienen carga propia.
 - Un pago anulado después de traído (Alegra `void`, Siigo) no se borra de Pagos; una factura borrada en QuickBooks (no anulada) se queda en la tabla y la cartera con su último saldo.
 - Alegra: un pago a varias facturas sin el valor de cada una entra como un pago sin factura (no se reparte a ciegas).
 - La cartera mira hasta 1.000 facturas abiertas por consulta, como el resto del módulo.

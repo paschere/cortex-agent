@@ -80,6 +80,7 @@ const BASE: Record<
     fields: [
       text('nombre', 'Nombre'),
       text('nit', 'NIT / Documento'),
+      select('relacion', 'Relación', ['Cliente', 'Proveedor', 'Otro']),
       select('tipo', 'Tipo', ['Empresa', 'Persona']),
       text('ciudad', 'Ciudad'),
       text('direccion', 'Dirección'),
@@ -211,6 +212,7 @@ export function customerValues(c: NormalizedCustomer): Values {
   return compact({
     nombre: c.name,
     nit: c.taxIdDisplay ?? c.taxId,
+    relacion: c.relationship,
     tipo: c.kind,
     ciudad: c.city,
     direccion: c.address,

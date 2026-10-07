@@ -17,55 +17,63 @@ interface DriveStatus {
   connected: boolean;
   folder: { id: string; name: string | null } | null;
   lastSyncedAt: string | null;
+  lastError: string | null;
   gdriveDocCount: number;
+  failedCount: number;
+  pendingCount: number;
 }
 
 async function fetchStatus(spaceId: string): Promise<DriveStatus> {
   const r = await fetch(`/api/kb/drive/status?spaceId=${spaceId}`);
+  if (!r.ok) throw new Error('No se pudo consultar la sincronización de Drive.');
   const j = (await r.json()) as Partial<DriveStatus>;
   return {
     connected: j.connected ?? false,
     folder: j.folder ?? null,
     lastSyncedAt: j.lastSyncedAt ?? null,
+    lastError: j.lastError ?? null,
     gdriveDocCount: j.gdriveDocCount ?? 0,
+    failedCount: j.failedCount ?? 0,
+    pendingCount: j.pendingCount ?? 0,
   };
 }
 
 export function DriveSyncPanel({ spaceId }: { spaceId: string }) {
   const [open, setOpen] = useState(false);
 
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ['drive-sync', spaceId],
     queryFn: () => fetchStatus(spaceId),
     // Poll while a folder is linked but the first sync hasn't landed yet.
     refetchInterval: (query) => {
       const s = query.state.data;
-      if (s?.folder && !s.lastSyncedAt) return 3000;
+      if (s?.folder && !s.lastSyncedAt) return 30_000;
       return false;
     },
   });
 
   const connected = data?.connected;
   const folder = data?.folder ?? null;
-  const synced = !!folder && !!data?.lastSyncedAt;
+  const recent = !!data?.lastSyncedAt && Date.now() - Date.parse(data.lastSyncedAt) < 30 * 60_000;
+  const synced = !!folder && recent && !data.lastError && !data.failedCount && !data.pendingCount;
+  const syncLabel = data?.lastError
+    ? `Falló la sincronización: ${data.lastError}`
+    : data?.failedCount
+      ? `${plural(data.failedCount, 'archivo con error', 'archivos con error')}`
+      : data?.pendingCount
+        ? `${plural(data.pendingCount, 'archivo procesándose', 'archivos procesándose')}`
+        : recent && data?.lastSyncedAt
+          ? `Al día ${ago(data.lastSyncedAt)}`
+          : data?.lastSyncedAt
+            ? `Última revisión ${ago(data.lastSyncedAt)}`
+            : 'Esperando la primera sincronización…';
 
   return (
     <div>
-      {!data ? (
+      {error ? (
+        <p className="text-xs text-rose">No se pudo consultar la sincronización de Drive.</p>
+      ) : !data ? (
         <div className="h-9 w-40 animate-pulse rounded-card bg-surface-2" />
-      ) : !connected ? (
-        <div className="flex flex-col items-start gap-3">
-          <p className="text-xs text-ink-muted">
-            Conecta Google Drive y enlaza una carpeta: lo que pongas ahí entra solo.
-          </p>
-          <a
-            href="/api/integrations/google?preset=drive"
-            className="inline-flex items-center justify-center gap-1.5 rounded-card bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-strong"
-          >
-            <FolderSearch className="h-3.5 w-3.5" />
-            Conectar Google Drive
-          </a>
-        </div>
       ) : folder ? (
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3 rounded-card border border-border bg-surface-2 px-3 py-2.5">
@@ -78,13 +86,9 @@ export function DriveSyncPanel({ spaceId }: { spaceId: string }) {
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${synced ? 'bg-emerald' : 'bg-amber'}`}
+                  className={`h-1.5 w-1.5 rounded-full ${synced ? 'bg-emerald' : data.lastError || data.failedCount ? 'bg-rose' : 'bg-amber'}`}
                 />
-                <span>
-                  {data.lastSyncedAt
-                    ? `Al día ${ago(data.lastSyncedAt)}`
-                    : 'Esperando la primera sincronización…'}
-                </span>
+                <span>{syncLabel}</span>
                 <span>&middot;</span>
                 <span className="tabular">
                   {plural(data.gdriveDocCount, 'archivo', 'archivos')}
@@ -92,14 +96,36 @@ export function DriveSyncPanel({ spaceId }: { spaceId: string }) {
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => setOpen(true)}>
-              Cambiar de carpeta
-            </Button>
-            <Button variant="ghost" onClick={() => setOpen(true)}>
-              Ver Drive
-            </Button>
-          </div>
+          {connected ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={() => setOpen(true)}>
+                Cambiar de carpeta
+              </Button>
+              <Button variant="ghost" onClick={() => setOpen(true)}>
+                Ver Drive
+              </Button>
+            </div>
+          ) : (
+            <a
+              href="/api/integrations/google?preset=drive"
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              Conecta tu Google para explorar Drive
+            </a>
+          )}
+        </div>
+      ) : !connected ? (
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-xs text-ink-muted">
+            Conecta Google Drive y enlaza una carpeta: lo que pongas ahí entra solo.
+          </p>
+          <a
+            href="/api/integrations/google?preset=drive"
+            className="inline-flex items-center justify-center gap-1.5 rounded-card bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-strong"
+          >
+            <FolderSearch className="h-3.5 w-3.5" />
+            Conectar Google Drive
+          </a>
         </div>
       ) : (
         <div className="flex flex-col items-start gap-3">

@@ -38,19 +38,42 @@ export async function GET(req: NextRequest) {
   const folderId = collection.gdrive_folder_id as string | null;
   const folder = folderId ? { id: folderId, name: null } : null;
 
-  const { data: syncState } = await sb
+  const { data: syncState, error: syncError } = await sb
     .from('gdrive_sync_state')
-    .select('last_synced_at')
+    .select('last_completed_at, last_error')
     .eq('collection_id', collectionId)
     .maybeSingle();
-  const lastSyncedAt = (syncState?.last_synced_at as string | undefined) ?? null;
+  if (syncError) {
+    return NextResponse.json({ error: 'Could not load Drive sync status' }, { status: 500 });
+  }
+  const lastSyncedAt = (syncState?.last_completed_at as string | undefined) ?? null;
+  const lastError = (syncState?.last_error as string | undefined) ?? null;
 
-  const { count } = await sb
-    .from('kb_documents')
-    .select('id', { count: 'exact', head: true })
-    .eq('collection_id', collectionId)
-    .eq('source', 'gdrive');
-  const gdriveDocCount = count ?? 0;
+  const countDocuments = (status?: string) => {
+    let query = sb
+      .from('kb_documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('collection_id', collectionId)
+      .eq('source', 'gdrive');
+    if (status) query = query.eq('status', status);
+    return query;
+  };
+  const [all, failed, pending] = await Promise.all([
+    countDocuments(),
+    countDocuments('failed'),
+    countDocuments('pending'),
+  ]);
+  if (all.error || failed.error || pending.error) {
+    return NextResponse.json({ error: 'Could not load Drive sync status' }, { status: 500 });
+  }
 
-  return NextResponse.json({ connected, folder, lastSyncedAt, gdriveDocCount });
+  return NextResponse.json({
+    connected,
+    folder,
+    lastSyncedAt,
+    lastError,
+    gdriveDocCount: all.count ?? 0,
+    failedCount: failed.count ?? 0,
+    pendingCount: pending.count ?? 0,
+  });
 }

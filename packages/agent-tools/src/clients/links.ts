@@ -398,6 +398,7 @@ export async function accountingCustomersMissing(
       for (const r of (rows.data ?? []) as Array<{ values: Record<string, unknown> | null }>) {
         const v = r.values ?? {};
         if (String(v.estado ?? '') === 'Inactivo') continue;
+        if (v.relacion && v.relacion !== 'Cliente') continue;
         const name = typeof v.nombre === 'string' ? v.nombre.trim() : '';
         const variants = nitVariants(v.nit == null ? null : String(v.nit));
         // Con el DV pegado hay dos lecturas: vale la que una factura confirme.

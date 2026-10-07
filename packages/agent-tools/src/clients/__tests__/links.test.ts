@@ -210,6 +210,34 @@ describe('linkClientRecords', () => {
     expect(JSON.stringify(fake.tables)).toBe(snapshot);
   });
 
+  it('no crea proveedores de Siigo como clientes del CRM', async () => {
+    const { fake, db } = setup();
+    (fake.tables.accounting_connections as Array<Record<string, unknown>>).push({
+      id: 'conn-siigo',
+      organization_id: ACME,
+      provider: 'siigo',
+      trackers: { customers: 'third-parties' },
+    });
+    fake.tables.tracker_rows = [
+      {
+        id: 'supplier-row',
+        organization_id: ACME,
+        tracker_id: 'third-parties',
+        values: {
+          nombre: 'Proveedor Exclusivo',
+          nit: '901234567',
+          relacion: 'Proveedor',
+          estado: 'Activo',
+        },
+      },
+    ];
+    await linkClientRecords(db, { userId: ANA });
+    const created = (fake.tables.clients as Array<Record<string, unknown>>).filter(
+      (c) => c.source === 'accounting',
+    );
+    expect(created.map((c) => c.name)).toEqual(['Ecopetrol']);
+  });
+
   it('confirmar una propuesta descarta la rival, llena la columna y puede aprender el nombre', async () => {
     const { fake, db } = setup();
     await linkClientRecords(db, { userId: ANA });

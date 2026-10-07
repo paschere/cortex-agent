@@ -154,7 +154,7 @@ export async function siigoPurchasePage(
   since: string,
   page: number,
 ): Promise<PurchasePage> {
-  const result = await client.page<Raw>('/v1/purchases', { date_start: since }, page);
+  const result = await client.page<Raw>('/v1/purchases', since ? { date_start: since } : {}, page);
   return {
     records: keep(result.results.map((r) => normalizeSiigoPurchase(r))),
     hasMore: hasMorePages(result),

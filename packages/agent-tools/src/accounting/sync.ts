@@ -44,7 +44,8 @@ import { ACCOUNTING_ENTITIES } from './types';
  * Una corrida, por cada cosa elegida y en este orden —clientes primero, para
  * que las facturas y los pagos salgan con el nombre del cliente—:
  *
- *   1. Decide qué pedir (`planEntity`): la primera vez, el último año; después,
+ *   1. Decide qué pedir (`planEntity`): la primera vez, el historial que permita
+ *      el programa (Siigo completo); después,
  *      lo creado o cambiado desde la corrida anterior, con diez minutos de
  *      margen; y una vez al día, además, las facturas recientes, porque un abono
  *      no siempre marca la factura como modificada.
@@ -85,14 +86,14 @@ export interface EntityPlan {
 
 /** Qué pedir de una cosa en esta corrida. Puro. */
 export function planEntity(
-  provider: Pick<AccountingProvider, 'queries'>,
+  provider: Pick<AccountingProvider, 'id' | 'queries'>,
   entity: AccountingEntity,
   cursor: EntityCursor | undefined,
   now: Date,
 ): EntityPlan {
   if (cursor?.resume?.queries?.length) return { ...cursor.resume };
   const startedAt = now.toISOString();
-  if (!cursor?.since)
+  if (!cursor?.since || (provider.id === 'siigo' && cursor.coverage_version !== 2))
     return {
       queries: provider.queries(entity, { mode: 'initial', now }),
       index: 0,
@@ -120,6 +121,11 @@ export function planEntity(
 export function finishedCursor(plan: EntityPlan, previous: EntityCursor | undefined): EntityCursor {
   return {
     since: plan.startedAt,
+    ...(plan.mode === 'initial'
+      ? { coverage_version: 2 }
+      : previous?.coverage_version
+        ? { coverage_version: previous.coverage_version }
+        : {}),
     ...(plan.mode !== 'incremental'
       ? { full_at: plan.startedAt }
       : previous?.full_at

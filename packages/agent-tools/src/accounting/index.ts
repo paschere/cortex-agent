@@ -43,6 +43,8 @@ export type {
   RunCounts as AccountingRunCounts,
 } from './store';
 export { accountingTableSpec } from './tables';
+export { nextPurchaseCursor, planPurchaseSync } from './purchase-plan';
+export type { PurchaseCursor } from './purchase-plan';
 export { noticeFor as accountingNoticeFor, runAccountingSync } from './sync';
 export type { SyncRunOutcome as AccountingSyncOutcome } from './sync';
 export { ACCOUNTING_ENTITIES, ACCOUNTING_PROVIDER_IDS } from './types';

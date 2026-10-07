@@ -30,6 +30,7 @@ export const ACCOUNTING_ENTITIES: readonly AccountingEntity[] = [
 export interface NormalizedCustomer {
   externalId: string;
   name?: string;
+  relationship?: 'Cliente' | 'Proveedor' | 'Otro';
   /** Sólo dígitos, sin dígito de verificación: lo que va en `clients.tax_id`. */
   taxId?: string;
   /** Como se escribe: «900123456-7». */

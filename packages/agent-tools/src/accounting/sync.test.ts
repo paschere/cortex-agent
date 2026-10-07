@@ -246,6 +246,7 @@ describe('una corrida contra un programa contable', () => {
     expect(out.result.cursors.invoices).toEqual({
       since: NOW.toISOString(),
       full_at: NOW.toISOString(),
+      coverage_version: 2,
     });
     expect(Object.keys(out.result.trackers).sort()).toEqual([
       'customers',
@@ -365,6 +366,7 @@ describe('una corrida contra un programa contable', () => {
     expect(second.result.cursors.invoices).toEqual({
       since: NOW.toISOString(),
       full_at: NOW.toISOString(),
+      coverage_version: 2,
     });
   });
 
@@ -397,7 +399,11 @@ describe('qué pedir en cada corrida', () => {
   it('primera vez, incremental con margen, y el repaso diario de facturas', () => {
     expect(planEntity(siigoProvider, 'customers', undefined, NOW).mode).toBe('initial');
 
-    const recent = { since: '2026-10-01T11:00:00.000Z', full_at: '2026-10-01T06:00:00.000Z' };
+    const recent = {
+      since: '2026-10-01T11:00:00.000Z',
+      full_at: '2026-10-01T06:00:00.000Z',
+      coverage_version: 2,
+    };
     const inc = planEntity(siigoProvider, 'invoices', recent, NOW);
     expect(inc.mode).toBe('incremental');
     expect(inc.queries).toEqual([
@@ -407,15 +413,23 @@ describe('qué pedir en cada corrida', () => {
     expect(finishedCursor(inc, recent)).toEqual({
       since: NOW.toISOString(),
       full_at: recent.full_at,
+      coverage_version: 2,
     });
 
-    const stale = { since: '2026-10-01T11:00:00.000Z', full_at: '2026-09-29T06:00:00.000Z' };
+    const stale = {
+      since: '2026-10-01T11:00:00.000Z',
+      full_at: '2026-09-29T06:00:00.000Z',
+      coverage_version: 2,
+    };
     const sweep = planEntity(siigoProvider, 'invoices', stale, NOW);
     expect(sweep.mode).toBe('sweep');
     expect(sweep.queries[0]).toEqual({ date_start: '2026-04-01' });
     expect(sweep.queries).toHaveLength(3);
     // Los clientes no tienen repaso: sólo lo nuevo y lo cambiado.
     expect(planEntity(siigoProvider, 'customers', stale, NOW).mode).toBe('incremental');
+    expect(planEntity(siigoProvider, 'customers', { since: stale.since }, NOW).mode).toBe(
+      'initial',
+    );
   });
 });
 

@@ -1,16 +1,16 @@
 ---
 title: Conectar Siigo, Alegra o QuickBooks
-summary: Conecta tu programa contable una vez y Cortex trae solo clientes, productos, facturas y pagos a tablas y a la cartera.
+summary: Conecta tu programa contable y Cortex inicia la carga de terceros, productos, ventas y pagos; Siigo también carga el historial de compras.
 category: conexiones
 module: general
 route: /integrations
 routes: [/trackers]
 keywords: [siigo, alegra, quickbooks, contabilidad, programa contable, facturas, recibos de caja, pagos, cartera, sincronizar, world office, helisa]
-updated: 2026-10-03
+updated: 2026-10-06
 order: 2
 ---
 
-Si llevas la contabilidad en **Siigo Nube**, **Alegra** o **QuickBooks Online**, conéctalo una vez y Cortex trae solo tus clientes, productos, facturas de venta y pagos recibidos a tablas de la empresa. Las facturas con saldo entran a la cartera y a la plata en riesgo, así que puedes preguntarle por lo que te deben sin exportar nada.
+Si llevas la contabilidad en **Siigo Nube**, **Alegra** o **QuickBooks Online**, conéctalo una vez y Cortex comienza a traer terceros, productos, facturas de venta y pagos recibidos a tablas de la empresa. Las facturas con saldo entran a la cartera y a la plata en riesgo. En Siigo también se cargan las facturas de compra a cuentas por pagar.
 
 ## Paso a paso
 
@@ -21,20 +21,21 @@ Si llevas la contabilidad en **Siigo Nube**, **Alegra** o **QuickBooks Online**,
    - **Alegra**: en Alegra, Configuración, «API - Integraciones con otros sistemas». Copia el correo de la cuenta y el token.
    - **QuickBooks**: no hay llave que copiar. Toca **Conectar con QuickBooks**, entra con tu usuario de Intuit, elige la empresa y da permiso de lectura.
 4. En Siigo y Alegra toca **Probar y conectar**. Cortex prueba la llave contra el programa antes de guardarla: si no sirve, no se guarda y te dice por qué.
-5. La primera carga trae el último año de facturas y pagos y todos los clientes y productos. Mientras tanto la tarjeta dice **Trayendo datos**; cuando termina, muestra qué trajo y un enlace a cada tabla en [Tablas](/trackers).
+5. En **Siigo**, la primera carga recorre todos los terceros (clientes, proveedores y otros; activos e inactivos), productos, facturas de venta, recibos de caja y facturas de compra disponibles por API. Puede necesitar varias corridas: la tarjeta indica qué categorías siguen cargándose. En Alegra y QuickBooks, la primera carga de facturas y pagos cubre el último año. Al terminar, la tarjeta muestra qué trajo y enlaza las tablas en [Tablas](/trackers).
 6. Después tienes **Sincronizar ahora**, **Ajustes** (qué traer, frecuencia, avisos y **Pausar la sincronización**), **Cambiar llave** (en QuickBooks, **Volver a conectar**) y **Desconectar**.
 
 ## Qué hace Cortex y qué haces tú
 
 **Cortex:**
 - Trae lo nuevo y lo modificado en cada corrida, sin duplicar filas.
+- En Siigo, repasa periódicamente el historial de compras para captar correcciones antiguas.
 - Pone las facturas en la cartera con el saldo que dice tu programa, que ya descontó los pagos.
 - Respeta las columnas que tu equipo agregue a esas tablas, como «gestor» o «notas».
 
 **Tú:**
 - Conectas el programa (la llave nunca pasa por el chat).
 - Decides qué traer y cada cuánto.
-- Cortex solo lee: nunca crea ni modifica nada en Siigo, Alegra ni QuickBooks.
+- Esta sincronización solo lee. Otras acciones, como emitir una factura, tienen su propia aprobación.
 
 ## Pídeselo en el chat
 

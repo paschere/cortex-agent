@@ -40,8 +40,6 @@ import { SiigoClient, hasMorePages } from './siigo-client';
  */
 
 const LOCAL_CURRENCY = 'COP';
-/** La primera carga trae los documentos del último año. */
-const INITIAL_MONTHS = 12;
 /** El repaso diario mira las facturas de los últimos seis meses. */
 const SWEEP_MONTHS = 6;
 
@@ -63,6 +61,7 @@ interface Metadata {
 
 export interface SiigoCustomer {
   id: string;
+  type?: 'Customer' | 'Supplier' | 'Other';
   person_type?: string;
   identification?: string;
   check_digit?: string;
@@ -187,6 +186,7 @@ export function normalizeSiigoCustomer(c: SiigoCustomer): NormalizedCustomer {
   return {
     externalId: String(c.id),
     name: siigoCustomerName(c),
+    relationship: c.type === 'Supplier' ? 'Proveedor' : c.type === 'Other' ? 'Otro' : 'Cliente',
     taxId: normalizeNit(c.identification) || undefined,
     taxIdDisplay: id ? (c.check_digit ? `${id}-${c.check_digit}` : id) : undefined,
     kind:
@@ -363,17 +363,39 @@ function normalize(entity: AccountingEntity, record: unknown): NormalizedRecord 
 // ---------------------------------------------------------------------------
 
 export function siigoQueries(entity: AccountingEntity, input: QueryPlanInput): ProviderQuery[] {
+  if (entity === 'customers' || entity === 'products') {
+    // Siigo defaults to active Customers. Enumerate every third-party kind
+    // and activity state; products default to active Products without stock
+    // control, so services and stocked items need explicit filters too.
+    const scopes =
+      entity === 'customers'
+        ? ['Customer', 'Supplier', 'Other'].flatMap((type) =>
+            ['true', 'false'].map((active) => ({ type, active })),
+          )
+        : ['Product', 'Service', 'Consumer Good'].flatMap((type) =>
+            ['true', 'false'].flatMap((active) =>
+              ['true', 'false'].map((stock_control) => ({ type, active, stock_control })),
+            ),
+          );
+    if (input.mode === 'incremental' && input.since) {
+      const since = siigoDateTime(input.since);
+      return scopes.flatMap((scope) => [
+        { ...scope, created_start: since },
+        { ...scope, updated_start: since },
+      ]);
+    }
+    return scopes;
+  }
   if (input.mode === 'incremental' && input.since) {
     const since = siigoDateTime(input.since);
     // Lo nuevo y lo cambiado son dos listados: un registro recién creado puede
     // traer `last_updated` vacío y no salir en el filtro de modificados.
     return [{ created_start: since }, { updated_start: since }];
   }
-  if (entity === 'invoices')
-    return [
-      { date_start: monthsAgo(input.now, input.mode === 'sweep' ? SWEEP_MONTHS : INITIAL_MONTHS) },
-    ];
-  if (entity === 'payments') return [{ created_start: monthsAgo(input.now, INITIAL_MONTHS) }];
+  // The first load has no date cutoff. The sync engine paginates and resumes
+  // across runs, so an old unpaid invoice or its receipt cannot be omitted.
+  if (entity === 'invoices' && input.mode === 'sweep')
+    return [{ date_start: monthsAgo(input.now, SWEEP_MONTHS) }];
   return [{}];
 }
 

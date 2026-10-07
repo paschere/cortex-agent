@@ -349,32 +349,56 @@ describe('de Siigo a la forma común', () => {
         available_quantity: 4,
       }),
     ).toMatchObject({ kind: 'Servicio', price: 12000, stock: 4, active: false });
+    expect(
+      normalizeSiigoCustomer({
+        id: 's-1',
+        type: 'Supplier',
+        name: ['Proveedor S.A.'],
+        active: false,
+      }),
+    ).toMatchObject({ relationship: 'Proveedor', active: false });
   });
 });
 
 describe('qué se le pide a Siigo', () => {
   const now = new Date('2026-10-01T12:00:00Z');
 
-  it('la primera vez: el último año de facturas y recibos, todos los clientes', () => {
-    expect(siigoQueries('invoices', { mode: 'initial', now })).toEqual([
-      { date_start: '2025-10-01' },
+  it('la primera vez: todos los clientes, productos, facturas y recibos disponibles', () => {
+    expect(siigoQueries('invoices', { mode: 'initial', now })).toEqual([{}]);
+    expect(siigoQueries('payments', { mode: 'initial', now })).toEqual([{}]);
+    expect(siigoQueries('customers', { mode: 'initial', now })).toEqual([
+      { type: 'Customer', active: 'true' },
+      { type: 'Customer', active: 'false' },
+      { type: 'Supplier', active: 'true' },
+      { type: 'Supplier', active: 'false' },
+      { type: 'Other', active: 'true' },
+      { type: 'Other', active: 'false' },
     ]);
-    expect(siigoQueries('payments', { mode: 'initial', now })).toEqual([
-      { created_start: '2025-10-01' },
-    ]);
-    expect(siigoQueries('customers', { mode: 'initial', now })).toEqual([{}]);
+    const products = siigoQueries('products', { mode: 'initial', now });
+    expect(products).toHaveLength(12);
+    expect(products).toContainEqual({ type: 'Service', active: 'false', stock_control: 'false' });
+    expect(products).toContainEqual({ type: 'Product', active: 'true', stock_control: 'true' });
   });
 
   it('el repaso diario mira seis meses; lo incremental, lo nuevo Y lo cambiado', () => {
     expect(siigoQueries('invoices', { mode: 'sweep', now })).toEqual([
       { date_start: '2026-04-01' },
     ]);
+    const productUpdates = siigoQueries('products', {
+      mode: 'incremental',
+      since: '2026-10-01T11:50:00.000Z',
+      now,
+    });
+    expect(productUpdates).toHaveLength(24);
+    expect(productUpdates).toContainEqual({
+      type: 'Service',
+      active: 'false',
+      stock_control: 'true',
+      updated_start: '2026-10-01T11:50:00Z',
+    });
     expect(
-      siigoQueries('products', { mode: 'incremental', since: '2026-10-01T11:50:00.000Z', now }),
-    ).toEqual([
-      { created_start: '2026-10-01T11:50:00Z' },
-      { updated_start: '2026-10-01T11:50:00Z' },
-    ]);
+      siigoQueries('customers', { mode: 'incremental', since: '2026-10-01T11:50:00.000Z', now }),
+    ).toHaveLength(12);
   });
 
   it('el programa abre una sesión que devuelve la forma común y cuenta lo ilegible', async () => {

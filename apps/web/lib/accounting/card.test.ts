@@ -76,10 +76,15 @@ describe('la tarjeta de un programa contable', () => {
       {
         entity: 'invoices',
         label: 'Facturas de venta',
-        text: '3 nuevos, 2 actualizados en la última corrida',
+        text: 'Carga inicial pendiente · 3 nuevos, 2 actualizados en la última corrida',
         href: '/trackers/siigo_invoices',
       },
-      { entity: 'payments', label: 'Recibos de caja', text: 'Todavía no se ha traído', href: null },
+      {
+        entity: 'payments',
+        label: 'Recibos de caja',
+        text: 'Carga inicial pendiente · Todavía no se ha traído',
+        href: null,
+      },
     ]);
     expect(soon).toMatchObject({ connected: false, status: 'Próximamente.', tone: 'idle' });
   });

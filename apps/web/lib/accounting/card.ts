@@ -45,6 +45,7 @@ export interface AccountingCardData {
   error: string | null;
   /** Qué trajo la última corrida, por cosa, en frases cortas. */
   lines: Array<{ entity: AccountingEntity; label: string; text: string; href: string | null }>;
+  purchaseStatus: string | null;
 }
 
 /** Quién puede conectar o tocar un programa contable: dueños y administradores. */
@@ -72,7 +73,7 @@ function statusOf(conn: AccountingConnectionRow, now: Date): { tone: CardTone; s
   if (conn.last_status === 'partial')
     return {
       tone: 'working',
-      status: 'Trayendo la primera carga. Puede tardar un rato; sigue sola.',
+      status: 'Trayendo datos. La carga continúa automáticamente.',
     };
   if (conn.last_status === 'ok')
     return { tone: 'ok', status: `Al día · última sincronización ${ago(conn.last_run_at, now)}.` };
@@ -100,16 +101,21 @@ export function buildAccountingCards(
         status: provider.available ? 'Sin conectar.' : 'Próximamente.',
         error: null,
         lines: [],
+        purchaseStatus: null,
       };
     const { tone, status } = statusOf(conn, now);
     const lines = conn.entities.map((entity) => {
       const n = conn.last_counts?.[entity];
       const label = entity === 'payments' ? provider.paymentsLabel : ENTITY_LABELS[entity];
-      const text = n
+      const activity = n
         ? n.inserted || n.updated
           ? `${n.inserted} nuevos, ${n.updated} actualizados en la última corrida`
           : 'Sin cambios en la última corrida'
         : 'Todavía no se ha traído';
+      const text =
+        provider.id === 'siigo'
+          ? `${conn.cursors?.[entity]?.since ? 'Carga inicial finalizada' : 'Carga inicial pendiente'} · ${activity}`
+          : activity;
       return {
         entity,
         label,
@@ -129,6 +135,14 @@ export function buildAccountingCards(
       status,
       error: conn.last_status === 'error' ? conn.last_error : null,
       lines,
+      purchaseStatus:
+        provider.id !== 'siigo'
+          ? null
+          : conn.cursors?.purchases?.resume
+            ? `Compras: ${conn.cursors.purchases.resume.mode === 'initial' ? 'trayendo historial' : 'revisando historial'} (página ${conn.cursors.purchases.resume.page}).`
+            : conn.cursors?.purchases?.since
+              ? 'Compras: carga histórica finalizada; los cambios se siguen revisando.'
+              : 'Compras: esperando la primera carga histórica.',
     };
   });
 }

@@ -1,7 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeAlegraBill, normalizeQuickbooksBill, normalizeSiigoPurchase } from './purchases';
+import {
+  normalizeAlegraBill,
+  normalizeQuickbooksBill,
+  normalizeSiigoPurchase,
+  siigoPurchasePage,
+} from './purchases';
+import type { SiigoClient } from './siigo-client';
 
 describe('compras del programa contable (cuentas por pagar, 0181)', () => {
+  it('consulta la primera página histórica de Siigo sin fecha de corte', async () => {
+    let query: Record<string, string> | undefined;
+    const client = {
+      page: async (_path: string, params: Record<string, string>) => {
+        query = params;
+        return { results: [], pagination: { page: 1, page_size: 100, total_results: 0 } };
+      },
+    } as unknown as SiigoClient;
+    await siigoPurchasePage(client, '', 1);
+    expect(query).toEqual({});
+  });
+
   it('Siigo: el número es el de la factura del proveedor', () => {
     expect(
       normalizeSiigoPurchase({

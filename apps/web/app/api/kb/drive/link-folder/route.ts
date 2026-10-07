@@ -67,6 +67,31 @@ export async function POST(req: NextRequest) {
 
   const ctx: DriveContext = await getDriveContext(session);
 
+  const folderMeta = await driveGet<{ mimeType?: string; driveId?: string }>(
+    ctx as ToolContext,
+    `/files/${encodeURIComponent(folderId)}`,
+    { fields: 'mimeType,driveId', supportsAllDrives: 'true' },
+  );
+  if (folderMeta.mimeType !== 'application/vnd.google-apps.folder') {
+    return NextResponse.json({ error: 'The Drive item is not a folder' }, { status: 422 });
+  }
+  const driveId = folderMeta.driveId ?? null;
+  // Seed cursors before the crawl, so changes made during the initial import
+  // are replayed afterwards. Shared drives need their own changes feed.
+  const { startPageToken: userStartToken } = await driveGet<{ startPageToken: string }>(
+    ctx as ToolContext,
+    '/changes/startPageToken',
+    { supportsAllDrives: 'true' },
+  );
+  const driveStartToken = driveId
+    ? (
+        await driveGet<{ startPageToken: string }>(ctx as ToolContext, '/changes/startPageToken', {
+          driveId,
+          supportsAllDrives: 'true',
+        })
+      ).startPageToken
+    : null;
+
   // Crawl the new folder subtree up front: we need the full file set both for the
   // change-of-folder cleanup (which docs survive) and for the import below.
   const { files } = await crawlSubtree(ctx, folderId);
@@ -108,7 +133,7 @@ export async function POST(req: NextRequest) {
   // an existing row keeps its cursor and only refreshes owner + tracked folders.
   const { data: syncRow, error: syncSelErr } = await sb
     .from('gdrive_sync_state')
-    .select('collection_id')
+    .select('collection_id, drive_id, drive_page_token')
     .eq('collection_id', collectionId)
     .maybeSingle();
   if (syncSelErr) {
@@ -121,22 +146,25 @@ export async function POST(req: NextRequest) {
       .update({
         owner_user_id: session.id,
         tracked_folder_ids: [folderId],
+        ...(priorFolderId !== folderId ? { page_token: userStartToken } : {}),
+        drive_id: driveId,
+        drive_page_token:
+          priorFolderId === folderId && syncRow.drive_id === driveId && syncRow.drive_page_token
+            ? syncRow.drive_page_token
+            : driveStartToken,
       })
       .eq('collection_id', collectionId);
     if (syncUpdErr) {
       return NextResponse.json({ error: syncUpdErr.message }, { status: 500 });
     }
   } else {
-    const { startPageToken } = await driveGet<{ startPageToken: string }>(
-      ctx as ToolContext,
-      '/changes/startPageToken',
-      { supportsAllDrives: 'true' },
-    );
     const { error: syncInsErr } = await sb.from('gdrive_sync_state').insert({
       collection_id: collectionId,
       owner_user_id: session.id,
       tracked_folder_ids: [folderId],
-      page_token: startPageToken,
+      page_token: userStartToken,
+      drive_id: driveId,
+      drive_page_token: driveStartToken,
     });
     if (syncInsErr) {
       return NextResponse.json({ error: syncInsErr.message }, { status: 500 });
