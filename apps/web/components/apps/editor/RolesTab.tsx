@@ -387,6 +387,21 @@ export function RolesTab({ data }: { data: AppEditorData }) {
                 />
                 Exporta
               </label>
+              <label
+                className="inline-flex items-center gap-1.5 text-xs text-ink"
+                title="Puede dejar el celular que tiene en la mano en modo kiosco (el modo kiosco se enciende en la pestaña Usuarios)."
+              >
+                <input
+                  type="checkbox"
+                  checked={r.permissions.kiosk === true}
+                  onChange={(e) =>
+                    patchRole(r.key, {
+                      permissions: { ...r.permissions, kiosk: e.target.checked || undefined },
+                    })
+                  }
+                />
+                Deja celulares en kiosco
+              </label>
               <button
                 type="button"
                 onClick={() => {

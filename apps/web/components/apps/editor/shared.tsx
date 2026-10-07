@@ -67,6 +67,22 @@ export interface EditorAppUser {
   attributes: Record<string, string>;
   status: 'invited' | 'active' | 'disabled';
   lastSeenAt: string | null;
+  /** Modo kiosco (0211): ya tiene PIN, y hasta cuándo está bloqueado por intentos fallidos. */
+  hasPin: boolean;
+  pinLockedUntil: string | null;
+}
+
+/** Modo kiosco de la app (0211): ajustes y dispositivos. */
+export interface EditorKiosk {
+  enabled: boolean;
+  idleMinutes: number;
+  devices: Array<{
+    id: string;
+    name: string;
+    state: 'active' | 'pending' | 'revoked';
+    createdAt: string;
+    lastSeenAt: string | null;
+  }>;
 }
 
 export interface EditorPerson {
@@ -92,10 +108,27 @@ export interface AppEditorData {
   appUsers: EditorAppUser[];
   /** El enlace de entrada /a/<id>, para copiarlo. */
   entryPath: string;
+  kiosk: EditorKiosk;
+  /**
+   * Portal por atributo: para cada tabla con un rol que lee `{field, equals: $user.x}`,
+   * los valores reales de esa columna (para autocompletar al invitar y en «Ver como…»).
+   */
+  attributeValues: Record<string, string[]>;
   directory: EditorPerson[];
   trackers: EditorTracker[];
   /** Tablas que una pantalla lee pero que no son tablas propias (sin campos que listar). */
   unknownTrackers: string[];
+}
+
+/** Los atributos que un rol necesita (`$user.x` en sus filtros de fila), en el mismo orden en que aparecen. */
+export function requiredAttributesOf(permissions: AppPermissions): string[] {
+  const out: string[] = [];
+  for (const perm of Object.values(permissions.tables)) {
+    if (typeof perm.read !== 'object') continue;
+    const attr = /^\$user\.([a-z][a-z0-9_]{0,39})$/.exec(perm.read.equals)?.[1];
+    if (attr && !out.includes(attr)) out.push(attr);
+  }
+  return out;
 }
 
 export const SCREEN_ICONS: Array<{ name: string; label: string; icon: LucideIcon }> = [

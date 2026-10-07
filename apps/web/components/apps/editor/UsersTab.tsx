@@ -12,6 +12,7 @@ import { clsx } from 'clsx';
 import { Copy, Mail, Plus, Trash2, Upload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
+import { KioskPanel, PinControl } from './KioskPanel';
 import {
   type AppEditorData,
   BTN_DANGER,
@@ -21,6 +22,7 @@ import {
   type EditorAppUser,
   ErrorLine,
   INPUT,
+  requiredAttributesOf,
 } from './shared';
 
 /**
@@ -53,12 +55,14 @@ function UserRow({
   roles,
   busy,
   run,
+  kioskEnabled,
 }: {
   appId: string;
   user: EditorAppUser;
   roles: AppEditorData['roles'];
   busy: boolean;
   run: Run;
+  kioskEnabled: boolean;
 }) {
   const st = STATUS[user.status];
   return (
@@ -137,12 +141,15 @@ function UserRow({
       >
         <Trash2 className="h-3.5 w-3.5" aria-hidden />
       </button>
+      {kioskEnabled && user.status !== 'disabled' && (
+        <PinControl appId={appId} user={user} busy={busy} />
+      )}
     </li>
   );
 }
 
 export function UsersTab({ data }: { data: AppEditorData }) {
-  const { app, roles, appUsers, entryPath } = data;
+  const { app, roles, appUsers, entryPath, kiosk, attributeValues } = data;
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +158,15 @@ export function UsersTab({ data }: { data: AppEditorData }) {
   const [email, setEmail] = useState('');
   const [roleKey, setRoleKey] = useState(roles[0]?.key ?? '');
   const [attrs, setAttrs] = useState('');
+  // Portal: el valor de cada atributo que el rol elegido necesita (con los valores reales de su columna).
+  const [required, setRequired] = useState<Record<string, string>>({});
   const [csv, setCsv] = useState('');
+  const needs = requiredAttributesOf(
+    roles.find((r) => r.key === roleKey)?.permissions ?? {
+      tables: {},
+      export: false,
+    },
+  );
   const [entryUrl, setEntryUrl] = useState(entryPath);
   useEffect(() => setEntryUrl(`${window.location.origin}${entryPath}`), [entryPath]);
 
@@ -204,6 +219,8 @@ export function UsersTab({ data }: { data: AppEditorData }) {
         <p className="rounded-card bg-emerald-soft px-3 py-2 text-xs text-emerald">{note}</p>
       )}
 
+      <KioskPanel appId={app.id} kiosk={kiosk} />
+
       {appUsers.length === 0 ? (
         <p className="rounded-card border border-dashed border-border-strong bg-surface/40 p-6 text-center text-sm text-ink-muted">
           Todavía no invitaste a nadie de afuera.
@@ -218,6 +235,7 @@ export function UsersTab({ data }: { data: AppEditorData }) {
               roles={roles}
               busy={pending}
               run={run}
+              kioskEnabled={kiosk.enabled}
             />
           ))}
         </ul>
@@ -234,7 +252,10 @@ export function UsersTab({ data }: { data: AppEditorData }) {
               name,
               email,
               roleKey,
-              attributes: parseAttrs(attrs),
+              attributes: {
+                ...parseAttrs(attrs),
+                ...Object.fromEntries(needs.map((a) => [a, (required[a] ?? '').trim()])),
+              },
             });
             if (!res.ok) return setError(res.error);
             setNote(
@@ -245,6 +266,7 @@ export function UsersTab({ data }: { data: AppEditorData }) {
             setName('');
             setEmail('');
             setAttrs('');
+            setRequired({});
             router.refresh();
           });
         }}
@@ -281,9 +303,30 @@ export function UsersTab({ data }: { data: AppEditorData }) {
               ))}
             </select>
           </label>
+          {needs.map((attr) => (
+            <label key={attr} className="min-w-0 flex-1 basis-40">
+              <span className="mb-1 block text-micro font-semibold text-ink-muted">
+                {attr.charAt(0).toUpperCase() + attr.slice(1).replace(/_/g, ' ')} (de la persona)
+              </span>
+              <input
+                value={required[attr] ?? ''}
+                onChange={(e) => setRequired({ ...required, [attr]: e.target.value })}
+                list={`valores-${attr}`}
+                required
+                maxLength={120}
+                placeholder="Elige o escribe"
+                className={clsx(INPUT, 'w-full')}
+              />
+              <datalist id={`valores-${attr}`}>
+                {(attributeValues[attr] ?? []).map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
+            </label>
+          ))}
           <label className="min-w-0 flex-1 basis-48">
             <span className="mb-1 block text-micro font-semibold text-ink-muted">
-              Atributos (opcional)
+              Otros atributos (opcional)
             </span>
             <input
               value={attrs}
@@ -294,7 +337,13 @@ export function UsersTab({ data }: { data: AppEditorData }) {
           </label>
           <button
             type="submit"
-            disabled={pending || !name.trim() || !email.trim() || !roleKey}
+            disabled={
+              pending ||
+              !name.trim() ||
+              !email.trim() ||
+              !roleKey ||
+              needs.some((a) => !(required[a] ?? '').trim())
+            }
             className={BTN_PRIMARY}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden /> Invitar

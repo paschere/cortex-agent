@@ -48,3 +48,11 @@ export const uploadsByAppUser = createLimiter(120, HOUR);
 export const dictationsByAppUser = createLimiter(80, HOUR);
 /** Los turnos de voz son muchos por formulario (uno por campo): su tope es aparte y más ancho. */
 export const voiceTurnsByAppUser = createLimiter(400, HOUR);
+
+/**
+ * PIN del modo kiosco (0211). El freno exacto es el bloqueo por persona en la
+ * base (5 intentos); éste frena a quien prueba a muchas personas desde un mismo
+ * dispositivo o una misma IP.
+ */
+export const pinAttemptsByDevice = createLimiter(40, 15 * 60_000);
+export const pinAttemptsByIp = createLimiter(120, HOUR);

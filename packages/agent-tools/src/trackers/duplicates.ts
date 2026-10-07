@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { emitAutomationEvent, watchesTracker } from '../apps/automations/emit';
 import { FIELD_KEY_RE, type TrackerField, trackerFieldsSchema } from './schema';
 
 /**
@@ -156,6 +157,8 @@ export interface DuplicateOutcome {
   /** Filas que cambiaron de marca en esta pasada. */
   changed: number;
   conflicts: DuplicateConflict[];
+  /** Filas que quedaron marcadas ahora (no lo estaban): disparan `row_flagged_duplicate`. */
+  flagged?: string[];
 }
 
 export async function getDuplicateRule(
@@ -274,7 +277,27 @@ export async function applyDuplicateRule(
     for (let i = 0; i < writes.length; i += WRITE_CHUNK) {
       await Promise.all(writes.slice(i, i + WRITE_CHUNK).map((w) => w()));
     }
-    return { changed: writes.length, conflicts: decision.conflicts };
+    // Las que quedaron marcadas AHORA (no lo estaban) avisan a las automatizaciones
+    // que miran esta tabla (0210). Es el punto único: lo cruzan el formulario, la
+    // grilla, el chat y todas las sincronizaciones. Nunca lanza.
+    const flagged = decision.flag.filter((id) => byId.get(id)?.flagged !== true);
+    if (flagged.length && (await watchesTracker(db, trackerId))) {
+      for (const id of flagged.slice(0, 50)) {
+        const row = byId.get(id);
+        if (!row) continue;
+        await emitAutomationEvent(db, {
+          kind: 'row_flagged_duplicate',
+          trackerId,
+          rowId: id,
+          after: { ...row.values, [rule.flagField]: rule.flagValue } as Record<
+            string,
+            string | number
+          >,
+          actor: { kind: 'system' },
+        });
+      }
+    }
+    return { changed: writes.length, conflicts: decision.conflicts, flagged };
   } catch {
     return empty;
   }

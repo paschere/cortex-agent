@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { emitAutomationEvent, watchesTracker } from '../apps/automations/emit';
 import {
   type DuplicateRule,
   type TouchedKey,
@@ -370,7 +371,8 @@ export async function upsertRow(
     rowId?: string;
     values: Record<string, unknown>;
     label?: string;
-    userId: string;
+    /** Quién escribe; `null` para lo que hace una automatización sin dueño. */
+    userId: string | null;
     /** Escrituras automáticas (consultas programadas): las reglas del campo no bloquean. */
     lenient?: boolean;
     /** Edición parcial: las reglas sólo se juzgan en estos campos. */
@@ -384,8 +386,23 @@ export async function upsertRow(
     only: input.only,
   });
   const label = rowLabel(input.tracker.fields, values, input.label);
+  // Automatizaciones (0210): una consulta indexada y recordada; sin reglas que
+  // miren esta tabla, no se lee nada más.
+  const watched = await watchesTracker(db, input.tracker.id);
+  const actor = { kind: 'member' as const, id: input.userId };
 
   if (input.rowId) {
+    let before: Record<string, string | number> | null = null;
+    if (watched) {
+      const { data: prior } = await db
+        .from('tracker_rows')
+        .select('values')
+        .eq('id', input.rowId)
+        .eq('tracker_id', input.tracker.id)
+        .maybeSingle();
+      before = ((prior as { values?: Record<string, string | number> } | null)?.values ??
+        null) as Record<string, string | number> | null;
+    }
     const { data, error } = await db
       .from('tracker_rows')
       .update({
@@ -401,7 +418,20 @@ export async function upsertRow(
     if (!data) throw new NotFoundError('Esa fila no está en esta tabla.');
     // La clave pudo cambiar: se revisa la tabla entera (guía vieja y nueva).
     const saved = adaptEntry(data as Record<string, unknown>);
-    return withDuplicates(db, input.tracker.id, saved);
+    const final = await withDuplicates(db, input.tracker.id, saved);
+    if (watched && JSON.stringify(before ?? {}) !== JSON.stringify(final.values))
+      await emitAutomationEvent(db, {
+        kind: 'row_updated',
+        trackerId: input.tracker.id,
+        trackerSlug: input.tracker.slug,
+        rowId: final.id,
+        before,
+        after: final.values,
+        label: final.label,
+        version: final.updated_at,
+        actor,
+      });
+    return final;
   }
 
   const { data, error } = await db
@@ -416,7 +446,19 @@ export async function upsertRow(
     .single();
   if (error) throw error;
   const inserted = adaptEntry(data as Record<string, unknown>);
-  return withDuplicates(db, input.tracker.id, inserted, [inserted.values]);
+  const final = await withDuplicates(db, input.tracker.id, inserted, [inserted.values]);
+  if (watched)
+    await emitAutomationEvent(db, {
+      kind: 'row_created',
+      trackerId: input.tracker.id,
+      trackerSlug: input.tracker.slug,
+      rowId: final.id,
+      after: final.values,
+      label: final.label,
+      version: final.created_at,
+      actor,
+    });
+  return final;
 }
 
 /**

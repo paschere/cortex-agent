@@ -426,7 +426,315 @@ export const CONTROL_EN_PLANTA: AppTemplate = {
   homeScreen: 'registrar',
 };
 
-export const APP_TEMPLATES: readonly AppTemplate[] = [CONTROL_EN_PLANTA];
+// ---------------------------------------------------------------------------
+// Portal de clientes (fase 4)
+// ---------------------------------------------------------------------------
+//
+// Lo que un cliente de la empresa abre en su celular: SUS pedidos o guías con
+// el estado, una solicitud nueva y SUS documentos. Es el caso de más riesgo de
+// las apps (una fuga entre clientes), así que todo cuelga de UN dato: el rol
+// «Cliente» lee `{field: 'cliente', equals: '$user.cliente'}` y el servidor
+// aplica ese filtro ANTES de calcular tablas, cifras y Excel. Al invitar a
+// alguien a ese rol se le pide su cliente (con los valores reales de la
+// columna) y al crear una solicitud el servidor escribe el cliente por él: no
+// puede pedir ni crear a nombre de otro.
+
+const PEDIDOS = 'pedidos_cliente';
+const DOCUMENTOS = 'documentos_cliente';
+const CLIENTE_ATTR = '$user.cliente';
+
+// La primera columna es la etiqueta de cada fila: el número del pedido, no el cliente.
+const pedidosFields: TrackerField[] = [
+  {
+    key: 'referencia',
+    label: 'Pedido o guía',
+    type: 'text',
+    required: true,
+    placeholder: 'Número de pedido o guía',
+  },
+  { key: 'cliente', label: 'Cliente', type: 'text', required: true },
+  { key: 'fecha', label: 'Fecha', type: 'date', required: true, default: 'today', max: 'today' },
+  {
+    key: 'estado',
+    label: 'Estado',
+    type: 'select',
+    required: false,
+    options: ['Solicitada', 'En proceso', 'Despachada', 'Entregada', 'Cancelada'],
+    default: 'Solicitada',
+  },
+  { key: 'descripcion', label: 'Detalle', type: 'longtext', required: false },
+  { key: 'respuesta', label: 'Respuesta de la empresa', type: 'longtext', required: false },
+] as TrackerField[];
+
+const documentosFields: TrackerField[] = [
+  { key: 'nombre', label: 'Nombre del documento', type: 'text', required: true },
+  { key: 'cliente', label: 'Cliente', type: 'text', required: true },
+  {
+    key: 'tipo',
+    label: 'Tipo',
+    type: 'select',
+    required: false,
+    options: ['Factura', 'Remisión', 'Certificado', 'Contrato', 'Otro'],
+  },
+  { key: 'fecha', label: 'Fecha', type: 'date', required: false, default: 'today', max: 'today' },
+  { key: 'archivo', label: 'Archivo', type: 'file', required: true },
+] as TrackerField[];
+
+const misPedidos: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'sky',
+  refreshSeconds: 60,
+  editing: 'off',
+  alerts: [],
+  theme: { accent: 'sky', layout: 'operator', density: 'comfortable' },
+  blocks: [
+    {
+      id: 'en_curso',
+      type: 'metric',
+      width: 'half',
+      tracker: PEDIDOS,
+      title: 'En curso',
+      aggregate: 'count',
+      filters: [
+        { field: 'estado', op: 'neq', value: 'Entregada' },
+        { field: 'estado', op: 'neq', value: 'Cancelada' },
+      ],
+      tone: 'amber',
+    },
+    {
+      id: 'entregados',
+      type: 'metric',
+      width: 'half',
+      tracker: PEDIDOS,
+      title: 'Entregados',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Entregada' }],
+      tone: 'emerald',
+    },
+    {
+      id: 'tarjetas',
+      type: 'gallery',
+      width: 'full',
+      tracker: PEDIDOS,
+      title: 'Mis pedidos y guías',
+      titleField: 'referencia',
+      subtitleField: 'fecha',
+      badgeField: 'estado',
+      metaFields: ['descripcion', 'respuesta'],
+      columns: 2,
+      sort: { field: 'created_at', dir: 'desc' },
+      limit: 24,
+    },
+  ],
+});
+
+const nuevaSolicitud: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'sky',
+  refreshSeconds: 0,
+  editing: 'team',
+  alerts: [],
+  theme: { accent: 'sky', layout: 'operator', density: 'comfortable' },
+  blocks: [
+    {
+      id: 'solicitud',
+      type: 'form',
+      width: 'full',
+      tracker: PEDIDOS,
+      title: 'Nueva solicitud',
+      intro: 'Cuéntanos qué necesitas. Te respondemos aquí mismo, en «Mis pedidos».',
+      fields: ['referencia', 'fecha', 'descripcion'],
+      submitLabel: 'Enviar solicitud',
+      successMessage: 'Solicitud enviada. La verás en «Mis pedidos».',
+    },
+  ],
+});
+
+const misDocumentos: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'sky',
+  refreshSeconds: 60,
+  editing: 'team',
+  alerts: [],
+  theme: { accent: 'sky', layout: 'operator', density: 'comfortable' },
+  blocks: [
+    {
+      id: 'lista_docs',
+      type: 'table',
+      width: 'full',
+      tracker: DOCUMENTOS,
+      title: 'Mis documentos',
+      columns: ['nombre', 'tipo', 'fecha', 'archivo'],
+      sort: { field: 'created_at', dir: 'desc' },
+      limit: 100,
+    },
+    {
+      id: 'subir_doc',
+      type: 'form',
+      width: 'full',
+      tracker: DOCUMENTOS,
+      title: 'Subir un documento',
+      fields: ['nombre', 'tipo', 'fecha', 'archivo'],
+      submitLabel: 'Subir',
+      successMessage: 'Documento guardado.',
+    },
+  ],
+});
+
+const atencion: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'primary',
+  refreshSeconds: 30,
+  editing: 'team',
+  alerts: [
+    {
+      id: 'nuevas',
+      source: PEDIDOS,
+      filters: [{ field: 'estado', op: 'eq', value: 'Solicitada' }],
+      on: 'new',
+      message: 'Solicitud nueva de un cliente',
+      sound: true,
+      desktop: true,
+      bell: false,
+    },
+  ],
+  theme: { accent: 'primary', density: 'compact' },
+  blocks: [
+    {
+      id: 'por_atender',
+      type: 'metric',
+      width: 'third',
+      tracker: PEDIDOS,
+      title: 'Por atender',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Solicitada' }],
+      tone: 'amber',
+    },
+    {
+      id: 'en_proceso',
+      type: 'metric',
+      width: 'third',
+      tracker: PEDIDOS,
+      title: 'En proceso',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'En proceso' }],
+    },
+    {
+      id: 'por_estado',
+      type: 'chart',
+      width: 'third',
+      tracker: PEDIDOS,
+      title: 'Por estado',
+      chart: 'funnel',
+      groupBy: 'estado',
+      aggregate: 'count',
+    },
+    {
+      id: 'todos',
+      type: 'table',
+      width: 'full',
+      tracker: PEDIDOS,
+      title: 'Pedidos y solicitudes de todos los clientes',
+      columns: ['cliente', 'referencia', 'fecha', 'estado', 'descripcion', 'respuesta'],
+      editable: ['estado', 'respuesta'],
+      sort: { field: 'created_at', dir: 'desc' },
+      limit: 200,
+    },
+  ],
+});
+
+export const PORTAL_CLIENTES: AppTemplate = {
+  id: 'portal_clientes',
+  name: 'Portal de clientes',
+  icon: '🤝',
+  body: 'Tus clientes ven sólo SUS pedidos y guías con el estado, hacen una solicitud nueva y descargan sus documentos; tu equipo atiende todo desde un tablero.',
+  accent: 'sky',
+  trackers: [
+    {
+      slug: PEDIDOS,
+      name: 'Pedidos de clientes',
+      description: 'Pedidos, guías y solicitudes de cada cliente, con su estado.',
+      fields: pedidosFields,
+    },
+    {
+      slug: DOCUMENTOS,
+      name: 'Documentos de clientes',
+      description: 'Facturas, remisiones y certificados de cada cliente.',
+      fields: documentosFields,
+    },
+  ],
+  roles: [
+    {
+      key: 'cliente',
+      name: 'Cliente',
+      description: 'Ve sólo lo de su empresa: sus pedidos, su estado y sus documentos.',
+      permissions: {
+        tables: {
+          [PEDIDOS]: {
+            read: { field: 'cliente', equals: CLIENTE_ATTR },
+            create: true,
+            edit: 'none',
+            fields: ['referencia', 'fecha', 'descripcion'],
+            actions: [],
+          },
+          [DOCUMENTOS]: {
+            read: { field: 'cliente', equals: CLIENTE_ATTR },
+            create: true,
+            edit: 'none',
+            fields: ['nombre', 'tipo', 'fecha', 'archivo'],
+            actions: [],
+          },
+        },
+        export: false,
+      },
+    },
+    {
+      key: 'atencion',
+      name: 'Atención al cliente',
+      description: 'Ve y atiende a todos los clientes: cambia el estado y responde.',
+      permissions: {
+        tables: {
+          [PEDIDOS]: { read: 'all', create: true, edit: 'all', actions: [] },
+          [DOCUMENTOS]: { read: 'all', create: true, edit: 'all', actions: [] },
+        },
+        export: true,
+      },
+    },
+  ],
+  screens: [
+    {
+      slug: 'mis_pedidos',
+      title: 'Mis pedidos',
+      icon: 'Package',
+      roles: ['cliente'],
+      spec: misPedidos,
+    },
+    {
+      slug: 'nueva_solicitud',
+      title: 'Nueva solicitud',
+      icon: 'ClipboardPlus',
+      roles: ['cliente'],
+      spec: nuevaSolicitud,
+    },
+    {
+      slug: 'mis_documentos',
+      title: 'Mis documentos',
+      icon: 'Table2',
+      roles: ['cliente'],
+      spec: misDocumentos,
+    },
+    {
+      slug: 'atencion',
+      title: 'Atención',
+      icon: 'BarChart3',
+      roles: ['atencion'],
+      spec: atencion,
+    },
+  ],
+  homeScreen: 'mis_pedidos',
+};
+
+export const APP_TEMPLATES: readonly AppTemplate[] = [CONTROL_EN_PLANTA, PORTAL_CLIENTES];
 
 export function appTemplate(id: string): AppTemplate | null {
   return APP_TEMPLATES.find((t) => t.id === id) ?? null;

@@ -16,6 +16,8 @@ import {
  *     ESA persona (una caché por usuario; nunca la de otro).
  *   - la página le dice al worker quién es (`{type:'who'}`): sólo entonces se
  *     guarda algo, y se borran las cachés de cualquier otra persona.
+ *   - al instalar, `who` trae además `precache` (la pantalla de inicio y sus datos):
+ *     se guardan en la caché de ESA persona si todavía no estaban.
  *   - al salir (`{type:'signout'}`) o si la red contesta que ya no hay sesión
  *     (redirige a la entrada), se borra todo lo de la persona.
  *   - la cola sin internet de los formularios ya existe en el navegador
@@ -94,6 +96,20 @@ self.addEventListener('message', (event) => {
             if (res) await remember(userKey, new Request(url.toString()), res);
           }
         }
+        // AL INSTALAR: la primera pantalla y sus datos, en la caché de ESTA persona
+        // (la misma que acaba de quedar como «quien está dentro»), si aún no están.
+        if (userKey && Array.isArray(data.precache)) {
+          const cache = await caches.open(userCacheName(APP, userKey));
+          for (const href of data.precache.slice(0, 4)) {
+            if (typeof href !== 'string') continue;
+            const url = new URL(href, self.location.origin);
+            if (url.origin !== self.location.origin || !isCacheablePath(APP, url.pathname)) continue;
+            const key = cacheUrlOf(url.toString());
+            if (await cache.match(key)) continue;
+            const res = await fetch(url.toString(), { credentials: 'same-origin' }).catch(() => null);
+            if (res) await remember(userKey, new Request(url.toString()), res);
+          }
+        }
       })(),
     );
   } else if (data.type === 'signout') {
@@ -155,6 +171,53 @@ self.addEventListener('fetch', (event) => {
         });
       }
     })(),
+  );
+});
+
+// Notificaciones push de la app (0210). El servidor manda { title, body, url, tag };
+// el aviso se pinta aunque la app esté cerrada, y al tocarlo abre la pantalla.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: 'Aviso', body: event.data ? event.data.text() : '' };
+  }
+  const title = String(data.title || 'Aviso').slice(0, 120);
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: String(data.body || '').slice(0, 300),
+      tag: data.tag ? String(data.tag).slice(0, 80) : undefined,
+      icon: SCOPE + 'icon-192.png',
+      badge: SCOPE + 'icon-192.png',
+      data: { url: typeof data.url === 'string' ? data.url : SCOPE },
+    }),
+  );
+});
+
+// Al tocar el aviso: se enfoca la app si ya está abierta (y se lleva a la pantalla)
+// o se abre. Sólo direcciones dentro de /a/<app>/: un aviso nunca abre otro sitio.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const raw = (event.notification.data && event.notification.data.url) || SCOPE;
+  let target;
+  try {
+    target = new URL(raw, self.location.origin);
+  } catch (e) {
+    target = new URL(SCOPE, self.location.origin);
+  }
+  if (target.origin !== self.location.origin || !target.pathname.startsWith(SCOPE.slice(0, -1)))
+    target = new URL(SCOPE, self.location.origin);
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url.startsWith(self.location.origin + SCOPE.slice(0, -1)) && 'focus' in client) {
+          if ('navigate' in client) client.navigate(target.href).catch(() => null);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target.href);
+    }),
   );
 });
 

@@ -6,6 +6,8 @@
  */
 
 import './tools';
+import './design';
+import './automations/tools';
 
 export {
   appsAssignMembers,
@@ -21,3 +23,8 @@ export * from './store';
 export * from './templates';
 export * from './install';
 export * from './external';
+export * from './automations';
+export * from './kiosk';
+export * from './portal';
+export { appsDesign, reviewAppDraft, appDraftSchema } from './design';
+export type { AppDraft, DraftReview, AutomationIdea } from './design';

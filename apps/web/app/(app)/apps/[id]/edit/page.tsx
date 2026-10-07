@@ -4,10 +4,14 @@ import { ViewBrandProvider } from '@/components/views/blocks/brand';
 import { requireAppAdmin } from '@/lib/apps/access';
 import { loadSessionBrand } from '@/lib/branding/store';
 import {
+  attributeValueSuggestions,
   computeView,
+  getKioskSettings,
   listAppUsers,
+  listDevices,
   listDirectory,
   listMembers,
+  listPinStates,
   listRoles,
   listScreens,
   listTrackers,
@@ -70,13 +74,19 @@ export default async function EditAppPage({
     );
   }
 
-  const [roles, members, appUsers, directory, trackers] = await Promise.all([
-    listRoles(db, app.id),
-    listMembers(db, app.id),
-    listAppUsers(db, app.id),
-    listDirectory(db),
-    listTrackers(db, 40),
-  ]);
+  const [roles, members, appUsers, directory, trackers, kioskSettings, devices, pins] =
+    await Promise.all([
+      listRoles(db, app.id),
+      listMembers(db, app.id),
+      listAppUsers(db, app.id),
+      listDirectory(db),
+      listTrackers(db, 40),
+      getKioskSettings(db, app.id),
+      listDevices(db, app.id),
+      listPinStates(db, app.id),
+    ]);
+  const attributeValues = await attributeValueSuggestions(db, roles);
+  const pinOf = new Map(pins.map((p) => [p.userId, p]));
 
   // Las tablas que alguna pantalla lee y los botones de fila que declara cada una:
   // sin esto la matriz de permisos no sabría qué ofrecer.
@@ -133,8 +143,22 @@ export default async function EditAppPage({
       attributes: u.attributes,
       status: u.status,
       lastSeenAt: u.last_seen_at,
+      hasPin: pinOf.get(u.id)?.hasPin ?? false,
+      pinLockedUntil: pinOf.get(u.id)?.lockedUntil ?? null,
     })),
     entryPath: `/a/${app.id}`,
+    kiosk: {
+      enabled: kioskSettings.enabled,
+      idleMinutes: kioskSettings.idleMinutes,
+      devices: devices.map((d) => ({
+        id: d.id,
+        name: d.name,
+        state: d.state,
+        createdAt: d.createdAt,
+        lastSeenAt: d.lastSeenAt,
+      })),
+    },
+    attributeValues,
     directory: directory.map((p) => ({ id: p.id, name: personLabel(p), email: p.email })),
     trackers: trackers
       .filter((t) => used.has(t.slug))

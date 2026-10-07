@@ -1,8 +1,9 @@
 import { AppRunner } from '@/components/apps/AppRunner';
 import { ViewBrandProvider } from '@/components/views/blocks/brand';
-import { requireScreen } from '@/lib/apps/access';
+import { previewAttributesOf, requireScreen } from '@/lib/apps/access';
+import { previewQuery } from '@/lib/apps/preview-query';
 import { loadSessionBrand } from '@/lib/branding/store';
-import { appCanExport, readScreen, visibleScreens } from '@cortex/agent-tools';
+import { appCanExport, readScreen, screenButtons, visibleScreens } from '@cortex/agent-tools';
 
 /**
  * Una pantalla de una aplicación. Los datos se calculan en cada visita con el
@@ -20,17 +21,18 @@ export default async function AppScreenPage({
   searchParams,
 }: {
   params: Promise<{ id: string; screen: string }>;
-  searchParams: Promise<{ como?: string }>;
+  searchParams: Promise<{ como?: string; atr?: string | string[] }>;
 }) {
   const [{ id, screen: screenRef }, query] = await Promise.all([params, searchParams]);
   const { actor, db, access, screen, readOnly, viewer } = await requireScreen(
     decodeURIComponent(id),
     decodeURIComponent(screenRef),
-    { as: query.como },
+    { as: query.como, attributes: previewAttributesOf(query.atr) },
   );
-  const [{ computed }, brand] = await Promise.all([
+  const [{ computed }, brand, buttons] = await Promise.all([
     readScreen(db, access, screen, { readOnly }),
     loadSessionBrand(db, actor.organizationName),
+    screenButtons(db, access.app.id, screen.slug),
   ]);
   const { app, role } = access;
   return (
@@ -45,12 +47,14 @@ export default async function AppScreenPage({
         current={screen.slug}
         role={{ key: role.key, name: role.name }}
         readOnly={readOnly}
+        previewAttributes={readOnly ? access.user.attributes : undefined}
         canExport={appCanExport(access)}
         canManage={viewer.companyAdmin}
         computed={computed}
         target={{ kind: 'custom_app', appId: app.slug, screen: screen.slug }}
-        dataUrl={`/api/apps/${app.slug}/screens/${screen.slug}/data${readOnly ? `?como=${encodeURIComponent(role.key)}` : ''}`}
+        dataUrl={`/api/apps/${app.slug}/screens/${screen.slug}/data${readOnly ? previewQuery(role.key, access.user.attributes) : ''}`}
         title={screen.title}
+        buttons={buttons}
       />
     </ViewBrandProvider>
   );

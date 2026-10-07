@@ -2,6 +2,7 @@ import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateObject } from 'ai';
 import type { ZodTypeAny } from 'zod';
+import { emitSyncEvents } from '../apps/automations/emit';
 import { driveGet, driveGetBytes, driveGetText } from '../gdrive/client';
 import { parseDocument } from '../kb/parsers';
 import { type SheetData, XLSX_MIME, parseSpreadsheet } from '../kb/spreadsheets';
@@ -687,6 +688,7 @@ export async function processDriveFile(
 
     const result: FileResult = { ...base, status: 'ok', newLabels: [] };
     const rowIds: string[] = [];
+    const wroteSince = new Date(Date.now() - 2000).toISOString();
     for (const planned of plan.rows) {
       const written = await writeRow(db, { tracker, sync, planned, fileName: file.name });
       rowIds.push(written.id);
@@ -698,12 +700,15 @@ export async function processDriveFile(
     }
     // La regla de duplicados de la tabla (p. ej. una guía repetida con otra
     // fecha) se aplica una vez por archivo, sobre las claves que acaba de tocar.
-    if (plan.rows.length)
+    if (plan.rows.length) {
       await applyDuplicateRule(
         db,
         tracker.id,
         plan.rows.map((r) => r.values),
       );
+      // Avisa a las automatizaciones de la app que miran esta tabla (0210).
+      await emitSyncEvents(db, tracker, wroteSince);
+    }
     const review = plan.notes.length > 0 || plan.rows.some((r) => r.review.length > 0);
     if (!plan.rows.length) result.needsReview += 1;
     result.status = review ? 'needs_review' : 'ok';

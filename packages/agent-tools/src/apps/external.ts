@@ -9,7 +9,7 @@ import {
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { roleKeySchema } from './permissions';
+import { requiredAttributes, roleKeySchema } from './permissions';
 import {
   APP_COLUMNS,
   type AppAccess,
@@ -54,6 +54,8 @@ export const SESSION_DAYS = 30;
 /** La sesión se renueva (se desliza) a lo sumo una vez por hora, para no escribir en cada petición. */
 export const SESSION_TOUCH_MINUTES = 60;
 export const MAX_APP_USERS_IMPORT = 500;
+/** Minutos sin uso de una sesión de kiosco cuando la fila no los trae (kiosk.ts los fija al entrar). */
+const DEFAULT_IDLE_MINUTES = 5;
 
 const USER_COLUMNS =
   'id, app_id, name, email, role_key, attributes, status, invited_at, last_seen_at, created_by, created_at';
@@ -229,10 +231,22 @@ async function mustGetUser(db: SupabaseClient, appId: string, id: string) {
   return adaptUser(data as Record<string, unknown>);
 }
 
-async function assertRole(db: SupabaseClient, appId: string, roleKey: string) {
+async function assertRole(
+  db: SupabaseClient,
+  appId: string,
+  roleKey: string,
+  attributes: Record<string, string> = {},
+) {
   const roles = await listRoles(db, appId);
-  if (!roles.some((r) => r.key === roleKey))
-    throw new ValidationError(`La aplicación no tiene el rol «${roleKey}».`);
+  const role = roles.find((r) => r.key === roleKey);
+  if (!role) throw new ValidationError(`La aplicación no tiene el rol «${roleKey}».`);
+  // Portal de clientes: un rol que filtra filas por atributo no sirve sin ese atributo
+  // (la persona entraría y no vería nada). Se pide al invitar, con el valor real.
+  const missing = requiredAttributes(role.permissions).filter((a) => !attributes[a]?.trim());
+  if (missing.length)
+    throw new ValidationError(
+      `El rol «${role.name}» ve las filas según ${missing.map((m) => `«${m}»`).join(', ')}: indica ${missing.length === 1 ? 'ese dato' : 'esos datos'} de la persona.`,
+    );
 }
 
 /**
@@ -247,7 +261,7 @@ export async function inviteAppUser(
   by: string,
 ): Promise<{ user: ExternalUserRow; created: boolean }> {
   const input = appUserInputSchema.parse(raw);
-  await assertRole(db, appId, input.roleKey);
+  await assertRole(db, appId, input.roleKey, input.attributes ?? {});
   const existing = (await listAppUsers(db, appId)).find((u) => u.email === input.email);
   const patch = {
     name: input.name,
@@ -330,14 +344,16 @@ export async function updateAppUser(
   id: string,
   input: { name?: string; roleKey?: string; attributes?: Record<string, string> },
 ): Promise<ExternalUserRow> {
-  await mustGetUser(db, appId, id);
+  const current = await mustGetUser(db, appId, id);
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.name !== undefined) patch.name = z.string().trim().min(1).max(80).parse(input.name);
-  if (input.roleKey !== undefined) {
-    await assertRole(db, appId, input.roleKey);
-    patch.role_key = input.roleKey;
-  }
   if (input.attributes !== undefined) patch.attributes = attributesSchema.parse(input.attributes);
+  if (input.roleKey !== undefined || input.attributes !== undefined) {
+    // El rol y los atributos se juzgan juntos: quien pasa a «Cliente» trae su cliente.
+    const attrs = (patch.attributes as Record<string, string> | undefined) ?? current.attributes;
+    await assertRole(db, appId, input.roleKey ?? current.role_key, attrs);
+  }
+  if (input.roleKey !== undefined) patch.role_key = input.roleKey;
   const { data, error } = await db
     .from('custom_app_users')
     .update(patch)
@@ -543,6 +559,9 @@ export interface ExternalSession {
   expiresAt: string;
   /** True si esta lectura renovó la sesión: la ruta vuelve a escribir la cookie. */
   renewed: boolean;
+  /** Si es una sesión de kiosco (0211): el dispositivo donde se abrió y sus minutos sin uso. */
+  deviceId: string | null;
+  idleMinutes: number | null;
 }
 
 /**
@@ -561,7 +580,7 @@ export async function resolveExternalSession(
   const now = options.now ?? new Date();
   const { data, error } = await db
     .from('custom_app_sessions')
-    .select('id, app_user_id, expires_at, last_seen_at, revoked_at')
+    .select('id, app_user_id, expires_at, last_seen_at, revoked_at, device_id, idle_minutes')
     .eq('app_id', app.id)
     .eq('token_hash', hashSessionToken(token))
     .maybeSingle();
@@ -572,6 +591,8 @@ export async function resolveExternalSession(
     expires_at: string;
     last_seen_at: string;
     revoked_at: string | null;
+    device_id?: string | null;
+    idle_minutes?: number | null;
   } | null;
   if (!session || session.revoked_at) return null;
   if (new Date(session.expires_at).getTime() <= now.getTime()) return null;
@@ -579,6 +600,48 @@ export async function resolveExternalSession(
   if (!user || user.status !== 'active') return null;
   const roles = await listRoles(db, app.id);
   if (!roles.some((r) => r.key === user.role_key)) return null;
+
+  if (session.device_id) {
+    // SESIÓN DE KIOSCO (0211): vive sólo mientras su dispositivo siga autorizado
+    // y la persona lo use. Sin uso durante `idle_minutes` se cierra sola (queda
+    // revocada, no sólo ignorada) y el celular vuelve a la lista de nombres.
+    const idleMinutes = session.idle_minutes ?? DEFAULT_IDLE_MINUTES;
+    const idle = now.getTime() - new Date(session.last_seen_at).getTime();
+    const closeIt = async () => {
+      await db
+        .from('custom_app_sessions')
+        .update({ revoked_at: now.toISOString() })
+        .eq('id', session.id)
+        .is('revoked_at', null);
+      return null;
+    };
+    if (idle >= idleMinutes * 60_000) return closeIt();
+    const { data: device, error: deviceError } = await db
+      .from('custom_app_devices')
+      .select('id, revoked_at, token_hash')
+      .eq('app_id', app.id)
+      .eq('id', session.device_id)
+      .maybeSingle();
+    if (deviceError) throw deviceError;
+    const dev = device as { revoked_at: string | null; token_hash: string | null } | null;
+    if (!dev || dev.revoked_at || !dev.token_hash) return closeIt();
+    if (idle >= 15_000) {
+      // El «último uso» sube en cada petición (con un respiro de segundos): es lo que mide la inactividad.
+      const { error: touchError } = await db
+        .from('custom_app_sessions')
+        .update({ last_seen_at: now.toISOString() })
+        .eq('id', session.id);
+      if (touchError) throw touchError;
+    }
+    return {
+      sessionId: session.id,
+      user,
+      expiresAt: session.expires_at,
+      renewed: false,
+      deviceId: session.device_id,
+      idleMinutes,
+    };
+  }
 
   let expiresAt = session.expires_at;
   let renewed = false;
@@ -597,7 +660,7 @@ export async function resolveExternalSession(
     if (seenError) throw seenError;
     renewed = true;
   }
-  return { sessionId: session.id, user, expiresAt, renewed };
+  return { sessionId: session.id, user, expiresAt, renewed, deviceId: null, idleMinutes: null };
 }
 
 /** Cerrar ESTA sesión (el token de la cookie). */

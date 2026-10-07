@@ -49,6 +49,21 @@ export function isCacheablePath(appId: string, pathname: string): boolean {
   return pathname.startsWith(api) && pathname.endsWith('/data');
 }
 
+/**
+ * Lo que se guarda al INSTALAR la app aunque la persona todavía no haya abierto
+ * esa pantalla: la primera (la de inicio de su rol) y sus datos, para que el
+ * primer arranque sin señal ya tenga algo que mostrar. Sólo direcciones de
+ * esta app; el worker las vuelve a validar y las guarda en la caché de LA
+ * persona que está dentro, nunca en una común.
+ */
+export function precacheUrlsOf(appId: string, homeSlug: string | null | undefined): string[] {
+  if (!homeSlug || !/^[a-z][a-z0-9_]{1,47}$/.test(homeSlug)) return [];
+  const slug = encodeURIComponent(homeSlug);
+  return [`/a/${appId}/${slug}`, `/api/apps/public/${appId}/screens/${slug}/data`].filter((u) =>
+    isCacheablePath(appId, u.split('?')[0] as string),
+  );
+}
+
 /** La dirección con la que se guarda: sin los parámetros que sólo sirven a Next. */
 export function cacheUrlOf(href: string): string {
   const url = new URL(href);

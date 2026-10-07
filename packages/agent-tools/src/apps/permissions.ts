@@ -51,6 +51,11 @@ export type TablePermission = z.infer<typeof tablePermissionSchema>;
 export const appPermissionsSchema = z.object({
   tables: z.record(z.string().trim().min(1).max(60), tablePermissionSchema).default({}),
   export: z.boolean().default(false),
+  /**
+   * Fase 4 (0211): este rol puede dejar el celular que tiene en la mano «en
+   * modo kiosco» (típico del supervisor de planta). Omitido = no puede.
+   */
+  kiosk: z.boolean().optional(),
 });
 export type AppPermissions = z.infer<typeof appPermissionsSchema>;
 
@@ -269,3 +274,24 @@ export function describeEdit(edit: TablePermission['edit']): string {
 }
 
 export const APPROVAL_ACTION_IDS: readonly string[] = [APPROVE_ACTION_ID, REJECT_ACTION_ID];
+
+/** ¿Este rol puede dejar un celular en modo kiosco? El administrador sí; el resto, sólo con el permiso. */
+export function canEnrollKiosk(role: ResolvedRole): boolean {
+  return role.admin || role.permissions.kiosk === true;
+}
+
+/**
+ * Los atributos de usuario que un rol NECESITA para ver algo: los `$user.<x>`
+ * de sus filtros de fila. Un cliente invitado sin su «cliente» no ve ninguna
+ * fila (es seguro, pero confunde): el editor y la invitación lo exigen.
+ */
+export function requiredAttributes(permissions: AppPermissions): string[] {
+  const out = new Set<string>();
+  for (const perm of Object.values(permissions.tables)) {
+    if (typeof perm.read === 'object') {
+      const attr = USER_ATTRIBUTE_RE.exec(perm.read.equals)?.[1];
+      if (attr) out.add(attr);
+    }
+  }
+  return [...out];
+}

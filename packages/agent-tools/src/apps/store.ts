@@ -378,10 +378,23 @@ function adaptView(row: Record<string, unknown>): CustomViewRow {
   };
 }
 
-const screenSlugSchema = z.string().trim().regex(APP_SLUG_RE);
+/**
+ * Nombres que una pantalla no puede usar porque son rutas fijas bajo
+ * /a/<app>/ (apps/web/app/a/[app]/): la pantalla quedaría tapada. Las demás
+ * rutas fijas (manifest, íconos, sw.js) llevan punto o guion y el patrón de
+ * slug ya las excluye.
+ */
+export const RESERVED_SCREEN_SLUGS = new Set(['kiosco']);
+
+const screenSlugSchema = z
+  .string()
+  .trim()
+  .regex(APP_SLUG_RE)
+  .refine((s) => !RESERVED_SCREEN_SLUGS.has(s), 'Ese nombre de pantalla está reservado.');
 
 async function freeScreenSlug(db: SupabaseClient, appId: string, wanted: string): Promise<string> {
-  const base = APP_SLUG_RE.test(wanted) ? wanted : slugify(wanted);
+  const raw = APP_SLUG_RE.test(wanted) ? wanted : slugify(wanted);
+  const base = RESERVED_SCREEN_SLUGS.has(raw) ? `${raw}_pantalla` : raw;
   const existing = new Set((await listScreens(db, appId)).map((s) => s.slug));
   if (!existing.has(base)) return base;
   for (let i = 2; i < 50; i++) {
@@ -918,15 +931,20 @@ export async function submitAppForm(
   // Quien ve «las filas donde Cliente = su cliente» sólo crea filas de SU
   // cliente: el campo del scope lo pone el servidor, no el formulario.
   const scope = rowAccessFor(access.role, access.user, slug);
+  let forced: Record<string, string> | undefined;
   if (scope.kind === 'equals') {
     if (scope.value === null)
       throw new ValidationError('Tu usuario no tiene el atributo que esta tabla necesita.');
-    values[scope.field] = scope.value;
+    // `forced`, no `values`: el formulario puede no pedir ese campo (el cliente
+    // no lo ve ni lo escribe) y aun así la fila tiene que quedar con su valor.
+    forced = { [scope.field]: scope.value };
   }
   await assertExternalBudget(db, access, 'submit');
   return submitViewForm(db, view, {
     blockId: input.blockId,
     values,
+    forced,
+    fillDefaults: true,
     submittedBy: access.user.id,
     submittedByKind: actorKindOf(access),
     viewer: access.user.name,

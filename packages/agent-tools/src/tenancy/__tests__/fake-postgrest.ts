@@ -143,6 +143,7 @@ class Query implements PromiseLike<Result<unknown>> {
   private predicates: Array<(row: Row) => boolean> = [];
   private orderBy: Array<{ column: string; ascending: boolean }> = [];
   private limitTo: number | null = null;
+  private rangeFrom: number | null = null;
   private mode: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
   private payload: Row[] = [];
   private singleMode: 'one' | 'maybe' | null = null;
@@ -151,6 +152,7 @@ class Query implements PromiseLike<Result<unknown>> {
   private returning = false;
 
   private onConflictKeys: string[] = [];
+  private ignoreDuplicates = false;
 
   constructor(
     private readonly tables: Tables,
@@ -183,10 +185,11 @@ class Query implements PromiseLike<Result<unknown>> {
     this.payload = Array.isArray(values) ? values : [values];
     return this;
   }
-  upsert(values: Row | Row[], opts?: { onConflict?: string }) {
+  upsert(values: Row | Row[], opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {
     this.mode = 'upsert';
     this.payload = Array.isArray(values) ? values : [values];
     if (opts?.onConflict) this.onConflictKeys = opts.onConflict.split(',');
+    this.ignoreDuplicates = opts?.ignoreDuplicates === true;
     return this;
   }
   update(values: Row) {
@@ -276,6 +279,12 @@ class Query implements PromiseLike<Result<unknown>> {
     this.limitTo = n;
     return this;
   }
+  /** `.range(from, to)`: ambos extremos incluidos, como PostgREST. */
+  range(from: number, to: number) {
+    this.rangeFrom = from;
+    this.limitTo = to + 1;
+    return this;
+  }
   maybeSingle() {
     this.singleMode = 'maybe';
     return this;
@@ -303,10 +312,15 @@ class Query implements PromiseLike<Result<unknown>> {
               ? this.rows().find((r) => this.onConflictKeys.every((k) => r[k] === row[k]))
               : undefined;
           if (existing) {
+            // `ignoreDuplicates` = ON CONFLICT DO NOTHING: ni se toca ni se devuelve.
+            if (this.ignoreDuplicates) continue;
             Object.assign(existing, row);
             written.push(existing);
           } else {
             const created = { ...row };
+            // Como `default gen_random_uuid()` de las filas de tablas propias.
+            if (this.table === 'tracker_rows' && created.id === undefined)
+              created.id = `row-${this.rows().length + 1}-${Math.random().toString(36).slice(2, 8)}`;
             this.rows().push(created);
             written.push(created);
           }
@@ -334,7 +348,8 @@ class Query implements PromiseLike<Result<unknown>> {
           });
         }
         const count = hit.length;
-        if (this.limitTo != null) hit = hit.slice(0, this.limitTo);
+        if (this.rangeFrom != null) hit = hit.slice(this.rangeFrom, this.limitTo ?? undefined);
+        else if (this.limitTo != null) hit = hit.slice(0, this.limitTo);
         if (this.headOnly) return { data: null, error: null, count };
         const shaped = this.shape(hit);
         return this.wantCount ? { ...shaped, count } : shaped;

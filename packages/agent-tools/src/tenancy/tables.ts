@@ -546,6 +546,15 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   custom_app_users: tenant(),
   custom_app_sessions: tenant(),
   custom_app_login_codes: tenant(),
+  // 0210: automatizaciones de una app, sus corridas (cola, idempotencia e
+  // historial) y las suscripciones push. Tenant: una regla o una suscripción
+  // de otra empresa nunca puede dispararse ni recibir un aviso aquí.
+  custom_app_automations: tenant(),
+  custom_app_automation_runs: tenant(),
+  push_subscriptions: tenant(),
+  // 0211: dispositivos compartidos de planta (modo kiosco). Tenant: un dispositivo
+  // ajeno dejaría entrar con un PIN a una app que no es de esta empresa.
+  custom_app_devices: tenant(),
   // 0178: las vistas guardadas del visualizador de datos (filtros, orden,
   // columnas) por alcance — una tabla de la empresa, la lista de clientes.
   // Tenant: el nombre y los filtros de una vista dicen qué mira una empresa

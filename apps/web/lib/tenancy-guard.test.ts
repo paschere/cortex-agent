@@ -127,6 +127,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. "Which table syncs are due" spans the install; each sync then runs on its own event with a handle pinned to its workspace, under the identity of the source owner who created it.',
   ],
   [
+    'inngest/functions/app-automations.ts',
+    'Cron. "Which app automations have a schedule that is due" and "which runs are queued" span the install; the raw handle reads (id, organization_id, app_id, trigger, schedule_last_slot) of enabled schedule rules and (id, organization_id) of queued runs, and resets runs stuck in "running". Each schedule slot is then claimed and each run executed with a handle pinned to its own workspace; app users are only ever looked up by the rule\'s app_id.',
+  ],
+  [
     'inngest/functions/view-digest.ts',
     'Cron. "Which views have a periodic digest" spans the install; the raw handle selects (id, organization_id, spec->digest, digest_last_sent_at) and nothing else. Each view then runs on its own event with a handle pinned to its workspace, reads no personal or Feed source (no viewerId) and mails only people still in that workspace directory.',
   ],

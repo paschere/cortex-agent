@@ -1,5 +1,6 @@
 import 'server-only';
 import { getAppUser } from '@/lib/apps/external-session';
+import { previewAttributesOf } from '@/lib/apps/preview-query';
 import { getOptionalSession, requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
@@ -45,6 +46,8 @@ export interface OpenedApp {
   viewer: AppViewer;
   /** True en «Ver como…»: nada se escribe. */
   readOnly: boolean;
+  /** Sesión de kiosco (0211): abierta con PIN en un dispositivo compartido; vence por inactividad. */
+  kiosk?: { idleMinutes: number } | null;
 }
 
 /** El que entró con sesión de Cortex: el editor y las puertas de administración. */
@@ -90,6 +93,7 @@ export async function openApp(
     access: ctx.access,
     viewer: { id: ctx.user.id, name: ctx.user.name, companyAdmin: false },
     readOnly: false,
+    kiosk: ctx.session.deviceId ? { idleMinutes: ctx.session.idleMinutes ?? 5 } : null,
   };
 }
 
@@ -124,7 +128,7 @@ async function openMemberApp(
 /** Para páginas: 404 de Next si no entra. */
 export async function requireApp(
   ref: string,
-  options: { as?: string | null } = {},
+  options: { as?: string | null; attributes?: Record<string, string> } = {},
 ): Promise<OpenedApp> {
   const opened = await openApp(ref, options);
   if (!opened) notFound();
@@ -134,7 +138,7 @@ export async function requireApp(
 export async function requireScreen(
   ref: string,
   screenRef: string | null | undefined,
-  options: { as?: string | null } = {},
+  options: { as?: string | null; attributes?: Record<string, string> } = {},
 ): Promise<OpenedScreen> {
   const opened = await requireApp(ref, options);
   const screen = screenFor(opened.access, screenRef);
@@ -146,7 +150,7 @@ export async function requireScreen(
 export async function openScreenForApi(
   ref: string,
   screenRef: string,
-  options: { as?: string | null } = {},
+  options: { as?: string | null; attributes?: Record<string, string> } = {},
 ): Promise<OpenedScreen | NextResponse> {
   const opened = await openApp(ref, options);
   const screen = opened ? screenFor(opened.access, screenRef) : null;
@@ -189,3 +193,5 @@ export function formGate(
     );
   return null;
 }
+
+export { previewAttributesOf };

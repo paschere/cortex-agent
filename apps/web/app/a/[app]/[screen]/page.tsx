@@ -4,7 +4,15 @@ import { ViewBrandProvider } from '@/components/views/blocks/brand';
 import { openApp } from '@/lib/apps/access';
 import { externalBrand } from '@/lib/apps/external-brand';
 import { openExternalApp } from '@/lib/apps/external-session';
-import { appCanExport, readScreen, screenFor, visibleScreens } from '@cortex/agent-tools';
+import {
+  appCanExport,
+  canEnrollKiosk,
+  getKioskSettings,
+  readScreen,
+  screenButtons,
+  screenFor,
+  visibleScreens,
+} from '@cortex/agent-tools';
 import { notFound, redirect } from 'next/navigation';
 
 /**
@@ -31,10 +39,12 @@ export default async function ExternalScreenPage({
   if (!opened) redirect(`/a/${ext.app.id}`);
   const screen = screenFor(opened.access, screenRef);
   if (!screen) notFound();
-  const { db, access, external, actor } = opened;
-  const [{ computed }, brand] = await Promise.all([
+  const { db, access, external, actor, kiosk } = opened;
+  const [{ computed }, brand, kioskSettings, buttons] = await Promise.all([
     readScreen(db, access, screen),
     externalBrand(db, ext.app),
+    external ? getKioskSettings(db, ext.app.id) : null,
+    screenButtons(db, ext.app.id, screen.slug),
   ]);
   const { app, role } = access;
   return (
@@ -57,7 +67,17 @@ export default async function ExternalScreenPage({
           dataUrl={`/api/apps/public/${app.id}/screens/${screen.slug}/data`}
           title={screen.title}
           basePath={`/a/${app.id}`}
-          session={{ appId: app.id, userKey: actor.id, external, name: actor.name }}
+          buttons={buttons}
+          session={{
+            appId: app.id,
+            userKey: actor.id,
+            external,
+            name: actor.name,
+            homeSlug: screenFor(access, null)?.slug ?? null,
+            kiosk: kiosk ?? null,
+            kioskEnabled: kioskSettings?.enabled ?? false,
+            canEnrollKiosk: Boolean(kioskSettings?.enabled) && canEnrollKiosk(role),
+          }}
         />
       </ViewBrandProvider>
     </PublicShell>

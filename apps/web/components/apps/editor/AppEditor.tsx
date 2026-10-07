@@ -6,6 +6,7 @@ import { ChevronLeft, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { AutomationsTab } from './AutomationsTab';
 import { MembersTab } from './MembersTab';
 import { PreviewTab } from './PreviewTab';
 import { RolesTab } from './RolesTab';
@@ -38,12 +39,13 @@ export type { AppEditorData } from './shared';
  * pantalla lee una fuente interna—; el texto del rechazo se muestra tal cual.
  */
 
-type Tab = 'screens' | 'roles' | 'members' | 'users' | 'preview';
+type Tab = 'screens' | 'roles' | 'members' | 'users' | 'automations' | 'preview';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'screens', label: 'Pantallas' },
   { id: 'roles', label: 'Roles y permisos' },
   { id: 'members', label: 'Miembros' },
   { id: 'users', label: 'Usuarios' },
+  { id: 'automations', label: 'Automatizaciones' },
   { id: 'preview', label: 'Ver como…' },
 ];
 
@@ -193,6 +195,7 @@ export function AppEditor({ data }: { data: AppEditorData }) {
       {tab === 'roles' && <RolesTab data={data} />}
       {tab === 'members' && <MembersTab data={data} />}
       {tab === 'users' && <UsersTab data={data} />}
+      {tab === 'automations' && <AutomationsTab data={data} />}
       {tab === 'preview' && <PreviewTab data={data} />}
     </div>
   );

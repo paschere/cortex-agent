@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { emitSyncEvents } from '../apps/automations/emit';
 import type { SheetData } from '../kb/spreadsheets';
 import { applyDuplicateRule } from '../trackers/duplicates';
 import { type TrackerField, rowLabel, trackerFieldsSchema } from '../trackers/schema';
@@ -78,6 +79,7 @@ export async function applyUpdateOnly(
   if (tError) throw tError;
   if (!t) throw new NotFoundError('La tabla de esta sincronización ya no existe.');
   const tracker = t as unknown as TrackerRow;
+  const syncedSince = new Date(Date.now() - 2000).toISOString();
 
   const plan = planSync(sheet, tracker.fields, sync.mapping, sync.key_fields);
   if (plan.missingHeaders.length)
@@ -148,7 +150,10 @@ export async function applyUpdateOnly(
   }
   // Una hoja sincronizada puede traer la misma guía con otra fecha: la
   // regla de duplicados de la tabla (si tiene) se revisa una vez al final.
-  if (outcome.inserted || outcome.updated) await applyDuplicateRule(db, tracker.id);
+  if (outcome.inserted || outcome.updated) {
+    await applyDuplicateRule(db, tracker.id);
+    await emitSyncEvents(db, tracker, syncedSince);
+  }
   return outcome;
 }
 

@@ -1,4 +1,4 @@
-import { openScreenForApi } from '@/lib/apps/access';
+import { openScreenForApi, previewAttributesOf } from '@/lib/apps/access';
 import { parseViewFilterParam, readScreen, screenView } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -19,7 +19,10 @@ export async function GET(
 ) {
   const { id, screen: screenRef } = await params;
   const sp = req.nextUrl.searchParams;
-  const opened = await openScreenForApi(id, screenRef, { as: sp.get('como') });
+  const opened = await openScreenForApi(id, screenRef, {
+    as: sp.get('como'),
+    attributes: previewAttributesOf(sp.getAll('atr')),
+  });
   if (opened instanceof NextResponse) return opened;
   const { db, access, screen, readOnly } = opened;
   const view = await screenView(db, screen);

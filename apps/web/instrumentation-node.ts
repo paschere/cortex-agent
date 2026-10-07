@@ -1,6 +1,7 @@
+import { wakeAutomationRuns } from '@/lib/apps/automation-wake';
 import { browserDocumentSink } from '@/lib/browser-download';
 import { readWaitingIndex } from '@/lib/waiting';
-import { setDocumentSink, setWaitingReader } from '@cortex/agent-tools';
+import { setAutomationWaker, setDocumentSink, setWaitingReader } from '@cortex/agent-tools';
 import * as Sentry from '@sentry/nextjs';
 
 /**
@@ -26,6 +27,14 @@ setDocumentSink(browserDocumentSink());
  * encargos.
  */
 setWaitingReader(readWaitingIndex);
+
+/**
+ * Quién despierta a las automatizaciones de las apps (0210). Las escrituras de
+ * filas viven en el paquete (que no puede importar la cola): dejan la corrida
+ * guardada y llaman a este despertador para que corra de inmediato. Sin él, el
+ * barrido de cada minuto hace el mismo trabajo.
+ */
+setAutomationWaker(wakeAutomationRuns);
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({

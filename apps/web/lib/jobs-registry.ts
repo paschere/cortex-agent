@@ -31,6 +31,7 @@ import {
   actionsSweepDispatchJob,
   actionsSweepWorkspaceJob,
 } from '@/inngest/functions/actions-sweep';
+import { appAutomationDispatchJob, appAutomationRunJob } from '@/inngest/functions/app-automations';
 import {
   autopilotDispatchJob,
   autopilotRemindJob,
@@ -128,6 +129,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'reports/weekly.dispatch': weeklyReportDispatchJob,
   // Resumen periódico de una vista (0203): cada hora decide qué vistas tocan.
   'views/digest.dispatch': viewDigestDispatchJob,
+  // Automatizaciones de las apps (0210): cada minuto, horarios y reintentos.
+  'apps/automation.dispatch': appAutomationDispatchJob,
   // Cobro (0187): estado efectivo y recordatorios, una vez al día.
   'billing/renewals': billingRenewalsJob,
   'work/sync.dispatch': workSyncDispatchJob,
@@ -159,6 +162,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'gmail/sweep.user': gmailSweepUserJob,
   'reports/weekly.workspace': weeklyReportWorkspaceJob,
   'views/digest.run': viewDigestRunJob,
+  'apps/automation.run': appAutomationRunJob,
   'work/sync.workspace': workSyncWorkspaceJob,
   'work/assigned': workAssignedJob,
   'clients/link-workspace': clientsLinkWorkspaceJob,

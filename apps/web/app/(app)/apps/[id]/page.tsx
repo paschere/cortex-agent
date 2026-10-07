@@ -1,4 +1,5 @@
-import { requireScreen } from '@/lib/apps/access';
+import { previewAttributesOf, requireScreen } from '@/lib/apps/access';
+import { previewQuery } from '@/lib/apps/preview-query';
 import { redirect } from 'next/navigation';
 
 /**
@@ -14,10 +15,13 @@ export default async function AppIndexPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ como?: string }>;
+  searchParams: Promise<{ como?: string; atr?: string | string[] }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const { access, screen } = await requireScreen(id, null, { as: query.como });
-  const como = query.como ? `?como=${encodeURIComponent(query.como)}` : '';
+  const { access, screen } = await requireScreen(id, null, {
+    as: query.como,
+    attributes: previewAttributesOf(query.atr),
+  });
+  const como = query.como ? previewQuery(query.como, access.user.attributes) : '';
   redirect(`/apps/${access.app.slug}/${screen.slug}${como}`);
 }

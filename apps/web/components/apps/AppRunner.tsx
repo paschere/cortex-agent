@@ -2,6 +2,7 @@
 
 import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import type { SubmitTarget } from '@/components/views/ViewCanvas';
+import { previewQuery } from '@/lib/apps/preview-query';
 import type { ComputedView } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
@@ -21,7 +22,15 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AppWorker, InstallButton, OfflineBanner, SignOutMenu } from './AppSession';
+import { type AppButton, AppButtons, PushToggle } from './AppAutomationBar';
+import {
+  AppWorker,
+  InstallButton,
+  KioskIdleGuard,
+  KioskMenu,
+  OfflineBanner,
+  SignOutMenu,
+} from './AppSession';
 
 /**
  * EL MARCO DE UNA APLICACIÓN.
@@ -79,7 +88,24 @@ export interface AppRunnerProps {
    * es. Sin esto, la app de un miembro (/apps/<slug>) como siempre.
    */
   basePath?: string;
-  session?: { appId: string; userKey: string; external: boolean; name: string } | null;
+  session?: {
+    appId: string;
+    userKey: string;
+    external: boolean;
+    name: string;
+    /** Pantalla de inicio de quien está dentro: se precachea al instalar. */
+    homeSlug?: string | null;
+    /** Sesión de kiosco (0211): minutos sin uso antes de volver a la lista de nombres. */
+    kiosk?: { idleMinutes: number } | null;
+    /** El kiosco de la app está encendido: se ofrece «Mi PIN». */
+    kioskEnabled?: boolean;
+    /** Este rol puede dejar un celular en modo kiosco. */
+    canEnrollKiosk?: boolean;
+  } | null;
+  /** «Ver como… cliente X»: el valor de los atributos con los que se mira (sólo lectura). */
+  previewAttributes?: Record<string, string>;
+  /** Botones de acción manual de esta pantalla (automatizaciones, 0210). */
+  buttons?: AppButton[];
 }
 
 export function AppRunner({
@@ -96,8 +122,10 @@ export function AppRunner({
   title,
   basePath,
   session = null,
+  previewAttributes,
+  buttons = [],
 }: AppRunnerProps) {
-  const como = readOnly ? `?como=${encodeURIComponent(role.key)}` : '';
+  const como = readOnly ? previewQuery(role.key, previewAttributes) : '';
   const base = basePath ?? `/apps/${app.slug}`;
   const hrefFor = (slug: string) => `${base}/${slug}${como}`;
   const editHref = `/apps/${app.slug}/edit`;
@@ -137,7 +165,17 @@ export function AppRunner({
             </span>
             {session?.external && <span className="text-xs text-ink-muted">{session.name}</span>}
             {session && <InstallButton />}
-            {session?.external && <SignOutMenu appId={session.appId} />}
+            {session?.external && (
+              <KioskMenu
+                appId={session.appId}
+                kiosk={Boolean(session.kiosk)}
+                canEnroll={Boolean(session.canEnrollKiosk)}
+                enabled={Boolean(session.kioskEnabled)}
+              />
+            )}
+            {session?.external && (
+              <SignOutMenu appId={session.appId} kiosk={Boolean(session.kiosk)} />
+            )}
             {canManage && (
               <Link
                 href={editHref}
@@ -157,11 +195,34 @@ export function AppRunner({
               <span className="text-xs font-semibold text-ink">{session.name}</span>
               <InstallButton />
             </div>
-            <SignOutMenu appId={session.appId} />
+            <div className="flex flex-col items-end gap-2">
+              <KioskMenu
+                appId={session.appId}
+                kiosk={Boolean(session.kiosk)}
+                canEnroll={Boolean(session.canEnrollKiosk)}
+                enabled={Boolean(session.kioskEnabled)}
+              />
+              <SignOutMenu appId={session.appId} kiosk={Boolean(session.kiosk)} />
+            </div>
           </div>
         )}
-        {session && <AppWorker appId={session.appId} userKey={session.userKey} />}
+        {session?.kiosk && (
+          <KioskIdleGuard appId={session.appId} idleMinutes={session.kiosk.idleMinutes} />
+        )}
+        {session && (
+          <AppWorker
+            appId={session.appId}
+            userKey={session.userKey}
+            homeSlug={session.homeSlug ?? null}
+          />
+        )}
         {session && <OfflineBanner computedAt={computed.computedAt} />}
+        {!readOnly && (
+          <div className="view-no-print mb-3 flex flex-col items-start gap-2">
+            <AppButtons appId={app.id} screen={current} buttons={buttons} />
+            <PushToggle appId={app.id} />
+          </div>
+        )}
         {readOnly && (
           <output className="view-no-print mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-amber/40 bg-amber-soft px-4 py-2.5 text-sm font-medium text-ink">
             <span>Viendo como {role.name}. Nada se guarda.</span>
@@ -194,7 +255,7 @@ export function AppRunner({
               href={hrefFor(s.slug)}
               aria-current={s.slug === current ? 'page' : undefined}
               className={clsx(
-                'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-semibold',
+                'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-2 text-micro font-semibold',
                 s.slug === current ? 'text-primary' : 'text-ink-faint',
               )}
             >

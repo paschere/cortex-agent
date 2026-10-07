@@ -2,6 +2,7 @@ import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { emitAutomationEvent, watchesTracker } from '../apps/automations/emit';
 import {
   type RowAccess,
   type RowScope,
@@ -1048,6 +1049,18 @@ export async function submitViewForm(
      * llegó uno igual, no se escribe otra fila — se devuelve la de la primera vez.
      */
     clientId?: string | null;
+    /**
+     * Valores que pone el SERVIDOR aunque el formulario no pida ese campo (el
+     * campo del scope de una app: «Cliente» = el cliente de quien escribe).
+     * Pisan lo que mande el navegador.
+     */
+    forced?: Record<string, string>;
+    /**
+     * Rellena con su `default` los campos de la tabla que el formulario no
+     * pide (por ejemplo el estado inicial «Solicitada»). Nunca toma el valor
+     * del navegador para esos campos. Lo usa la capa de apps.
+     */
+    fillDefaults?: boolean;
   },
 ): Promise<SubmitOutcome> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
@@ -1110,9 +1123,19 @@ export async function submitViewForm(
   const allowed = new Set(block.fields.length ? block.fields : tracker.fields.map((f) => f.key));
   // El campo de estado de la aprobación no se pide: lo pone el servidor.
   if (block.approval) allowed.add(block.approval.field);
+  const forced = input.forced ?? {};
+  for (const key of Object.keys(forced)) allowed.add(key);
+  const defaultOnly = new Set<string>();
+  if (input.fillDefaults)
+    for (const f of tracker.fields)
+      if (!allowed.has(f.key) && f.default !== undefined && f.default !== '') {
+        allowed.add(f.key);
+        defaultOnly.add(f.key);
+      }
   const asked = tracker.fields.filter((f) => allowed.has(f.key));
   const raw: Record<string, unknown> = {};
-  for (const f of asked) raw[f.key] = input.values[f.key];
+  for (const f of asked) raw[f.key] = defaultOnly.has(f.key) ? undefined : input.values[f.key];
+  for (const [key, value] of Object.entries(forced)) raw[key] = value;
   if (block.approval) raw[block.approval.field] = block.approval.pending;
   // Defaults, campos ocultos (showIf), reglas de cada campo y relaciones. Una
   // relación de un enlace público sólo puede apuntar a las tablas de ESTA vista:
@@ -1175,6 +1198,28 @@ export async function submitViewForm(
       rule.fields,
       outcome.conflicts.find((c) => c.rowId === rowId),
     );
+  }
+
+  // Automatizaciones (0210): una fila nueva y un formulario enviado. Después de
+  // la regla de duplicados, para que `after` ya lleve la marca si la hubo.
+  if (await watchesTracker(db, tracker.id)) {
+    const actor = {
+      kind: byApp ? ('app_user' as const) : ('member' as const),
+      id: input.submittedBy,
+    };
+    const common = {
+      trackerId: tracker.id,
+      trackerSlug: tracker.slug,
+      rowId,
+      after: values as Record<string, string | number>,
+      label: rowLabel(tracker.fields, values),
+      version: new Date().toISOString(),
+      actor,
+      viewId: view.id,
+      blockId: block.id,
+    };
+    await emitAutomationEvent(db, { ...common, kind: 'row_created' });
+    await emitAutomationEvent(db, { ...common, kind: 'form_submitted' });
   }
 
   return {
@@ -1381,6 +1426,8 @@ async function patchRow(
     actionId?: string;
     actor: string | null;
     actorKind?: ActorKind;
+    /** Motivo de un rechazo, para las automatizaciones (`{{motivo}}`). */
+    reason?: string | null;
   },
 ): Promise<{
   label: string;
@@ -1459,6 +1506,29 @@ async function patchRow(
     actor: input.actor,
     actor_kind: input.actorKind ?? 'member',
   });
+  // Automatizaciones (0210): la fila cambió y, si fue Aprobar/Rechazar, se decidió.
+  if (await watchesTracker(db, input.tracker.id)) {
+    const common = {
+      trackerId: input.tracker.id,
+      trackerSlug: input.tracker.slug,
+      rowId: input.rowId,
+      before: before as Record<string, string | number>,
+      after: values as Record<string, string | number>,
+      label,
+      version: new Date().toISOString(),
+      actor: { kind: input.actorKind ?? ('member' as const), id: input.actor },
+      viewId: view.id,
+      blockId: input.blockId,
+    };
+    await emitAutomationEvent(db, { ...common, kind: 'row_updated' });
+    if (input.actionId === APPROVE_ACTION_ID || input.actionId === REJECT_ACTION_ID)
+      await emitAutomationEvent(db, {
+        ...common,
+        kind: 'approval_decided',
+        decision: input.actionId === APPROVE_ACTION_ID ? 'approved' : 'rejected',
+        reason: input.reason ?? undefined,
+      });
+  }
   return { label, changes, duplicate };
 }
 
@@ -1561,6 +1631,7 @@ export async function runViewAction(
       actionId: input.actionId,
       actor: input.actor,
       actorKind: input.actorKind,
+      reason: input.reason,
     });
     return {
       kind: 'set_field',

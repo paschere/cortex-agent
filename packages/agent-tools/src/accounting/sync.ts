@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { emitSyncEvents } from '../apps/automations/emit';
 import { bogotaToday } from '../commitments/shape';
 import { importSystemPayments } from '../payments/import';
 import { type TrackerField, rowLabel, trackerFieldsSchema } from '../trackers/schema';
@@ -223,6 +224,7 @@ export async function upsertAccountingRows(
   counts: EntityCounts,
   newLabels: string[],
 ): Promise<void> {
+  const wroteSince = new Date(Date.now() - 2000).toISOString();
   const known = new Set(table.fields.map((f) => f.key));
   const byKey = new Map<string, Record<string, string | number>>();
   for (const r of rows) if (r.key) byKey.set(r.key.slice(0, 400), r.values);
@@ -297,6 +299,8 @@ export async function upsertAccountingRows(
       else throw oneError;
     }
   }
+  // Avisa a las automatizaciones de la app que miran esta tabla (0210).
+  if (counts.inserted || counts.updated) await emitSyncEvents(db, table, wroteSince);
 }
 
 // ---------------------------------------------------------------------------
