@@ -75,6 +75,8 @@ const ctxNow = (): VoiceCtx => ({ today: todayBogota(), now: nowBogota() });
 function turnEndpoint(c: FormController): string | null {
   if (c.target.kind === 'app') return `/api/views/${c.target.viewId}/voice-turn`;
   if (c.target.kind === 'public') return '/api/views/public/voice-turn';
+  if (c.target.kind === 'custom_app')
+    return `/api/apps/${c.target.appId}/screens/${c.target.screen}/voice-turn`;
   return null;
 }
 
@@ -109,6 +111,8 @@ export function useVoiceForm(controller: FormController | undefined) {
   const cortexRef = useRef(false);
   cortexRef.current = cortexAvailable;
   const inputMode = useRef<'speech' | 'record' | null>(null);
+  /** Enviando y diciendo «Enviado»: el «listo» del formulario no debe cortar esa frase. */
+  const finishing = useRef(false);
 
   useEffect(() => {
     setSettingsState(loadSettings());
@@ -157,7 +161,7 @@ export function useVoiceForm(controller: FormController | undefined) {
   // El formulario mostró su «listo» (por la voz o por el dedo): la conversación terminó.
   const done = controller?.done ?? false;
   useEffect(() => {
-    if (done && phase !== 'idle' && phase !== 'ended') {
+    if (done && !finishing.current && phase !== 'idle' && phase !== 'ended') {
       cutAll();
       setPhase('ended');
     }
@@ -359,15 +363,21 @@ export function useVoiceForm(controller: FormController | undefined) {
     }
     // submit
     setPhase('thinking');
+    finishing.current = true;
     const res = await c.submit();
-    if (!alive(id)) return 'end';
+    if (!alive(id)) {
+      finishing.current = false;
+      return 'end';
+    }
     if (res.ok) {
       const tail = res.offline
         ? 'Sin señal: lo guardé en el teléfono y se envía solo cuando vuelva.'
         : `Enviado.${res.duplicate ? ` Ojo: ${res.duplicate}` : ' Gracias.'}`;
       await say(tail, id);
+      finishing.current = false;
       return 'end';
     }
+    finishing.current = false;
     if (!eng.current) return 'end';
     return {
       state: { ...eng.current, phase: 'confirming', awaitingFix: false },
