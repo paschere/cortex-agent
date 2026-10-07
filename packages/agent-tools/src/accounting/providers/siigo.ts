@@ -16,7 +16,7 @@ import type {
 import { siigoInvoicing } from './invoicing';
 import { siigoPurchasePage } from './purchases';
 import { siigoReports } from './reports-siigo';
-import { SiigoClient, hasMorePages } from './siigo-client';
+import { SiigoClient, SiigoError, hasMorePages } from './siigo-client';
 
 /**
  * SIIGO NUBE (Colombia), el primer programa contable conectado.
@@ -399,6 +399,36 @@ export function siigoQueries(entity: AccountingEntity, input: QueryPlanInput): P
   return [{}];
 }
 
+/**
+ * Filtros que se sueltan, en este orden, cuando Siigo responde
+ * `parameters_exclusive` (400): no documenta qué combinaciones de `type`,
+ * `active` y `stock_control` acepta juntas, y un solo 400 detenía la carga de
+ * productos y con ella las de facturas y recibos (2026-10-07). Soltar un
+ * filtro trae MÁS registros, nunca menos; los repetidos entre consultas no
+ * importan porque cada registro se identifica por su id de Siigo. El orden es
+ * fijo, así que cada página de la misma consulta pide lo mismo.
+ */
+const RELAXABLE = ['stock_control', 'type', 'active'] as const;
+
+export async function pageRelaxing(
+  client: Pick<SiigoClient, 'page'>,
+  path: string,
+  query: Parameters<SiigoClient['page']>[1],
+  page: number,
+): Promise<Awaited<ReturnType<SiigoClient['page']>>> {
+  let current: Record<string, unknown> = { ...query };
+  for (;;) {
+    try {
+      return await client.page<unknown>(path, current as typeof query, page);
+    } catch (err) {
+      const drop = RELAXABLE.find((k) => current[k] !== undefined);
+      if (!(err instanceof SiigoError) || err.code !== 'parameters_exclusive' || !drop) throw err;
+      const { [drop]: _dropped, ...rest } = current;
+      current = rest;
+    }
+  }
+}
+
 export const siigoProvider: AccountingProvider = {
   id: 'siigo',
   name: 'Siigo',
@@ -432,7 +462,7 @@ export const siigoProvider: AccountingProvider = {
       reports: siigoReports(client, { fetch: runtime.fetch }),
       writer: siigoWriter(client),
       async listPage(entity, query, page) {
-        const result = await client.page<unknown>(PATHS[entity], query, page);
+        const result = await pageRelaxing(client, PATHS[entity], query, page);
         const records = result.results
           .map((r) => normalize(entity, r))
           .filter((r): r is NormalizedRecord => r !== null);

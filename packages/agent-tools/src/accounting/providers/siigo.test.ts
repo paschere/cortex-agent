@@ -424,3 +424,43 @@ describe('qué se le pide a Siigo', () => {
     expect(session.requests).toBe(2);
   });
 });
+
+describe('Siigo rechaza combinaciones de filtros (parameters_exclusive)', () => {
+  it('suelta filtros en orden fijo hasta que Siigo acepta, sin perder la página', async () => {
+    const { pageRelaxing } = await import('./siigo');
+    const { SiigoError } = await import('./siigo-client');
+    const seen: Array<Record<string, unknown>> = [];
+    const client = {
+      async page(_path: string, query: Record<string, unknown>, page: number) {
+        seen.push({ ...query, page });
+        if ('stock_control' in query)
+          throw new SiigoError('400', 'other', 400, 'parameters_exclusive');
+        return { results: [{ id: 'p1' }], pagination: { page, page_size: 100, total_results: 1 } };
+      },
+    };
+    const out = await pageRelaxing(
+      client as never,
+      '/v1/products',
+      { type: 'Service', active: 'true', stock_control: 'false' },
+      3,
+    );
+    expect(out.results).toHaveLength(1);
+    expect(seen).toEqual([
+      { type: 'Service', active: 'true', stock_control: 'false', page: 3 },
+      { type: 'Service', active: 'true', page: 3 },
+    ]);
+  });
+
+  it('otro 400 no se esconde', async () => {
+    const { pageRelaxing } = await import('./siigo');
+    const { SiigoError } = await import('./siigo-client');
+    const client = {
+      async page() {
+        throw new SiigoError('400', 'other', 400, 'invalid_parameter');
+      },
+    };
+    await expect(
+      pageRelaxing(client as never, '/v1/products', { type: 'Product' }, 1),
+    ).rejects.toThrow();
+  });
+});
