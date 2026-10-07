@@ -20,10 +20,10 @@ export async function GET(
   const sp = req.nextUrl.searchParams;
   const opened = await openScreenForApi(id, screenRef, { as: sp.get('como') });
   if (opened instanceof NextResponse) return opened;
-  const { db, user, access, screen, readOnly } = opened;
+  const { db, actor, access, screen, readOnly } = opened;
   if (!appCanExport(access))
     return NextResponse.json({ error: 'Tu rol en esta aplicación no exporta.' }, { status: 403 });
-  if (!takeExportSlot(`u:${user.id}`))
+  if (!takeExportSlot(`u:${actor.id}`))
     return NextResponse.json(
       { error: 'Exportaste muchas veces en la última hora. Intenta más tarde.' },
       { status: 429 },

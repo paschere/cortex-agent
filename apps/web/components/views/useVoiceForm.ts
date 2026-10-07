@@ -1,5 +1,6 @@
 'use client';
 
+import { appApiBase } from '@/lib/apps/api-base';
 import {
   type ServerTurn,
   type VoiceCommand,
@@ -76,7 +77,7 @@ function turnEndpoint(c: FormController): string | null {
   if (c.target.kind === 'app') return `/api/views/${c.target.viewId}/voice-turn`;
   if (c.target.kind === 'public') return '/api/views/public/voice-turn';
   if (c.target.kind === 'custom_app')
-    return `/api/apps/${c.target.appId}/screens/${c.target.screen}/voice-turn`;
+    return `${appApiBase(c.target)}/screens/${c.target.screen}/voice-turn`;
   return null;
 }
 

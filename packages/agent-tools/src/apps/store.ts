@@ -7,8 +7,11 @@ import { type ComputedView, type ViewSource, computeView } from '../views/comput
 import { internalShareRefusal, internalSourcesOf } from '../views/sources';
 import { APPROVE_ACTION_ID, REJECT_ACTION_ID, type ViewSpec, slugify } from '../views/spec';
 import {
+  type ActorKind,
   type CustomViewRow,
+  SubmissionLimitError,
   VIEW_COLUMNS,
+  ViewWriteLimitError,
   archiveView,
   createView,
   editViewRow,
@@ -33,6 +36,7 @@ import {
   canSeeScreen,
   editAccessFor,
   fieldsOutside,
+  isOwnRow,
   parsePermissions,
   roleKeySchema,
   rowAccessFor,
@@ -140,7 +144,7 @@ export interface AppMemberRow {
 export const APP_SLUG_RE = /^[a-z][a-z0-9_]{1,47}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function adaptApp(row: Record<string, unknown>): CustomAppRow {
+export function adaptApp(row: Record<string, unknown>): CustomAppRow {
   const theme = appThemeSchema.safeParse(row.theme ?? {});
   return {
     ...(row as unknown as CustomAppRow),
@@ -802,6 +806,63 @@ async function trackerRow(db: SupabaseClient, slug: string): Promise<TrackerRow>
   return data as unknown as TrackerRow;
 }
 
+interface RowOwner {
+  values: Record<string, string | number>;
+  created_by: string | null;
+  created_by_app_user?: string | null;
+}
+
+/** Quién escribe: un usuario externo de la app (0209) o un miembro de Cortex. */
+export function actorKindOf(access: AppAccess): ActorKind {
+  return access.user.external ? 'app_user' : 'member';
+}
+
+/**
+ * LOS TOPES DE USO DE UN USUARIO EXTERNO, por usuario y por app (decidido
+ * 2026-10-06: los usuarios son ilimitados y no cuentan como asientos, pero lo
+ * que hacen sí tiene tope). Una hora deslizante. Un miembro de Cortex no pasa
+ * por aquí: tiene el tope del plan.
+ */
+export const EXTERNAL_SUBMISSIONS_PER_USER_HOUR = 60;
+export const EXTERNAL_SUBMISSIONS_PER_APP_HOUR = 1000;
+export const EXTERNAL_WRITES_PER_USER_HOUR = 240;
+export const EXTERNAL_WRITES_PER_APP_HOUR = 3000;
+
+export async function assertExternalBudget(
+  db: SupabaseClient,
+  access: AppAccess,
+  kind: 'submit' | 'write',
+  now: Date = new Date(),
+): Promise<void> {
+  if (!access.user.external) return;
+  const since = new Date(now.getTime() - 3_600_000).toISOString();
+  const viewIds = access.screens.map((s) => s.view_id);
+  const table = kind === 'submit' ? 'custom_view_submissions' : 'custom_view_events';
+  const userColumn = kind === 'submit' ? 'submitted_by' : 'actor';
+  const [mine, all] = await Promise.all([
+    db
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq(userColumn, access.user.id)
+      .gte('created_at', since),
+    viewIds.length
+      ? db
+          .from(table)
+          .select('id', { count: 'exact', head: true })
+          .in('view_id', viewIds)
+          .gte('created_at', since)
+      : Promise.resolve({ count: 0, error: null }),
+  ]);
+  if (mine.error) throw mine.error;
+  if (all.error) throw all.error;
+  const userCap =
+    kind === 'submit' ? EXTERNAL_SUBMISSIONS_PER_USER_HOUR : EXTERNAL_WRITES_PER_USER_HOUR;
+  const appCap =
+    kind === 'submit' ? EXTERNAL_SUBMISSIONS_PER_APP_HOUR : EXTERNAL_WRITES_PER_APP_HOUR;
+  if ((mine.count ?? 0) >= userCap || (all.count ?? 0) >= appCap)
+    throw kind === 'submit' ? new SubmissionLimitError() : new ViewWriteLimitError();
+}
+
 /**
  * La fila tiene que ser VISIBLE para el rol antes de tocarla. Una que no pasa
  * el scope es «no existe» (NotFound), no «prohibida»: no se confirma que esté.
@@ -811,16 +872,16 @@ async function assertRowVisible(
   access: AppAccess,
   slug: string,
   rowId: string,
-): Promise<{ values: Record<string, string | number>; created_by: string | null }> {
+): Promise<RowOwner> {
   const tracker = await trackerRow(db, slug);
   const { data, error } = await db
     .from('tracker_rows')
-    .select('id, values, created_by')
+    .select('id, values, created_by, created_by_app_user')
     .eq('id', rowId)
     .eq('tracker_id', tracker.id)
     .maybeSingle();
   if (error) throw error;
-  const row = data as { values: Record<string, string | number>; created_by: string | null } | null;
+  const row = data as RowOwner | null;
   if (!row || !rowVisible(rowAccessFor(access.role, access.user, slug), row))
     throw new NotFoundError('Esa fila ya no está en la tabla.');
   return row;
@@ -862,10 +923,12 @@ export async function submitAppForm(
       throw new ValidationError('Tu usuario no tiene el atributo que esta tabla necesita.');
     values[scope.field] = scope.value;
   }
+  await assertExternalBudget(db, access, 'submit');
   return submitViewForm(db, view, {
     blockId: input.blockId,
     values,
     submittedBy: access.user.id,
+    submittedByKind: actorKindOf(access),
     viewer: access.user.name,
     clientId: input.clientId,
   });
@@ -883,7 +946,12 @@ export async function editAppSubmission(
     throw new ValidationError('Tu rol en esta aplicación no corrige en esta tabla.');
   await assertRowVisible(db, access, slug, input.rowId);
   assertFields(access, slug, Object.keys(input.values));
-  return editViewSubmission(db, view, { ...input, actor: access.user.id });
+  await assertExternalBudget(db, access, 'write');
+  return editViewSubmission(db, view, {
+    ...input,
+    actor: access.user.id,
+    actorKind: actorKindOf(access),
+  });
 }
 
 /** Editar una celda, mover una tarjeta o cambiar un campo desde la ficha. */
@@ -897,10 +965,11 @@ export async function editAppRow(
   const edit = editAccessFor(access.role, slug);
   if (edit === 'none') throw new ValidationError('Tu rol en esta aplicación no edita esta tabla.');
   const row = await assertRowVisible(db, access, slug, input.rowId);
-  if (edit === 'own' && row.created_by !== access.user.id)
+  if (edit === 'own' && !isOwnRow(access.user, row))
     throw new ValidationError('Sólo puedes editar lo que registraste tú.');
   assertFields(access, slug, Object.keys(input.patch));
-  return editViewRow(db, view, { ...input, actor: access.user.id });
+  await assertExternalBudget(db, access, 'write');
+  return editViewRow(db, view, { ...input, actor: access.user.id, actorKind: actorKindOf(access) });
 }
 
 /** Un botón de fila, incluidos Aprobar y Rechazar: el rol lo tiene que tener. */
@@ -920,7 +989,12 @@ export async function runAppAction(
     );
   }
   await assertRowVisible(db, access, slug, input.rowId);
-  return runViewAction(db, view, { ...input, actor: access.user.id });
+  await assertExternalBudget(db, access, 'write');
+  return runViewAction(db, view, {
+    ...input,
+    actor: access.user.id,
+    actorKind: actorKindOf(access),
+  });
 }
 
 export function appCanExport(access: AppAccess): boolean {

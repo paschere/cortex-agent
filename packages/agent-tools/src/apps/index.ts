@@ -7,8 +7,17 @@
 
 import './tools';
 
-export { appsCreate, appsList } from './tools';
+export {
+  appsAssignMembers,
+  appsCreate,
+  appsGet,
+  appsInviteUsers,
+  appsList,
+  appsPublish,
+  appsUpdate,
+} from './tools';
 export * from './permissions';
 export * from './store';
 export * from './templates';
 export * from './install';
+export * from './external';

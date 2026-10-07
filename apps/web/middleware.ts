@@ -146,6 +146,14 @@ const PUBLIC_PATHS = [
   // el resto de /cumplimiento y de /api/pqrs sigue detrás de la sesión.
   '/pqrs',
   '/api/pqrs/public',
+  // Aplicaciones para usuarios externos (migración 0209): la entrada por código,
+  // las pantallas, el manifiesto, los íconos y el service worker de CADA app
+  // cuelgan de /a/<app>, y sus rutas de datos de /api/apps/public. Quien entra no
+  // tiene cookie de better-auth: la puerta real es `openApp` (lib/apps/access.ts),
+  // que resuelve la sesión de Cortex o la cookie propia de la app y entrega el
+  // rol GUARDADO. El resto de /api/apps (y /apps) sigue detrás de la sesión.
+  '/a',
+  '/api/apps/public',
 ];
 
 interface SessionPayload {

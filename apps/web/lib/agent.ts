@@ -64,6 +64,12 @@ export function buildToolContext(opts: {
         ...input,
       });
     },
+    // Invitar usuarios externos de una app (`apps.invite_users`): el correo lo
+    // manda la aplicación web. Import dinámico: arrastra Resend y las plantillas.
+    sendAppInvitations: async (input) => {
+      const { sendAppInvitations } = await import('./apps/invitations');
+      return sendAppInvitations(db, input.appId, input.userIds);
+    },
     signal: opts.signal,
   };
 }

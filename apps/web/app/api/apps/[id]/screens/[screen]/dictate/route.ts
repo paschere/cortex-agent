@@ -1,5 +1,6 @@
 import { isSameOrigin } from '@/lib/activations/request';
-import { openScreenForApi } from '@/lib/apps/access';
+import { formGate, openScreenForApi } from '@/lib/apps/access';
+import { dictationsByAppUser } from '@/lib/apps/rate-limit';
 import { dictateForm } from '@/lib/views/dictate';
 import { dictationError, readDictation } from '@/lib/views/dictate-request';
 import { screenView } from '@cortex/agent-tools';
@@ -31,6 +32,13 @@ export async function POST(
   const view = await screenView(db, screen);
   const read = await readDictation(await req.formData().catch(() => null));
   if ('error' in read) return NextResponse.json({ error: read.error }, { status: 400 });
+  const denied = formGate(opened, view, read.blockId);
+  if (denied) return denied;
+  if (opened.external && !dictationsByAppUser.take(opened.actor.id))
+    return NextResponse.json(
+      { error: 'Dictaste muchas veces en la última hora. Intenta más tarde.' },
+      { status: 429 },
+    );
   try {
     return NextResponse.json(
       await dictateForm(db, view, read.blockId, read.input, { signal: req.signal }),

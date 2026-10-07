@@ -83,6 +83,10 @@ const ALLOWED = new Map<string, string>([
     'The platform support inbox (migration 0190): the people who operate Cortex read every company’s tickets on purpose. Every exported function starts with requireSupportOperator() — platform admin (ba_user.role) or SUPPORT_OPERATORS — so a server action called on its own cannot skip the gate, and a reply is stamped with the organization of the ticket it answers, never another.',
   ],
   [
+    'lib/apps/external-session.ts',
+    'The entrance of an application for external users (/a/<app>, migration 0209) has no session, so the company is not known yet. The raw client is used for exactly one read: the PUBLISHED app by its id (findPublishedApp). Everything after — users, sessions, roles, rows — is read through getOrgScopedClient(app.organization_id), the only workspace that session can ever open.',
+  ],
+  [
     'lib/views/public.ts',
     'A shared view (/v/<token>) is opened by people with no Cortex account, so the token is the credential — the same posture as the report link. It is used for exactly two reads: the view row by token and its workspace name. Every row the view then shows is read through getOrgScopedClient(view.organization_id).',
   ],

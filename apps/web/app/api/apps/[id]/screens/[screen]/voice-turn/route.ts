@@ -1,5 +1,6 @@
 import { isSameOrigin } from '@/lib/activations/request';
-import { openScreenForApi } from '@/lib/apps/access';
+import { formGate, openScreenForApi } from '@/lib/apps/access';
+import { voiceTurnsByAppUser } from '@/lib/apps/rate-limit';
 import { dictationError } from '@/lib/views/dictate-request';
 import { voiceTurn } from '@/lib/views/voice-turn';
 import { readVoiceTurn } from '@/lib/views/voice-turn-request';
@@ -34,6 +35,13 @@ export async function POST(
   const view = await screenView(db, screen);
   const read = await readVoiceTurn(await req.formData().catch(() => null));
   if ('error' in read) return NextResponse.json({ error: read.error }, { status: 400 });
+  const denied = formGate(opened, view, read.blockId);
+  if (denied) return denied;
+  if (opened.external && !voiceTurnsByAppUser.take(opened.actor.id))
+    return NextResponse.json(
+      { error: 'Hablaste muchas veces en la última hora. Intenta más tarde.' },
+      { status: 429 },
+    );
   try {
     return NextResponse.json(await voiceTurn(db, view, read, { signal: req.signal }));
   } catch (err) {

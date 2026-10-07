@@ -59,6 +59,16 @@ export interface EditorMember {
   attributes: Record<string, string>;
 }
 
+export interface EditorAppUser {
+  id: string;
+  name: string;
+  email: string;
+  roleKey: string;
+  attributes: Record<string, string>;
+  status: 'invited' | 'active' | 'disabled';
+  lastSeenAt: string | null;
+}
+
 export interface EditorPerson {
   id: string;
   name: string;
@@ -78,6 +88,10 @@ export interface AppEditorData {
   screens: EditorScreen[];
   roles: EditorRole[];
   members: EditorMember[];
+  /** Usuarios externos (sin cuenta de Cortex), 0209. */
+  appUsers: EditorAppUser[];
+  /** El enlace de entrada /a/<id>, para copiarlo. */
+  entryPath: string;
   directory: EditorPerson[];
   trackers: EditorTracker[];
   /** Tablas que una pantalla lee pero que no son tablas propias (sin campos que listar). */

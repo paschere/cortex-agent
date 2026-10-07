@@ -216,8 +216,15 @@ export async function restoreViewVersionAction(
   try {
     const user = await requireSession();
     const db = getOrgScopedClient(user.organization.id);
-    const view = await restoreViewVersion(db, viewId, version, user.id);
+    // Una pantalla de app no es «vista» para las puertas normales (0208): se
+    // busca con `appScreens` y restaurarla es, como guardarla, de quien administra.
+    const current = await mustGetView(db, viewId, { appScreens: true });
+    const appScreen = Boolean(current.app_id);
+    if (appScreen && !viewerFromSession(user).companyAdmin)
+      throw new ValidationError('Sólo quien administra la empresa puede cambiar una aplicación.');
+    const view = await restoreViewVersion(db, viewId, version, user.id, { appScreen });
     revalidatePath(`/views/${view.slug}`);
+    if (appScreen) revalidatePath(`/apps/${view.app_id}/edit`);
     return { ok: true, version: view.version };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo restaurar esa versión.') };

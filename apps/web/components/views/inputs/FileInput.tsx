@@ -1,5 +1,6 @@
 'use client';
 
+import { appApiBase } from '@/lib/apps/api-base';
 import { compressImage } from '@/lib/views/compress-image';
 import { isPendingUrl, previewUrl, stashBlob } from '@/lib/views/offline-files';
 import {
@@ -64,7 +65,7 @@ export function uploadFile(
     target.kind === 'app'
       ? `/api/views/${target.viewId}/upload`
       : target.kind === 'custom_app'
-        ? `/api/apps/${target.appId}/screens/${target.screen}/upload`
+        ? `${appApiBase(target)}/screens/${target.screen}/upload`
         : '/api/views/public/upload';
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();

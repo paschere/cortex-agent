@@ -10,6 +10,7 @@ import { MembersTab } from './MembersTab';
 import { PreviewTab } from './PreviewTab';
 import { RolesTab } from './RolesTab';
 import { ScreensTab } from './ScreensTab';
+import { UsersTab } from './UsersTab';
 import {
   type AppEditorData,
   BTN_DANGER,
@@ -23,12 +24,12 @@ import {
 export type { AppEditorData } from './shared';
 
 /**
- * EL EDITOR DE UNA APLICACIÓN: cuatro pestañas y una cabecera.
+ * EL EDITOR DE UNA APLICACIÓN: cinco pestañas y una cabecera.
  *
  * La cabecera es la app misma (nombre, descripción, icono, publicar,
  * archivar). Las pestañas siguen el orden en que se arma una app: primero las
- * pantallas, luego quién ve y hace qué en cada una (roles), luego las personas
- * y al final «Ver como…», que abre la app corriendo con los datos reales y con
+ * pantallas, luego quién ve y hace qué en cada una (roles), luego las personas del equipo (miembros) y las de afuera (usuarios: operarios, clientes
+ * que entran con un código por correo) y al final «Ver como…», que abre la app corriendo con los datos reales y con
  * los ojos de un rol para comprobar que nadie ve de más.
  *
  * Todo cambio es una acción de servidor con su resultado a la vista (errores
@@ -37,11 +38,12 @@ export type { AppEditorData } from './shared';
  * pantalla lee una fuente interna—; el texto del rechazo se muestra tal cual.
  */
 
-type Tab = 'screens' | 'roles' | 'members' | 'preview';
+type Tab = 'screens' | 'roles' | 'members' | 'users' | 'preview';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'screens', label: 'Pantallas' },
   { id: 'roles', label: 'Roles y permisos' },
   { id: 'members', label: 'Miembros' },
+  { id: 'users', label: 'Usuarios' },
   { id: 'preview', label: 'Ver como…' },
 ];
 
@@ -190,6 +192,7 @@ export function AppEditor({ data }: { data: AppEditorData }) {
       {tab === 'screens' && <ScreensTab data={data} />}
       {tab === 'roles' && <RolesTab data={data} />}
       {tab === 'members' && <MembersTab data={data} />}
+      {tab === 'users' && <UsersTab data={data} />}
       {tab === 'preview' && <PreviewTab data={data} />}
     </div>
   );

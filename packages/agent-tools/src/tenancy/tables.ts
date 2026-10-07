@@ -541,6 +541,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   custom_app_screens: tenant(),
   custom_app_roles: tenant(),
   custom_app_members: tenant(),
+  // 0209: usuarios externos de una app, sus sesiones y sus códigos de entrada.
+  // Tenant las tres: un usuario o una sesión ajena entraría a una app que no es suya.
+  custom_app_users: tenant(),
+  custom_app_sessions: tenant(),
+  custom_app_login_codes: tenant(),
   // 0178: las vistas guardadas del visualizador de datos (filtros, orden,
   // columnas) por alcance — una tabla de la empresa, la lista de clientes.
   // Tenant: el nombre y los filtros de una vista dicen qué mira una empresa

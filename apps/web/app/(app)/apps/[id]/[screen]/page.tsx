@@ -23,14 +23,14 @@ export default async function AppScreenPage({
   searchParams: Promise<{ como?: string }>;
 }) {
   const [{ id, screen: screenRef }, query] = await Promise.all([params, searchParams]);
-  const { user, db, access, screen, readOnly, viewer } = await requireScreen(
+  const { actor, db, access, screen, readOnly, viewer } = await requireScreen(
     decodeURIComponent(id),
     decodeURIComponent(screenRef),
     { as: query.como },
   );
   const [{ computed }, brand] = await Promise.all([
     readScreen(db, access, screen, { readOnly }),
-    loadSessionBrand(db, user.organization.name),
+    loadSessionBrand(db, actor.organizationName),
   ]);
   const { app, role } = access;
   return (

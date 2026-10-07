@@ -60,8 +60,13 @@ export const roleKeySchema = z.string().trim().regex(ROLE_KEY_RE);
 export interface AppUser {
   id: string;
   name: string;
-  /** Los atributos de su fila en `custom_app_members` ({cliente: "Andina"}). */
+  /** Los atributos de su fila en `custom_app_members` o `custom_app_users` ({cliente: "Andina"}). */
   attributes: Record<string, string>;
+  /**
+   * True para un usuario externo de la app (0209, sin cuenta de Cortex): su
+   * «own» es `created_by_app_user`, no `created_by`. Un miembro: omitido/false.
+   */
+  external?: boolean;
 }
 
 /** El rol resuelto: la clave, el nombre y los permisos ya validados. */
@@ -115,7 +120,7 @@ export function canSeeScreen(role: ResolvedRole, screenRoles: readonly string[])
  */
 export type RowAccess =
   | { kind: 'all' }
-  | { kind: 'own'; userId: string }
+  | { kind: 'own'; userId: string; external?: boolean }
   | { kind: 'equals'; field: string; value: string | null }
   | { kind: 'none' };
 
@@ -129,7 +134,10 @@ export function rowAccessFor(role: ResolvedRole, user: AppUser, tracker: string)
   const perm = role.permissions.tables[tracker];
   if (!perm) return { kind: 'none' };
   if (perm.read === 'all') return { kind: 'all' };
-  if (perm.read === 'own') return { kind: 'own', userId: user.id };
+  if (perm.read === 'own')
+    return user.external
+      ? { kind: 'own', userId: user.id, external: true }
+      : { kind: 'own', userId: user.id };
   const attr = USER_ATTRIBUTE_RE.exec(perm.read.equals)?.[1] ?? '';
   const value = user.attributes[attr];
   return {
@@ -154,7 +162,7 @@ export function rowScopeFor(role: ResolvedRole, user: AppUser, spec: ViewSpec): 
 /** ¿Esta fila pasa el scope? Es la misma regla que filtra la lectura. */
 export function rowVisible(
   access: RowAccess,
-  row: Pick<ViewRow, 'values' | 'created_by'>,
+  row: Pick<ViewRow, 'values' | 'created_by' | 'created_by_app_user'>,
 ): boolean {
   switch (access.kind) {
     case 'all':
@@ -162,19 +170,30 @@ export function rowVisible(
     case 'none':
       return false;
     case 'own':
-      return row.created_by === access.userId;
+      // Dos mundos que no se mezclan: la fila de un miembro lleva `created_by`,
+      // la de un externo `created_by_app_user`. Un uuid de uno nunca vale por el otro.
+      return access.external
+        ? row.created_by_app_user === access.userId
+        : row.created_by === access.userId;
     case 'equals':
       return access.value !== null && String(row.values[access.field] ?? '') === access.value;
   }
 }
 
-export function applyRowScope<R extends Pick<ViewRow, 'values' | 'created_by'>>(
-  rows: R[],
-  access: RowAccess,
-): R[] {
+export function applyRowScope<
+  R extends Pick<ViewRow, 'values' | 'created_by' | 'created_by_app_user'>,
+>(rows: R[], access: RowAccess): R[] {
   if (access.kind === 'all') return rows;
   if (access.kind === 'none') return [];
   return rows.filter((r) => rowVisible(access, r));
+}
+
+/** ¿Esta fila la creó quien mira? (el «own» de las ediciones, miembro o externo). */
+export function isOwnRow(
+  user: Pick<AppUser, 'id' | 'external'>,
+  row: Pick<ViewRow, 'created_by' | 'created_by_app_user'>,
+): boolean {
+  return user.external ? row.created_by_app_user === user.id : row.created_by === user.id;
 }
 
 export const SCOPE_BLOCKED_MESSAGE = 'Tu rol en esta aplicación no ve esta tabla.';

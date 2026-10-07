@@ -1,5 +1,6 @@
 import { isSameOrigin } from '@/lib/activations/request';
-import { openScreenForApi } from '@/lib/apps/access';
+import { formGate, openScreenForApi } from '@/lib/apps/access';
+import { uploadsByAppUser } from '@/lib/apps/rate-limit';
 import { readUploadForm, storeViewUpload, uploadError } from '@/lib/views/upload';
 import { screenView } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -31,8 +32,18 @@ export async function POST(
   const view = await screenView(db, screen);
   const read = await readUploadForm(await req.formData().catch(() => null));
   if ('error' in read) return NextResponse.json({ error: read.error }, { status: 400 });
+  const denied = formGate(opened, view, read.blockId);
+  if (denied) return denied;
+  // Un usuario externo sube con el tope por hora del enlace público, y además el suyo.
+  if (opened.external && !uploadsByAppUser.take(opened.actor.id))
+    return NextResponse.json(
+      { error: 'Subiste muchos archivos en la última hora. Intenta más tarde.' },
+      { status: 429 },
+    );
   try {
-    return NextResponse.json(await storeViewUpload(db, view, read, { publicLink: false }));
+    return NextResponse.json(
+      await storeViewUpload(db, view, read, { publicLink: opened.external }),
+    );
   } catch (err) {
     logger.warn({ err, viewId: view.id }, 'apps: upload failed');
     return uploadError(err);

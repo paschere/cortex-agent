@@ -1,5 +1,6 @@
 'use client';
 
+import { appApiBase } from '@/lib/apps/api-base';
 import { clsx } from 'clsx';
 import { Loader2, Mic, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -108,7 +109,7 @@ export function DictateRecord({
     target.kind === 'app'
       ? `/api/views/${target.viewId}/dictate`
       : target.kind === 'custom_app'
-        ? `/api/apps/${target.appId}/screens/${target.screen}/dictate`
+        ? `${appApiBase(target)}/screens/${target.screen}/dictate`
         : target.kind === 'public'
           ? '/api/views/public/dictate'
           : null;

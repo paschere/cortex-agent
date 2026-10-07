@@ -89,8 +89,13 @@ import './views.css';
 export type SubmitTarget =
   | { kind: 'app'; viewId: string }
   | { kind: 'public'; token: string }
-  /** Una pantalla de una aplicación: appId y screen son los slugs; el rol sale de la sesión. */
-  | { kind: 'custom_app'; appId: string; screen: string }
+  /**
+   * Una pantalla de una aplicación: appId y screen son los slugs; el rol sale de
+   * la sesión. `external` (0209): quien mira es un usuario externo de la app (sin
+   * cuenta de Cortex), que entra por el prefijo público de las rutas y con el id
+   * de la app en `appId`.
+   */
+  | { kind: 'custom_app'; appId: string; screen: string; external?: boolean }
   | { kind: 'preview' }
   /** El escaparate de desarrollo (/v/views-showcase): escribe de mentira, sin red. */
   | { kind: 'demo' };

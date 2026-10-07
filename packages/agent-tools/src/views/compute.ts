@@ -79,6 +79,8 @@ export interface ViewRow {
    * las aplicaciones (apps/permissions.ts); no viaja a ningún bloque.
    */
   created_by?: string | null;
+  /** El usuario externo de una app que creó la fila (0209). */
+  created_by_app_user?: string | null;
 }
 
 export interface ViewSource {

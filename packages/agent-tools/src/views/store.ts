@@ -347,6 +347,8 @@ function adaptEntry(row: Record<string, unknown>): ViewRow {
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     created_by: typeof row.created_by === 'string' ? row.created_by : null,
+    created_by_app_user:
+      typeof row.created_by_app_user === 'string' ? row.created_by_app_user : null,
   };
 }
 
@@ -527,9 +529,12 @@ export async function loadViewSources(
       }
       let query = db
         .from('tracker_rows')
-        .select('id, label, values, created_by, created_at, updated_at')
+        .select('id, label, values, created_by, created_by_app_user, created_at, updated_at')
         .eq('tracker_id', t.id);
-      if (access.kind === 'own') query = query.eq('created_by', access.userId);
+      // «Own» de un miembro mira `created_by`; el de un usuario externo de la
+      // app (0209) mira `created_by_app_user`. Nunca se cruzan.
+      if (access.kind === 'own')
+        query = query.eq(access.external ? 'created_by_app_user' : 'created_by', access.userId);
       const { data: rows, error: rowsError } = await query
         .order('updated_at', { ascending: false })
         .limit(VIEW_ROW_CAP + 1);
@@ -806,6 +811,8 @@ export async function restoreViewVersion(
   viewId: string,
   version: number,
   userId: string,
+  /** `appScreen`: la vista es una pantalla de una app (0208); `updateView` la oculta si no se pide. */
+  options: { appScreen?: boolean } = {},
 ): Promise<CustomViewRow> {
   const { data, error } = await db
     .from('custom_view_versions')
@@ -822,6 +829,7 @@ export async function restoreViewVersion(
     spec,
     userId,
     prompt: `Restaurada la versión ${version}`,
+    appScreen: options.appScreen,
   });
 }
 
@@ -1004,6 +1012,9 @@ export interface SubmitOutcome {
   replayed?: boolean;
 }
 
+/** Quién escribe: un miembro de Cortex o un usuario externo de una app (0209). */
+export type ActorKind = 'member' | 'app_user';
+
 export class SubmissionLimitError extends Error {
   constructor() {
     super('Este formulario recibió demasiados envíos en la última hora. Intenta más tarde.');
@@ -1023,6 +1034,13 @@ export async function submitViewForm(
     blockId: string;
     values: Record<string, unknown>;
     submittedBy: string | null;
+    /**
+     * Quién es `submittedBy`: un miembro de Cortex (por omisión) o un usuario
+     * externo de una app (0209). El externo está autenticado —no cuenta en el
+     * tope del enlace público— pero lee relaciones sólo de las tablas de la
+     * pantalla, y la fila queda con `created_by_app_user`.
+     */
+    submittedByKind?: ActorKind;
     /** Nombre de quien llena (para `default: 'viewer'`); sin sesión, vacío. */
     viewer?: string | null;
     /**
@@ -1102,16 +1120,21 @@ export async function submitViewForm(
   const values = await prepareValues(db, { ...tracker, fields: asked }, raw, {
     applyDefaults: true,
     viewer: input.viewer,
-    allowedRelationTrackers: input.submittedBy ? undefined : new Set(trackersOf(view.spec)),
+    allowedRelationTrackers:
+      input.submittedBy && input.submittedByKind !== 'app_user'
+        ? undefined
+        : new Set(trackersOf(view.spec)),
   });
 
+  const byApp = input.submittedByKind === 'app_user';
   const { data: row, error } = await db
     .from('tracker_rows')
     .insert({
       tracker_id: tracker.id,
       label: rowLabel(tracker.fields, values),
       values,
-      created_by: input.submittedBy,
+      created_by: byApp ? null : input.submittedBy,
+      ...(byApp ? { created_by_app_user: input.submittedBy } : {}),
     })
     .select('id')
     .single();
@@ -1180,6 +1203,7 @@ export async function editViewSubmission(
     rowId: string;
     values: Record<string, string>;
     actor: string | null;
+    actorKind?: ActorKind;
     token?: string | null;
   },
 ): Promise<{ label: string; duplicate: string | null }> {
@@ -1237,6 +1261,7 @@ export async function editViewSubmission(
     allowed,
     kind: 'edit',
     actor: input.actor,
+    actorKind: input.actorKind,
   });
   return { label, duplicate };
 }
@@ -1355,6 +1380,7 @@ async function patchRow(
     kind: 'edit' | 'move' | 'action';
     actionId?: string;
     actor: string | null;
+    actorKind?: ActorKind;
   },
 ): Promise<{
   label: string;
@@ -1395,7 +1421,8 @@ async function patchRow(
     {
       selfId: input.rowId,
       only: new Set(keys),
-      allowedRelationTrackers: input.actor ? undefined : new Set(trackersOf(view.spec)),
+      allowedRelationTrackers:
+        input.actor && input.actorKind !== 'app_user' ? undefined : new Set(trackersOf(view.spec)),
     },
   );
   const changes: Record<string, { from: unknown; to: unknown }> = {};
@@ -1430,6 +1457,7 @@ async function patchRow(
     tracker_row_id: input.rowId,
     changes,
     actor: input.actor,
+    actor_kind: input.actorKind ?? 'member',
   });
   return { label, changes, duplicate };
 }
@@ -1441,7 +1469,13 @@ const ROW_BLOCKS: ReadonlySet<string> = new Set(['table', 'board', 'zones', 'gal
 export async function editViewRow(
   db: SupabaseClient,
   view: CustomViewRow,
-  input: { blockId: string; rowId: string; patch: Record<string, unknown>; actor: string | null },
+  input: {
+    blockId: string;
+    rowId: string;
+    patch: Record<string, unknown>;
+    actor: string | null;
+    actorKind?: ActorKind;
+  },
 ): Promise<{ label: string; duplicate: string | null }> {
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Esta vista no se puede editar.');
@@ -1468,6 +1502,7 @@ export async function editViewRow(
           : 'edit'
         : 'edit',
     actor: input.actor,
+    actorKind: input.actorKind,
   });
   return { label, duplicate };
 }
@@ -1489,6 +1524,7 @@ export async function runViewAction(
     actionId: string;
     rowId: string;
     actor: string | null;
+    actorKind?: ActorKind;
     /** Motivo opcional de un rechazo (Aprobar / Rechazar). */
     reason?: string | null;
   },
@@ -1524,6 +1560,7 @@ export async function runViewAction(
       kind: 'action',
       actionId: input.actionId,
       actor: input.actor,
+      actorKind: input.actorKind,
     });
     return {
       kind: 'set_field',
@@ -1546,6 +1583,7 @@ export async function runViewAction(
       kind: 'action',
       actionId: action.id,
       actor: input.actor,
+      actorKind: input.actorKind,
     });
     return {
       kind: 'set_field',
@@ -1573,6 +1611,7 @@ export async function runViewAction(
     tracker_row_id: input.rowId,
     changes: {},
     actor: input.actor,
+    actor_kind: input.actorKind ?? 'member',
   });
   return {
     kind: 'notify',

@@ -5,6 +5,7 @@ import { requireAppAdmin } from '@/lib/apps/access';
 import { loadSessionBrand } from '@/lib/branding/store';
 import {
   computeView,
+  listAppUsers,
   listDirectory,
   listMembers,
   listRoles,
@@ -69,9 +70,10 @@ export default async function EditAppPage({
     );
   }
 
-  const [roles, members, directory, trackers] = await Promise.all([
+  const [roles, members, appUsers, directory, trackers] = await Promise.all([
     listRoles(db, app.id),
     listMembers(db, app.id),
+    listAppUsers(db, app.id),
     listDirectory(db),
     listTrackers(db, 40),
   ]);
@@ -123,6 +125,16 @@ export default async function EditAppPage({
       roleKey: m.role_key,
       attributes: m.attributes,
     })),
+    appUsers: appUsers.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      roleKey: u.role_key,
+      attributes: u.attributes,
+      status: u.status,
+      lastSeenAt: u.last_seen_at,
+    })),
+    entryPath: `/a/${app.id}`,
     directory: directory.map((p) => ({ id: p.id, name: personLabel(p), email: p.email })),
     trackers: trackers
       .filter((t) => used.has(t.slug))

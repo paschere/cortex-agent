@@ -126,6 +126,17 @@ export interface ToolContext {
     message: string;
   }>;
   /**
+   * Mandar el correo de invitación (con el enlace /a/<app>) a usuarios externos
+   * de una aplicación (0209), sin saber cómo se manda un correo. Mandar correos
+   * es de la aplicación web (`lib/apps/invitations.ts`: Resend, plantillas); este
+   * paquete no puede importarla, igual que `inviteTeamMember`. OPCIONAL: sin ella
+   * `apps.invite_users` deja a las personas en la lista y lo dice.
+   */
+  sendAppInvitations?: (input: {
+    appId: string;
+    userIds: string[];
+  }) => Promise<{ sent: number; failed: Array<{ email: string; reason: string }> }>;
+  /**
    * El alcance de idempotencia de esta ejecución, cuando lo hay (migración
    * 0168). Lo pone quien sabe que una ejecución es UNA: una rutina programada
    * usa `routine:<id>:<hora programada>`, de modo que el reintento de ese paso

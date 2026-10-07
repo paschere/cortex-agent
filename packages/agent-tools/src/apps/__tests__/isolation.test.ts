@@ -3,7 +3,15 @@ import { createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import type { ComputedBlock } from '../../views/compute';
 import { APPROVE_ACTION_ID } from '../../views/spec';
-import { archiveView, findViewByToken, getView, listViews, setViewAccess } from '../../views/store';
+import {
+  SubmissionLimitError,
+  archiveView,
+  findViewByToken,
+  getView,
+  listViews,
+  setViewAccess,
+} from '../../views/store';
+import { type ExternalUserRow, externalAppAccess } from '../external';
 import {
   type AppAccess,
   type AppViewer,
@@ -17,6 +25,7 @@ import {
   submitAppForm,
   visibleScreens,
 } from '../store';
+import { EXTERNAL_SUBMISSIONS_PER_USER_HOUR, getApp } from '../store';
 import { CONTROL_EN_PLANTA } from '../templates';
 
 /**
@@ -384,5 +393,318 @@ describe('aplicaciones: las pantallas no se abren por la puerta de las vistas', 
     ).rejects.toThrow();
     expect(await archiveView(postal, 'p-view-tablero')).toBe(false);
     expect(await findViewByToken(postal, 'x'.repeat(32))).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FASE 2: USUARIOS EXTERNOS (0209)
+// ---------------------------------------------------------------------------
+
+const EXT_ANA = 'e0000000-0000-4000-8000-00000000a001'; // operaria externa de Postal
+const EXT_BETO = 'e0000000-0000-4000-8000-00000000b002'; // operario externo de Postal
+const EXT_CLIENTE = 'e0000000-0000-4000-8000-00000000c003'; // cliente de Postal, zona Norte
+const EXT_CARLA = 'e0000000-0000-4000-8000-00000000d004'; // operaria externa de Aduanas
+
+const externalUser = (
+  id: string,
+  roleKey: string,
+  attributes: Record<string, string> = {},
+): ExternalUserRow => ({
+  id,
+  app_id: '',
+  name: id,
+  email: `${id}@x.co`,
+  role_key: roleKey,
+  attributes,
+  status: 'active',
+  invited_at: null,
+  last_seen_at: '2026-10-05T00:00:00Z',
+  created_by: null,
+  created_at: '2026-10-01T00:00:00Z',
+});
+
+function externalWorld() {
+  const data = seed();
+  const row = (
+    id: string,
+    by: Partial<Record<'created_by' | 'created_by_app_user', string>>,
+    numero: string,
+    zona: string,
+    org = POSTAL,
+    trk = 'trk-postal',
+  ) => ({
+    id,
+    organization_id: org,
+    tracker_id: trk,
+    label: numero,
+    values: { numero_guia: numero, fecha: '2026-10-05', estado: 'Por aprobar', ubicacion: zona },
+    created_by: by.created_by ?? null,
+    created_by_app_user: by.created_by_app_user ?? null,
+    created_at: '2026-10-05T10:00:00Z',
+    updated_at: '2026-10-05T10:00:00Z',
+  });
+  (data.tracker_rows as Array<Record<string, unknown>>).push(
+    row('e1', { created_by_app_user: EXT_ANA }, '777-001', 'Norte'),
+    row('e2', { created_by_app_user: EXT_BETO }, '777-002', 'Sur'),
+    // Un MIEMBRO con el mismo uuid que una externa: «own» no los mezcla.
+    row('m1', { created_by: EXT_ANA }, '777-003', 'Norte'),
+    row('c1', { created_by_app_user: EXT_CARLA }, '777-001', 'Norte', ADUANAS, 'trk-aduanas'),
+  );
+  const cliente = {
+    id: 'app-postal-role-cliente',
+    organization_id: POSTAL,
+    app_id: 'app-postal',
+    key: 'cliente',
+    name: 'Cliente',
+    description: '',
+    permissions: {
+      tables: {
+        guias: {
+          read: { field: 'ubicacion', equals: '$user.zona' },
+          create: false,
+          edit: 'none',
+          actions: [],
+        },
+      },
+      export: true,
+    },
+    position: 9,
+  };
+  (data.custom_app_roles as Array<Record<string, unknown>>).push(cliente);
+  const fake = createFakeSupabase({
+    ...data,
+    custom_view_submissions: [] as Array<Record<string, unknown>>,
+  });
+  return {
+    fake,
+    postal: createOrgScopedClient(fake.client, POSTAL),
+    aduanas: createOrgScopedClient(fake.client, ADUANAS),
+  };
+}
+
+async function enterExternal(
+  db: ReturnType<typeof externalWorld>['postal'],
+  user: ExternalUserRow,
+  appRef = 'planta',
+) {
+  const app = await getApp(db, appRef);
+  if (!app) throw new Error('sin app');
+  const access = await externalAppAccess(db, app, user);
+  if (!access) throw new Error(`${user.id} no entra`);
+  return access;
+}
+
+const idsOf = async (
+  db: ReturnType<typeof externalWorld>['postal'],
+  access: AppAccess,
+  slug: string,
+) => {
+  const screen = access.screens.find((s) => s.slug === slug);
+  if (!screen) throw new Error('sin pantalla');
+  const read = await readScreen(db, access, screen);
+  const rows = read.sources.get('guias')?.rows ?? [];
+  return { read, ids: rows.map((r) => r.id).sort(), labels: rows.map((r) => r.label).sort() };
+};
+
+describe('aplicaciones, usuarios externos: aislamiento', () => {
+  it('el externo de Aduanas nunca ve filas de Postal ni al revés, aunque el número coincida', async () => {
+    const { postal, aduanas } = externalWorld();
+    const carla = await enterExternal(aduanas, externalUser(EXT_CARLA, 'operario'));
+    expect((await idsOf(aduanas, carla, 'mis_registros')).ids).toEqual(['c1']);
+    const ana = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    expect((await idsOf(postal, ana, 'mis_registros')).ids).not.toContain('c1');
+    // La app de Postal no existe para el handle de Aduanas.
+    expect(await getApp(aduanas, 'app-postal')).toBeNull();
+  });
+
+  it('«own» de un externo mira created_by_app_user: no ve lo de otro externo ni lo de un miembro con su mismo uuid', async () => {
+    const { postal } = externalWorld();
+    const ana = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    const beto = await enterExternal(postal, externalUser(EXT_BETO, 'operario'));
+    expect((await idsOf(postal, ana, 'mis_registros')).ids).toEqual(['e1']);
+    expect((await idsOf(postal, beto, 'mis_registros')).ids).toEqual(['e2']);
+  });
+
+  it('un MIEMBRO sigue viendo lo suyo por created_by (las dos formas de «own» conviven)', async () => {
+    const { fake, postal } = externalWorld();
+    // Un miembro con el mismo uuid que la externa: lee `created_by`, no `created_by_app_user`.
+    fake.tables.custom_app_members?.push({
+      id: 'm-x',
+      organization_id: POSTAL,
+      app_id: 'app-postal',
+      user_id: EXT_ANA,
+      role_key: 'operario',
+      attributes: {},
+      created_by: null,
+      created_at: '2026-10-01T00:00:00Z',
+    });
+    const miembro = await enter(postal, viewer(EXT_ANA));
+    expect((await idsOf(postal, miembro, 'mis_registros')).labels).toEqual(['777-003']);
+    const externa = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    expect((await idsOf(postal, externa, 'mis_registros')).labels).toEqual(['777-001']);
+  });
+
+  it('un externo no entra a pantallas de otro rol (404) ni lee con el Feed: audiencia pública', async () => {
+    const { postal } = externalWorld();
+    const ana = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    expect(visibleScreens(ana).map((s) => s.slug)).toEqual(['registrar', 'mis_registros']);
+    expect(screenFor(ana, 'tablero')).toBeNull();
+    expect(ana.role.admin).toBe(false);
+  });
+});
+
+describe('aplicaciones, usuarios externos: portal de clientes con $user.<atributo>', () => {
+  it('el cliente de la zona Norte sólo ve filas Norte: en tablas, cifras y exportar', async () => {
+    const { postal } = externalWorld();
+    const norte = await enterExternal(
+      postal,
+      externalUser(EXT_CLIENTE, 'cliente', { zona: 'Norte' }),
+    );
+    const sur = await enterExternal(postal, externalUser(EXT_CLIENTE, 'cliente', { zona: 'Sur' }));
+    const sin = await enterExternal(postal, externalUser(EXT_CLIENTE, 'cliente', {}));
+    expect((await idsOf(postal, norte, 'tablero')).ids).toEqual(['e1', 'm1']);
+    expect((await idsOf(postal, sur, 'tablero')).ids).toEqual(['e2']);
+    // Sin el atributo no ve NINGUNA, no «todas».
+    expect((await idsOf(postal, sin, 'tablero')).ids).toEqual([]);
+    // Cifras: parten de las filas permitidas.
+    const metrics = async (a: AppAccess) =>
+      (await idsOf(postal, a, 'tablero')).read.computed.blocks.flatMap((b) =>
+        b.type === 'metric' && typeof b.value === 'number' ? [b.value] : [],
+      );
+    expect(Math.max(0, ...(await metrics(norte)))).toBeLessThanOrEqual(2);
+    expect(Math.max(0, ...(await metrics(sur)))).toBeLessThanOrEqual(1);
+    // Exportar: el rol exporta y lo que baja sale del MISMO scope.
+    expect(appCanExport(norte)).toBe(true);
+    const tabla = (await idsOf(postal, sur, 'tablero')).read.computed.blocks.find(
+      (b) => b.type === 'table',
+    );
+    expect(numbers(tabla)).toEqual(['777-002']);
+  });
+
+  it('un cliente no escribe: su rol no crea ni edita', async () => {
+    const { postal } = externalWorld();
+    const cli = await enterExternal(
+      postal,
+      externalUser(EXT_CLIENTE, 'cliente', { zona: 'Norte' }),
+    );
+    const ana = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    const screen = screenFor(ana, 'registrar');
+    if (!screen) throw new Error('sin pantalla');
+    const { view } = await readScreen(postal, ana, screen);
+    const form = view.spec.blocks.find((b) => b.type === 'form');
+    await expect(
+      submitAppForm(postal, cli, view, { blockId: form?.id ?? 'x', values: {} }),
+    ).rejects.toThrow(/no registra/);
+  });
+});
+
+describe('aplicaciones, usuarios externos: escrituras', () => {
+  async function formOf(db: ReturnType<typeof externalWorld>['postal'], access: AppAccess) {
+    const screen = screenFor(access, 'registrar');
+    if (!screen) throw new Error('sin pantalla');
+    const { view } = await readScreen(db, access, screen);
+    const form = view.spec.blocks.find((b) => b.type === 'form');
+    return { view, blockId: form?.id ?? 'x' };
+  }
+
+  it('el operario externo no aprueba, no rechaza y no escribe campos ajenos', async () => {
+    const { postal } = externalWorld();
+    const ana = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    const { view, blockId } = await formOf(postal, ana);
+    await expect(
+      runAppAction(postal, ana, view, { blockId, actionId: APPROVE_ACTION_ID, rowId: 'e1' }),
+    ).rejects.toThrow(/no aprueba/);
+    await expect(
+      submitAppForm(postal, ana, view, {
+        blockId,
+        values: { numero_guia: '999-001', estado: 'Aprobada' },
+      }),
+    ).rejects.toThrow(/no puede escribir/);
+  });
+
+  it('no edita la fila de otro externo ni la de un miembro: para él no existen', async () => {
+    const { postal } = externalWorld();
+    const ana = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    const screen = screenFor(ana, 'mis_registros');
+    if (!screen) throw new Error('sin pantalla');
+    const { view } = await readScreen(postal, ana, screen);
+    const block = view.spec.blocks.find((b) => b.type === 'table');
+    for (const rowId of ['e2', 'm1', 'p1', 'c1'])
+      await expect(
+        editAppRow(postal, ana, view, {
+          blockId: block?.id ?? 'x',
+          rowId,
+          patch: { ubicacion: 'Muelle 9' },
+        }),
+      ).rejects.toThrow(/ya no está/);
+  });
+
+  it('su envío queda con created_by_app_user (y created_by vacío) y lo ve en «Mis registros»', async () => {
+    const { postal, fake } = externalWorld();
+    const ana = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    const { view, blockId } = await formOf(postal, ana);
+    const res = await submitAppForm(postal, ana, view, {
+      blockId,
+      values: { numero_guia: '888-001', fecha: '2026-10-05', ubicacion: 'Norte' },
+    });
+    expect(res.message).toBeTruthy();
+    const row = fake.tables.tracker_rows?.find((r) => r.label === '888-001');
+    expect(row?.created_by_app_user).toBe(EXT_ANA);
+    expect(row?.created_by).toBeNull();
+    expect((await idsOf(postal, ana, 'mis_registros')).labels).toContain('888-001');
+    const beto = await enterExternal(postal, externalUser(EXT_BETO, 'operario'));
+    expect((await idsOf(postal, beto, 'mis_registros')).labels).not.toContain('888-001');
+    // El envío queda a nombre del externo (para poder corregirlo dentro de la ventana).
+    expect(fake.tables.custom_view_submissions?.at(-1)?.submitted_by).toBe(EXT_ANA);
+  });
+
+  it('lo que hace un supervisor externo deja el evento con el actor externo', async () => {
+    const { postal, fake } = externalWorld();
+    const sofia = await enterExternal(postal, externalUser(EXT_BETO, 'supervisor'));
+    const screen = screenFor(sofia, 'por_aprobar');
+    if (!screen) throw new Error('sin pantalla');
+    const { view } = await readScreen(postal, sofia, screen);
+    const block = view.spec.blocks.find((b) => 'actions' in b);
+    // El supervisor externo SÍ aprueba (su rol lo permite): p1 es de un miembro y lo ve por scope «all».
+    for (const r of fake.tables.tracker_rows ?? [])
+      if (r.id === 'p1') (r.values as Record<string, string>).estado = 'Pendiente';
+    await runAppAction(postal, sofia, view, {
+      blockId: block?.id ?? 'x',
+      actionId: APPROVE_ACTION_ID,
+      rowId: 'p1',
+    });
+    expect(fake.tables.custom_view_events?.at(-1)).toMatchObject({
+      actor: EXT_BETO,
+      actor_kind: 'app_user',
+    });
+  });
+
+  it('el tope por usuario corta los envíos de la hora', async () => {
+    const { postal, fake } = externalWorld();
+    const ana = await enterExternal(postal, externalUser(EXT_ANA, 'operario'));
+    const { view, blockId } = await formOf(postal, ana);
+    const now = new Date().toISOString();
+    for (let i = 0; i < EXTERNAL_SUBMISSIONS_PER_USER_HOUR; i++)
+      fake.tables.custom_view_submissions?.push({
+        id: `s${i}`,
+        organization_id: POSTAL,
+        view_id: view.id,
+        submitted_by: EXT_ANA,
+        created_at: now,
+      });
+    await expect(
+      submitAppForm(postal, ana, view, {
+        blockId,
+        values: { numero_guia: '888-009', fecha: '2026-10-05' },
+      }),
+    ).rejects.toBeInstanceOf(SubmissionLimitError);
+    // Otro usuario externo de la misma app no está topado por el de Ana.
+    const beto = await enterExternal(postal, externalUser(EXT_BETO, 'operario'));
+    await expect(
+      submitAppForm(postal, beto, view, {
+        blockId,
+        values: { numero_guia: '888-010', fecha: '2026-10-05' },
+      }),
+    ).resolves.toBeTruthy();
   });
 });
