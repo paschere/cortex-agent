@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateObject } from 'ai';
 import { z } from 'zod';
+import { parseSpokenNumber } from './spoken-number';
 
 /**
  * DICTAR UN REGISTRO EN UNA VISTA.
@@ -57,7 +58,7 @@ export function isDictationAudio(mime: string): boolean {
   return AUDIO_MIMES.has((mime.split(';')[0] ?? '').trim().toLowerCase());
 }
 
-interface DictField {
+export interface DictField {
   key: string;
   label: string;
   type: string;
@@ -83,12 +84,12 @@ export class DictationLimitError extends Error {
   }
 }
 
-function todayInBogota(): string {
+export function todayInBogota(): string {
   // en-CA da AAAA-MM-DD, el formato de los campos de fecha.
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
 }
 
-const HOW_TO = `Eres el asistente que llena un formulario a partir de lo que dijo un operario (español de Colombia, a veces con ruido de planta).
+export const HOW_TO = `Eres el asistente que llena un formulario a partir de lo que dijo un operario (español de Colombia, a veces con ruido de planta).
 Devuelve SOLO los campos que se dijeron o se deducen sin duda. No inventes: si un dato no se dijo, no lo pongas.
 Formatos:
 - date: AAAA-MM-DD. "hoy", "ayer", "el lunes" se resuelven con la fecha de hoy que viene en el mensaje.
@@ -103,7 +104,7 @@ Códigos (números de guía, pedido, factura, lote o serie; placas; NIT; referen
  * Los campos del formulario `blockId` de la vista, leídos de su tabla. Sólo
  * los que el bloque pide, igual que `submitViewForm`.
  */
-async function formFields(
+export async function formFields(
   db: SupabaseClient,
   view: CustomViewRow,
   blockId: string,
@@ -127,20 +128,7 @@ async function formFields(
 
 const NOT_DICTATED: ReadonlySet<string> = new Set(['file', 'location', 'relation']);
 
-/**
- * Un número como lo escribe el modelo o la persona en Colombia: «1.200.000»
- * es un millón doscientos mil (punto de miles), «3,5» es tres y medio (coma
- * decimal), «1200000» y «3.5» también valen. Lo que no es un número: null.
- */
-export function parseSpokenNumber(raw: string): number | null {
-  let s = raw.replace(/[$\s]/g, '').replace(/^COP/i, '');
-  if (!/^-?[\d.,]+$/.test(s) || !/\d/.test(s)) return null;
-  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
-  else if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
-  else s = s.replace(',', '.');
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
+export { parseSpokenNumber };
 
 /** Normaliza lo que propuso el modelo al formato exacto de cada input. */
 export function shapeDictated(

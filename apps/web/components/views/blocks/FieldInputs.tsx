@@ -152,6 +152,8 @@ function relationUrl(
 ): string | null {
   const qs = new URLSearchParams({ block: blockId, field, q });
   if (target.kind === 'app') return `/api/views/${target.viewId}/relation?${qs}`;
+  if (target.kind === 'custom_app')
+    return `/api/apps/${target.appId}/screens/${target.screen}/relation?${qs}`;
   if (target.kind === 'public') {
     qs.set('token', target.token);
     return `/api/views/public/relation?${qs}`;

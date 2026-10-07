@@ -557,6 +557,7 @@ const blocks: ComputedBlock[] = [
     submitLabel: 'Enviar novedad',
     successMessage: 'Recibido. Gracias.',
     editWindowMinutes: 10,
+    voice: 'conversation',
     steps: [
       { title: 'Qué pasó', fields: ['guia', 'tipo', 'detalle'] },
       { title: 'Datos', fields: ['fecha', 'valor'] },
@@ -574,6 +575,14 @@ const blocks: ComputedBlock[] = [
       { key: 'valor', label: 'Valor afectado', type: 'money', required: false, options: [] },
       { key: 'detalle', label: 'Detalle', type: 'text', required: false, options: [] },
     ],
+  },
+  {
+    id: 'hablar',
+    width: 'half',
+    type: 'voice',
+    title: 'Reportar hablando',
+    form: 'pqr',
+    autoStart: false,
   },
   {
     id: 'atajos',

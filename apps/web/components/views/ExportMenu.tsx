@@ -22,12 +22,15 @@ export function ExportMenu({
   dataUrl,
   filterParam,
   title,
+  excel: canExcel = true,
 }: {
   /** La ruta de datos de la vista; de ella sale la de exportar. Null: sólo PDF. */
   dataUrl: string | null;
   /** Lo elegido en la barra de filtros, ya codificado. */
   filterParam: string;
   title: string;
+  /** Falso: oculta la opción de Excel (el rol no exporta). */
+  excel?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +99,7 @@ export function ExportMenu({
             sideOffset={6}
             className="view-no-print z-50 min-w-[12rem] rounded-card border border-border bg-surface p-1 text-xs shadow-pop"
           >
-            {dataUrl && (
+            {dataUrl && canExcel && (
               <Menu.Item
                 onSelect={() => void excel()}
                 className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 font-medium text-ink outline-none data-[highlighted]:bg-surface-2"

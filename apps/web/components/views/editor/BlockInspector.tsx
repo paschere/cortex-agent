@@ -94,6 +94,7 @@ export function BlockInspector({
   sources,
   problems,
   editing,
+  forms = [],
   onChange,
   onAllowEditing,
   onSchemaChanged,
@@ -102,6 +103,8 @@ export function BlockInspector({
   sources: EditorSource[];
   problems: string[];
   editing: Editing;
+  /** Los formularios de la vista (el asistente de voz elige uno). */
+  forms?: Array<{ id: string; title: string }>;
   onChange: Change;
   onAllowEditing: () => void;
   /** Se guardó un cambio en los campos de la tabla: recargar el catálogo del lienzo. */
@@ -131,7 +134,7 @@ export function BlockInspector({
       )}
 
       <Section title="Contenido">
-        {(block.type === 'media' || block.type === 'links') && (
+        {(block.type === 'media' || block.type === 'links' || block.type === 'voice') && (
           <Field label="Título (opcional)">
             <input
               value={block.title ?? ''}
@@ -146,7 +149,8 @@ export function BlockInspector({
         {'title' in block &&
           typeof block.title === 'string' &&
           block.type !== 'media' &&
-          block.type !== 'links' && (
+          block.type !== 'links' &&
+          block.type !== 'voice' && (
             <Field label="Título">
               <input
                 value={block.title}
@@ -171,6 +175,34 @@ export function BlockInspector({
         )}
         {block.type === 'media' && <MediaFields block={block} onChange={onChange} />}
         {block.type === 'links' && <LinksFields block={block} onChange={onChange} />}
+        {block.type === 'voice' && (
+          <>
+            <Field label="Formulario" hint="El asistente pregunta sus campos en voz alta.">
+              <select
+                value={block.form}
+                onChange={(e) => onChange({ ...block, form: e.target.value }, key('form'))}
+                className={INPUT}
+              >
+                {!forms.some((f) => f.id === block.form) && (
+                  <option value={block.form}>{block.form} (ya no existe)</option>
+                )}
+                {forms.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Toggle
+              label="Arrancar al abrir la pantalla"
+              hint="Empieza a preguntar solo; el navegador puede pedir un toque antes de hablar."
+              checked={block.autoStart === true}
+              onChange={(autoStart) =>
+                onChange({ ...block, autoStart: autoStart || undefined }, key('auto'))
+              }
+            />
+          </>
+        )}
         <Segmented
           label="Ancho"
           value={block.width}
@@ -265,6 +297,18 @@ export function BlockInspector({
               className={INPUT}
             />
           </Field>
+          <Segmented
+            label="Voz"
+            value={block.voice ?? 'dictate'}
+            options={[
+              { value: 'off', label: 'Sin voz' },
+              { value: 'dictate', label: 'Dictar' },
+              { value: 'conversation', label: 'Conversar' },
+            ]}
+            onChange={(voice) =>
+              onChange({ ...block, voice: voice === 'dictate' ? undefined : voice })
+            }
+          />
           <Field label="Mensaje al enviar">
             <input
               maxLength={200}

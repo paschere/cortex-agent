@@ -1,5 +1,6 @@
 'use client';
 
+import { editAppRowAction, runAppActionAction } from '@/lib/apps/write-actions';
 import { editViewRowAction, runViewActionAction } from '@/lib/views/actions';
 import type { ComputedAction, ComputedEditMeta, TrackerField } from '@cortex/agent-tools';
 import { validateRowValues } from '@cortex/agent-tools/src/trackers/validation';
@@ -81,6 +82,30 @@ export function ViewWriterProvider({
         const reason = askReason(action, rowLabel);
         if (reason === null) return { ok: false, error: 'Cancelado.' };
         const res = await runViewActionAction(target.viewId, blockId, action.id, rowId, reason);
+        if (res.ok) onChanged?.();
+        return res;
+      },
+    };
+  } else if (target.kind === 'custom_app') {
+    writer = {
+      async edit(blockId, rowId, patch) {
+        const res = await editAppRowAction(target.appId, target.screen, blockId, rowId, patch);
+        if (res.ok) onChanged?.();
+        return res;
+      },
+      async act(blockId, action, rowId, rowLabel) {
+        if (action.confirm && !window.confirm(`¿${action.label} en «${rowLabel}»?`))
+          return { ok: false, error: 'Cancelado.' };
+        const reason = askReason(action, rowLabel);
+        if (reason === null) return { ok: false, error: 'Cancelado.' };
+        const res = await runAppActionAction(
+          target.appId,
+          target.screen,
+          blockId,
+          action.id,
+          rowId,
+          reason,
+        );
         if (res.ok) onChanged?.();
         return res;
       },

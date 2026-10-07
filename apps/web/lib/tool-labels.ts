@@ -479,6 +479,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   trackers_query: { label: 'Consultar la tabla', icon: 'Table2' },
   trackers_upsert: { label: 'Anotar en la tabla', icon: 'Table2' },
   trackers_remove: { label: 'Borrar de la tabla', icon: 'Table2' },
+  apps_list: { label: 'Ver las aplicaciones', icon: 'LayoutGrid' },
+  apps_create: { label: 'Crear una aplicación', icon: 'LayoutGrid' },
   views_list: { label: 'Ver las vistas', icon: 'LayoutPanelTop' },
   views_get: { label: 'Abrir una vista', icon: 'LayoutPanelTop' },
   views_create: { label: 'Crear una vista', icon: 'LayoutPanelTop' },

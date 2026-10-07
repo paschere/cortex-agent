@@ -534,6 +534,13 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   custom_view_submissions: tenant(),
   // 0160: cada edición, tarjeta movida o botón usado en una vista, con quién.
   custom_view_events: tenant(),
+  // 0208: aplicaciones — varias pantallas (vistas con app_id), roles con
+  // permisos por tabla y miembros con rol. Tenant las cuatro: una app ajena
+  // en el listado diría qué opera otra empresa, y un rol ajeno abriría sus filas.
+  custom_apps: tenant(),
+  custom_app_screens: tenant(),
+  custom_app_roles: tenant(),
+  custom_app_members: tenant(),
   // 0178: las vistas guardadas del visualizador de datos (filtros, orden,
   // columnas) por alcance — una tabla de la empresa, la lista de clientes.
   // Tenant: el nombre y los filtros de una vista dicen qué mira una empresa

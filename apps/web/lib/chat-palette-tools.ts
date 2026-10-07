@@ -406,6 +406,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.retry_sync': 'Vuelve a correr la sincronización de ',
   'accounting.status': '¿Cómo va la conexión con el programa contable?',
   'accounting.sync_now': 'Trae ya lo nuevo del programa contable',
+  'apps.list': 'Muéstrame las aplicaciones que tenemos',
+  'apps.create': 'Hazme una aplicación para ',
   'views.archive': 'Archiva la vista ',
   'views.company_pulse': 'Dime cómo va la empresa en una vista',
   'views.refresh_summary': 'Actualiza el resumen de hoy de la vista ',

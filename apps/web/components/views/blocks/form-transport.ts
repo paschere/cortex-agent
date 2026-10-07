@@ -1,3 +1,4 @@
+import { editAppSubmissionAction, submitAppFormAction } from '@/lib/apps/write-actions';
 import { editViewSubmissionAction, submitViewFormAction } from '@/lib/views/actions';
 import { isOfflineFailure } from '@/lib/views/offline-queue';
 import type { UploadedFile } from '@/lib/views/upload-rules';
@@ -73,6 +74,15 @@ export function submitterFor(target: SubmitTarget): SubmitFn | undefined {
         return { ok: false, error: 'Sin conexión. Inténtalo otra vez.', offline: true };
       }
     };
+  if (target.kind === 'custom_app')
+    return async (blockId, values, clientId) => {
+      try {
+        return await submitAppFormAction(target.appId, target.screen, blockId, values, clientId);
+      } catch {
+        // La server action no llegó: sin red.
+        return { ok: false, error: 'Sin conexión. Inténtalo otra vez.', offline: true };
+      }
+    };
   if (target.kind === 'public')
     return async (blockId, values, clientId) => {
       const res = await publicPost<{
@@ -106,6 +116,14 @@ export function correctorFor(target: SubmitTarget): CorrectFn | undefined {
     return async (blockId, rowId, values) => {
       try {
         return await editViewSubmissionAction(target.viewId, blockId, rowId, values);
+      } catch {
+        return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
+      }
+    };
+  if (target.kind === 'custom_app')
+    return async (blockId, rowId, values) => {
+      try {
+        return await editAppSubmissionAction(target.appId, target.screen, blockId, rowId, values);
       } catch {
         return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
       }

@@ -24,11 +24,11 @@ import type { SubmitTarget } from './ViewCanvas';
  * siendo un formulario.
  */
 
-interface RecognitionResult {
+export interface RecognitionResult {
   isFinal: boolean;
   0: { transcript: string };
 }
-interface Recognition {
+export interface Recognition {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
@@ -44,9 +44,9 @@ interface Recognition {
   onerror: ((e: { error: string }) => void) | null;
   onend: (() => void) | null;
 }
-type RecognitionCtor = new () => Recognition;
+export type RecognitionCtor = new () => Recognition;
 
-function recognitionCtor(): RecognitionCtor | null {
+export function recognitionCtor(): RecognitionCtor | null {
   if (typeof window === 'undefined') return null;
   const w = window as unknown as {
     SpeechRecognition?: RecognitionCtor;
@@ -55,7 +55,7 @@ function recognitionCtor(): RecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-function canRecord(): boolean {
+export function canRecord(): boolean {
   return (
     typeof window !== 'undefined' &&
     typeof window.MediaRecorder !== 'undefined' &&
@@ -107,9 +107,11 @@ export function DictateRecord({
   const endpoint =
     target.kind === 'app'
       ? `/api/views/${target.viewId}/dictate`
-      : target.kind === 'public'
-        ? '/api/views/public/dictate'
-        : null;
+      : target.kind === 'custom_app'
+        ? `/api/apps/${target.appId}/screens/${target.screen}/dictate`
+        : target.kind === 'public'
+          ? '/api/views/public/dictate'
+          : null;
   if (!endpoint || !mode) return null;
 
   async function send(payload: { text: string } | { audio: Blob }) {

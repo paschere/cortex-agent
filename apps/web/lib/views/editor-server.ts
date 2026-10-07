@@ -50,7 +50,7 @@ export async function editorCatalog(
   viewerId: string,
   viewId?: string | null,
 ): Promise<EditorCatalog> {
-  const saved = viewId ? await getView(db, viewId) : null;
+  const saved = viewId ? await getView(db, viewId, { appScreens: true }) : null;
   const entries = await viewCatalog(db, {
     viewerId,
     keep: saved ? trackersOf(saved.spec) : [],
@@ -107,7 +107,7 @@ export async function previewSpec(
     return { ok: true, view: null, problems: problemsFromZod(parsed.error.issues, input.spec) };
   const spec = parsed.data;
 
-  const saved = input.viewId ? await getView(db, input.viewId) : null;
+  const saved = input.viewId ? await getView(db, input.viewId, { appScreens: true }) : null;
   const catalog: CatalogTracker[] = await viewCatalog(db, {
     viewerId,
     keep: saved ? trackersOf(saved.spec) : [],

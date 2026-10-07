@@ -28,8 +28,10 @@ import {
 import { useEffect, useId, useState, useTransition } from 'react';
 import { DictateRecord, type Dictated } from '../DictateRecord';
 import type { SubmitTarget } from '../ViewCanvas';
+import { VoiceFormAssistant } from '../VoiceFormAssistant';
 import { FileInput, LocationInput, RelationInput, ScanInput } from './FieldInputs';
 import { type SubmitFn, correctorFor, uploaderFor } from './form-transport';
+import { type VoiceSendOutcome, useFormVoiceStore } from './form-voice-bridge';
 import { Card, useViewTheme } from './theme';
 import { queueKeyFor, useFormQueue, useOnline } from './useFormQueue';
 
@@ -242,42 +244,53 @@ export function FormBlock({
       return;
     }
 
-    const payload = buildPayload(false);
-    const clientId = newClientId();
-    const keepLocal = async () => {
-      await queue.add(payload, clientId);
-      finish({
-        message: 'Guardado en el teléfono — se enviará al volver la señal.',
-        duplicate: null,
-        offline: true,
-        rowId: null,
-      });
-    };
     start(async () => {
-      const canQueue = target.kind === 'app' || target.kind === 'public';
-      // Sin señal (o con fotos sin subir y sin señal): directo a la cola.
-      if (canQueue && !navigator.onLine) return keepLocal();
-      let outgoing = payload;
-      if (canQueue && hasPending(payload)) {
-        try {
-          const { resolvePending } = await import('@/lib/views/offline-files');
-          outgoing = await resolvePending(payload, uploaderFor(target, block.id));
-        } catch {
-          return keepLocal();
-        }
-      }
-      const res = await submit(block.id, outgoing, clientId);
-      if (res.ok) {
-        const rec = queue.recordSent(outgoing, res);
-        finish({
-          message: res.message,
-          duplicate: res.duplicate ?? null,
-          offline: false,
-          rowId: rec?.rowId ?? null,
-        });
-      } else if (res.offline && canQueue) await keepLocal();
-      else setError(res.error);
+      await submitRecord(buildPayload(false), newClientId());
     });
+  };
+
+  /**
+   * El envío de un registro nuevo, por el camino de siempre: a la cola del
+   * teléfono si no hay señal, fotos pendientes primero, y el submitter de la
+   * vista. Lo usan el botón Enviar y el asistente de voz.
+   */
+  const submitRecord = async (
+    payload: Record<string, string>,
+    clientId: string,
+  ): Promise<VoiceSendOutcome> => {
+    const keepLocal = async (): Promise<VoiceSendOutcome> => {
+      await queue.add(payload, clientId);
+      const message = 'Guardado en el teléfono — se enviará al volver la señal.';
+      finish({ message, duplicate: null, offline: true, rowId: null });
+      return { ok: true, offline: true, message, duplicate: null };
+    };
+    const canQueue = target.kind === 'app' || target.kind === 'public';
+    // Sin señal (o con fotos sin subir y sin señal): directo a la cola.
+    if (canQueue && !navigator.onLine) return keepLocal();
+    let outgoing = payload;
+    if (canQueue && hasPending(payload)) {
+      try {
+        const { resolvePending } = await import('@/lib/views/offline-files');
+        outgoing = await resolvePending(payload, uploaderFor(target, block.id));
+      } catch {
+        return keepLocal();
+      }
+    }
+    if (!submit) return { ok: false, error: 'Este formulario no puede enviar ahora.' };
+    const res = await submit(block.id, outgoing, clientId);
+    if (res.ok) {
+      const rec = queue.recordSent(outgoing, res);
+      finish({
+        message: res.message,
+        duplicate: res.duplicate ?? null,
+        offline: false,
+        rowId: rec?.rowId ?? null,
+      });
+      return { ok: true, offline: false, message: res.message, duplicate: res.duplicate ?? null };
+    }
+    if (res.offline && canQueue) return keepLocal();
+    setError(res.error);
+    return { ok: false, error: res.error };
   };
 
   const startCorrection = (rec: SentRecord) => {
@@ -291,6 +304,54 @@ export function FormBlock({
   };
 
   const lastSent = done?.rowId ? queue.sent.find((r) => r.rowId === done.rowId) : undefined;
+
+  // El asistente de voz maneja ESTE formulario por el puente: mismos valores,
+  // misma validación, mismo envío (con su cola sin internet).
+  const voiceMode = block.voice ?? 'dictate';
+  const voiceStore = useFormVoiceStore();
+  useEffect(() => {
+    voiceStore?.set(block.id, {
+      blockId: block.id,
+      title: block.title,
+      target,
+      fields,
+      steps: block.steps ?? null,
+      values,
+      setValues: (patch) => {
+        setValues((v) => ({ ...v, ...patch }));
+        setErrors((e) => {
+          const keys = Object.keys(patch).filter((k) => k in e);
+          if (!keys.length) return e;
+          const rest = { ...e };
+          for (const k of keys) delete rest[k];
+          return rest;
+        });
+      },
+      disabled,
+      online,
+      done: Boolean(done),
+      prepare: forValidation,
+      submit: async () => {
+        if (disabled || !submit)
+          return { ok: false, error: 'Esta vista es sólo una vista previa.' };
+        setError(null);
+        const found = check();
+        const first = Object.values(found)[0];
+        if (first) {
+          goToFirstError(found);
+          return { ok: false, error: first };
+        }
+        if (correcting)
+          return {
+            ok: false,
+            error: 'Estás corrigiendo un envío: termina esa corrección con el dedo.',
+          };
+        return submitRecord(buildPayload(false), newClientId());
+      },
+      reset,
+    });
+  });
+  useEffect(() => () => voiceStore?.drop(block.id), [voiceStore, block.id]);
 
   // ------------------------------------------------------------------------
   // Pantalla de «listo»
@@ -644,7 +705,10 @@ export function FormBlock({
             </button>
           </p>
         )}
-        {!disabled && !correcting && online && (
+        {!disabled && !correcting && online && voiceMode === 'conversation' && (
+          <VoiceFormAssistant blockId={block.id} variant="button" className="mb-3" />
+        )}
+        {!disabled && !correcting && online && voiceMode !== 'off' && (
           <DictateRecord
             className="mb-5"
             target={target}
@@ -656,7 +720,7 @@ export function FormBlock({
             }}
           />
         )}
-        {!disabled && !correcting && !online && (
+        {!disabled && !correcting && !online && voiceMode !== 'off' && (
           <p className="mb-5 flex items-center gap-2 rounded-sm bg-surface-2 px-3 py-2 text-xs text-ink-muted">
             <WifiOff className="h-4 w-4 shrink-0" aria-hidden />
             Sin internet: el dictado no está disponible. Escribe el registro; se guarda en el

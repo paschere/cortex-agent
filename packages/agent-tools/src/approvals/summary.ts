@@ -343,6 +343,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   trackers_query: 'Consultar la tabla',
   trackers_upsert: 'Anotar en la tabla',
   trackers_remove: 'Borrar de la tabla',
+  apps_list: 'Ver las aplicaciones',
+  apps_create: 'Crear una aplicación',
   views_list: 'Ver las vistas',
   views_get: 'Abrir una vista',
   views_create: 'Crear una vista',

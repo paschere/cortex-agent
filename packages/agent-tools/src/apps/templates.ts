@@ -1,0 +1,433 @@
+import type { DuplicateRule } from '../trackers/duplicates';
+import type { TrackerField } from '../trackers/schema';
+import { APPROVE_ACTION_ID, REJECT_ACTION_ID, type ViewSpec, viewSpecSchema } from '../views/spec';
+import type { RoleInput } from './store';
+
+/**
+ * LAS PLANTILLAS DE «NUEVA APLICACIÓN».
+ *
+ * Una plantilla trae la tabla que necesita (se crea sólo si no existe, con
+ * `defineTracker`; nunca se le cambia el esquema a una tabla con filas), sus
+ * pantallas como specs de vista y sus roles con permisos. Todo pasa por el
+ * mismo contrato que una app armada a mano: `validateSpec` para cada
+ * pantalla y `appPermissionsSchema` para cada rol. `templates.test.ts` lo
+ * comprueba contra el catálogo de verdad, para que renombrar un campo rompa la
+ * prueba y no la plantilla.
+ *
+ * La primera es el caso real que motivó las apps: el control de guías en
+ * planta. Operario registra (con foto, dictado y sin señal) y ve lo suyo;
+ * supervisor aprueba, rechaza y revisa duplicados; gerencia mira el tablero y
+ * exporta.
+ */
+
+export interface AppTemplateScreen {
+  slug: string;
+  title: string;
+  icon: string;
+  /** Claves de los roles que la ven; vacío = todos. */
+  roles: string[];
+  spec: ViewSpec;
+}
+
+export interface AppTemplateTracker {
+  slug: string;
+  name: string;
+  description: string;
+  fields: TrackerField[];
+  duplicates?: DuplicateRule;
+}
+
+export interface AppTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  body: string;
+  accent: 'primary' | 'emerald' | 'amber' | 'sky' | 'rose';
+  trackers: AppTemplateTracker[];
+  roles: RoleInput[];
+  screens: AppTemplateScreen[];
+  homeScreen: string;
+}
+
+const GUIAS = 'guias';
+
+const guiasFields: TrackerField[] = [
+  {
+    key: 'numero_guia',
+    label: 'Número de guía',
+    type: 'text',
+    required: true,
+    placeholder: '123-45678901',
+  },
+  { key: 'fecha', label: 'Fecha', type: 'date', required: true, default: 'today', max: 'today' },
+  {
+    key: 'estado',
+    label: 'Estado',
+    type: 'select',
+    required: false,
+    options: ['Pendiente', 'Aprobada', 'Rechazada', 'Duplicada'],
+  },
+  { key: 'ubicacion', label: 'Ubicación', type: 'text', required: false, placeholder: 'Muelle 3' },
+  { key: 'foto', label: 'Foto', type: 'file', required: false, accept: 'image' },
+  { key: 'observaciones', label: 'Observaciones', type: 'longtext', required: false },
+  { key: 'motivo_rechazo', label: 'Motivo del rechazo', type: 'text', required: false },
+  {
+    key: 'registrado_por',
+    label: 'Registrado por',
+    type: 'text',
+    required: false,
+    default: 'viewer',
+  },
+] as TrackerField[];
+
+const OPERATOR_THEME = { layout: 'operator', density: 'comfortable' } as const;
+
+const registrar: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'emerald',
+  refreshSeconds: 0,
+  editing: 'team',
+  alerts: [],
+  theme: { ...OPERATOR_THEME, accent: 'emerald' },
+  blocks: [
+    {
+      id: 'registrar',
+      type: 'form',
+      width: 'full',
+      tracker: GUIAS,
+      title: 'Registrar guía',
+      intro:
+        'Escanea o dicta el número, toma la foto y envía. Sin señal se guarda y se envía después.',
+      fields: ['numero_guia', 'fecha', 'ubicacion', 'foto', 'observaciones'],
+      submitLabel: 'Registrar',
+      successMessage: 'Guía registrada. Queda pendiente de aprobación.',
+      editWindowMinutes: 15,
+      approval: {
+        field: 'estado',
+        pending: 'Pendiente',
+        approved: 'Aprobada',
+        rejected: 'Rechazada',
+        notesField: 'motivo_rechazo',
+      },
+    },
+  ],
+});
+
+const misRegistros: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'emerald',
+  refreshSeconds: 30,
+  editing: 'off',
+  alerts: [],
+  theme: { ...OPERATOR_THEME, accent: 'emerald' },
+  blocks: [
+    {
+      id: 'hoy',
+      type: 'metric',
+      width: 'half',
+      tracker: GUIAS,
+      title: 'Registradas hoy y ayer',
+      aggregate: 'count',
+      filters: [{ field: 'fecha', op: 'last_days', value: 1 }],
+      tone: 'emerald',
+    },
+    {
+      id: 'rechazadas',
+      type: 'metric',
+      width: 'half',
+      tracker: GUIAS,
+      title: 'Rechazadas',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Rechazada' }],
+      tone: 'rose',
+    },
+    {
+      id: 'lista',
+      type: 'table',
+      width: 'full',
+      tracker: GUIAS,
+      title: 'Mis registros',
+      columns: ['numero_guia', 'fecha', 'estado', 'ubicacion', 'motivo_rechazo'],
+      sort: { field: 'created_at', dir: 'desc' },
+      limit: 100,
+    },
+  ],
+});
+
+const porAprobar: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'amber',
+  refreshSeconds: 10,
+  editing: 'team',
+  alerts: [
+    {
+      id: 'nuevas',
+      source: GUIAS,
+      filters: [{ field: 'estado', op: 'eq', value: 'Pendiente' }],
+      on: 'new',
+      message: 'Guía nueva por aprobar',
+      sound: true,
+      desktop: true,
+      bell: false,
+    },
+  ],
+  theme: { accent: 'amber', density: 'compact' },
+  blocks: [
+    {
+      id: 'pendientes',
+      type: 'metric',
+      width: 'third',
+      tracker: GUIAS,
+      title: 'Por aprobar',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Pendiente' }],
+      tone: 'amber',
+    },
+    {
+      id: 'aprobadas_hoy',
+      type: 'metric',
+      width: 'third',
+      tracker: GUIAS,
+      title: 'Aprobadas hoy y ayer',
+      aggregate: 'count',
+      filters: [
+        { field: 'estado', op: 'eq', value: 'Aprobada' },
+        { field: 'fecha', op: 'last_days', value: 1 },
+      ],
+      tone: 'emerald',
+    },
+    {
+      id: 'duplicadas',
+      type: 'metric',
+      width: 'third',
+      tracker: GUIAS,
+      title: 'Duplicadas',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Duplicada' }],
+      tone: 'rose',
+    },
+    {
+      id: 'cola',
+      type: 'table',
+      width: 'full',
+      tracker: GUIAS,
+      title: 'Pendientes de aprobación',
+      columns: ['numero_guia', 'fecha', 'ubicacion', 'registrado_por', 'foto'],
+      filters: [{ field: 'estado', op: 'eq', value: 'Pendiente' }],
+      sort: { field: 'created_at', dir: 'asc' },
+      limit: 100,
+    },
+    {
+      id: 'dup',
+      type: 'table',
+      width: 'full',
+      tracker: GUIAS,
+      title: 'Duplicados por resolver',
+      columns: ['numero_guia', 'fecha', 'ubicacion', 'registrado_por', 'observaciones'],
+      filters: [{ field: 'estado', op: 'eq', value: 'Duplicada' }],
+      editable: ['numero_guia', 'fecha', 'estado'],
+      sort: { field: 'numero_guia', dir: 'asc' },
+      limit: 100,
+    },
+    // El formulario con aprobación es lo que enciende Aprobar / Rechazar en
+    // las tablas de arriba (`approvalFor` busca en ESTA pantalla). Al final,
+    // para que el supervisor también pueda registrar si hace falta.
+    {
+      id: 'registrar_sup',
+      type: 'form',
+      width: 'full',
+      tracker: GUIAS,
+      title: 'Registrar una guía',
+      fields: ['numero_guia', 'fecha', 'ubicacion', 'foto', 'observaciones'],
+      submitLabel: 'Registrar',
+      successMessage: 'Guía registrada.',
+      approval: {
+        field: 'estado',
+        pending: 'Pendiente',
+        approved: 'Aprobada',
+        rejected: 'Rechazada',
+        notesField: 'motivo_rechazo',
+      },
+    },
+  ],
+});
+
+const tablero: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'primary',
+  refreshSeconds: 60,
+  editing: 'off',
+  alerts: [],
+  theme: { accent: 'primary', header: 'hero' },
+  filtersBar: [
+    { id: 'f_fecha', label: 'Fechas', kind: 'date_range', source: GUIAS, field: 'fecha' },
+  ],
+  blocks: [
+    {
+      id: 'total',
+      type: 'metric',
+      width: 'third',
+      tracker: GUIAS,
+      title: 'Guías registradas',
+      aggregate: 'count',
+      compare: 'previous_period',
+      period: 'week',
+      dateField: 'fecha',
+    },
+    {
+      id: 'aprobadas',
+      type: 'metric',
+      width: 'third',
+      tracker: GUIAS,
+      title: 'Aprobadas',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Aprobada' }],
+      tone: 'emerald',
+    },
+    {
+      id: 'rechazo',
+      type: 'metric',
+      width: 'third',
+      tracker: GUIAS,
+      title: 'Rechazadas',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Rechazada' }],
+      tone: 'rose',
+      goodWhen: 'down',
+    },
+    {
+      id: 'por_dia',
+      type: 'chart',
+      width: 'half',
+      tracker: GUIAS,
+      title: 'Guías por día',
+      chart: 'bar',
+      groupBy: 'fecha',
+      bucket: 'day',
+      aggregate: 'count',
+    },
+    {
+      id: 'embudo',
+      type: 'chart',
+      width: 'half',
+      tracker: GUIAS,
+      title: 'Por estado',
+      chart: 'funnel',
+      groupBy: 'estado',
+      aggregate: 'count',
+    },
+    {
+      id: 'todas',
+      type: 'table',
+      width: 'full',
+      tracker: GUIAS,
+      title: 'Todas las guías',
+      columns: ['numero_guia', 'fecha', 'estado', 'ubicacion', 'registrado_por'],
+      sort: { field: 'created_at', dir: 'desc' },
+      limit: 200,
+    },
+  ],
+});
+
+export const CONTROL_EN_PLANTA: AppTemplate = {
+  id: 'control_planta',
+  name: 'Control en planta',
+  icon: '🏭',
+  body: 'Los operarios registran guías con foto y sin señal; el supervisor aprueba y resuelve duplicados; gerencia ve el tablero y exporta.',
+  accent: 'emerald',
+  trackers: [
+    {
+      slug: GUIAS,
+      name: 'Guías',
+      description: 'Cada guía que entra a la planta: número, fecha, estado y foto.',
+      fields: guiasFields,
+      duplicates: {
+        key: 'numero_guia',
+        distinctBy: 'fecha',
+        flagField: 'estado',
+        flagValue: 'Duplicada',
+      },
+    },
+  ],
+  roles: [
+    {
+      key: 'operario',
+      name: 'Operario',
+      description: 'Registra guías y ve sólo las suyas.',
+      permissions: {
+        tables: {
+          [GUIAS]: {
+            read: 'own',
+            create: true,
+            edit: 'own',
+            fields: ['numero_guia', 'fecha', 'ubicacion', 'foto', 'observaciones'],
+            actions: [],
+          },
+        },
+        export: false,
+      },
+    },
+    {
+      key: 'supervisor',
+      name: 'Supervisor',
+      description: 'Ve todo, aprueba o rechaza y corrige duplicados.',
+      permissions: {
+        tables: {
+          [GUIAS]: {
+            read: 'all',
+            create: true,
+            edit: 'all',
+            actions: [APPROVE_ACTION_ID, REJECT_ACTION_ID],
+          },
+        },
+        export: true,
+      },
+    },
+    {
+      key: 'gerencia',
+      name: 'Gerencia',
+      description: 'Mira el tablero y exporta; no escribe.',
+      permissions: {
+        tables: { [GUIAS]: { read: 'all', create: false, edit: 'none', actions: [] } },
+        export: true,
+      },
+    },
+  ],
+  screens: [
+    {
+      slug: 'registrar',
+      title: 'Registrar',
+      icon: 'ClipboardPlus',
+      roles: ['operario', 'supervisor'],
+      spec: registrar,
+    },
+    {
+      slug: 'mis_registros',
+      title: 'Mis registros',
+      icon: 'ListChecks',
+      roles: ['operario'],
+      spec: misRegistros,
+    },
+    {
+      slug: 'por_aprobar',
+      title: 'Por aprobar',
+      icon: 'BadgeCheck',
+      roles: ['supervisor'],
+      spec: porAprobar,
+    },
+    {
+      slug: 'tablero',
+      title: 'Tablero',
+      icon: 'BarChart3',
+      roles: ['supervisor', 'gerencia'],
+      spec: tablero,
+    },
+  ],
+  homeScreen: 'registrar',
+};
+
+export const APP_TEMPLATES: readonly AppTemplate[] = [CONTROL_EN_PLANTA];
+
+export function appTemplate(id: string): AppTemplate | null {
+  return APP_TEMPLATES.find((t) => t.id === id) ?? null;
+}

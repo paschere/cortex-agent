@@ -2,6 +2,12 @@ import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  type RowAccess,
+  type RowScope,
+  SCOPE_BLOCKED_MESSAGE,
+  applyRowScope,
+} from '../apps/permissions';
 import { bogotaToday } from '../commitments/shape';
 import { moduleByKey } from '../modules/catalog';
 import { enabledModules, moduleOffMessage } from '../modules/store';
@@ -73,7 +79,7 @@ import {
 // necesita, y así no hay forma de que viaje por accidente a un componente. La
 // única que lo lee es `custom_view_reserve_unlock`, dentro de la base.
 export const VIEW_COLUMNS =
-  'id, slug, name, description, spec, version, visibility, share_token, share_expires_at, share_views, pinned, created_by, updated_by, created_at, updated_at, archived_at';
+  'id, slug, name, description, spec, version, visibility, share_token, share_expires_at, share_views, pinned, app_id, created_by, updated_by, created_at, updated_at, archived_at';
 
 export type ViewVisibility = 'workspace' | 'link' | 'password';
 
@@ -90,6 +96,8 @@ export interface CustomViewRow {
   share_expires_at: string | null;
   share_views: number;
   pinned: boolean;
+  /** La aplicación de la que esta vista es pantalla (0208); null = vista suelta. */
+  app_id?: string | null;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -338,6 +346,7 @@ function adaptEntry(row: Record<string, unknown>): ViewRow {
     values,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
+    created_by: typeof row.created_by === 'string' ? row.created_by : null,
   };
 }
 
@@ -363,6 +372,16 @@ export interface LoadViewSourcesOptions {
    * del Feed sólo se leen si es su dueño. Sin él, ninguna de las dos se lee.
    */
   viewerId?: string | null;
+  /**
+   * EL SCOPE DE UNA APLICACIÓN (0208): qué filas de cada fuente ve el rol de
+   * quien mira. Se aplica AQUÍ, al leer, y no en el navegador ni después de
+   * calcular: las cifras, los gráficos y el Excel de un operario salen de SUS
+   * filas porque las demás nunca entraron al mapa. Una fuente del spec que no
+   * esté en la lista se lee entera, así que `rowScopeFor` entrega una entrada por
+   * fuente; `none` la bloquea con aviso. «own» se filtra además en la consulta
+   * (`created_by`), para no traer lo que no se va a mostrar.
+   */
+  scope?: RowScope[];
 }
 
 /** Lee las tablas y fuentes que el spec nombra y sus filas, hasta el tope. */
@@ -378,6 +397,13 @@ export async function loadViewSources(
   const platform = refs.filter(isPlatformSourceId);
   const feed = refs.filter(isFeedSourceId);
   const viewerId = options.audience === 'public' ? null : (options.viewerId ?? null);
+  const scopes = new Map((options.scope ?? []).map((s) => [s.tracker, s.access]));
+  const accessOf = (ref: string): RowAccess => scopes.get(ref) ?? { kind: 'all' };
+  /** Las fuentes de sólo lectura no tienen `created_by`: «own» ahí es nada. */
+  const readOnlyAccess = (ref: string): RowAccess => {
+    const access = accessOf(ref);
+    return access.kind === 'own' ? { kind: 'none' } : access;
+  };
 
   await Promise.all(
     feed.map(async (id) => {
@@ -387,12 +413,14 @@ export async function loadViewSources(
         sources.set(id, { tracker, rows: [], truncated: false, blocked: message });
       if (options.audience === 'public') return blocked(FEED_PUBLIC_MESSAGE);
       if (!viewerId) return blocked(FEED_NO_VIEWER_MESSAGE);
+      const access = readOnlyAccess(id);
+      if (access.kind === 'none') return blocked(SCOPE_BLOCKED_MESSAGE);
       try {
         const read = await readFeedSource(db, id, viewerId, VIEW_ROW_CAP);
         if (!read.ok) return blocked(read.message);
         sources.set(id, {
           tracker: { slug: id, name: read.name, fields: read.fields },
-          rows: read.rows.slice(0, VIEW_ROW_CAP),
+          rows: applyRowScope(read.rows.slice(0, VIEW_ROW_CAP), access),
           truncated: read.truncated,
         });
       } catch {
@@ -429,6 +457,11 @@ export async function loadViewSources(
         });
         return;
       }
+      const access = readOnlyAccess(id);
+      if (access.kind === 'none') {
+        sources.set(id, { tracker, rows: [], truncated: false, blocked: SCOPE_BLOCKED_MESSAGE });
+        return;
+      }
       try {
         const read = await def.read(db, VIEW_ROW_CAP, bogotaToday(), { viewerId });
         // Un módulo apagado o una cifra sólo para quien administra: sin filas
@@ -439,7 +472,7 @@ export async function loadViewSources(
         }
         sources.set(id, {
           tracker,
-          rows: read.rows.slice(0, VIEW_ROW_CAP),
+          rows: applyRowScope(read.rows.slice(0, VIEW_ROW_CAP), access),
           truncated: read.truncated,
         });
       } catch {
@@ -476,21 +509,40 @@ export async function loadViewSources(
   }
   await Promise.all(
     trackers.map(async (t) => {
-      const { data: rows, error: rowsError } = await db
+      const tracker = {
+        slug: t.slug,
+        name: t.name,
+        fields: Array.isArray(t.fields) ? t.fields : [],
+        ...(flags.has(t.slug) ? { alertFlag: flags.get(t.slug) } : {}),
+      };
+      const access = accessOf(t.slug);
+      if (access.kind === 'none') {
+        sources.set(t.slug, {
+          tracker,
+          rows: [],
+          truncated: false,
+          blocked: SCOPE_BLOCKED_MESSAGE,
+        });
+        return;
+      }
+      let query = db
         .from('tracker_rows')
-        .select('id, label, values, created_at, updated_at')
-        .eq('tracker_id', t.id)
+        .select('id, label, values, created_by, created_at, updated_at')
+        .eq('tracker_id', t.id);
+      if (access.kind === 'own') query = query.eq('created_by', access.userId);
+      const { data: rows, error: rowsError } = await query
         .order('updated_at', { ascending: false })
         .limit(VIEW_ROW_CAP + 1);
       if (rowsError) throw rowsError;
-      const list = (rows ?? []).map((r) => adaptEntry(r as Record<string, unknown>));
+      // El scope se aplica otra vez en memoria: es la misma regla que
+      // `rowVisible` usa antes de escribir, y así la lectura no depende de que
+      // la consulta lo haya hecho.
+      const list = applyRowScope(
+        (rows ?? []).map((r) => adaptEntry(r as Record<string, unknown>)),
+        access,
+      );
       sources.set(t.slug, {
-        tracker: {
-          slug: t.slug,
-          name: t.name,
-          fields: Array.isArray(t.fields) ? t.fields : [],
-          ...(flags.has(t.slug) ? { alertFlag: flags.get(t.slug) } : {}),
-        },
+        tracker,
         rows: list.slice(0, VIEW_ROW_CAP),
         truncated: list.length > VIEW_ROW_CAP,
       });
@@ -503,11 +555,17 @@ export async function loadViewSources(
 // Vistas
 // ---------------------------------------------------------------------------
 
+/**
+ * Las vistas del espacio. Las pantallas de una aplicación (0208, `app_id`)
+ * también son filas de `custom_views`, pero no son «vistas» para la gente: se
+ * ven y se editan desde su app, no desde /views ni desde Inicio.
+ */
 export async function listViews(db: SupabaseClient, limit = 60): Promise<CustomViewRow[]> {
   const { data, error } = await db
     .from('custom_views')
     .select(VIEW_COLUMNS)
     .is('archived_at', null)
+    .is('app_id', null)
     .order('pinned', { ascending: false })
     .order('updated_at', { ascending: false })
     .limit(limit);
@@ -520,6 +578,7 @@ export async function listPinnedViews(db: SupabaseClient, limit = 3): Promise<Cu
     .from('custom_views')
     .select(VIEW_COLUMNS)
     .is('archived_at', null)
+    .is('app_id', null)
     .eq('pinned', true)
     .order('updated_at', { ascending: false })
     .limit(limit);
@@ -530,8 +589,21 @@ export async function listPinnedViews(db: SupabaseClient, limit = 3): Promise<Cu
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Por id o por slug: el chat nombra vistas como la gente, la app por id. */
-export async function getView(db: SupabaseClient, ref: string): Promise<CustomViewRow | null> {
-  const q = db.from('custom_views').select(VIEW_COLUMNS).is('archived_at', null);
+/**
+ * Una vista por id o slug. Las pantallas de una aplicación (0208, `app_id`)
+ * NO se devuelven salvo que quien llama lo pida (`appScreens`): las rutas y
+ * acciones de /views, el enlace público y las herramientas del chat reciben
+ * «no existe» para ellas, porque abrirlas por ahí saltaría el rol de la app
+ * (filas de otros, exportar, botones). Sólo la capa de apps y el editor de
+ * quien administra la empresa usan `appScreens: true`.
+ */
+export async function getView(
+  db: SupabaseClient,
+  ref: string,
+  options: { appScreens?: boolean } = {},
+): Promise<CustomViewRow | null> {
+  let q = db.from('custom_views').select(VIEW_COLUMNS).is('archived_at', null);
+  if (!options.appScreens) q = q.is('app_id', null);
   const { data, error } = await (UUID_RE.test(ref)
     ? q.eq('id', ref)
     : q.eq('slug', ref)
@@ -540,8 +612,12 @@ export async function getView(db: SupabaseClient, ref: string): Promise<CustomVi
   return data ? adapt(data as Record<string, unknown>) : null;
 }
 
-export async function mustGetView(db: SupabaseClient, ref: string): Promise<CustomViewRow> {
-  const view = await getView(db, ref);
+export async function mustGetView(
+  db: SupabaseClient,
+  ref: string,
+  options: { appScreens?: boolean } = {},
+): Promise<CustomViewRow> {
+  const view = await getView(db, ref, options);
   if (!view) throw new NotFoundError(`No hay una vista «${ref}» en este espacio.`);
   return view;
 }
@@ -617,6 +693,8 @@ export async function createView(
     spec: ViewSpec;
     userId: string;
     prompt?: string | null;
+    /** La app de la que esta vista es pantalla (0208). Sin él, una vista suelta. */
+    appId?: string | null;
   },
 ): Promise<CustomViewRow> {
   const slug = await freeSlug(db, input.slug ?? slugify(input.name));
@@ -628,6 +706,7 @@ export async function createView(
       description: (input.description ?? '').trim().slice(0, 500),
       spec: input.spec,
       version: 1,
+      ...(input.appId ? { app_id: input.appId } : {}),
       created_by: input.userId,
       updated_by: input.userId,
     })
@@ -660,9 +739,11 @@ export async function updateView(
     userId: string;
     prompt?: string | null;
     expectedVersion?: number;
+    /** La vista es la pantalla de una app (0208): sólo lo pide quien ya comprobó que administra. */
+    appScreen?: boolean;
   },
 ): Promise<CustomViewRow> {
-  const current = await mustGetView(db, id);
+  const current = await mustGetView(db, id, { appScreens: input.appScreen });
   if (input.expectedVersion !== undefined && input.expectedVersion !== current.version)
     throw new ViewConflictError();
   // Una vista que ya está afuera no puede empezar a mostrar algo interno: el
@@ -744,8 +825,12 @@ export async function restoreViewVersion(
   });
 }
 
-export async function archiveView(db: SupabaseClient, id: string): Promise<boolean> {
-  const { data, error } = await db
+export async function archiveView(
+  db: SupabaseClient,
+  id: string,
+  options: { appScreen?: boolean } = {},
+): Promise<boolean> {
+  let q = db
     .from('custom_views')
     .update({
       archived_at: new Date().toISOString(),
@@ -756,9 +841,10 @@ export async function archiveView(db: SupabaseClient, id: string): Promise<boole
       password_hash: null,
     })
     .eq('id', id)
-    .is('archived_at', null)
-    .select('id')
-    .maybeSingle();
+    .is('archived_at', null);
+  // Una pantalla de app (0208) se archiva sólo desde su app.
+  if (!options.appScreen) q = q.is('app_id', null);
+  const { data, error } = await q.select('id').maybeSingle();
   if (error) throw error;
   return Boolean(data);
 }
@@ -868,6 +954,7 @@ export async function findViewByToken(
     .select(`organization_id, ${VIEW_COLUMNS}`)
     .eq('share_token', token)
     .is('archived_at', null)
+    .is('app_id', null)
     .maybeSingle();
   if (error || !data) return null;
   const row = adapt(data as Record<string, unknown>) as PublicViewRow;

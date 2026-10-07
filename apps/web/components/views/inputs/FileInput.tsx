@@ -61,7 +61,11 @@ export function uploadFile(
   form.set('field', field);
   form.set('file', file, file.name);
   const url =
-    target.kind === 'app' ? `/api/views/${target.viewId}/upload` : '/api/views/public/upload';
+    target.kind === 'app'
+      ? `/api/views/${target.viewId}/upload`
+      : target.kind === 'custom_app'
+        ? `/api/apps/${target.appId}/screens/${target.screen}/upload`
+        : '/api/views/public/upload';
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
@@ -129,7 +133,7 @@ export function FileInput({
       };
       try {
         if (
-          (target.kind === 'app' || target.kind === 'public') &&
+          (target.kind === 'app' || target.kind === 'custom_app' || target.kind === 'public') &&
           typeof navigator !== 'undefined' &&
           !navigator.onLine
         ) {

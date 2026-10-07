@@ -197,6 +197,8 @@ export const SETUP: NavItem = { href: '/onboarding', label: 'Puesta en marcha', 
 /** Tableros, portales y formularios armados hablando (migración 0156). Fija
  * junto a Chat y Gerencia: enterrada en «Herramientas» nadie la encontraba. */
 export const VIEWS: NavItem = { href: '/views', label: 'Vistas', icon: LayoutPanelTop };
+/** Aplicaciones (0208): varias pantallas con roles, para operarios y clientes que no son «del equipo». */
+export const APPS: NavItem = { href: '/apps', label: 'Aplicaciones', icon: LayoutGrid };
 export const PINNED: NavItem[] = [SETUP, MANAGEMENT, CHAT, VIEWS, FEED, CALLS, BRAIN];
 /** Procesos listos para activar: la puerta del autoservicio. */
 export const PROCESSES: NavItem = { href: '/procesos', label: 'Procesos', icon: Sparkles };
@@ -265,6 +267,7 @@ export const SECTIONS: NavSection[] = [
       // clientes que se están yendo y las encuestas.
       { href: '/comercial', label: 'Embudo comercial', icon: Handshake },
       { href: '/trackers', label: 'Tablas', icon: Table2 },
+      APPS,
     ],
   },
   {
@@ -574,6 +577,7 @@ export function primaryNav({
       { ...CHAT, match: ['/chat'] },
       { ...PROCESSES, match: ['/procesos'] },
       { ...VIEWS, match: ['/views'] },
+      { ...APPS, match: ['/apps'] },
       { ...DATA, match: ['/integrations', '/trackers', '/feed', '/kb'] },
       { href: team, label: 'Equipo', icon: Users, match: ['/admin', '/team'] },
     ],

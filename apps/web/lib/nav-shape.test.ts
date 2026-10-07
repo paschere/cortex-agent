@@ -69,7 +69,10 @@ describe('el rail', () => {
   });
 
   it('una sección que se queda vacía no deja su encabezado colgando', () => {
-    const rail = buildRail(['/clients', '/ventas', '/comercial', '/payments', '/trackers'], false);
+    const rail = buildRail(
+      ['/clients', '/ventas', '/comercial', '/payments', '/trackers', '/apps'],
+      false,
+    );
     expect(rail.rest.map((s) => s.id)).not.toContain('work');
   });
 
@@ -193,7 +196,7 @@ describe('la navegación principal del autoservicio', () => {
   });
 
   it('Datos se enciende en tablas, feed, Brain Knowledge e integraciones; el chat no en la consola multiempresa', () => {
-    const [, chat, , , data] = primaryNav({ admin: false, founder: false });
+    const [, chat, , , , data] = primaryNav({ admin: false, founder: false });
     if (!chat || !data) throw new Error('faltan puertas');
     for (const path of ['/trackers/abc', '/feed', '/kb', '/integrations/whatsapp']) {
       expect(primaryActive(path, data), path).toBe(true);

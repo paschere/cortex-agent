@@ -5,6 +5,7 @@ import { buildSystemPrompt } from '@/lib/system-prompt';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { figuresForTts } from '@/lib/voice-figures';
 import { VOICE_LIVE_FACTS, takeSpokenClauses } from '@/lib/voice-spoken';
+import { TTS_VOICE, VOICE_PLANS } from '@/lib/voice-tts';
 import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, SecurityBlockedError } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
@@ -61,11 +62,6 @@ type UUID = `${string}-${string}-${string}-${string}-${string}`;
 
 const VOICE_FAMILIES_BLOCKED = new Set(['browser', 'screen', 'security', 'admin']);
 
-const VOICE_PLANS = new Set(
-  (process.env.VOICE_PLANS || process.env.MEET_VOICE_PLANS || 'business,enterprise').split(','),
-);
-
-const TTS_VOICE = process.env.VOICE_TTS_VOICE || 'aura-2-celeste-es';
 /** Deepgram Aura entrega PCM crudo por WS; el cliente lo reproduce a esta tasa. */
 const SAMPLE_RATE = 24_000;
 

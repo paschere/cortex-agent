@@ -86,6 +86,8 @@ export function LiveViewCanvas({
   heading,
   actions,
   showBrand = true,
+  canExport = true,
+  readOnly = false,
 }: {
   initial: ComputedView;
   target: SubmitTarget;
@@ -100,6 +102,10 @@ export function LiveViewCanvas({
   actions?: React.ReactNode;
   /** El logo en la portada; el enlace público lo lleva en su barra de arriba. */
   showBrand?: boolean;
+  /** Falso: el rol no exporta; el menú ofrece sólo PDF. */
+  canExport?: boolean;
+  /** «Ver como…»: nada se escribe, pero los datos siguen refrescándose. */
+  readOnly?: boolean;
 }) {
   const brand = useViewBrand();
   const scope = useBrandScope();
@@ -349,6 +355,7 @@ export function LiveViewCanvas({
         dataUrl={dataUrl}
         filterParam={filterParam.current}
         title={heading?.title ?? 'Vista'}
+        excel={canExport}
       />
     </>
   );
@@ -375,7 +382,7 @@ export function LiveViewCanvas({
       <FlashProvider value={flashing}>
         <ViewCanvas
           view={view}
-          target={target}
+          target={readOnly ? { kind: 'preview' } : target}
           onChanged={() => void refresh(true)}
           filters={{ state: filters, onChange: changeFilters, pending: filtering }}
           page={{

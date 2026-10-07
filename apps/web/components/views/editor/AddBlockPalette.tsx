@@ -40,6 +40,7 @@ const ORDER: PaletteType[] = [
   'text',
   'media',
   'links',
+  'voice',
 ];
 
 const WHY_NOT: Partial<Record<PaletteType, string>> = {
@@ -47,6 +48,7 @@ const WHY_NOT: Partial<Record<PaletteType, string>> = {
   board: 'Necesitas una tabla con un campo de opciones (un estado, una etapa).',
   zones: 'Necesitas una tabla con un campo de opciones (una zona, un muelle).',
   calendar: 'Necesitas una tabla con un campo de fecha (una cita, una entrega).',
+  voice: 'Primero agrega un formulario a esta vista: la voz lo llena conversando.',
 };
 
 export function AddBlockPalette({
@@ -56,6 +58,7 @@ export function AddBlockPalette({
   blockTypes,
   prefer,
   loading,
+  hasForm = true,
   onPick,
   onTableCreated,
 }: {
@@ -65,6 +68,8 @@ export function AddBlockPalette({
   blockTypes: string[];
   prefer: string | null;
   loading: boolean;
+  /** La vista ya tiene un formulario (el asistente de voz maneja uno). */
+  hasForm?: boolean;
   onPick: (type: PaletteType) => void;
   /** Se creó una tabla desde aquí: quien llama la lee y pone un formulario sobre ella. */
   onTableCreated?: (slug: string) => void;
@@ -99,7 +104,9 @@ export function AddBlockPalette({
             {types.map((type) => {
               const Icon = blockIcon(type);
               const ready =
-                SOURCELESS_TYPES.has(type) || Boolean(defaultSourceFor(type, sources, prefer));
+                type === 'voice'
+                  ? hasForm
+                  : SOURCELESS_TYPES.has(type) || Boolean(defaultSourceFor(type, sources, prefer));
               const disabled = (loading && !SOURCELESS_TYPES.has(type)) || !ready;
               return (
                 <li key={type}>

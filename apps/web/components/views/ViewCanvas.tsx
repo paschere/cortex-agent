@@ -28,6 +28,7 @@ import remarkGfm from 'remark-gfm';
 import { DictateRecord, type Dictated } from './DictateRecord';
 import { ViewChart } from './ViewChart';
 import { ViewZones } from './ViewZones';
+import { VoiceFormAssistant } from './VoiceFormAssistant';
 import { CalendarBlock } from './blocks/Calendar';
 import { FormBlock } from './blocks/FormBlock';
 import { GalleryBlock } from './blocks/Gallery';
@@ -44,6 +45,7 @@ import { RichValue } from './blocks/RichValue';
 import { FilterBar, PageTabs } from './blocks/ViewChrome';
 import { useBrandScope } from './blocks/brand';
 import { type SubmitFn, submitterFor } from './blocks/form-transport';
+import { FormVoiceProvider } from './blocks/form-voice-bridge';
 import {
   Card,
   EmptyState,
@@ -87,6 +89,8 @@ import './views.css';
 export type SubmitTarget =
   | { kind: 'app'; viewId: string }
   | { kind: 'public'; token: string }
+  /** Una pantalla de una aplicación: appId y screen son los slugs; el rol sale de la sesión. */
+  | { kind: 'custom_app'; appId: string; screen: string }
   | { kind: 'preview' }
   /** El escaparate de desarrollo (/v/views-showcase): escribe de mentira, sin red. */
   | { kind: 'demo' };
@@ -152,87 +156,89 @@ export function ViewCanvas({
 
   return (
     <ViewThemeProvider theme={theme}>
-      <ViewWriterProvider
-        target={view.writable ? target : { kind: 'preview' }}
-        onChanged={onChanged}
-      >
-        <RecordOpenerProvider value={openRecord}>
-          <div
-            className={clsx(scope.className, operator && 'view-operator')}
-            style={scope.style}
-            data-view-layout={theme?.layout ?? 'dashboard'}
-            data-view-style={theme?.style ?? 'clean'}
-          >
-            {(view.filtersBar?.length ?? 0) > 0 && (
-              <FilterBar
-                items={view.filtersBar ?? []}
-                state={filters?.state ?? {}}
-                onChange={filters?.onChange}
-                pending={filters?.pending}
-              />
-            )}
-            {pages.length > 1 && current && (
-              <PageTabs
-                pages={pages}
-                current={current.id}
-                accent={theme?.accent ?? 'primary'}
-                idBase={idBase}
-                onSelect={(id) => (page ? page.onSelect(id) : setLocalPage(id))}
-              />
-            )}
+      <FormVoiceProvider>
+        <ViewWriterProvider
+          target={view.writable ? target : { kind: 'preview' }}
+          onChanged={onChanged}
+        >
+          <RecordOpenerProvider value={openRecord}>
             <div
-              id={pages.length > 1 ? `${idBase}-panel` : undefined}
-              role={pages.length > 1 ? 'tabpanel' : undefined}
-              aria-labelledby={
-                pages.length > 1 && current ? `${idBase}-tab-${current.id}` : undefined
-              }
-              aria-busy={filters?.pending || undefined}
-              className={clsx(
-                'grid transition-opacity duration-200',
-                operator ? 'mx-auto max-w-2xl grid-cols-6 gap-3' : 'grid-cols-1 md:grid-cols-6',
-                !operator && (compact ? 'gap-3' : 'gap-4 md:gap-5'),
-                filters?.pending && 'opacity-60',
-              )}
+              className={clsx(scope.className, operator && 'view-operator')}
+              style={scope.style}
+              data-view-layout={theme?.layout ?? 'dashboard'}
+              data-view-style={theme?.style ?? 'clean'}
             >
-              {shown.map((block) => (
-                <section
-                  key={block.id}
-                  className={clsx(
-                    'view-block min-w-0',
-                    // Planta: una columna; las métricas de a dos en el celular, de a tres arriba.
-                    operator
-                      ? block.type === 'metric'
-                        ? 'view-metric-cell col-span-3 min-w-0 overflow-hidden sm:col-span-2'
-                        : 'col-span-6'
-                      : SPAN[block.width],
-                  )}
-                >
-                  <Block block={block} target={target} submit={submit} />
-                </section>
-              ))}
-              {shown.length === 0 && (
-                <EmptyState
-                  className="col-span-full"
-                  icon={<Inbox className="h-5 w-5" aria-hidden />}
-                  title="Esta página todavía no tiene bloques"
-                  hint="Pídele a Cortex que agregue uno, o ábrela en el lienzo para armarla con las manos."
+              {(view.filtersBar?.length ?? 0) > 0 && (
+                <FilterBar
+                  items={view.filtersBar ?? []}
+                  state={filters?.state ?? {}}
+                  onChange={filters?.onChange}
+                  pending={filters?.pending}
                 />
               )}
-              {view.partial.length > 0 && (
-                <p className="col-span-full text-micro text-ink-faint">
-                  Cifras calculadas sobre las 2.000 filas más recientes de {view.partial.join(', ')}
-                  .
-                </p>
+              {pages.length > 1 && current && (
+                <PageTabs
+                  pages={pages}
+                  current={current.id}
+                  accent={theme?.accent ?? 'primary'}
+                  idBase={idBase}
+                  onSelect={(id) => (page ? page.onSelect(id) : setLocalPage(id))}
+                />
               )}
+              <div
+                id={pages.length > 1 ? `${idBase}-panel` : undefined}
+                role={pages.length > 1 ? 'tabpanel' : undefined}
+                aria-labelledby={
+                  pages.length > 1 && current ? `${idBase}-tab-${current.id}` : undefined
+                }
+                aria-busy={filters?.pending || undefined}
+                className={clsx(
+                  'grid transition-opacity duration-200',
+                  operator ? 'mx-auto max-w-2xl grid-cols-6 gap-3' : 'grid-cols-1 md:grid-cols-6',
+                  !operator && (compact ? 'gap-3' : 'gap-4 md:gap-5'),
+                  filters?.pending && 'opacity-60',
+                )}
+              >
+                {shown.map((block) => (
+                  <section
+                    key={block.id}
+                    className={clsx(
+                      'view-block min-w-0',
+                      // Planta: una columna; las métricas de a dos en el celular, de a tres arriba.
+                      operator
+                        ? block.type === 'metric'
+                          ? 'view-metric-cell col-span-3 min-w-0 overflow-hidden sm:col-span-2'
+                          : 'col-span-6'
+                        : SPAN[block.width],
+                    )}
+                  >
+                    <Block block={block} target={target} submit={submit} />
+                  </section>
+                ))}
+                {shown.length === 0 && (
+                  <EmptyState
+                    className="col-span-full"
+                    icon={<Inbox className="h-5 w-5" aria-hidden />}
+                    title="Esta página todavía no tiene bloques"
+                    hint="Pídele a Cortex que agregue uno, o ábrela en el lienzo para armarla con las manos."
+                  />
+                )}
+                {view.partial.length > 0 && (
+                  <p className="col-span-full text-micro text-ink-faint">
+                    Cifras calculadas sobre las 2.000 filas más recientes de{' '}
+                    {view.partial.join(', ')}.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-          <RecordDrawer
-            block={openedBlock}
-            rowId={opened?.rowId ?? null}
-            onClose={() => setOpened(null)}
-          />
-        </RecordOpenerProvider>
-      </ViewWriterProvider>
+            <RecordDrawer
+              block={openedBlock}
+              rowId={opened?.rowId ?? null}
+              onClose={() => setOpened(null)}
+            />
+          </RecordOpenerProvider>
+        </ViewWriterProvider>
+      </FormVoiceProvider>
     </ViewThemeProvider>
   );
 }
@@ -309,6 +315,15 @@ function Block({
       return <MediaBlock block={block} />;
     case 'links':
       return <LinksBlock block={block} />;
+    case 'voice':
+      return (
+        <VoiceFormAssistant
+          blockId={block.form}
+          variant="panel"
+          title={block.title}
+          autoStart={block.autoStart}
+        />
+      );
     case 'problem':
       return (
         <Card className="border-amber/40 bg-amber-soft/40">

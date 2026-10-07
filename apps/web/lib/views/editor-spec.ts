@@ -386,7 +386,7 @@ function preferredSources(sources: EditorSource[]): EditorSource[] {
 export type PaletteType = KnownBlockType | 'zones';
 
 /** Los tipos que no leen ninguna fuente: nacen sin tabla. */
-export const SOURCELESS_TYPES: ReadonlySet<string> = new Set(['text', 'media', 'links']);
+export const SOURCELESS_TYPES: ReadonlySet<string> = new Set(['text', 'media', 'links', 'voice']);
 
 export function defaultSourceFor(
   type: PaletteType,
@@ -425,6 +425,7 @@ export function newBlock(
     progress: 'avance',
     media: 'imagen',
     links: 'botones',
+    voice: 'voz',
   };
   const id = uniqueBlockId(spec, BASE[type]);
   if (type === 'text')
@@ -444,6 +445,11 @@ export function newBlock(
       style: 'buttons',
       links: [{ label: 'Todas las vistas', href: '/views', tone: 'primary' }],
     };
+  // El asistente de voz maneja un formulario de la misma vista: sin uno, no hay bloque.
+  if (type === 'voice') {
+    const form = spec.blocks.find((b) => b.type === 'form');
+    return form ? { id, type: 'voice', width: 'full', form: form.id } : null;
+  }
   const source = defaultSourceFor(type, sources, prefer);
   if (!source) return null;
   const fields = fieldOptions(source);
@@ -756,6 +762,7 @@ const PROP_NAME: Record<string, string> = {
   url: 'Dirección',
   href: 'Destino',
   links: 'Botones',
+  autoStart: 'Arrancar al abrir',
   alt: 'Texto alternativo',
   detailFields: 'Campos de la ficha',
   recordEditable: 'Campos editables en la ficha',

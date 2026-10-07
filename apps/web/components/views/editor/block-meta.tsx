@@ -10,6 +10,7 @@ import {
   Link2,
   type LucideIcon,
   MapPinned,
+  Mic,
   SquareKanban,
   Table2,
   Target,
@@ -30,6 +31,7 @@ export const BLOCK_ICON: Record<string, LucideIcon> = {
   progress: Target,
   media: ImageIcon,
   links: Link2,
+  voice: Mic,
 };
 
 export function blockIcon(type: string): LucideIcon {
@@ -54,4 +56,5 @@ export const BLOCK_PITCH: Record<string, string> = {
   progress: 'Barras de avance hacia una meta, en total o por sede, vendedor o ruta.',
   media: 'Una imagen, o un video de YouTube o Loom, un mapa o una presentación.',
   links: 'Botones que llevan a otra vista o a una página.',
+  voice: 'Un panel grande para llenar un formulario hablando, manos libres.',
 };

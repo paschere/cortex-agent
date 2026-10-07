@@ -108,7 +108,13 @@ describe('operaciones del lienzo', () => {
   it('cada plantilla de la paleta pasa el contrato y el catálogo', () => {
     const sources = [remates, ...platform];
     for (const type of KNOWN_BLOCK_TYPES) {
-      const spec = base();
+      let spec = base();
+      // El asistente de voz maneja un formulario de la vista: sin uno no nace.
+      if (type === 'voice') {
+        expect(newBlock('voice', spec, sources)).toBeNull();
+        const form = newBlock('form', spec, sources) as ViewSpec['blocks'][number];
+        spec = { ...spec, blocks: [...spec.blocks, form] };
+      }
       const block = newBlock(type, spec, sources);
       expect(block, type).not.toBeNull();
       const next = { ...spec, blocks: [...spec.blocks, block as ViewSpec['blocks'][number]] };

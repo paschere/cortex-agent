@@ -29,6 +29,7 @@ import type { SubmitFn } from './form-transport';
 /** Un id estable por vista + bloque. Null en vista previa (no hay cola). */
 export function queueKeyFor(target: SubmitTarget, blockId: string): string | null {
   if (target.kind === 'app') return `app:${target.viewId}:${blockId}`;
+  if (target.kind === 'custom_app') return `capp:${target.appId}:${target.screen}:${blockId}`;
   if (target.kind === 'public') return `pub:${target.token.slice(0, 20)}:${blockId}`;
   return null;
 }

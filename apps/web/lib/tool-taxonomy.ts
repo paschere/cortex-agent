@@ -419,6 +419,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'emerald',
     icon: 'Table2',
   },
+  apps: {
+    name: 'Aplicaciones',
+    blurb:
+      'Varias pantallas con menú y roles sobre las tablas de la empresa: el operario registra y ve lo suyo, el supervisor aprueba, gerencia mira el tablero. Se arman con plantillas o escribiendo.',
+    tone: 'primary',
+    icon: 'SquareKanban',
+  },
   views: {
     name: 'Vistas',
     blurb:
@@ -740,6 +747,7 @@ const FAMILY_GROUP: Record<string, string> = {
   reports: 'docs',
   trackers: 'docs',
   views: 'docs',
+  apps: 'docs',
   github: 'eng',
   linear: 'eng',
   payroll: 'money',

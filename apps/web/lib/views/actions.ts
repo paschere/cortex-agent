@@ -23,6 +23,7 @@ import {
   trackersOf,
   updateView,
   validateSpec,
+  viewerFromSession,
 } from '@cortex/agent-tools';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
@@ -92,7 +93,10 @@ export async function saveViewAction(
     // Las tablas del Feed se comprueban con las de quien guarda; las que la
     // versión guardada ya usaba y esta persona no puede leer (el Feed privado
     // de otro, una captura vencida) se conservan sin abrirlas.
-    const saved = input.viewId ? await mustGetView(db, input.viewId) : null;
+    const saved = input.viewId ? await mustGetView(db, input.viewId, { appScreens: true }) : null;
+    // La pantalla de una aplicación sólo la cambia quien administra la empresa.
+    if (saved?.app_id && !viewerFromSession(user).companyAdmin)
+      throw new NotFoundError('No hay una vista con ese id en este espacio.');
     const spec = await validateSpec(db, input.spec, {
       viewerId: user.id,
       keep: saved ? trackersOf(saved.spec) : [],
@@ -105,6 +109,7 @@ export async function saveViewAction(
           userId: user.id,
           prompt: input.prompt ?? null,
           expectedVersion: input.expectedVersion,
+          appScreen: Boolean(saved?.app_id),
         })
       : await createView(db, {
           name: input.name,

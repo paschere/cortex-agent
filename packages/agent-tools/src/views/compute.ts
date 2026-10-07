@@ -7,6 +7,7 @@ import {
   type CatalogTracker,
   type ChartKind,
   type FormApproval,
+  type FormVoiceMode,
   type Period,
   REJECT_ACTION_ID,
   type RowAction,
@@ -16,6 +17,7 @@ import {
   type ViewSpec,
   editWindowOf,
   fieldType,
+  formVoiceOf,
   isReadOnlySource,
 } from './spec';
 import type { FilterBarValue, ViewFilterState } from './view-filters';
@@ -72,6 +74,11 @@ export interface ViewRow {
   values: Record<string, string | number>;
   created_at: string;
   updated_at: string;
+  /**
+   * Quién creó la fila (sólo en tablas propias). Lo lee el scope «own» de
+   * las aplicaciones (apps/permissions.ts); no viaja a ningún bloque.
+   */
+  created_by?: string | null;
 }
 
 export interface ViewSource {
@@ -193,6 +200,8 @@ export type ComputedBlock =
       editWindowMinutes?: number;
       /** Pasos con los campos que pide cada uno; null/ausente = una sola pantalla. */
       steps?: Array<{ title: string; fields: string[] }> | null;
+      /** Cómo se llena hablando: `off` | `dictate` (por defecto) | `conversation`. */
+      voice?: FormVoiceMode;
       fields: ComputedFormField[];
     })
   | (BlockBase & {
@@ -277,6 +286,13 @@ export type ComputedBlock =
         description: string | null;
         tone: Tone;
       }>;
+    })
+  | (BlockBase & {
+      type: 'voice';
+      title: string | null;
+      /** El id del bloque `form` de esta vista que el asistente maneja. */
+      form: string;
+      autoStart: boolean;
     })
   | (BlockBase & { type: 'problem'; title: string; message: string });
 
@@ -1055,6 +1071,16 @@ function computeBlock(
       }),
     };
   }
+  if (block.type === 'voice') {
+    return {
+      type: 'voice',
+      id: block.id,
+      width: block.width,
+      title: block.title ?? null,
+      form: block.form,
+      autoStart: block.autoStart ?? false,
+    };
+  }
   const src = sources.get(block.tracker);
   if (!src) return problem(block, `La tabla «${block.tracker}» ya no existe en este espacio.`);
   if (src.blocked) return problem(block, src.blocked);
@@ -1559,6 +1585,7 @@ function computeBlock(
         successMessage: block.successMessage,
         editWindowMinutes: editWindowOf(block),
         steps: block.steps?.length ? block.steps : null,
+        voice: formVoiceOf(block),
         // El campo de estado de la aprobación lo pone el servidor: no se pide.
         fields: keys
           .filter((key) => key !== block.approval?.field)
@@ -1780,7 +1807,14 @@ export function computeView(
     });
   }
   return {
-    blocks: spec.blocks.map((block) => computeBlock(block, sources, today, options)),
+    blocks: spec.blocks.map((block) =>
+      block.type === 'voice' && !spec.blocks.some((b) => b.id === block.form && b.type === 'form')
+        ? problem(
+            block,
+            `El asistente de voz maneja el formulario «${block.form}», que ya no está en esta vista.`,
+          )
+        : computeBlock(block, sources, today, options),
+    ),
     computedAt: now.toISOString(),
     partial: [...unfiltered.values()].filter((s) => s.truncated).map((s) => s.tracker.name),
     refreshSeconds: spec.refreshSeconds,

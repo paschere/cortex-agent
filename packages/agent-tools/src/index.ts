@@ -138,6 +138,8 @@ export * from './reports';
 // filas, no un informe — y antes de encargos, que ejecutan, no almacenan.
 export * from './trackers';
 export * from './views';
+// Aplicaciones (0208): varias pantallas con roles sobre las mismas tablas y vistas.
+export * from './apps';
 export * from './table-sync';
 export * from './drive-table';
 // Programas contables conectados directo (migración 0165): Siigo llena tablas

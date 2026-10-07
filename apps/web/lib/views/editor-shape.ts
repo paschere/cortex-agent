@@ -149,6 +149,7 @@ export const KNOWN_BLOCK_TYPES = [
   'form',
   'media',
   'links',
+  'voice',
   'text',
 ] as const;
 export type KnownBlockType = (typeof KNOWN_BLOCK_TYPES)[number];
@@ -166,6 +167,7 @@ export const BLOCK_LABEL: Record<string, string> = {
   progress: 'Avance',
   media: 'Imagen o video',
   links: 'Botones',
+  voice: 'Asistente de voz',
 };
 
 /** Bloques cuyas filas abren su ficha al tocarlas. */

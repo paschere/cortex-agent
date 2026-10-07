@@ -1362,6 +1362,9 @@ export function ViewEditor({
                     sources={sources}
                     problems={byBlock.get(selected.id) ?? []}
                     editing={spec.editing}
+                    forms={spec.blocks.flatMap((b) =>
+                      b.type === 'form' ? [{ id: b.id, title: b.title }] : [],
+                    )}
                     onChange={(next, coalesce) =>
                       setSpec(updateBlock(spec, selected.id, next), coalesce)
                     }
@@ -1410,6 +1413,7 @@ export function ViewEditor({
         blockTypes={catalog?.blockTypes ?? []}
         prefer={selected ? sourceOf(selected) : null}
         loading={!catalog && !catalogError}
+        hasForm={spec.blocks.some((b) => b.type === 'form')}
         onPick={(type) => addBlock(type)}
         onTableCreated={tableCreated}
       />

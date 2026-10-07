@@ -61,7 +61,9 @@ export async function POST(req: NextRequest) {
         { status: 429 },
       );
 
-    const current = parsed.data.viewId ? await getView(db, parsed.data.viewId) : null;
+    const current = parsed.data.viewId
+      ? await getView(db, parsed.data.viewId, { appScreens: true })
+      : null;
     if (parsed.data.viewId && !current)
       return NextResponse.json({ error: 'Esa vista ya no existe.' }, { status: 404 });
 

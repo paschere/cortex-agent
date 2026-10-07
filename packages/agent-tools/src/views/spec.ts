@@ -406,6 +406,36 @@ export const formBlockSchema = z.object({
   approval: formApprovalSchema.optional(),
   /** Formulario por pasos: cada paso pide algunos de los campos (máx. 10 pasos). */
   steps: z.array(formStepSchema).max(10).optional(),
+  /**
+   * Cómo se llena hablando: `off` sin voz, `dictate` (por defecto, el de
+   * siempre) un botón para dictar el registro entero de una vez,
+   * `conversation` además «Llenar hablando»: Cortex pregunta campo por campo
+   * en voz alta, valida y lo envía al confirmar. Ver `VOICE_MODES`.
+   */
+  voice: z.enum(['off', 'dictate', 'conversation']).optional(),
+});
+
+/** Cómo se llena un formulario hablando (por defecto: dictar). */
+export const VOICE_MODES = ['off', 'dictate', 'conversation'] as const;
+export type FormVoiceMode = (typeof VOICE_MODES)[number];
+export function formVoiceOf(block: Pick<FormBlock, 'voice'>): FormVoiceMode {
+  return block.voice ?? 'dictate';
+}
+
+/**
+ * EL ASISTENTE DE VOZ. Un panel grande que maneja el formulario `form` de la
+ * MISMA vista conversando: Cortex pregunta campo por campo, escucha, valida y
+ * envía al confirmar. Llena el formulario visible, así que la persona lo ve y
+ * puede corregir con el dedo. `autoStart` arranca la conversación al abrir la
+ * pantalla (el navegador puede pedir un toque antes de dejar sonar la voz).
+ */
+export const voiceBlockSchema = z.object({
+  ...base,
+  type: z.literal('voice'),
+  title: title.optional(),
+  /** El id de un bloque `form` de esta misma vista. */
+  form: z.string().regex(BLOCK_ID_RE),
+  autoStart: z.boolean().optional(),
 });
 
 /**
@@ -541,6 +571,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   progressBlockSchema,
   mediaBlockSchema,
   linksBlockSchema,
+  voiceBlockSchema,
 ]);
 export type ViewBlock = z.infer<typeof blockSchema>;
 export type ViewBlockType = ViewBlock['type'];
@@ -862,6 +893,14 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
   const problems: string[] = [];
   const bySlug = new Map(catalog.map((t) => [t.slug, t]));
   for (const block of spec.blocks) {
+    if (block.type === 'voice') {
+      const target = spec.blocks.find((b) => b.id === block.form);
+      if (!target || target.type !== 'form')
+        problems.push(
+          `Bloque «${block.id}»: el asistente de voz maneja un formulario de esta vista; «${block.form}» no es un bloque form.`,
+        );
+      continue;
+    }
     if (!('tracker' in block)) continue;
     const where = `Bloque «${block.id}»`;
     const tracker = bySlug.get(block.tracker);
@@ -1136,4 +1175,5 @@ export const BLOCK_LABEL: Record<ViewBlockType, string> = {
   progress: 'Avance',
   media: 'Imagen o video',
   links: 'Botones',
+  voice: 'Asistente de voz',
 };
