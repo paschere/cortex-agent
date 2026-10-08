@@ -421,7 +421,7 @@ export function buildDetail(
               label: String(status),
               tone: (() => {
                 const at = statusOptions.indexOf(String(status));
-                return at >= 0 ? K.toneAt(at) : 'primary';
+                return at >= 0 ? K.toneAt(at, statusOptions) : 'primary';
               })(),
             },
       createdAt: row.created_at,

@@ -87,7 +87,7 @@ export function computeCards(
       status:
         status === undefined
           ? null
-          : { label: String(status), tone: at >= 0 ? K.toneAt(at) : ('primary' as const) },
+          : { label: String(status), tone: at >= 0 ? K.toneAt(at, statusOptions) : ('primary' as const) },
       data: block.dataFields.map((k) => K.detailOf(tracker, r, k)).filter((d) => d.value !== '—'),
       day: typeof date === 'string' ? K.dayOf(date) : null,
       mine: isMine(r),
@@ -127,7 +127,7 @@ export function computeCards(
     total: rows.length,
     cards,
     chips,
-    statusOptions: statusOptions.map((label, i) => ({ label, tone: K.toneAt(i) })),
+    statusOptions: statusOptions.map((label, i) => ({ label, tone: K.toneAt(i, statusOptions) })),
     searchable: block.searchable,
     groupLabel: block.groupBy ? K.fieldLabel(tracker, block.groupBy) : null,
     sortOptions: block.sortOptions.map((k) => ({

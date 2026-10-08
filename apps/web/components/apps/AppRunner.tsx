@@ -256,7 +256,7 @@ export function AppRunner({
     <LocationProvider appId={app.id} initial={readOnly ? null : location}>
       <AppToastProvider>
         <AppThemeScope />
-        <div style={look ? { fontFamily: look.font } : undefined}>
+        <div className="app-frame" style={look ? { fontFamily: look.font } : undefined}>
           <BrandScope className="md:flex md:gap-6">
             <aside className="view-no-print hidden w-60 shrink-0 md:block">
               <div className="sticky top-4 flex flex-col gap-4">

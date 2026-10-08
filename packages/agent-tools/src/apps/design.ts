@@ -15,6 +15,7 @@ import {
 } from '../views/spec';
 import { validateSpec } from '../views/store';
 import { SPEC_GRAMMAR } from '../views/tools';
+import { normalizeAppIcon } from './icon-names';
 import {
   type AppPermissions,
   USER_ATTRIBUTE_RE,
@@ -202,7 +203,7 @@ export async function reviewAppDraft(
     if (!/^[a-z][a-z0-9_]{1,47}$/.test(slug)) slug = `pantalla_${i + 1}`;
     while (used.has(slug)) slug = `${slug.slice(0, 44)}_${i + 1}`;
     used.add(slug);
-    return { ...s, slug, icon: s.icon || 'LayoutPanelTop' };
+    return { ...s, slug, icon: normalizeAppIcon(s.icon) };
   });
   const homeScreen = parsed.data.homeScreen ?? screens[0]?.slug;
   if (homeScreen && !screens.some((s) => s.slug === homeScreen))

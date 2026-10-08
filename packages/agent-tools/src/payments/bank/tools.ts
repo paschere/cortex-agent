@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { getFile } from '../../files';
 import { registerTool } from '../../index';
+import { getVisibleDocument } from '../../kb/spaces';
 import { applyPaymentToInvoice } from '../store';
 import { normalizeHeader } from './format';
 import type { ManualMapping, NeedsMapping } from './parse';
@@ -46,8 +47,16 @@ const STATEMENT_INPUT = z.object({
   fileId: z
     .string()
     .uuid()
+    .nullish()
     .describe(
-      'El `id` de la etiqueta `<archivo>` del extracto (adjunto del chat o archivo del Feed).',
+      'El `id` de la etiqueta `<archivo>` del extracto (adjunto del chat o archivo del Feed). Usa fileId O documentId, nunca los dos.',
+    ),
+  documentId: z
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      'El `result.download.documentId` que devolvió browser.run_flow cuando un trámite bajó el extracto del portal del banco (queda en Brain Knowledge). Usa documentId O fileId, nunca los dos.',
     ),
   accountLabel: z
     .string()
@@ -121,6 +130,48 @@ async function loadStatementFile(
 }
 
 /**
+ * Un archivo que bajó un trámite: vive en Brain Knowledge (`kb_documents`, bytes
+ * en 'kb-uploads' bajo `source_ref`). Pasa por la misma puerta de visibilidad que
+ * el resto del cerebro: un documento de un espacio que esta persona no ve, o de
+ * otra organización, se lee como si no existiera.
+ */
+export async function loadStatementDocument(
+  db: SupabaseClient,
+  id: string,
+  userId: string,
+): Promise<{ bytes: Uint8Array; fileName: string; mime: string | null }> {
+  const visible = await getVisibleDocument(db, userId, id).catch(() => null);
+  if (!visible) {
+    throw new NotFoundError(
+      'No encuentro ese documento en Brain Knowledge, o no es tuyo. Vuelve a correr el trámite que baja el extracto.',
+    );
+  }
+  const { data, error } = await db
+    .from('kb_documents')
+    .select('source_ref, mime, title')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  const sourceRef = (data?.source_ref as string | null) ?? null;
+  if (!sourceRef) {
+    throw new ValidationError(
+      `«${visible.title}» no tiene un archivo detrás (es texto guardado). Necesito el Excel o CSV del extracto.`,
+    );
+  }
+  const stored = await getFile(db, 'kb-uploads', sourceRef).catch(() => null);
+  if (!stored) {
+    throw new NotFoundError(
+      `No encontré los bytes de «${visible.title}». Vuelve a bajar el extracto.`,
+    );
+  }
+  return {
+    bytes: stored.content,
+    fileName: sourceRef.split('/').pop() || visible.title,
+    mime: (data?.mime as string | null) ?? stored.contentType ?? null,
+  };
+}
+
+/**
  * Las columnas que nombró la persona, de encabezado a índice. Se leen los
  * encabezados del propio archivo para que «Valor Total» signifique la columna
  * que se llama así y no otra.
@@ -164,7 +215,17 @@ async function statementInput(
   userId: string,
   input: StatementToolInput,
 ): Promise<BankStatementInput> {
-  const file = await loadStatementFile(db, input.fileId, userId);
+  if (input.fileId && input.documentId) {
+    throw new ValidationError('Pasa fileId o documentId, no los dos.');
+  }
+  if (!input.fileId && !input.documentId) {
+    throw new ValidationError(
+      'Falta el archivo: pasa fileId (adjunto del chat o Feed) o documentId (el que bajó un trámite con browser.run_flow).',
+    );
+  }
+  const file = input.documentId
+    ? await loadStatementDocument(db, input.documentId, userId)
+    : await loadStatementFile(db, input.fileId as string, userId);
   return {
     ...file,
     accountLabel: input.accountLabel,
@@ -225,7 +286,7 @@ const LINE = z.object({
 export const paymentsPreviewBankStatement = registerTool({
   id: 'payments.preview_bank_statement',
   description:
-    'Mirar un extracto bancario (Excel o CSV de Bancolombia, Davivienda, BBVA, Banco de Bogotá u otro) antes de importarlo, sin escribir nada: qué banco es, cuántos abonos trae y por cuánto, cuántos ya estaban importados, y a qué factura iría cada uno. Las salidas no entran a Pagos; al importar quedan en el libro de plata. Úsalo SIEMPRE antes de payments.import_bank_statement y cuéntale el resumen a la persona. Si dice needs_mapping, enséñale los encabezados y pregúntale qué columna es cada cosa.',
+    'Mirar un extracto bancario (Excel o CSV de Bancolombia, Davivienda, BBVA, Banco de Bogotá u otro) antes de importarlo, sin escribir nada: qué banco es, cuántos abonos trae y por cuánto, cuántos ya estaban importados, y a qué factura iría cada uno. Las salidas no entran a Pagos; al importar quedan en el libro de plata. El extracto puede ser un adjunto del chat (fileId) o el archivo que bajó un trámite del portal del banco (documentId = result.download.documentId de browser.run_flow). Úsalo SIEMPRE antes de payments.import_bank_statement y cuéntale el resumen a la persona. Si dice needs_mapping, enséñale los encabezados y pregúntale qué columna es cada cosa.',
   inputSchema: STATEMENT_INPUT,
   outputSchema: z.object({
     status: z.enum(['ready', 'needs_mapping']),
@@ -276,7 +337,7 @@ export const paymentsPreviewBankStatement = registerTool({
 export const paymentsImportBankStatement = registerTool({
   id: 'payments.import_bank_statement',
   description:
-    'Importar los abonos de un extracto bancario a Pagos. Cada abono nuevo queda registrado como dicho por el banco; los que cuadran sin duda (valor exacto y el número de la factura o el NIT en la descripción) quedan atados a su factura, y los demás quedan por revisar con sugerencias en /payments. Reimportar el mismo archivo o un periodo que se solapa NO duplica nada. Las salidas (débitos) no entran a Pagos: quedan en el libro de plata como gastos, y el saldo de cierre del extracto queda como saldo de la cuenta. Llama antes a payments.preview_bank_statement. Requiere confirmación.',
+    'Importar los abonos de un extracto bancario a Pagos. Cada abono nuevo queda registrado como dicho por el banco; los que cuadran sin duda (valor exacto y el número de la factura o el NIT en la descripción) quedan atados a su factura, y los demás quedan por revisar con sugerencias en /payments. Reimportar el mismo archivo o un periodo que se solapa NO duplica nada. Las salidas (débitos) no entran a Pagos: quedan en el libro de plata como gastos, y el saldo de cierre del extracto queda como saldo de la cuenta. Mismo archivo que la vista previa: fileId (adjunto) o documentId (lo que bajó un trámite con browser.run_flow). Llama antes a payments.preview_bank_statement. Requiere confirmación.',
   inputSchema: STATEMENT_INPUT,
   outputSchema: z.object({
     status: z.enum(['imported', 'needs_mapping']),

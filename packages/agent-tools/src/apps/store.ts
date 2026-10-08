@@ -32,6 +32,7 @@ import {
 } from '../views/store';
 import type { ViewFilterState } from '../views/view-filters';
 import { type AppBrand, type AppHome, parseBrand, parseHome } from './appearance';
+import { normalizeAppIcon } from './icon-names';
 import {
   type AppLocationSettings,
   type PersonKind,
@@ -486,7 +487,7 @@ export async function addScreen(
       view_id: view.id,
       slug,
       title: input.title.trim().slice(0, 60),
-      icon: (input.icon ?? '').trim().slice(0, 60) || 'LayoutPanelTop',
+      icon: normalizeAppIcon(input.icon),
       position: screens.length,
       roles: (input.roles ?? []).filter((r) => roleKeySchema.safeParse(r).success),
     })
@@ -504,7 +505,7 @@ export async function updateScreen(
 ): Promise<AppScreenRow> {
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.title !== undefined) patch.title = input.title.trim().slice(0, 60);
-  if (input.icon !== undefined) patch.icon = input.icon.trim().slice(0, 60) || 'LayoutPanelTop';
+  if (input.icon !== undefined) patch.icon = normalizeAppIcon(input.icon);
   if (input.roles !== undefined)
     patch.roles = input.roles.filter((r) => roleKeySchema.safeParse(r).success);
   if (input.slug !== undefined) patch.slug = screenSlugSchema.parse(input.slug);

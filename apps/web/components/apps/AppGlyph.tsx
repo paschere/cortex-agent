@@ -1,48 +1,152 @@
+import { normalizeAppIcon } from '@cortex/agent-tools/src/apps/icon-names';
 import { clsx } from 'clsx';
 import {
+  AlertTriangle,
   BadgeCheck,
   BarChart3,
+  Bell,
+  Boxes,
+  Briefcase,
+  Building2,
   Calendar,
+  CalendarClock,
   Camera,
+  Car,
+  CheckCircle2,
+  ClipboardCheck,
+  ClipboardList,
   ClipboardPlus,
+  Clock,
+  DollarSign,
+  FileText,
+  Folder,
+  Fuel,
+  GraduationCap,
+  Hammer,
+  Heart,
   Home,
+  Inbox,
+  LayoutDashboard,
+  LayoutGrid,
   LayoutPanelTop,
+  Leaf,
+  LineChart,
   ListChecks,
   type LucideIcon,
+  Mail,
   Map as MapIcon,
+  MapPin,
+  MessageSquare,
+  Navigation,
   Package,
+  Phone,
+  PieChart,
+  Plane,
+  QrCode,
+  Receipt,
+  Route,
+  ScanLine,
+  Search,
+  Settings,
+  Ship,
+  ShoppingCart,
+  Star,
+  Stethoscope,
+  Store,
   Table2,
+  Tag,
+  Timer,
   Truck,
+  User,
   Users,
+  Utensils,
+  Wallet,
+  Warehouse,
+  Wrench,
+  Zap,
 } from 'lucide-react';
 
 /**
- * Los íconos que el agente guarda son nombres de lucide de una lista corta;
- * cualquier otra cosa se pinta como emoji. Compartido por el marco de la app y
- * el Inicio.
+ * Los íconos que el agente guarda son nombres de lucide de la lista de
+ * `icon-names` o un emoji. Un nombre que no está en la lista se dibuja con el
+ * ícono por defecto: nunca como texto (se montaba encima del título).
+ * Compartido por el marco de la app y el Inicio.
  */
 export const APP_ICONS: Record<string, LucideIcon> = {
-  ClipboardPlus,
-  ListChecks,
+  AlertTriangle,
   BadgeCheck,
   BarChart3,
-  Table2,
-  Camera,
-  Truck,
-  Users,
-  Home,
+  Bell,
+  Boxes,
+  Briefcase,
+  Building2,
   Calendar,
-  Package,
+  CalendarClock,
+  Camera,
+  Car,
+  CheckCircle2,
+  ClipboardCheck,
+  ClipboardList,
+  ClipboardPlus,
+  Clock,
+  DollarSign,
+  FileText,
+  Folder,
+  Fuel,
+  GraduationCap,
+  Hammer,
+  Heart,
+  Home,
+  Inbox,
+  LayoutDashboard,
+  LayoutGrid,
   LayoutPanelTop,
+  Leaf,
+  LineChart,
+  ListChecks,
+  Mail,
   Map: MapIcon,
+  MapPin,
+  MessageSquare,
+  Navigation,
+  Package,
+  Phone,
+  PieChart,
+  Plane,
+  QrCode,
+  Receipt,
+  Route,
+  ScanLine,
+  Search,
+  Settings,
+  Ship,
+  ShoppingCart,
+  Star,
+  Stethoscope,
+  Store,
+  Table2,
+  Tag,
+  Timer,
+  Truck,
+  User,
+  Users,
+  Utensils,
+  Wallet,
+  Warehouse,
+  Wrench,
+  Zap,
 };
 
 export function Glyph({ name, className }: { name: string; className?: string }) {
-  const Icon = APP_ICONS[name];
+  const resolved = normalizeAppIcon(name);
+  const Icon = APP_ICONS[resolved];
   if (Icon) return <Icon className={className} aria-hidden />;
   return (
-    <span className={clsx('inline-grid place-items-center leading-none', className)} aria-hidden>
-      {name || '▫️'}
+    <span
+      className={clsx('inline-grid place-items-center overflow-hidden leading-none', className)}
+      aria-hidden
+    >
+      {resolved}
     </span>
   );
 }

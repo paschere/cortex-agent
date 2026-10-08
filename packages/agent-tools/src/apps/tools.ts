@@ -9,6 +9,7 @@ import { updateView, validateSpec } from '../views/store';
 import { SPEC_GRAMMAR } from '../views/tools';
 import { appBrandPatchSchema, appHomeSchema, mergeBrand } from './appearance';
 import { inviteAppUser, listAppUsers } from './external';
+import { APP_ICON_NAMES, normalizeAppIcon } from './icon-names';
 import { installAppTemplate } from './install';
 import { locationSettingsPatchSchema } from './location-shape';
 import { appPermissionsSchema, roleKeySchema } from './permissions';
@@ -113,7 +114,9 @@ const screenInput = z.object({
     .trim()
     .max(60)
     .optional()
-    .describe('A lucide icon name (ClipboardPlus, ListChecks, BadgeCheck, BarChart3) or an emoji.'),
+    .describe(
+      `Screen icon: one of ${APP_ICON_NAMES.join(', ')} — or an emoji. Any other name is replaced by LayoutPanelTop.`,
+    ),
   roles: z
     .array(roleKeySchema)
     .max(MAX_APP_ROLES)
@@ -169,7 +172,7 @@ ${SPEC_GRAMMAR}`,
           screens: (input.screens ?? []).map((s, i) => ({
             slug: s.slug ?? `pantalla_${i + 1}`,
             title: s.title,
-            icon: s.icon || 'LayoutPanelTop',
+            icon: normalizeAppIcon(s.icon),
             roles: s.roles ?? [],
             spec: viewSpecSchema.parse(s.spec),
           })),

@@ -879,8 +879,53 @@ const SERIES_LENGTH: Record<Period, number> = { day: 12, week: 10, month: 12 };
  * pueden parecer la misma.
  */
 const CATEGORY_TONES: readonly Tone[] = ['sky', 'amber', 'emerald', 'rose', 'primary'];
-function toneAt(i: number): Tone {
+function toneAt(i: number, options?: readonly string[]): Tone {
+  if (options) {
+    const tones = optionTones(options);
+    if (tones[i]) return tones[i];
+  }
   return CATEGORY_TONES[i % CATEGORY_TONES.length] as Tone;
+}
+
+/**
+ * Lo que una opción dice de sí misma manda sobre su posición: «Cancelado» es
+ * rojo, «Aterrizó» o «Entregado» verde, «Demorado» o «Pendiente» ámbar, «En
+ * vuelo» o «En camino» azul — en cualquier tabla, de cualquier empresa. Sólo
+ * las opciones que no dicen nada reciben un tono por orden, saltando los que
+ * ya usó el significado para que dos opciones vecinas no se confundan.
+ */
+const SEMANTIC_TONES: ReadonlyArray<[Tone, RegExp]> = [
+  [
+    'rose',
+    /cancel|anulad|rechaz|fall|perdid|vencid|bloque|error|devuel|reject|fail|lost|overdue|blocked|urgent/,
+  ],
+  [
+    'amber',
+    /demor|retras|pendient|espera|revisi|por aprobar|por pagar|pausad|parcial|incomplet|delay|pending|waiting|review|hold|partial|incomplete/,
+  ],
+  [
+    'emerald',
+    /aterriz|entregad|complet|hech[oa]|termin|list[oa]|aprobad|pagad|cerrad|resuelt|recibid|finaliz|exitos|done|deliver|landed|approved|paid|closed|resolved|complete|success/,
+  ],
+  [
+    'sky',
+    /en vuelo|en curso|en camino|en tr[aá]nsito|en proceso|en ruta|despachad|enviad|in progress|transit|shipped|sent|ongoing/,
+  ],
+];
+
+function semanticTone(label: string): Tone | null {
+  const l = label.toLowerCase();
+  for (const [tone, re] of SEMANTIC_TONES) if (re.test(l)) return tone;
+  return null;
+}
+
+export function optionTones(options: readonly string[]): Tone[] {
+  const fixed = options.map((o) => semanticTone(o));
+  const used = new Set(fixed.filter(Boolean));
+  const free = CATEGORY_TONES.filter((t) => !used.has(t));
+  const pool = free.length ? free : CATEGORY_TONES;
+  let n = 0;
+  return fixed.map((t) => t ?? (pool[n++ % pool.length] as Tone));
 }
 
 // ---------------------------------------------------------------------------
@@ -1643,7 +1688,7 @@ function computeBlock(
             badge:
               badge === undefined
                 ? null
-                : { label: String(badge), tone: at >= 0 ? toneAt(at) : 'primary' },
+                : { label: String(badge), tone: at >= 0 ? toneAt(at, badgeOptions) : 'primary' },
             image: typeof image === 'string' ? httpsUrl(image) : null,
           };
         }),
@@ -1713,10 +1758,10 @@ function computeBlock(
                 : displayValue(tracker, row, block.labelField),
             time: eventTime(row, block.timeField),
             tag: tag === undefined ? null : String(tag),
-            tone: at >= 0 ? toneAt(at) : null,
+            tone: at >= 0 ? toneAt(at, colorOptions) : null,
           };
         }),
-        legend: colorOptions.map((label, i) => ({ label, tone: toneAt(i) })),
+        legend: colorOptions.map((label, i) => ({ label, tone: toneAt(i, colorOptions) })),
         hidden: dated.length - kept.length,
         source: tracker.name,
         actions: actionsFor(
@@ -1775,10 +1820,10 @@ function computeBlock(
             title: text(row, block.titleField) ?? row.label,
             subtitle: text(row, block.subtitleField),
             tag: tag === undefined ? null : String(tag),
-            tone: at >= 0 ? toneAt(at) : null,
+            tone: at >= 0 ? toneAt(at, colorOptions) : null,
           };
         }),
-        legend: colorOptions.map((label, i) => ({ label, tone: toneAt(i) })),
+        legend: colorOptions.map((label, i) => ({ label, tone: toneAt(i, colorOptions) })),
         withoutLocation,
         hidden: placed.length - kept.length,
         people:
