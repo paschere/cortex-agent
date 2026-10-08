@@ -1331,7 +1331,16 @@ export async function POST(req: NextRequest) {
     // "An error occurred." into something both the user and we can act on.
     getErrorMessage: (error) => {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('chat stream error', { message });
+      // pino es (objeto, mensaje): con el orden al revés el detalle se perdía y
+      // en producción sólo quedaba «chat stream error».
+      logger.error(
+        {
+          message: message.slice(0, 4000),
+          name: error instanceof Error ? error.name : undefined,
+          stack: error instanceof Error ? error.stack?.slice(0, 4000) : undefined,
+        },
+        'chat stream error',
+      );
       return humanChatError(message);
     },
   });
@@ -1350,7 +1359,14 @@ function humanChatError(message: string): string {
     return 'Hay mucha demanda en este momento. Espera unos segundos y escríbeme «sigue».';
   if (/timeout|timed out|aborted|ETIMEDOUT|ECONNRESET|fetch failed/i.test(message))
     return 'Se cortó la conexión mientras respondía. Escríbeme «sigue» y retomo.';
-  if (/context|too long|maximum.*tokens|prompt is too long/i.test(message))
+  // Sólo los errores que de verdad hablan del largo de la conversación. Con un
+  // /context/ suelto, cualquier «Cannot read … 'context'» se leía como «la
+  // conversación quedó demasiado larga» en un chat recién abierto.
+  if (
+    /prompt is too long|context length|context window|maximum context|input is too long|too many (input )?tokens|exceeds? the (maximum|context)/i.test(
+      message,
+    )
+  )
     return 'La conversación quedó demasiado larga para seguir aquí. Abre una nueva y te resumo lo importante.';
   return 'Algo falló mientras respondía. Escríbeme «sigue» para retomar; si se repite, avísale al equipo de Cortex.';
 }
