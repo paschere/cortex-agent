@@ -29,6 +29,7 @@ import {
   screenBlock,
 } from '@/lib/screen-glance';
 import { requireSession } from '@/lib/session';
+import { stripEmptyMessages } from '@/lib/strip-empty-messages';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   LIVE_BROWSING_BLOCK,
@@ -1208,6 +1209,9 @@ export async function POST(req: NextRequest) {
     }
   }
   if (glance) coreMessages = attachScreenFrame(coreMessages, glance);
+  // Un turno cortado puede haber quedado guardado vacío; la API rechaza todo
+  // el historial por eso (ver lib/strip-empty-messages.ts).
+  coreMessages = stripEmptyMessages(coreMessages);
 
   // Everything before this line is Cortex's own work, and it is the only part
   // of the wait that can be shortened without touching the model or the answer.
