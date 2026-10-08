@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { getTool, runTool, toolIdAllowed } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 const Body = z.object({
@@ -85,17 +86,36 @@ export async function POST(req: NextRequest) {
       : entry,
   );
   // Compare-and-swap prevents two tabs, retries or double clicks executing twice.
-  const claimQuery = db
+  //
+  // Antes se comparaba `tool_results` ENTERO dentro de la URL de PostgREST. Con
+  // resultados grandes en el mismo mensaje (una lista de tablas, filas de
+  // Siigo) la URL pasaba del límite, la consulta fallaba y la persona veía
+  // «Esta propuesta ya cambió» en una propuesta intacta. Ahora se compara sólo
+  // la entrada que se aprueba, por su ruta en el JSON: sigue pendiente y es la
+  // misma llamada. Una entrada recuperada de `parts` (no guardada aún en
+  // tool_results) se reclama exigiendo que su toolCallId todavía no esté.
+  const entryId = (original[index] as { toolCallId?: unknown } | undefined)?.toolCallId;
+  const saved = Array.isArray(row.tool_results)
+    ? (row.tool_results as Array<{ toolCallId?: unknown }>)
+    : null;
+  const savedIndex =
+    saved && typeof entryId === 'string' ? saved.findIndex((e) => e?.toolCallId === entryId) : -1;
+  let claimQuery = db
     .from('messages')
     .update({ tool_results: claimed })
     .eq('id', row.id)
     .eq('conversation_id', conversationId);
-  const { data: claim, error: claimError } = await (row.tool_results === null
-    ? claimQuery.is('tool_results', null)
-    : claimQuery.eq('tool_results', JSON.stringify(row.tool_results))
-  )
-    .select('id')
-    .maybeSingle();
+  if (row.tool_results === null) claimQuery = claimQuery.is('tool_results', null);
+  else if (savedIndex >= 0)
+    claimQuery = claimQuery
+      .eq(`tool_results->${savedIndex}->>toolCallId`, entryId as string)
+      .eq(`tool_results->${savedIndex}->result->>__requires_confirmation`, 'true');
+  else if (typeof entryId === 'string')
+    claimQuery = claimQuery.not('tool_results', 'cs', JSON.stringify([{ toolCallId: entryId }]));
+  else claimQuery = claimQuery.eq('tool_results', JSON.stringify(row.tool_results));
+  const { data: claim, error: claimError } = await claimQuery.select('id').maybeSingle();
+  if (claimError)
+    logger.warn({ err: claimError, conversationId }, 'chat confirm: claim query failed');
   if (claimError || !claim)
     return NextResponse.json(
       { error: 'Esta propuesta ya cambió o está en ejecución. Actualiza la conversación.' },

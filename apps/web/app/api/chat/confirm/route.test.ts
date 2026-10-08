@@ -33,12 +33,20 @@ beforeEach(() => {
   mocks.from.mockImplementation((table: string) => {
     let update: { tool_results: unknown } | undefined;
     let expected: string | null | undefined;
+    // Filtros por ruta JSON (`tool_results->0->>toolCallId`) y «no contiene»,
+    // como los evalúa PostgREST, para el reclamo por entrada.
+    const preds: Array<(rows: unknown) => boolean> = [];
     let list = false;
     const resolve = () => {
       if (table === 'conversations') return { data: { agent_id: 'agent' } };
       if (table === 'agents') return { data: { allowed_tool_ids: ['meetings.join'] } };
       if (update) {
-        const matches = expected === null ? stored === null : JSON.stringify(stored) === expected;
+        const matches =
+          (expected === undefined
+            ? true
+            : expected === null
+              ? stored === null
+              : JSON.stringify(stored) === expected) && preds.every((p) => p(stored));
         if (loseClaim || !matches) return { data: null };
         stored = update.tool_results;
         return { data: { id: 'message' } };
@@ -51,6 +59,29 @@ beforeEach(() => {
       select: () => q,
       eq: (key: string, value: string) => {
         if (key === 'tool_results') expected = value;
+        const path = /^tool_results->(\d+)(?:->(\w+))?->>(\w+)$/.exec(key);
+        if (path) {
+          const [, i, mid, leaf] = path;
+          preds.push((rows) => {
+            const entry = Array.isArray(rows) ? rows[Number(i)] : undefined;
+            const holder = mid ? entry?.[mid] : entry;
+            const v = holder?.[leaf as string];
+            return v !== undefined && v !== null && String(v) === value;
+          });
+        }
+        return q;
+      },
+      not: (key: string, op: string, value: string) => {
+        if (key === 'tool_results' && op === 'cs') {
+          const wanted = (JSON.parse(value) as Array<{ toolCallId: string }>)[0]?.toolCallId;
+          preds.push(
+            (rows) =>
+              !(
+                Array.isArray(rows) &&
+                rows.some((r: { toolCallId?: string }) => r?.toolCallId === wanted)
+              ),
+          );
+        }
         return q;
       },
       is: (key: string, value: null) => {
