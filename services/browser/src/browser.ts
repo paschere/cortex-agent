@@ -634,7 +634,17 @@ export class BrowserWorker {
         throw new UnknownSession();
       page = await context.newPage();
       this.foldPopupsInto(page);
-      await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      // Un portal lento (o que frena IPs de centros de datos) no debe impedir
+      // abrir la pestaña: si en 30 s no termina de cargar, la sesión se abre
+      // igual con lo que haya y la persona sigue o recarga desde ahí. Antes el
+      // timeout tumbaba la sesión entera (visto con apuestaaqui.baloto.com).
+      // Un error que no es de tiempo (DNS, destino prohibido) sí se propaga.
+      try {
+        await page.goto(startUrl, { waitUntil: 'commit', timeout: 30_000 });
+        await page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => undefined);
+      } catch (navError) {
+        if (!/Timeout/i.test((navError as Error).message)) throw navError;
+      }
       if (profile && profile.revision < (this.profileRevisions.get(profile.key) ?? 1))
         throw new UnknownSession();
       const sessionId = this.newSessionId();

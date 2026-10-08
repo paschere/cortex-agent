@@ -340,14 +340,25 @@ describe('tipos nuevos', () => {
     const ok = (x: object) => trackerFieldSchema.safeParse({ key: 'a', label: 'A', ...x }).success;
     expect(ok({ type: 'relation' })).toBe(false);
     expect(ok({ type: 'relation', tracker: 'sedes' })).toBe(true);
-    expect(ok({ type: 'text', tracker: 'sedes' })).toBe(false);
     expect(ok({ type: 'text', scan: true })).toBe(true);
-    expect(ok({ type: 'number', scan: true })).toBe(false);
     expect(ok({ type: 'file', accept: 'image', multiple: true })).toBe(true);
-    expect(ok({ type: 'number', format: 'email' })).toBe(false);
     expect(ok({ type: 'number', min: 5, max: 1 })).toBe(false);
     expect(ok({ type: 'date', max: 'today' })).toBe(true);
     expect(ok({ type: 'date', max: 'mañana' })).toBe(false);
+  });
+
+  it('opciones de otro tipo se quitan en vez de rechazar la tabla (accept en un texto)', () => {
+    const parsed = trackerFieldsSchema.parse([
+      { key: 'vuelo', label: 'Vuelo', type: 'text', accept: 'any', multiple: true },
+      { key: 'kilos', label: 'Kilos', type: 'number', format: 'email', scan: true, min: '0' },
+      { key: 'cliente', label: 'Cliente', type: 'text', tracker: 'clientes' },
+    ]);
+    expect(parsed[0]).not.toHaveProperty('accept');
+    expect(parsed[0]).not.toHaveProperty('multiple');
+    expect(parsed[1]).not.toHaveProperty('format');
+    expect(parsed[1]).not.toHaveProperty('scan');
+    expect(parsed[1]?.min).toBe(0);
+    expect(parsed[2]).not.toHaveProperty('tracker');
   });
 
   it('un campo viejo (sin ninguna opción nueva) sigue siendo válido', () => {

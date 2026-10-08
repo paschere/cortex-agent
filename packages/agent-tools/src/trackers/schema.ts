@@ -92,6 +92,36 @@ export type ShowIf = z.infer<typeof showIfSchema>;
 /** Los valores fijos que `default` entiende además de un texto o número. */
 export const DEFAULT_KEYWORDS = ['today', 'now', 'viewer'] as const;
 
+/**
+ * Quita las opciones que no aplican al tipo del campo antes de validar/guardar.
+ * Visto en producción (2026-10-08): el modelo puso `accept` en un campo de
+ * texto y trackers.define rechazó la tabla «Vuelos» entera. Una opción de otro
+ * tipo no cambia lo pedido; un error real (lista sin opciones, fecha mal
+ * escrita, patrón peligroso) sí se sigue rechazando.
+ */
+export function normalizeFieldInput<T>(raw: T): T {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const f = { ...(raw as Record<string, unknown>) };
+  const type = f.type;
+  const textual = type === 'text' || type === 'longtext';
+  const numeric = type === 'number' || type === 'money';
+  const temporal = type === 'date' || type === 'time';
+  const drop = (...keys: string[]) => {
+    for (const k of keys) delete f[k];
+  };
+  if (type !== 'file') drop('accept', 'multiple');
+  if (type !== 'text') drop('scan', 'format');
+  if (type !== 'relation') drop('tracker');
+  if (!textual) drop('pattern', 'minLength', 'maxLength');
+  if (!numeric && !temporal) drop('min', 'max');
+  if (numeric)
+    for (const k of ['min', 'max'] as const) {
+      const v = f[k];
+      if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) f[k] = Number(v);
+    }
+  return f as T;
+}
+
 export const trackerFieldSchema = z
   .object({
     key: z.string().regex(FIELD_KEY_RE),
@@ -150,7 +180,6 @@ export const trackerFieldSchema = z
       if (b === undefined) continue;
       if (numeric && typeof b !== 'number') bad(`«${k}» de un número tiene que ser un número.`, k);
       else if (temporal && typeof b !== 'string') bad(`«${k}» de una fecha u hora es texto.`, k);
-      else if (!numeric && !temporal) bad(`«${k}» sólo aplica a número, dinero, fecha y hora.`, k);
       else if (temporal && typeof b === 'string' && !isBound(field.type as 'date' | 'time', b))
         bad(
           field.type === 'date'
@@ -167,24 +196,16 @@ export const trackerFieldSchema = z
       field.minLength > field.maxLength
     )
       bad('«minLength» no puede ser mayor que «maxLength».', 'minLength');
+    // Opciones de OTRO tipo (accept en un texto, format en un número…) no se
+    // rechazan: normalizeFieldInput las quita al guardar.
     const textual = field.type === 'text' || field.type === 'longtext';
-    if ((field.minLength !== undefined || field.maxLength !== undefined) && !textual)
-      bad('«minLength»/«maxLength» sólo aplican a texto.', 'minLength');
-    if (field.format !== undefined && field.type !== 'text')
-      bad('«format» sólo aplica a un campo de texto corto.', 'format');
     if (field.pattern !== undefined) {
-      if (!textual) bad('«pattern» sólo aplica a texto.', 'pattern');
-      else if (!isSafePattern(field.pattern) || !compilePattern(field.pattern))
+      if (textual && (!isSafePattern(field.pattern) || !compilePattern(field.pattern)))
         bad(
           'Ese patrón no es válido o es peligroso (largo máx. 200, sin cuantificadores anidados como (a+)+ ni referencias hacia atrás).',
           'pattern',
         );
     }
-    if (field.scan && field.type !== 'text') bad('«scan» sólo aplica a un campo de texto.', 'scan');
-    if ((field.accept !== undefined || field.multiple !== undefined) && field.type !== 'file')
-      bad('«accept» y «multiple» sólo aplican a un campo de archivo.', 'accept');
-    if (field.tracker !== undefined && field.type !== 'relation')
-      bad('«tracker» sólo aplica a un campo de relación.', 'tracker');
     if (field.showIf && field.showIf.field === field.key)
       bad('Un campo no puede depender de sí mismo.', 'showIf');
   });
@@ -198,7 +219,7 @@ export function isBound(type: 'date' | 'time', b: string): boolean {
 export type TrackerField = z.infer<typeof trackerFieldSchema>;
 
 export const trackerFieldsSchema = z
-  .array(trackerFieldSchema)
+  .array(z.preprocess(normalizeFieldInput, trackerFieldSchema))
   .min(1)
   .max(20)
   .superRefine((fields, ctx) => {
