@@ -15,6 +15,7 @@ import {
   loadViewSources,
   publicViewUrl,
   shareIsOpen,
+  viewerFromSession,
 } from '@cortex/agent-tools';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -86,6 +87,7 @@ export default async function ViewPage({
     expiresAt: view.share_expires_at,
     opens: view.share_views,
     canManage: user.role === 'org_admin' || view.created_by === user.id,
+    canDelete: viewerFromSession(user).companyAdmin,
     shareBlocked: internal.length ? internalShareRefusal(internal) : null,
   };
   const toolbar = (

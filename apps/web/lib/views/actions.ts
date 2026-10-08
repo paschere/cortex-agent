@@ -9,6 +9,7 @@ import {
   archiveView,
   createView,
   defineTracker,
+  deleteView,
   duplicateRuleSchema,
   editViewRow,
   editViewSubmission,
@@ -240,6 +241,23 @@ export async function archiveViewAction(viewId: string): Promise<ViewActionResul
     return { ok: true };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo archivar la vista.') };
+  }
+}
+
+export async function deleteViewAction(viewId: string): Promise<ViewActionResult> {
+  try {
+    const user = await requireSession();
+    if (!viewerFromSession(user).companyAdmin)
+      throw new ValidationError('Sólo quien administra la empresa puede eliminar una vista.');
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId);
+    await deleteView(db, view.id);
+    revalidatePath('/views');
+    revalidatePath(`/views/${view.slug}`);
+    revalidatePath('/dashboard');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo eliminar la vista.') };
   }
 }
 

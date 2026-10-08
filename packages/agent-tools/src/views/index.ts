@@ -14,6 +14,7 @@ import './pulse-weekly';
 export {
   viewsArchive,
   viewsCreate,
+  viewsDelete,
   viewsGet,
   viewsList,
   viewsShare,

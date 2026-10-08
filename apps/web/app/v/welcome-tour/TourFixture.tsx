@@ -27,6 +27,7 @@ const SHARE = {
   expiresAt: null,
   opens: 0,
   canManage: true,
+  canDelete: true,
   shareBlocked: null,
 };
 

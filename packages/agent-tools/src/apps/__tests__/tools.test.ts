@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import type { ToolContext } from '../../types';
+import { deleteView } from '../../views/store';
 import { CONTROL_EN_PLANTA } from '../templates';
 import {
   appsAssignMembers,
   appsCreate,
+  appsDelete,
   appsGet,
   appsInviteUsers,
   appsPublish,
@@ -290,6 +292,31 @@ describe('apps.publish', () => {
     expect(fake.tables.custom_apps?.[0]?.status).toBe('published');
     await appsPublish.handler({ app: 'planta', publish: false }, ctx(ADMIN));
     expect(fake.tables.custom_apps?.[0]?.status).toBe('draft');
+  });
+});
+
+describe('apps.delete', () => {
+  it('borra la app con sus pantallas-vista; sólo owner/admin; los datos no se tocan', async () => {
+    const { ctx, fake } = world();
+    await expect(appsDelete.handler({ app: 'planta' }, ctx(OPERARIO))).rejects.toThrow();
+    expect(fake.tables.custom_apps?.length).toBe(1);
+    const out = await appsDelete.handler({ app: 'planta' }, ctx(ADMIN));
+    expect(out.deleted).toBe(true);
+    expect(fake.tables.custom_apps?.length).toBe(0);
+    expect(fake.tables.custom_views?.length).toBe(0);
+    expect(fake.tables.trackers?.length).toBe(1);
+  });
+  it('pide confirmación', () => {
+    expect(appsDelete.requiresConfirmation).toBe(true);
+  });
+});
+
+describe('views.delete (deleteView)', () => {
+  it('se niega a borrar una vista que es pantalla de una app y dice cuál', async () => {
+    const { db, fake } = world();
+    const id = String(fake.tables.custom_views?.[0]?.id);
+    await expect(deleteView(db, id)).rejects.toThrow(/Control en planta/);
+    expect(fake.tables.custom_views?.length).toBeGreaterThan(0);
   });
 });
 

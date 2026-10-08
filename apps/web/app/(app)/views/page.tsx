@@ -12,6 +12,7 @@ import {
   listViews,
   publicViewUrl,
   shareIsOpen,
+  viewerFromSession,
 } from '@cortex/agent-tools';
 
 /**
@@ -100,6 +101,7 @@ export default async function ViewsPage() {
         expiresAt: v.share_expires_at,
         opens: v.share_views,
         canManage: user.role === 'org_admin' || v.created_by === user.id,
+        canDelete: viewerFromSession(user).companyAdmin,
         shareBlocked: internal.length ? internalShareRefusal(internal) : null,
       },
     };

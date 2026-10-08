@@ -1,10 +1,13 @@
+import { ForbiddenError } from '@cortex/core';
 import { z } from 'zod';
+import { isCompanyManager } from '../directory/store';
 import { registerTool } from '../index';
 import { PLATFORM_SOURCES, platformSourcesGrammar } from './sources';
 import { BLOCK_LABEL, trackersOf, viewSpecSchema } from './spec';
 import {
   archiveView,
   createView,
+  deleteView,
   listViews,
   mustGetView,
   publicViewUrl,
@@ -270,6 +273,32 @@ export const viewsArchive = registerTool({
       markdown: archived
         ? `Vista **${view.name}** archivada. Los datos de sus tablas siguen intactos.`
         : 'Esa vista ya no estaba activa.',
+    };
+  },
+});
+
+export const viewsDelete = registerTool({
+  id: 'views.delete',
+  description:
+    'Permanently DELETE a custom view (not just archive it): it disappears for good with its versions, submissions and outside link. The table data is untouched. Refused, naming the apps, if the view is a screen of an application. Cannot be undone. Requires human confirmation; company owners/admins only.',
+  inputSchema: z.object({
+    view: z.string().trim().min(1).max(80).describe('Slug or id of the view.'),
+  }),
+  outputSchema: z.object({ deleted: z.boolean(), markdown: z.string() }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    if (!(await isCompanyManager(ctx.db, ctx.userId)))
+      throw new ForbiddenError(
+        'Sólo quien administra la empresa o es su dueño puede eliminar una vista.',
+      );
+    const view = await mustGetView(ctx.db, input.view);
+    const deleted = await deleteView(ctx.db, view.id);
+    return {
+      deleted,
+      markdown: deleted
+        ? `Vista **${view.name}** eliminada. Los datos de sus tablas siguen intactos.`
+        : 'Esa vista ya no existía.',
     };
   },
 });

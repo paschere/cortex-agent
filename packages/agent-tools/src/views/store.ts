@@ -880,6 +880,39 @@ export async function archiveView(
 }
 
 /**
+ * Borra la vista de verdad (no la archiva): sus versiones, envíos, eventos y
+ * resúmenes se van con ella (ON DELETE CASCADE). Los datos de las tablas no se
+ * tocan. Una vista que es pantalla de una aplicación no se borra aquí: se
+ * rechaza con el nombre de las apps que la usan.
+ */
+export async function deleteView(db: SupabaseClient, id: string): Promise<boolean> {
+  const { data: used, error: usedErr } = await db
+    .from('custom_app_screens')
+    .select('app_id')
+    .eq('view_id', id);
+  if (usedErr) throw usedErr;
+  const appIds = [...new Set((used ?? []).map((r) => String((r as { app_id: string }).app_id)))];
+  if (appIds.length > 0) {
+    const { data: apps } = await db.from('custom_apps').select('name').in('id', appIds);
+    const names = (apps ?? []).map((a) => `«${String((a as { name: string }).name)}»`);
+    throw new ValidationError(
+      `Esta vista es pantalla de ${names.length === 1 ? 'la aplicación' : 'las aplicaciones'} ${
+        names.join(', ') || 'una aplicación'
+      }. Quítala de ahí o elimina la aplicación primero.`,
+    );
+  }
+  const { data, error } = await db
+    .from('custom_views')
+    .delete()
+    .eq('id', id)
+    .is('app_id', null)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/**
  * Cambia la puerta. Pasar de interna a enlace acuña un token; volver a interna
  * lo borra (el enlace viejo muere). `rotate` acuña uno nuevo aunque ya hubiera,
  * para cuando un enlace se filtró. La contraseña sólo se toca si viene.

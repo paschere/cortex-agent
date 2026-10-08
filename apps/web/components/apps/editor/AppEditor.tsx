@@ -1,14 +1,18 @@
 'use client';
 
-import { archiveAppAction, updateAppAction } from '@/lib/apps/actions';
+import { Glyph } from '@/components/apps/AppGlyph';
+import { DeleteDialog } from '@/components/ui/DeleteDialog';
+import { archiveAppAction, deleteAppAction, updateAppAction } from '@/lib/apps/actions';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
-import { ChevronLeft, ExternalLink } from 'lucide-react';
+import { Archive, ChevronLeft, ExternalLink, Loader2, MoreHorizontal, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { AppearanceTab } from './AppearanceTab';
 import { AutomationsTab } from './AutomationsTab';
 import { HomeTab } from './HomeTab';
+import { IconPicker } from './IconPicker';
 import { MembersTab } from './MembersTab';
 import { PreviewTab } from './PreviewTab';
 import { RolesTab } from './RolesTab';
@@ -16,12 +20,11 @@ import { ScreensTab } from './ScreensTab';
 import { UsersTab } from './UsersTab';
 import {
   type AppEditorData,
-  BTN_DANGER,
   BTN_PRIMARY,
   BTN_SECONDARY,
-  CARD,
   ErrorLine,
-  INPUT,
+  MENU_CONTENT,
+  MenuItem,
 } from './shared';
 
 export type { AppEditorData } from './shared';
@@ -53,16 +56,23 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'preview', label: 'Ver como…' },
 ];
 
+/** Un campo de texto que crece con lo que tiene: el nombre largo se parte en dos líneas en vez de cortarse. */
+function autosize(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 export function AppEditor({ data }: { data: AppEditorData }) {
   const { app } = data;
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('screens');
+  const [deleting, setDeleting] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(app.name);
   const [description, setDescription] = useState(app.description);
   const [icon, setIcon] = useState(app.icon);
-  const dirty = name !== app.name || description !== app.description || icon !== app.icon;
 
   function run(task: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) {
     setError(null);
@@ -74,6 +84,22 @@ export function AppEditor({ data }: { data: AppEditorData }) {
     });
   }
 
+  function save(patch: { name?: string; description?: string; icon?: string }) {
+    const next = { name, description, icon, ...patch };
+    if (!next.name.trim()) return setName(app.name);
+    if (next.name === app.name && next.description === app.description && next.icon === app.icon)
+      return;
+    run(() => updateAppAction(app.id, next));
+  }
+
+  const counts: Partial<Record<Tab, number>> = {
+    screens: data.screens.length,
+    roles: data.roles.length,
+    members: data.members.length,
+    users: data.appUsers.length,
+  };
+  const published = app.status === 'published';
+
   return (
     <div className="space-y-5">
       <Link
@@ -83,116 +109,201 @@ export function AppEditor({ data }: { data: AppEditorData }) {
         <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Aplicaciones
       </Link>
 
-      <section className={clsx(CARD, 'space-y-3')}>
-        <div className="flex flex-wrap items-start gap-3">
-          <label className="shrink-0">
-            <span className="sr-only">Icono (un emoji)</span>
-            <input
-              value={icon}
-              onChange={(e) => setIcon(e.target.value)}
-              maxLength={8}
-              className="h-12 w-12 rounded-lg border border-border bg-primary-soft text-center text-2xl outline-none focus:border-primary"
-            />
-          </label>
-          <div className="min-w-0 flex-1 basis-64 space-y-2">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
+          <IconPicker
+            value={icon}
+            emoji
+            label="Cambiar el icono de la app"
+            onChange={(next) => {
+              setIcon(next);
+              save({ icon: next });
+            }}
+          >
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-card border border-border bg-primary-soft text-primary-ink shadow-card transition-transform hover:scale-105">
+              <Glyph name={icon} className="h-7 w-7 text-2xl" />
+            </span>
+          </IconPicker>
+
+          <div className="min-w-0 flex-1 basis-60">
             <label className="block">
-              <span className="sr-only">Nombre</span>
-              <input
+              <span className="sr-only">Nombre de la aplicación</span>
+              <textarea
+                ref={autosize}
+                rows={1}
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value.replace(/\n/g, ' '));
+                  autosize(e.currentTarget);
+                }}
+                onBlur={() => save({})}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                  if (e.key === 'Escape') {
+                    setName(app.name);
+                    e.currentTarget.blur();
+                  }
+                }}
                 maxLength={80}
-                className={clsx(INPUT, 'w-full text-base font-semibold')}
+                placeholder="Nombre de la aplicación"
+                className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-0.5 -mx-2 text-xl font-semibold leading-snug text-ink outline-none transition-colors placeholder:text-ink-faint hover:bg-surface-2 focus:border-primary focus:bg-surface"
               />
             </label>
-            <label className="block">
+            <label className="mt-0.5 block">
               <span className="sr-only">Descripción</span>
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                ref={autosize}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  autosize(e.currentTarget);
+                }}
+                onBlur={() => save({})}
                 maxLength={500}
-                rows={2}
-                placeholder="Para qué sirve esta aplicación y quién la usa"
-                className="w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-xs text-ink outline-none placeholder:text-ink-faint focus:border-primary"
+                rows={1}
+                placeholder="Agrega una descripción: para qué sirve y quién la usa"
+                className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-0.5 -mx-2 text-sm text-ink-muted outline-none transition-colors placeholder:text-ink-faint hover:bg-surface-2 focus:border-primary focus:bg-surface"
               />
             </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={clsx(
-                'rounded-pill px-2.5 py-1 text-micro font-semibold',
-                app.status === 'published'
-                  ? 'bg-emerald-soft text-emerald'
-                  : 'bg-amber-soft text-amber',
-              )}
-            >
-              {app.status === 'published' ? 'Publicada' : 'Borrador'}
-            </span>
-            {dirty && (
-              <button
-                type="button"
-                disabled={pending || !name.trim()}
-                onClick={() => run(() => updateAppAction(app.id, { name, description, icon }))}
-                className={BTN_PRIMARY}
+            <div className="mt-1.5 flex items-center gap-2">
+              <span
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-micro font-semibold',
+                  published ? 'bg-emerald-soft text-emerald' : 'bg-amber-soft text-amber',
+                )}
               >
-                Guardar cambios
-              </button>
-            )}
+                <span
+                  className={clsx(
+                    'h-1.5 w-1.5 rounded-full',
+                    published ? 'bg-emerald' : 'bg-amber',
+                  )}
+                  aria-hidden
+                />
+                {published ? 'Publicada' : 'Borrador'}
+              </span>
+              {pending && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-faint" aria-hidden />
+              )}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               disabled={pending}
               onClick={() =>
                 run(() =>
                   updateAppAction(app.id, {
-                    status: app.status === 'published' ? 'draft' : 'published',
+                    status: published ? 'draft' : 'published',
                   }),
                 )
               }
               className={BTN_SECONDARY}
             >
-              {app.status === 'published' ? 'Despublicar' : 'Publicar'}
+              {published ? 'Despublicar' : 'Publicar'}
             </button>
-            <Link href={`/apps/${app.slug}`} className={BTN_SECONDARY}>
+            <Link href={`/apps/${app.slug}`} className={BTN_PRIMARY}>
               <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Abrir la app
             </Link>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `¿Archivar «${app.name}»? Sus pantallas se archivan; los datos de las tablas no se tocan.`,
-                  )
-                )
-                  run(
-                    () => archiveAppAction(app.id),
-                    () => router.push('/apps'),
-                  );
-              }}
-              className={BTN_DANGER}
-            >
-              Archivar
-            </button>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  aria-label="Más acciones"
+                  className="grid h-8 w-8 place-items-center rounded-pill border border-border bg-surface text-ink-muted transition-colors hover:text-ink data-[state=open]:text-ink"
+                >
+                  <MoreHorizontal className="h-4 w-4" aria-hidden />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content align="end" sideOffset={6} className={MENU_CONTENT}>
+                  <MenuItem
+                    tone="rose"
+                    disabled={pending}
+                    onSelect={() => {
+                      if (
+                        window.confirm(
+                          `¿Archivar «${app.name}»? Sus pantallas se archivan; los datos de las tablas no se tocan.`,
+                        )
+                      )
+                        run(
+                          () => archiveAppAction(app.id),
+                          () => router.push('/apps'),
+                        );
+                    }}
+                  >
+                    <Archive className="h-3.5 w-3.5" aria-hidden /> Archivar la app
+                  </MenuItem>
+                  <MenuItem tone="rose" disabled={pending} onSelect={() => setDeleting(true)}>
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden /> Eliminar la app…
+                  </MenuItem>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           </div>
         </div>
         <ErrorLine error={error} />
+        <DeleteDialog
+          open={deleting}
+          onOpenChange={setDeleting}
+          title="¿Eliminar esta aplicación?"
+          name={app.name}
+          confirmLabel="Eliminar la aplicación"
+          consequences={[
+            'Se borran para siempre sus pantallas, roles, miembros, usuarios externos, kioscos, automatizaciones y avisos. No se puede deshacer.',
+            'Su enlace y la app instalada en los teléfonos dejan de funcionar.',
+            'Los datos de las tablas no se tocan.',
+          ]}
+          onConfirm={async () => {
+            const res = await deleteAppAction(app.id);
+            if (!res.ok) return res.error;
+            router.push('/apps');
+            router.refresh();
+            return null;
+          }}
+        />
       </section>
 
-      <div role="tablist" className="flex gap-1 overflow-x-auto rounded-pill bg-surface-2 p-0.5">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={clsx(
-              'shrink-0 rounded-pill px-3.5 py-1.5 text-xs font-semibold transition-colors',
-              tab === t.id ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="sticky top-0 z-20 -mx-1 bg-canvas/90 px-1 backdrop-blur">
+        <div
+          role="tablist"
+          className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {TABS.map((t) => {
+            const active = tab === t.id;
+            const count = counts[t.id];
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(t.id)}
+                className={clsx(
+                  '-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors',
+                  active
+                    ? 'border-primary text-ink'
+                    : 'border-transparent text-ink-muted hover:text-ink',
+                )}
+              >
+                {t.label}
+                {count !== undefined && count > 0 && (
+                  <span
+                    className={clsx(
+                      'rounded-pill px-1.5 text-micro font-semibold',
+                      active ? 'bg-primary-soft text-primary-ink' : 'bg-surface-2 text-ink-faint',
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {tab === 'screens' && <ScreensTab data={data} />}

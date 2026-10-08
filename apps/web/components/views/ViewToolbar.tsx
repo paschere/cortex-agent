@@ -1,7 +1,9 @@
 'use client';
 
+import { DeleteDialog } from '@/components/ui/DeleteDialog';
 import {
   archiveViewAction,
+  deleteViewAction,
   restoreViewVersionAction,
   setViewAccessAction,
   setViewPinnedAction,
@@ -22,6 +24,7 @@ import {
   Pin,
   PinOff,
   RefreshCw,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -56,6 +59,8 @@ export interface ToolbarView {
   expiresAt: string | null;
   opens: number;
   canManage: boolean;
+  /** Sólo quien administra la empresa elimina de verdad. */
+  canDelete: boolean;
   /**
    * Por qué esta vista no puede salir de Cortex (usa una fuente interna de la
    * plataforma), o null. El servidor lo rechaza igual; esto lo dice antes.
@@ -90,6 +95,7 @@ export function ViewToolbar({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   return (
     <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:gap-2">
@@ -155,6 +161,38 @@ export function ViewToolbar({
         >
           <Archive className="h-3.5 w-3.5" /> <Label>Archivar</Label>
         </button>
+      )}
+      {view.canDelete && (
+        <>
+          <button
+            type="button"
+            className={clsx(PILL, 'text-rose')}
+            title="Eliminar"
+            disabled={pending}
+            onClick={() => setDeleting(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> <Label>Eliminar</Label>
+          </button>
+          <DeleteDialog
+            open={deleting}
+            onOpenChange={setDeleting}
+            title="¿Eliminar esta vista?"
+            name={view.name}
+            confirmLabel="Eliminar la vista"
+            consequences={[
+              'La vista se borra para siempre, con sus versiones y los envíos de sus formularios. No se puede deshacer.',
+              'Su enlace afuera deja de abrir y se quita de Inicio.',
+              'Los datos de las tablas no se tocan.',
+            ]}
+            onConfirm={async () => {
+              const res = await deleteViewAction(view.id);
+              if (!res.ok) return res.error;
+              router.push('/views');
+              router.refresh();
+              return null;
+            }}
+          />
+        </>
       )}
       {error && <p className="w-full text-xs text-rose">{error}</p>}
     </div>

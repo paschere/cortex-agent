@@ -12,6 +12,7 @@ import './automations/tools';
 export {
   appsAssignMembers,
   appsCreate,
+  appsDelete,
   appsGet,
   appsInviteUsers,
   appsList,

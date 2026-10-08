@@ -19,6 +19,7 @@ import {
   addScreen,
   appSummary,
   attributesSchema,
+  deleteApp,
   listApps,
   listMembers,
   listRoles,
@@ -533,6 +534,33 @@ export const appsPublish = registerTool({
       markdown: publish
         ? `**${app.name}** está publicada. Entrada para usuarios externos: /a/${app.id}; los miembros entran por ${`/apps/${app.slug}`}.`
         : `**${app.name}** volvió a borrador: nadie más que quien administra puede abrirla.`,
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// apps.delete
+// ---------------------------------------------------------------------------
+
+export const appsDelete = registerTool({
+  id: 'apps.delete',
+  description:
+    'Permanently DELETE an application (not just archive it): its screens (views made for the app), roles, members, invited external users, kiosk devices, automations and push subscriptions go with it; the link /a/<id> stops working. Independent views in the library and ALL table data are untouched. Cannot be undone. Requires human confirmation; company owners/admins only.',
+  inputSchema: z.object({
+    app: z.string().trim().min(1).max(80).describe('App id or slug.'),
+  }),
+  outputSchema: z.object({ deleted: z.boolean(), markdown: z.string() }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    const app = await mustGetApp(ctx.db, input.app);
+    const deleted = await deleteApp(ctx.db, app.id);
+    return {
+      deleted,
+      markdown: deleted
+        ? `Aplicación **${app.name}** eliminada con sus pantallas, roles y usuarios. Los datos de las tablas siguen intactos.`
+        : 'Esa aplicación ya no existía.',
     };
   },
 });

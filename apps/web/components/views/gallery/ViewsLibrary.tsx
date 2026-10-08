@@ -1,7 +1,13 @@
 'use client';
 
+import { DeleteDialog } from '@/components/ui/DeleteDialog';
 import type { ViewBrand } from '@/lib/branding/shape';
-import { archiveViewAction, duplicateViewAction, setViewPinnedAction } from '@/lib/views/actions';
+import {
+  archiveViewAction,
+  deleteViewAction,
+  duplicateViewAction,
+  setViewPinnedAction,
+} from '@/lib/views/actions';
 import { startersFor } from '@/lib/views/starter-templates';
 import type { ModuleKey } from '@cortex/agent-tools';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -22,6 +28,7 @@ import {
   Search,
   Share2,
   Sparkles,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -175,6 +182,8 @@ export function ViewsLibrary({
     setLaunch(next);
   }
 
+  const [deleteFor, setDeleteFor] = useState<{ id: string; name: string } | null>(null);
+
   function run(task: () => Promise<{ ok: boolean; error?: string }>, ok?: string) {
     start(async () => {
       const res = await task();
@@ -319,6 +328,7 @@ export function ViewsLibrary({
                     return;
                   run(() => archiveViewAction(v.id), `«${v.name}» quedó archivada.`);
                 }}
+                onDelete={() => setDeleteFor({ id: v.id, name: v.name })}
               />
             ))}
           </ul>
@@ -379,6 +389,26 @@ export function ViewsLibrary({
           </button>
         </output>
       )}
+      <DeleteDialog
+        open={deleteFor !== null}
+        onOpenChange={(o) => !o && setDeleteFor(null)}
+        title="¿Eliminar esta vista?"
+        name={deleteFor?.name ?? ''}
+        confirmLabel="Eliminar la vista"
+        consequences={[
+          'La vista se borra para siempre, con sus versiones y los envíos de sus formularios. No se puede deshacer.',
+          'Su enlace afuera deja de abrir y se quita de Inicio.',
+          'Los datos de las tablas no se tocan.',
+        ]}
+        onConfirm={async () => {
+          if (!deleteFor) return null;
+          const res = await deleteViewAction(deleteFor.id);
+          if (!res.ok) return res.error;
+          setNotice({ tone: 'ok', text: `«${deleteFor.name}» se eliminó.` });
+          router.refresh();
+          return null;
+        }}
+      />
     </ViewBrandProvider>
   );
 }
@@ -390,6 +420,7 @@ function ViewCard({
   onDuplicate,
   onShare,
   onArchive,
+  onDelete,
 }: {
   view: ViewSummary;
   pending: boolean;
@@ -397,6 +428,7 @@ function ViewCard({
   onDuplicate: () => void;
   onShare: () => void;
   onArchive: () => void;
+  onDelete: () => void;
 }) {
   const door = DOOR[v.visibility];
   return (
@@ -496,6 +528,18 @@ function ViewCard({
                 >
                   <Archive className="h-3.5 w-3.5" aria-hidden /> Archivar
                 </DropdownMenu.Item>
+                {v.share.canDelete && (
+                  <DropdownMenu.Item
+                    className={clsx(
+                      MENU_ITEM,
+                      'text-rose data-[highlighted]:bg-rose-soft data-[highlighted]:text-rose',
+                    )}
+                    disabled={pending}
+                    onSelect={onDelete}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden /> Eliminar…
+                  </DropdownMenu.Item>
+                )}
               </>
             )}
           </DropdownMenu.Content>

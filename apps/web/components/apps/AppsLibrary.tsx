@@ -1,8 +1,11 @@
 'use client';
 
-import { createAppAction } from '@/lib/apps/actions';
+import { MENU_CONTENT, MenuItem } from '@/components/apps/editor/shared';
+import { DeleteDialog } from '@/components/ui/DeleteDialog';
+import { createAppAction, deleteAppAction } from '@/lib/apps/actions';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
-import { LayoutGrid, Pencil, Plus, Sparkles } from 'lucide-react';
+import { LayoutGrid, MoreHorizontal, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
@@ -51,6 +54,7 @@ export function AppsLibrary({
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [blankName, setBlankName] = useState('');
+  const [deleteFor, setDeleteFor] = useState<{ id: string; name: string } | null>(null);
 
   function create(input: { template?: string; name?: string }) {
     setError(null);
@@ -130,11 +134,54 @@ export function AppsLibrary({
                     <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar
                   </Link>
                 )}
+                {canManage && (
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Más acciones para «${a.name}»`}
+                        className="ml-auto grid h-9 w-9 place-items-center rounded-pill border border-border bg-surface text-ink-muted transition-colors hover:text-ink data-[state=open]:text-ink"
+                      >
+                        <MoreHorizontal className="h-4 w-4" aria-hidden />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content align="end" sideOffset={6} className={MENU_CONTENT}>
+                        <MenuItem
+                          tone="rose"
+                          onSelect={() => setDeleteFor({ id: a.id, name: a.name })}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden /> Eliminar la app…
+                        </MenuItem>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
+
+      <DeleteDialog
+        open={deleteFor !== null}
+        onOpenChange={(o) => !o && setDeleteFor(null)}
+        title="¿Eliminar esta aplicación?"
+        name={deleteFor?.name ?? ''}
+        confirmLabel="Eliminar la aplicación"
+        consequences={[
+          'Se borran para siempre sus pantallas, roles, miembros, usuarios externos, kioscos, automatizaciones y avisos. No se puede deshacer.',
+          'Su enlace y la app instalada en los teléfonos dejan de funcionar.',
+          'Los datos de las tablas no se tocan.',
+        ]}
+        onConfirm={async () => {
+          if (!deleteFor) return null;
+          const res = await deleteAppAction(deleteFor.id);
+          if (!res.ok) return res.error;
+          router.refresh();
+          return null;
+        }}
+      />
 
       {canManage && (
         <section aria-labelledby="nueva-app">

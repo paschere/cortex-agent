@@ -360,6 +360,28 @@ export async function archiveApp(db: SupabaseClient, id: string): Promise<boolea
 }
 
 /**
+ * Borra la app de verdad. Sus pantallas son vistas con su `app_id` (nacieron
+ * para ella): se van con ella, igual que sus roles, miembros, usuarios
+ * externos, kioscos, automatizaciones y suscripciones push (ON DELETE
+ * CASCADE). Las vistas independientes de la biblioteca y los datos de las
+ * tablas no se tocan.
+ */
+export async function deleteApp(db: SupabaseClient, id: string): Promise<boolean> {
+  const app = await getApp(db, id);
+  if (!app) return false;
+  const { error: viewsErr } = await db.from('custom_views').delete().eq('app_id', app.id);
+  if (viewsErr) throw viewsErr;
+  const { data, error } = await db
+    .from('custom_apps')
+    .delete()
+    .eq('id', app.id)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/**
  * Las fuentes que una app NO puede usar: las mismas que una vista no puede
  * compartir (internas, personales, Feed). Lanza con la lista si alguna
  * pantalla las usa.

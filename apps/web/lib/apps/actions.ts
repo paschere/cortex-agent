@@ -13,6 +13,7 @@ import {
   archiveApp,
   attributesSchema,
   createApp,
+  deleteApp,
   installAppTemplate,
   locationSettingsPatchSchema,
   mustGetApp,
@@ -162,6 +163,20 @@ export async function archiveAppAction(appId: string): Promise<AppActionResult> 
     return { ok: true };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo archivar la aplicación.') };
+  }
+}
+
+export async function deleteAppAction(appId: string): Promise<AppActionResult> {
+  try {
+    const { db } = await admin();
+    const app = await mustGetApp(db, appId);
+    await deleteApp(db, app.id);
+    touched(app);
+    revalidatePath('/views');
+    revalidatePath('/dashboard');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo eliminar la aplicación.') };
   }
 }
 

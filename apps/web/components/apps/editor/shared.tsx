@@ -1,6 +1,8 @@
 'use client';
 
 import type { AppBrand, AppHome, AppPermissions } from '@cortex/agent-tools';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { clsx } from 'clsx';
 import {
   BadgeCheck,
   BarChart3,
@@ -179,6 +181,32 @@ export const INPUT =
   'h-8 rounded-pill border border-border bg-surface px-3 text-xs text-ink outline-none placeholder:text-ink-faint focus:border-primary';
 export const CARD = 'rounded-card border border-border bg-surface p-4 shadow-card';
 
+/** Tarjeta de sección: título, una línea de ayuda y el contenido. */
+export function Section({
+  title,
+  help,
+  action,
+  children,
+}: {
+  title: string;
+  help?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={clsx(CARD, 'space-y-3')}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink">{title}</h3>
+          {help && <p className="mt-0.5 text-xs text-ink-muted">{help}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function ErrorLine({ error }: { error: string | null }) {
   if (!error) return null;
   return (
@@ -198,4 +226,35 @@ export function roleKeyOf(name: string): string {
     .replace(/^_+|_+$/g, '')
     .slice(0, 32);
   return /^[a-z]/.test(base) ? base : `r_${base}`.slice(0, 32);
+}
+
+/** Contenedor y elemento del menú «…» (Radix), con la misma cara en todo el editor. */
+export const MENU_CONTENT =
+  'z-50 min-w-[190px] overflow-hidden rounded-card border border-border bg-surface p-1 shadow-pop';
+
+export function MenuItem({
+  children,
+  onSelect,
+  disabled,
+  tone = 'default',
+}: {
+  children: React.ReactNode;
+  onSelect: () => void;
+  disabled?: boolean;
+  tone?: 'default' | 'rose';
+}) {
+  return (
+    <DropdownMenu.Item
+      disabled={disabled}
+      onSelect={onSelect}
+      className={clsx(
+        'flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-xs font-semibold outline-none transition-colors data-[disabled]:cursor-default data-[disabled]:opacity-40',
+        tone === 'rose'
+          ? 'text-rose data-[highlighted]:bg-rose-soft'
+          : 'text-ink-muted data-[highlighted]:bg-primary-soft data-[highlighted]:text-primary-ink',
+      )}
+    >
+      {children}
+    </DropdownMenu.Item>
+  );
 }
