@@ -9,13 +9,11 @@ import {
 import { READ_ONLY_MESSAGE } from '@/lib/billing/billing-shape';
 import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
+import { humanChatError } from '@/lib/chat-error';
 import { CITATION_RULE } from '@/lib/citations';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { querySheet, tableQuerySchema } from '@/lib/feed/table-query';
 import { enqueueJobs } from '@/lib/jobs';
-// Solo para la persistencia de `onFinish`: la cronología del mensaje, recortada
-// a sus topes (100 KB por resultado, ~1 MB por mensaje — ver lib/message-parts.ts).
-import { buildStoredParts, capStoredParts } from '@/lib/message-parts';
 import { ragQueryFor } from '@/lib/rag-query';
 import {
   POINT_AT_DESCRIPTION,
@@ -29,9 +27,10 @@ import {
   screenBlock,
 } from '@/lib/screen-glance';
 import { requireSession } from '@/lib/session';
-import { stripEmptyMessages } from '@/lib/strip-empty-messages';
+import { sanitizeHistory } from '@/lib/strip-empty-messages';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  FOLLOW_THROUGH_BLOCK,
   LIVE_BROWSING_BLOCK,
   LIVE_MEETING_BLOCK,
   REFUSAL_BLOCK,
@@ -41,7 +40,22 @@ import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { DISPATCH_TOOL_NAME, resolveDispatch, withNoSuchToolRedirect } from '@/lib/tool-dispatch';
 import { TOOL_PROGRESS_TYPE, createProgressThrottle } from '@/lib/tool-progress';
+import { modelToolContent } from '@/lib/tool-result-cap';
+import { createTurnBudget, hardMarginMs, runWithinBudget, turnLimitMs } from '@/lib/turn-budget';
+import { continuationNudge, maxStepsFor, shouldContinue } from '@/lib/turn-continuation';
 import { buildTurnMessages } from '@/lib/turn-messages';
+import {
+  type MergeTarget,
+  createTurnPersister,
+  guardTurnStream,
+  turnOutcome,
+} from '@/lib/turn-persist';
+import {
+  TurnTranscript,
+  digestToolWork,
+  isInterruptedContent,
+  withoutNotes,
+} from '@/lib/turn-transcript';
 import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
 import {
   type AnyTool,
@@ -82,6 +96,7 @@ import {
   type CoreMessage,
   type CoreTool,
   createDataStreamResponse,
+  formatDataStreamPart,
   generateText,
   jsonSchema,
   streamText,
@@ -91,6 +106,10 @@ import { type NextRequest, NextResponse, after } from 'next/server';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
+// 800 s es el techo de Vercel Pro con Fluid Compute. El turno NO usa todo: su
+// propio presupuesto (lib/turn-budget.ts) deja de empezar herramientas al 70 %
+// y corta limpio antes del límite, para que guardar lo producido quepa siempre.
+// Si cambia, cambia también CHAT_MAX_DURATION_S (Next exige aquí un literal).
 export const maxDuration = 800;
 
 /**
@@ -170,6 +189,8 @@ export async function POST(req: NextRequest) {
   // nothing until the answer has already been delivered. See
   // packages/agent-tools/src/latency.
   const started = performance.now();
+  // El mismo instante en el reloj de pared, para el presupuesto del turno.
+  const startedWall = Date.now();
 
   const user = await requireSession();
 
@@ -710,7 +731,7 @@ export async function POST(req: NextRequest) {
     try {
       const { data } = await db
         .from('messages')
-        .select('role, content')
+        .select('id, role, content')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -730,6 +751,27 @@ export async function POST(req: NextRequest) {
 
   const [ragBlockResolved, { selection, allCandidates, stickyIds }, dbMessages, turnAttachments] =
     await Promise.all([retrieving, selecting, loadingHistory, loadingAttachments]);
+  // EL TRABAJO A MEDIAS DEL TURNO ANTERIOR. Si la última respuesta guardada se
+  // cortó (tiempo, error, la función murió), sus herramientas ya corrieron: se
+  // le pega al modelo un resumen de sus resultados para que «sigue» continúe
+  // en vez de repetirlas. Una consulta más, sólo en ese caso.
+  const historyRows = (dbMessages ?? []) as { id?: string; role: string; content: string }[];
+  const lastAssistantRow = historyRows.find((r) => r.role === 'assistant');
+  let resumeDigest: { content: string; digest: string } | null = null;
+  if (lastAssistantRow?.id && isInterruptedContent(lastAssistantRow.content)) {
+    try {
+      const { data: row } = await db
+        .from('messages')
+        .select('parts')
+        .eq('id', lastAssistantRow.id)
+        .single();
+      const digest = digestToolWork((row as { parts?: unknown } | null)?.parts);
+      if (digest) resumeDigest = { content: lastAssistantRow.content, digest };
+    } catch {
+      // Sin resumen el turno sigue: el modelo sólo verá el texto.
+    }
+  }
+
   // Taken from the resolved value rather than left to the closure's assignment,
   // so the block is provably finished before anything downstream reads it.
   ragBlock = ragBlockResolved;
@@ -820,6 +862,17 @@ export async function POST(req: NextRequest) {
     }),
   });
 
+  // EL PRESUPUESTO DEL TURNO. Medido desde la primera línea del handler. Pasado
+  // el 70 % ninguna herramienta empieza (devuelve «sin tiempo» y el modelo
+  // cierra con un resumen); antes del límite la señal corta el turno limpio y
+  // lo producido se guarda. Ver lib/turn-budget.ts.
+  const turnLimit = turnLimitMs();
+  const budget = createTurnBudget({
+    limitMs: turnLimit,
+    startedAt: startedWall,
+    parent: req.signal,
+  });
+
   // Sumidero del avance de herramientas: el `dataStream` sólo existe dentro de
   // `createDataStreamResponse`, pero las herramientas se arman antes. Mientras no
   // haya stream (o ya se cerró) las líneas se descartan: son cosmética.
@@ -841,42 +894,46 @@ export async function POST(req: NextRequest) {
     // row per call with its own latency, in `audit_events`. What that
     // table cannot say is how much of ONE TURN was spent in tools, because
     // it has no notion of a turn — so only the count and the sum are kept.
-    const toolStarted = performance.now();
-    try {
-      return await runTool(t, args, {
-        ...scopedCtx,
-        signal: abortSignal,
-        onProgress: progress.push,
-      });
-    } catch (err) {
-      if (err instanceof ConfirmationRequiredError) {
-        // Return a sentinel value the client can detect to show a confirmation prompt
+    // Con su propio tope (lib/turn-budget.ts): ninguna herramienta sola puede
+    // quedarse con el turno, y pasado el 70 % ninguna empieza.
+    return runWithinBudget(budget, t.id, abortSignal, async (signal) => {
+      const toolStarted = performance.now();
+      try {
+        return await runTool(t, args, {
+          ...scopedCtx,
+          signal,
+          onProgress: progress.push,
+        });
+      } catch (err) {
+        if (err instanceof ConfirmationRequiredError) {
+          // Return a sentinel value the client can detect to show a confirmation prompt
+          return {
+            __requires_confirmation: true,
+            toolId: t.id,
+            input: err.input,
+          } as unknown as never;
+        }
+        // Never throw: a failed tool must not kill the turn. Return a
+        // structured error so (a) the model can read it, explain it, and
+        // keep going, and (b) the UI renders it as a failed tool card.
+        //
+        // The envelope is capped for the model; the whole failure — SQL
+        // state, hint, stack — goes to the log, because the envelope is the
+        // only trace a tool failure leaves and it is not enough to debug on.
+        logger.error('tool failed', { tool: t.id, ...toolErrorDetail(err) });
         return {
-          __requires_confirmation: true,
-          toolId: t.id,
-          input: err.input,
+          __error: true,
+          tool: t.id,
+          message: toolErrorMessage(err),
         } as unknown as never;
+      } finally {
+        // In `finally` so a tool that failed still counts. A turn that spent
+        // eleven seconds discovering it had no Gmail scope spent them.
+        clock.toolFinished(performance.now() - toolStarted);
+        // Una línea de avance pendiente ya no dice nada: la herramienta terminó.
+        progress.cancel();
       }
-      // Never throw: a failed tool must not kill the turn. Return a
-      // structured error so (a) the model can read it, explain it, and
-      // keep going, and (b) the UI renders it as a failed tool card.
-      //
-      // The envelope is capped for the model; the whole failure — SQL
-      // state, hint, stack — goes to the log, because the envelope is the
-      // only trace a tool failure leaves and it is not enough to debug on.
-      logger.error('tool failed', { tool: t.id, ...toolErrorDetail(err) });
-      return {
-        __error: true,
-        tool: t.id,
-        message: toolErrorMessage(err),
-      } as unknown as never;
-    } finally {
-      // In `finally` so a tool that failed still counts. A turn that spent
-      // eleven seconds discovering it had no Gmail scope spent them.
-      clock.toolFinished(performance.now() - toolStarted);
-      // Una línea de avance pendiente ya no dice nada: la herramienta terminó.
-      progress.cancel();
-    }
+    });
   };
 
   const aiTools: Record<string, CoreTool> = {};
@@ -889,6 +946,8 @@ export async function POST(req: NextRequest) {
         parameters: t.inputSchema,
         execute: (args, { abortSignal, toolCallId }) =>
           execRegistry(t, args, abortSignal, toolCallId),
+        // Lo que LEE el modelo, con tope; la tarjeta recibe el resultado entero.
+        experimental_toToolResultContent: modelToolContent,
       });
       continue;
     }
@@ -898,6 +957,7 @@ export async function POST(req: NextRequest) {
     const sdkName = (prefix + entry.tool_name).slice(0, 64);
     aiTools[sdkName] = tool({
       description: (entry.tool_description ?? '').slice(0, 500),
+      experimental_toToolResultContent: modelToolContent,
       parameters: jsonSchema(
         (entry.input_schema_json ?? {
           type: 'object',
@@ -915,32 +975,34 @@ export async function POST(req: NextRequest) {
         // A connected MCP server is somebody else's network, and it is the most
         // likely source of a turn that hangs. Timed on the same footing as the
         // built-in tools so a slow server shows up in the same number.
-        const toolStarted = performance.now();
-        try {
-          return await callExternalTool(
-            server as unknown as ExternalServerRow,
-            entry.tool_name,
-            args,
-            {
-              userId: user.id,
-              db,
-              signal: abortSignal,
-            },
-          );
-        } catch (err) {
-          logger.error('external tool failed', {
-            server: server.name,
-            tool: entry.tool_name,
-            ...toolErrorDetail(err),
-          });
-          return {
-            __error: true,
-            tool: `${server.name}/${entry.tool_name}`,
-            message: toolErrorMessage(err),
-          } as unknown as never;
-        } finally {
-          clock.toolFinished(performance.now() - toolStarted);
-        }
+        return runWithinBudget(budget, sdkName, abortSignal, async (signal) => {
+          const toolStarted = performance.now();
+          try {
+            return await callExternalTool(
+              server as unknown as ExternalServerRow,
+              entry.tool_name,
+              args,
+              {
+                userId: user.id,
+                db,
+                signal,
+              },
+            );
+          } catch (err) {
+            logger.error('external tool failed', {
+              server: server.name,
+              tool: entry.tool_name,
+              ...toolErrorDetail(err),
+            });
+            return {
+              __error: true,
+              tool: `${server.name}/${entry.tool_name}`,
+              message: toolErrorMessage(err),
+            } as unknown as never;
+          } finally {
+            clock.toolFinished(performance.now() - toolStarted);
+          }
+        });
       },
     });
   }
@@ -957,6 +1019,7 @@ export async function POST(req: NextRequest) {
   aiTools[DISPATCH_TOOL_NAME] = tool({
     description:
       'Úsala SOLO si una herramienta que necesitas no aparece en tu lista: pasa su nombre exacto en `tool` y sus argumentos en `args`. Se ejecuta con los mismos permisos y confirmaciones.',
+    experimental_toToolResultContent: modelToolContent,
     parameters: z.object({
       tool: z.string().min(1).max(120),
       args: z.record(z.unknown()).default({}),
@@ -992,6 +1055,7 @@ export async function POST(req: NextRequest) {
       description:
         'Read or calculate stored rows from a Feed spreadsheet attached to this conversation. A partial capture is not the complete original spreadsheet. Column and row indices start at 1. Verify headers, units and duplicate warnings. Does not save anything to memory.',
       parameters: tableQuerySchema,
+      experimental_toToolResultContent: modelToolContent,
       execute: async (input) => {
         const attachment = turnAttachments.find((a) => a.id === input.attachmentId);
         if (!attachment?.tables) return { error: 'La tabla no está adjunta a esta consulta.' };
@@ -1080,6 +1144,31 @@ export async function POST(req: NextRequest) {
     messages.map((m) => ({ role: m.role, content: m.content })),
     (dbMessages ?? null) as { role: string; content: string }[] | null,
   );
+  if (resumeDigest) {
+    // A la respuesta cortada, esté donde esté en el hilo; si el navegador la
+    // tenía con otro texto, a la última respuesta antes de la pregunta.
+    const target = withoutNotes(resumeDigest.content);
+    const lastIndex = (match: (m: CoreMessage) => boolean) => {
+      for (let i = coreMessages.length - 1; i >= 0; i--)
+        if (match(coreMessages[i] as CoreMessage)) return i;
+      return -1;
+    };
+    let at = lastIndex(
+      (m) =>
+        m.role === 'assistant' &&
+        typeof m.content === 'string' &&
+        withoutNotes(m.content) === target,
+    );
+    if (at < 0) at = lastIndex((m) => m.role === 'assistant');
+    const msg = at >= 0 ? coreMessages[at] : undefined;
+    if (msg && typeof msg.content === 'string') {
+      coreMessages = [
+        ...coreMessages.slice(0, at),
+        { role: 'assistant', content: `${msg.content}\n\n${resumeDigest.digest}` },
+        ...coreMessages.slice(at + 1),
+      ];
+    }
+  }
 
   // Shared with Google Chat and MCP so a person's standing instructions cannot
   // apply on one surface and silently not on another. See lib/system-prompt.ts.
@@ -1120,7 +1209,7 @@ export async function POST(req: NextRequest) {
   // exactamente su longitud. El de reuniones faltaba desde que se añadió.
   recorder.part(
     'instructions',
-    `${agent.systemPrompt}\n\n${LIVE_BROWSING_BLOCK}\n\n${LIVE_MEETING_BLOCK}\n\n${REFUSAL_BLOCK}`,
+    `${agent.systemPrompt}\n\n${LIVE_BROWSING_BLOCK}\n\n${LIVE_MEETING_BLOCK}\n\n${REFUSAL_BLOCK}\n\n${FOLLOW_THROUGH_BLOCK}`,
   );
   recorder.part('memory', memoryBlock);
   // Su propia etiqueta y no sumado a 'memory': lo escribe un admin una vez y lo
@@ -1209,68 +1298,158 @@ export async function POST(req: NextRequest) {
     }
   }
   if (glance) coreMessages = attachScreenFrame(coreMessages, glance);
-  // Un turno cortado puede haber quedado guardado vacío; la API rechaza todo
-  // el historial por eso (ver lib/strip-empty-messages.ts).
-  coreMessages = stripEmptyMessages(coreMessages);
+  // Un turno cortado puede haber dejado huellas que la API rechaza enteras
+  // (texto vacío, llamadas sin resultado, resultados huérfanos): se reparan al
+  // leer, cada vez. Ver lib/strip-empty-messages.ts.
+  coreMessages = sanitizeHistory(coreMessages);
 
   // Everything before this line is Cortex's own work, and it is the only part
   // of the wait that can be shortened without touching the model or the answer.
   clock.handedToModel();
 
-  const result = streamText({
-    model: chatModel(agent.defaultModel),
-    system,
-    messages: coreMessages,
-    tools: aiTools,
-    toolChoice: 'auto',
-    maxSteps: 12,
-    abortSignal: req.signal,
-    // Argumentos rotos de una herramienta no tumban el turno: ver lib/tool-call-repair.ts.
-    experimental_repairToolCall: withNoSuchToolRedirect(
-      createToolCallRepair({ signal: req.signal, surface: 'chat' }),
-    ),
-    // The one measurement that has to happen mid-stream, because it is the only
-    // moment that matters and it is over before `onFinish` runs. The callback is
-    // a comparison and an assignment — the SDK pauses the stream until it
-    // resolves, so anything more here would literally slow the answer down in
-    // order to time it.
-    //
-    // Reasoning counts as visible: `sendReasoning` is on, the client draws it in
-    // the reasoning trail, and a person watching words appear is not watching a
-    // blank screen. It is recorded apart from the answer all the same — see
-    // TurnLatency.firstAnswerMs.
-    onChunk: ({ chunk }) => {
-      if (chunk.type === 'text-delta') clock.visible('answer');
-      else if (chunk.type === 'reasoning' || chunk.type === 'tool-call') clock.visible('reasoning');
+  // ---------------------------------------------------------------------------
+  // EL TURNO, Y CÓMO PUEDE TERMINAR
+  //
+  //   completo      el modelo cerró solo → se guarda tal cual.
+  //   por tiempo    nuestra señal cortó antes del límite de Vercel → la persona
+  //                 ve lo producido con «escríbeme sigue», y eso se guarda.
+  //   el cliente    cerró la pestaña o tocó detener → se guarda con su nota.
+  //   error         del proveedor, del historial, de la red → se guarda lo
+  //                 producido (si hubo algo) y la persona ve la frase humana.
+  //   muerte        la plataforma mata la función → queda el último punto de
+  //                 control (cada paso con herramientas), marcado «se cortó».
+  //
+  // Lo producido se anota en `transcript` desde los callbacks, que corren en
+  // todos los casos — las promesas de `result` NO se resuelven si el stream
+  // erra, y esperarlas colgaba `after()` hasta el timeout (ver
+  // lib/turn-transcript.ts). Nunca se guarda un mensaje del asistente vacío.
+  // ---------------------------------------------------------------------------
+  const transcript = new TurnTranscript();
+  const persister = createTurnPersister({
+    writer: {
+      insert: async (row) => {
+        const { data, error } = await db
+          .from('messages')
+          .insert({ conversation_id: conversationId, role: 'assistant', ...row })
+          .select('id')
+          .single();
+        return { id: (data?.id as string | undefined) ?? null, error: error?.message };
+      },
+      update: async (id, row) => {
+        const { error } = await db.from('messages').update(row).eq('id', id);
+        return { error: error?.message };
+      },
     },
-    // One round-trip finished. Recorded per step and not per turn because the
-    // prompt cache works per request: on a turn that calls tools, the first
-    // request writes the prefix and the rest should read it back. A per-turn
-    // figure would blur exactly the distinction that says whether it works.
-    onStepFinish: ({ usage, providerMetadata }) => {
-      clock.modelStep(usage, providerMetadata);
-    },
+    extra: { brain_sources: ragSources.length > 0 ? ragSources : null },
+    log: (message, detail) => logger.error(message, { conversationId, ...detail }),
+  });
+  const usageTotal = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  let finished = false;
+  let errored = false;
+  let lastFinishReason: string | undefined;
+  let lastStepHadTools = false;
+  let lastStepText = '';
+  let stepsUsed = 0;
+  const maxSteps = maxStepsFor(turnLimit);
+
+  const runModel = (messagesForRun: CoreMessage[], stepsForRun: number) =>
+    streamText({
+      model: chatModel(agent.defaultModel),
+      system,
+      messages: messagesForRun,
+      tools: aiTools,
+      toolChoice: 'auto',
+      maxSteps: stepsForRun,
+      // Nuestra señal, no la de la petición: aborta si el cliente se va Y en el
+      // corte duro del presupuesto, antes de que Vercel mate la función.
+      abortSignal: budget.signal,
+      // Argumentos rotos de una herramienta no tumban el turno: ver lib/tool-call-repair.ts.
+      experimental_repairToolCall: withNoSuchToolRedirect(
+        createToolCallRepair({ signal: budget.signal, surface: 'chat' }),
+      ),
+      // The one measurement that has to happen mid-stream, because it is the only
+      // moment that matters and it is over before `onFinish` runs. Reasoning
+      // counts as visible: `sendReasoning` is on and the client draws it.
+      onChunk: ({ chunk }) => {
+        transcript.onChunk(chunk);
+        if (chunk.type === 'text-delta') clock.visible('answer');
+        else if (chunk.type === 'reasoning' || chunk.type === 'tool-call')
+          clock.visible('reasoning');
+      },
+      // One round-trip finished. Recorded per step and not per turn because the
+      // prompt cache works per request. Y es el punto de control: un paso que
+      // ejecutó herramientas queda guardado antes de seguir.
+      onStepFinish: ({ usage, providerMetadata, finishReason, text, toolCalls }) => {
+        clock.modelStep(usage, providerMetadata);
+        stepsUsed++;
+        lastFinishReason = finishReason;
+        lastStepHadTools = toolCalls.length > 0;
+        lastStepText = text;
+        usageTotal.promptTokens += usage?.promptTokens || 0;
+        usageTotal.completionTokens += usage?.completionTokens || 0;
+        usageTotal.totalTokens += usage?.totalTokens || 0;
+        if (transcript.onStepFinish()) persister.checkpoint(transcript.steps());
+      },
+      onFinish: () => {
+        finished = true;
+      },
+      onError: ({ error }) => {
+        errored = true;
+        if (!budget.reason()) {
+          logger.error(
+            {
+              message: (error instanceof Error ? error.message : String(error)).slice(0, 4000),
+              name: error instanceof Error ? error.name : undefined,
+            },
+            'chat model stream error',
+          );
+        }
+      },
+    });
+
+  // Se resuelve cuando el turno terminó DE CUALQUIER FORMA (ver `execute`).
+  let markEnded: () => void = () => {};
+  const ended = new Promise<void>((resolve) => {
+    markEnded = resolve;
   });
 
   /**
    * LA RESPUESTA SE ESCRIBE DESPUÉS DE DEVOLVER EL STREAM.
    *
-   * En Vercel la función puede terminar en cuanto cierra el HTTP aunque el
-   * `onFinish` del SDK todavía tenga un insert pendiente — la persona ve la
-   * respuesta en vivo (viene del stream) pero al reabrir el hilo sólo están
-   * sus prompts. `after()` es el mismo patrón que `/api/chat-app/google`:
-   * Next mantiene la invocación viva hasta que este bloque termina.
+   * En Vercel la función puede terminar en cuanto cierra el HTTP aunque quede
+   * una escritura pendiente. `after()` mantiene la invocación viva hasta que
+   * este bloque termina — y ya no puede colgarse: espera a `ended`, con un
+   * tope por si algo no avisara, nunca a las promesas de `result`.
    */
   after(async () => {
     try {
-      const [text, steps, usage] = await Promise.all([result.text, result.steps, result.usage]);
-      // The SDK's top-level toolCalls/toolResults contain only the final step,
-      // commonly a text-only follow-up after a confirmation was proposed.
-      const toolCalls = steps.flatMap((step) => step.toolCalls);
-      const toolResults = steps.flatMap((step) => step.toolResults);
-      clock.finished(usage);
+      let capTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        ended,
+        new Promise<void>((resolve) => {
+          capTimer = setTimeout(
+            resolve,
+            Math.max(budget.msUntilHard() + hardMarginMs(turnLimit) - 15_000, 1_000),
+          );
+        }),
+      ]);
+      clearTimeout(capTimer);
+      const outcome = turnOutcome({ interrupted: budget.reason(), finished, errored });
+      budget.dispose();
+      if (outcome !== 'complete') {
+        logger.warn('chat: turn interrupted', {
+          conversationId,
+          outcome,
+          elapsedMs: Date.now() - startedWall,
+          steps: stepsUsed,
+        });
+      }
 
-      const startedErrands = (toolResults ?? []).flatMap((r) => {
+      const steps = transcript.steps();
+      const toolResults = steps.flatMap((s) => s.toolResults ?? []);
+      clock.finished(usageTotal);
+
+      const startedErrands = toolResults.flatMap((r) => {
         const call = r as { toolName?: string; result?: { errandId?: unknown } };
         if (call.toolName !== 'errands_start') return [];
         const id = call.result?.errandId;
@@ -1290,57 +1469,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const storedParts = (() => {
-        try {
-          const built = buildStoredParts(steps ?? []);
-          return built ? capStoredParts(built) : null;
-        } catch {
-          return null;
-        }
-      })();
-
-      const baseRow = {
-        conversation_id: conversationId,
-        role: 'assistant' as const,
-        content: text,
-        tool_calls: toolCalls as unknown as object,
-        tool_results: toolResults as unknown as object,
-      };
-
-      let assistantMessageId: string | null = null;
-      const { data: assistantRow, error: insertError } = await db
-        .from('messages')
-        .insert({
-          ...baseRow,
-          parts: storedParts as unknown as object,
-          brain_sources: ragSources.length > 0 ? ragSources : null,
-        })
-        .select('id')
-        .single();
-
-      if (insertError) {
-        logger.error('chat: assistant message insert failed', {
-          conversationId,
-          message: insertError.message,
-          code: insertError.code,
-        });
-        const { data: fallbackRow, error: fallbackError } = await db
-          .from('messages')
-          .insert(baseRow)
-          .select('id')
-          .single();
-        if (fallbackError) {
-          logger.error('chat: assistant message fallback insert failed', {
-            conversationId,
-            message: fallbackError.message,
-            code: fallbackError.code,
-          });
-        } else {
-          assistantMessageId = (fallbackRow?.id as string | undefined) ?? null;
-        }
-      } else {
-        assistantMessageId = (assistantRow?.id as string | undefined) ?? null;
-      }
+      const assistantMessageId = await persister.finalize(steps, outcome);
 
       if (assistantMessageId) {
         const isFirstTurn = coreMessages.filter((m) => m.role === 'assistant').length <= 1;
@@ -1369,13 +1498,14 @@ export async function POST(req: NextRequest) {
           conversation_id: conversationId,
           tool_id: '__agent_turn',
           input_hash: 'turn',
-          status: 'ok',
+          status: outcome === 'complete' ? 'ok' : 'error',
           latency_ms: Math.round(performance.now() - started),
           metadata: {
             model: agent.defaultModel,
-            tokensIn: usage?.promptTokens ?? 0,
-            tokensOut: usage?.completionTokens ?? 0,
+            tokensIn: usageTotal.promptTokens,
+            tokensOut: usageTotal.completionTokens,
             firstVisibleMs: clock.snapshot().firstVisibleMs,
+            ...(outcome === 'complete' ? {} : { outcome }),
           },
         });
       }
@@ -1384,8 +1514,8 @@ export async function POST(req: NextRequest) {
         recorder.save(db, {
           messageId: assistantMessageId,
           usage: {
-            promptTokens: usage?.promptTokens,
-            completionTokens: usage?.completionTokens,
+            promptTokens: usageTotal.promptTokens,
+            completionTokens: usageTotal.completionTokens,
           },
         }),
         clock.save(db, { messageId: assistantMessageId }),
@@ -1401,8 +1531,8 @@ export async function POST(req: NextRequest) {
   return createDataStreamResponse({
     headers: { 'X-Conversation-Id': conversationId },
     execute: async (dataStream) => {
-      // Anotaciones efímeras del mensaje: sólo viajan por este stream, y
-      // `onFinish` (persistencia) no las lee.
+      // Anotaciones efímeras del mensaje: sólo viajan por este stream, y la
+      // persistencia no las lee.
       progressSink.write = (annotation) => {
         try {
           dataStream.writeMessageAnnotation(
@@ -1412,21 +1542,75 @@ export async function POST(req: NextRequest) {
           // Stream ya cerrado: el avance es cosmético.
         }
       };
-      // Send the model's reasoning to the client. Opus 5 thinks before it writes,
-      // and on a turn that calls tools that thinking is the only account of why it
-      // chose them — without it the user watches a long silence and then a result,
-      // with no way to judge whether the route taken was sensible.
-      result.mergeIntoDataStream(dataStream, { sendReasoning: true });
+      // Un corte NUESTRO (tiempo, cliente) no se pinta como error: ver
+      // guardTurnStream en lib/turn-persist.ts.
+      const target = guardTurnStream(dataStream as unknown as MergeTarget, budget.reason);
+      const mergeOptions = { sendReasoning: true } as const;
+      try {
+        // Send the model's reasoning to the client. Opus 5 thinks before it
+        // writes, and on a turn that calls tools that thinking is the only
+        // account of why it chose them.
+        const first = runModel(coreMessages, maxSteps);
+        // Sin el «finish» del mensaje: si hay continuación, sigue el mismo mensaje.
+        first.mergeIntoDataStream(target as never, {
+          ...mergeOptions,
+          experimental_sendFinish: false,
+        });
+        await first.consumeStream();
+
+        // UNA continuación automática cuando el turno terminó en una promesa o
+        // sin pasos (lib/turn-continuation.ts). Sólo si el primer tramo terminó
+        // bien y queda tiempo.
+        const kind =
+          finished && !errored && !budget.reason()
+            ? shouldContinue({
+                lastStepText,
+                lastStepHadTools,
+                finishReason: lastFinishReason,
+                stepsUsed,
+                maxSteps,
+                pastSoft: budget.pastSoft(),
+                alreadyContinued: false,
+              })
+            : null;
+        if (kind) {
+          const response = await first.response;
+          logger.info('chat: auto-continuing turn', { conversationId, kind, stepsUsed });
+          finished = false;
+          const second = runModel(
+            [
+              ...coreMessages,
+              ...(response.messages as CoreMessage[]),
+              { role: 'user', content: continuationNudge(kind, lastStepText) },
+            ],
+            kind === 'steps' ? 1 : Math.max(maxSteps - stepsUsed, 4),
+          );
+          second.mergeIntoDataStream(target as never, mergeOptions);
+          await second.consumeStream();
+        } else {
+          dataStream.write(
+            formatDataStreamPart('finish_message', {
+              finishReason: (lastFinishReason ?? 'unknown') as 'stop',
+              usage: {
+                promptTokens: usageTotal.promptTokens,
+                completionTokens: usageTotal.completionTokens,
+              },
+            }),
+          );
+        }
+      } catch (err) {
+        errored = true;
+        throw err;
+      } finally {
+        markEnded();
+      }
     },
     // An error part on the data stream makes useChat drop the assistant message
-    // it was building, so a hiccup the model itself recovered from wiped the
-    // whole answer from the screen — the reply was in the database and only
-    // reappeared on reload. Surfacing the real reason turns a silent
-    // "An error occurred." into something both the user and we can act on.
+    // it was building. Surfacing the real reason turns a silent "An error
+    // occurred." into something both the user and we can act on.
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
-      // pino es (objeto, mensaje): con el orden al revés el detalle se perdía y
-      // en producción sólo quedaba «chat stream error».
+      // pino es (objeto, mensaje): con el orden al revés el detalle se perdía.
       logger.error(
         {
           message: message.slice(0, 4000),
@@ -1435,32 +1619,7 @@ export async function POST(req: NextRequest) {
         },
         'chat stream error',
       );
-      return humanChatError(message);
+      return humanChatError(message, { deadline: budget.reason() === 'deadline' });
     },
   });
-}
-
-/**
- * Lo que ve la persona cuando el turno se cae: una frase en español y qué
- * hacer, nunca el error técnico (en inglés, con JSON) — ése queda en el log.
- * Visto en producción: «Invalid arguments for tool ask_choice: Type validation
- * failed: Value: {…}» en rojo en mitad de una respuesta.
- */
-function humanChatError(message: string): string {
-  if (/Invalid arguments for tool|Type validation failed|InvalidToolArguments/i.test(message))
-    return 'Se me enredó una pregunta que te iba a hacer. Escríbeme «sigue» y continúo desde aquí.';
-  if (/rate.?limit|429|overloaded|529/i.test(message))
-    return 'Hay mucha demanda en este momento. Espera unos segundos y escríbeme «sigue».';
-  if (/timeout|timed out|aborted|ETIMEDOUT|ECONNRESET|fetch failed/i.test(message))
-    return 'Se cortó la conexión mientras respondía. Escríbeme «sigue» y retomo.';
-  // Sólo los errores que de verdad hablan del largo de la conversación. Con un
-  // /context/ suelto, cualquier «Cannot read … 'context'» se leía como «la
-  // conversación quedó demasiado larga» en un chat recién abierto.
-  if (
-    /prompt is too long|context length|context window|maximum context|input is too long|too many (input )?tokens|exceeds? the (maximum|context)/i.test(
-      message,
-    )
-  )
-    return 'La conversación quedó demasiado larga para seguir aquí. Abre una nueva y te resumo lo importante.';
-  return 'Algo falló mientras respondía. Escríbeme «sigue» para retomar; si se repite, avísale al equipo de Cortex.';
 }

@@ -19,6 +19,7 @@ import Link from 'next/link';
 export function ChatErrorCard({
   message,
   isLimit,
+  interrupted = false,
   busy,
   onRetry,
   onContinue,
@@ -26,6 +27,12 @@ export function ChatErrorCard({
 }: {
   message: string;
   isLimit: boolean;
+  /**
+   * El turno se CORTÓ (tiempo, red) y lo hecho quedó guardado: lo que sirve es
+   * «Continuar», que retoma desde ahí sin repetir trabajo; reintentar lo
+   * empezaría de cero. Se dice distinto y el botón principal cambia.
+   */
+  interrupted?: boolean;
   /** Hay un turno en marcha: los botones que lanzan otro se apagan. */
   busy?: boolean;
   onRetry: () => void;
@@ -53,7 +60,11 @@ export function ChatErrorCard({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">
-            {isLimit ? 'Llegaste al límite de tu plan' : 'No pude terminar la respuesta'}
+            {isLimit
+              ? 'Llegaste al límite de tu plan'
+              : interrupted
+                ? 'La respuesta quedó a medias'
+                : 'No pude terminar la respuesta'}
           </p>
           <p className="mt-0.5 text-xs leading-relaxed text-ink-muted [overflow-wrap:anywhere]">
             {message}
@@ -66,6 +77,16 @@ export function ChatErrorCard({
               >
                 Ver plan y consumo
               </Link>
+            ) : interrupted ? (
+              <button
+                type="button"
+                onClick={onContinue}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-pill bg-rose px-3.5 py-1.5 text-xs font-semibold text-white shadow-card transition-colors duration-150 hover:brightness-95 disabled:opacity-60 motion-reduce:transition-none"
+              >
+                <RotateCw className="h-3 w-3" aria-hidden />
+                Continuar
+              </button>
             ) : (
               <>
                 <button

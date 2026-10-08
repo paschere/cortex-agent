@@ -2,6 +2,7 @@
 
 import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
 import type { BrainSource } from '@/lib/brain-sources-shape';
+import { type ChatErrorKind, classifyClientChatError } from '@/lib/chat-error';
 import { type ScreenFrame, rememberFrame } from '@/lib/screen-marks';
 import type { ScreenGlance } from '@/lib/tab-recorder';
 import { type WaitingNoticeData, clipTitle } from '@/lib/waiting-shape';
@@ -101,7 +102,11 @@ export function ChatRoot({
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const [draft, setDraft] = useState(initialDraft ?? '');
-  const [blocked, setBlocked] = useState<{ message: string; isLimit: boolean } | null>(null);
+  const [blocked, setBlocked] = useState<{
+    message: string;
+    isLimit: boolean;
+    kind?: ChatErrorKind;
+  } | null>(null);
   const { setOpen: setSidebarOpen } = useMobileSidebar();
 
   /**
@@ -242,7 +247,10 @@ export function ChatRoot({
       } catch {
         // not JSON — fall through to the raw message
       }
-      setBlocked({ message: raw.slice(0, 300), isLimit: false });
+      // Un stream cortado (red, plataforma) o un corte por tiempo NO es un fallo
+      // de Cortex: lo hecho quedó guardado y se retoma con «Continuar».
+      const { message, kind } = classifyClientChatError(raw);
+      setBlocked({ message, isLimit: false, kind });
     },
     onResponse: (response) => {
       // Any successful send clears whatever the last failure said.
@@ -435,6 +443,7 @@ export function ChatRoot({
         <ChatErrorCard
           message={blocked.message}
           isLimit={blocked.isLimit}
+          interrupted={blocked.kind === 'interrupted'}
           busy={isLoading}
           onRetry={() => {
             setBlocked(null);

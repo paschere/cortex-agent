@@ -1,4 +1,5 @@
 import type { CoreMessage } from 'ai';
+import { withoutNotes } from './turn-transcript';
 
 /**
  * EL HILO QUE SE LE MANDA AL MODELO, ARMADO DE DOS SITIOS.
@@ -48,6 +49,16 @@ import type { CoreMessage } from 'ai';
 
 type Row = { role: string; content: string };
 
+/**
+ * La clave con la que se reconoce el mismo mensaje en los dos lados: rol y
+ * texto SIN espacios sobrantes y sin la nota de interrupción (la base la lleva,
+ * el navegador puede no haberla recibido). Un carácter de espacio de
+ * diferencia ya no vuelve «distinto» un mensaje.
+ */
+function keyOf(row: Row, role: string): string {
+  return `${role}::${withoutNotes(row.content ?? '')}`;
+}
+
 export function buildTurnMessages(
   /** Lo que tiene el navegador, en el orden en que pasó. El último es la pregunta nueva. */
   clientMessages: readonly Row[],
@@ -67,14 +78,33 @@ export function buildTurnMessages(
   if (!historyNewestFirst || historyNewestFirst.length === 0) {
     merged = client;
   } else {
-    const clientSet = new Set(clientMessages.map((m) => `${m.role}::${m.content}`));
-    // Sólo lo que el navegador NO tiene: el historial viejo. Lo demás ya viene
-    // en la lista del cliente, y en su sitio.
-    const older = historyNewestFirst
-      .filter((m) => !clientSet.has(`${m.role}::${m.content}`))
-      .reverse()
-      .map(asCore);
-    merged = [...older, ...client];
+    // FUSIÓN ANCLADA. Se recorre la base de la más vieja a la más nueva; cada
+    // fila que el navegador también tiene es un ANCLA y arrastra consigo lo
+    // del navegador que iba hasta ahí (un aviso de pantalla, por ejemplo). Una
+    // fila que el navegador no tiene —el historial viejo, o la respuesta de un
+    // turno cortado que nunca llegó entera a la pantalla— entra EN SU SITIO,
+    // después del último ancla, y no amontonada al principio: antes una
+    // respuesta interrumpida quedaba por delante de su propia pregunta.
+    const keys = client.map((m, i) => keyOf(clientMessages[i] as Row, m.role));
+    merged = [];
+    let next = 0;
+    for (const row of [...historyNewestFirst].reverse()) {
+      const key = keyOf(row, row.role);
+      let found = -1;
+      for (let j = next; j < keys.length; j++) {
+        if (keys[j] === key) {
+          found = j;
+          break;
+        }
+      }
+      if (found >= 0) {
+        merged.push(...client.slice(next, found + 1));
+        next = found + 1;
+      } else {
+        merged.push(asCore(row));
+      }
+    }
+    merged.push(...client.slice(next));
   }
 
   return dropTrailingNonUser(merged);

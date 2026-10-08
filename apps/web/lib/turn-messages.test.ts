@@ -102,3 +102,25 @@ describe('recortar lo que cuelga después de la última pregunta', () => {
     expect(dropTrailingNonUser(msgs)).toHaveLength(2);
   });
 });
+
+describe('respuestas cortadas en el hilo', () => {
+  const note =
+    '_Se me acabó el tiempo de este turno. Guardé lo que alcancé a hacer: escríbeme «sigue» y continúo desde aquí sin repetirlo._';
+
+  it('la respuesta cortada que el navegador no tiene entra en SU sitio, no antes de su pregunta', () => {
+    const out = buildTurnMessages(
+      [user('arma la app'), user('sigue')],
+      newestFirst(user('arma la app'), bot(note), user('sigue')),
+    );
+    expect(out.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+    expect(out[1]?.content).toBe(note);
+  });
+
+  it('la misma respuesta con y sin la nota es UNA sola', () => {
+    const out = buildTurnMessages(
+      [user('lee la hoja'), bot('Leí 40 filas.'), user('sigue')],
+      newestFirst(user('lee la hoja'), bot(`Leí 40 filas.\n\n${note}`), user('sigue')),
+    );
+    expect(out.filter((m) => m.role === 'assistant')).toHaveLength(1);
+  });
+});
