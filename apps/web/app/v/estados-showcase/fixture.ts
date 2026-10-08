@@ -9,6 +9,7 @@ import {
   incomeStatement,
   incomeValues,
   mergeExpenseClasses,
+  statementsHeadline,
 } from '@cortex/agent-tools';
 
 /**
@@ -57,12 +58,31 @@ export function fixtureHistory(): PnlMonth[] {
 }
 
 export function fixtureStatements(
-  opts: { year?: number; month?: number; contable?: boolean } = {},
+  opts: {
+    year?: number;
+    month?: number;
+    contable?: boolean;
+    /** Como producción: un solo ingreso en julio, ningún gasto, Siigo conectado sin copia. */
+    soloVentas?: boolean;
+  } = {},
 ): StatementsResult {
-  const history = fixtureHistory();
+  const history: PnlMonth[] = opts.soloVentas
+    ? fixtureHistory().map((m) =>
+        m.month === '2026-07'
+          ? {
+              ...m,
+              sales: 115_000_000,
+              otherIncome: 0,
+              expenses: 0,
+              byCategory: {},
+              margin: 115_000_000,
+            }
+          : { ...m, sales: 0, otherIncome: 0, expenses: 0, byCategory: {}, margin: 0 },
+      )
+    : fixtureHistory();
   const classes = mergeExpenseClasses({ mercadeo: 'variable' });
   const year = opts.year ?? 2026;
-  const throughMonth = opts.month ?? 10;
+  const throughMonth = opts.month ?? (opts.soloVentas ? 9 : 10);
   const income = incomeStatement(history, {
     year,
     throughMonth,
@@ -98,6 +118,21 @@ export function fixtureStatements(
     inventory: working.inventory,
     payables: working.payables,
   });
+  const pnl = {
+    provider: 'siigo' as const,
+    from: '2026-01-01',
+    to: '2026-09-30',
+    currency: 'COP',
+    revenue: 1_712_000_000,
+    costOfSales: 801_000_000,
+    operatingExpenses: 612_000_000,
+    otherIncome: 6_100_000,
+    otherExpenses: 14_000_000,
+    incomeTax: 48_000_000,
+    netIncome: 243_100_000,
+    lines: [],
+    notes: [],
+  };
   const balance = approx;
   const indicators = computeIndicators({
     currency: 'COP',
@@ -110,6 +145,7 @@ export function fixtureStatements(
     fixedExpenses: t.fijo,
     operatingIncome: t.op,
     netIncome: t.neta,
+    expensesMissing: opts.soloVentas ? true : undefined,
     invoiced: working.invoiced12,
     purchases: working.purchases12,
     balance: {
@@ -132,35 +168,24 @@ export function fixtureStatements(
     classes,
     customClasses: { mercadeo: 'variable' },
     income,
+    headline: statementsHeadline(
+      income,
+      {
+        pnl: opts.contable ? pnl : null,
+        pnlPrev: null,
+      },
+      opts.contable ? 'Siigo' : null,
+    ),
     trailing: { from: `${last12[0]?.month}-01`, to: TODAY, months: 12, values: income.ytd },
     balance,
     approxBalance: approx,
     indicators,
     accounting: {
-      provider: opts.contable ? 'siigo' : null,
+      provider: opts.contable || opts.soloVentas ? 'siigo' : null,
       balance: null,
-      pnl: opts.contable
-        ? {
-            fetchedAt: '2026-10-04T13:00:00Z',
-            report: {
-              provider: 'siigo',
-              from: '2026-01-01',
-              to: '2026-09-30',
-              currency: 'COP',
-              revenue: 1_712_000_000,
-              costOfSales: 801_000_000,
-              operatingExpenses: 612_000_000,
-              otherIncome: 6_100_000,
-              otherExpenses: 14_000_000,
-              incomeTax: 48_000_000,
-              netIncome: 243_100_000,
-              lines: [],
-              notes: [],
-            },
-          }
-        : null,
+      pnl: opts.contable ? { fetchedAt: '2026-10-04T13:00:00Z', report: pnl } : null,
       pnlPrev: null,
-      connected: Boolean(opts.contable),
+      connected: Boolean(opts.contable || opts.soloVentas),
     },
     history,
     working,

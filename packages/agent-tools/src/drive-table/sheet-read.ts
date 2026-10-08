@@ -53,6 +53,14 @@ export function readSheetRows(input: {
   keyFields: string[];
   fileId: string;
   cap?: number;
+  /** Valores que no vienen de la hoja y entran a la clave (la subcarpeta, campos de la ruta). */
+  fixed?: Record<string, string | number>;
+  /**
+   * La clave de la fila es la misma que la de un documento con esos campos
+   * (sin el id del archivo): la fila de la hoja y la del PDF son UNA fila.
+   * Sin clave en la fila, vuelve a la del archivo.
+   */
+  joinByKey?: boolean;
 }): SheetReadResult {
   const cap = input.cap ?? SHEET_ROWS_PER_FILE;
   const wanted = Object.entries(input.mapping)
@@ -127,16 +135,19 @@ export function readSheetRows(input: {
         out.truncated = true;
         return;
       }
-      const id = externalKeyFor(values, keys, input.fields);
+      const all = { ...values, ...(input.fixed ?? {}) };
+      const id = externalKeyFor(all, input.joinByKey ? input.keyFields : keys, input.fields);
       if (id === null)
-        for (const k of keys) {
+        for (const k of input.joinByKey ? input.keyFields : keys) {
           const f = input.fields.find((x) => x.key === k);
-          if (f && values[k] === undefined)
+          if (f && all[k] === undefined)
             review.push(`Hoja «${sheet.name}», fila ${line}: falta «${f.label}».`);
         }
       const key = (
         id !== null
-          ? `hoja:${input.fileId}:${tab}:${id}`
+          ? input.joinByKey
+            ? id
+            : `hoja:${input.fileId}:${tab}:${id}`
           : `hoja:${input.fileId}:${tab}:fila${line}`
       ).slice(0, 400);
       const planned: PlannedFileRow = { key, keyMissing: id === null, values, review };
@@ -156,6 +167,10 @@ export function readSheetRows(input: {
     if (repeated)
       out.notes.push(
         `En la pestaña «${sheet.name}» hay ${repeated} fila(s) con la misma clave que otra; quedó la última.`,
+      );
+    if (sheet.truncated)
+      out.notes.push(
+        `La pestaña «${sheet.name}» tiene ${(sheet.totalRows ?? 0) > 0 ? `${(sheet.totalRows as number).toLocaleString('es-CO')} filas` : 'más filas'}; leí las primeras ${(sheet.rows.length - 1).toLocaleString('es-CO')}.`,
       );
     out.rows.push(...byKey.values());
   });

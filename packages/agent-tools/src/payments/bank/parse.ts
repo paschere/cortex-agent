@@ -321,12 +321,14 @@ export function parseStatementRows(input: Cell[][], opts: ParseOptions = {}): St
     if (map.credit != null || map.debit != null) {
       const credit = map.credit != null ? parseAmount(row[map.credit], creditStyle) : null;
       const debit = map.debit != null ? parseAmount(row[map.debit], debitStyle) : null;
+      // Un valor NEGATIVO en la columna de créditos es una reversa (sale plata)
+      // y uno negativo en la de débitos también entra: el signo no se pierde.
       if (credit != null && Math.abs(credit) > 0.004) {
         amount = Math.abs(credit);
-        direction = 'credit';
+        direction = credit < 0 ? 'debit' : 'credit';
       } else if (debit != null && Math.abs(debit) > 0.004) {
         amount = Math.abs(debit);
-        direction = 'debit';
+        direction = debit < 0 ? 'credit' : 'debit';
       } else if (map.amount != null) {
         // Créditos vacíos y un valor aparte: se cae al valor de abajo.
       } else {

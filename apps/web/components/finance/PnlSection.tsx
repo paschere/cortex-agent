@@ -8,6 +8,7 @@ import {
   changeText,
   findMonth,
   formatMoney,
+  isNewFromZero,
   monthLabel,
   monthShort,
   pctChange,
@@ -48,6 +49,11 @@ export function PnlSection({ pnl }: { pnl: Piece<PnlPanel> }) {
   const categories = categoryChanges(current, previous, { payrollConfidential });
   const maxCategory = Math.max(1, ...categories.map((c) => c.amount));
   const fm = (n: number) => formatMoney(n, currency);
+  // Ventas sin un solo gasto: el margen sería el 100 % de lo que entró, una
+  // cifra inventada por lo que falta. Se dice que faltan los gastos.
+  const noExpenses = current
+    ? current.sales + current.otherIncome > 0 && current.expenses <= 0
+    : false;
   const isCurrentMonth = focus === pnl.data.months[pnl.data.months.length - 1]?.month;
 
   return (
@@ -80,20 +86,29 @@ export function PnlSection({ pnl }: { pnl: Piece<PnlPanel> }) {
             />
             <Kpi
               label="Gastos"
-              value={fm(current.expenses)}
-              previous={previous?.expenses}
-              lastYear={lastYear?.expenses}
+              value={noExpenses ? 'Sin registrar' : fm(current.expenses)}
+              previous={noExpenses ? null : previous?.expenses}
+              lastYear={noExpenses ? null : lastYear?.expenses}
               now={current.expenses}
+              note={
+                noExpenses
+                  ? 'No hay gastos en este mes: sube los extractos del banco o conecta tu programa contable.'
+                  : null
+              }
               higherIsWorse
             />
             <Kpi
               label="Margen"
-              value={fm(current.margin)}
-              previous={previous?.margin}
-              lastYear={lastYear?.margin}
+              value={noExpenses ? '—' : fm(current.margin)}
+              previous={noExpenses ? null : previous?.margin}
+              lastYear={noExpenses ? null : lastYear?.margin}
               now={current.margin}
-              note={marginNote(current)}
-              negative={current.margin < 0}
+              note={
+                noExpenses
+                  ? 'Faltan los gastos: sin ellos no se puede afirmar un margen.'
+                  : marginNote(current)
+              }
+              negative={!noExpenses && current.margin < 0}
             />
           </div>
 
@@ -124,7 +139,7 @@ export function PnlSection({ pnl }: { pnl: Piece<PnlPanel> }) {
                         <span className="tabular font-mono font-semibold text-ink">
                           {fm(c.amount)}
                         </span>
-                        <Change change={c.change} higherIsWorse />
+                        <Change change={c.change} isNew={c.isNew} higherIsWorse />
                       </span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-pill bg-surface-2">
@@ -194,7 +209,11 @@ function Kpi({
           <div className="flex justify-between gap-2">
             <dt>vs mes anterior</dt>
             <dd>
-              <Change change={pctChange(now, previous)} higherIsWorse={higherIsWorse} />
+              <Change
+                change={pctChange(now, previous)}
+                isNew={isNewFromZero(now, previous)}
+                higherIsWorse={higherIsWorse}
+              />
             </dd>
           </div>
         )}
@@ -202,7 +221,11 @@ function Kpi({
           <div className="flex justify-between gap-2">
             <dt>vs hace un año</dt>
             <dd>
-              <Change change={pctChange(now, lastYear)} higherIsWorse={higherIsWorse} />
+              <Change
+                change={pctChange(now, lastYear)}
+                isNew={isNewFromZero(now, lastYear)}
+                higherIsWorse={higherIsWorse}
+              />
             </dd>
           </div>
         )}
@@ -211,7 +234,17 @@ function Kpi({
   );
 }
 
-function Change({ change, higherIsWorse }: { change: number | null; higherIsWorse?: boolean }) {
+function Change({
+  change,
+  isNew,
+  higherIsWorse,
+}: {
+  change: number | null;
+  isNew?: boolean;
+  higherIsWorse?: boolean;
+}) {
+  if (change == null && isNew)
+    return <span className="tabular font-mono text-ink-muted">nuevo</span>;
   if (change == null) return <span className="tabular font-mono text-ink-faint">—</span>;
   const up = change > 0.005;
   const down = change < -0.005;

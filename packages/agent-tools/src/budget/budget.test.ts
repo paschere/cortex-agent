@@ -8,6 +8,7 @@ import {
   budgetOverruns,
   budgetVsActual,
   lightFor,
+  missingExpensesNote,
   roundBudget,
 } from './shape';
 
@@ -54,6 +55,15 @@ describe('lights', () => {
     expect(lightFor('ingreso', 95, 100)).toBe('amarillo');
     expect(lightFor('ingreso', 80, 100)).toBe('rojo');
     expect(lightFor('gasto', 10, 0)).toBe('sin_presupuesto');
+  });
+
+  it('un gasto presupuestado con cero real no es verde: es «sin datos reales»', () => {
+    expect(lightFor('gasto', 0, 500)).toBe('sin_datos');
+    expect(lightFor('gasto', 0.2, 500)).toBe('sin_datos');
+    // Un ingreso en cero sí es un mal resultado, no falta de datos.
+    expect(lightFor('ingreso', 0, 500)).toBe('rojo');
+    // Sin presupuesto y sin gasto: nada que decir.
+    expect(lightFor('gasto', 0, 0)).toBe('verde');
   });
 });
 
@@ -105,6 +115,34 @@ describe('budget vs actual', () => {
       href: '/presupuesto',
     });
     expect(items[0]?.why).toMatch(/marzo/);
+  });
+
+  it('marca «faltan los gastos de <mes>» donde el gasto presupuestado no tiene real', () => {
+    const h = [
+      month('2026-01', 1_100, { arriendo: 300 }),
+      month('2026-02', 900, {}),
+      month('2026-03', 400, {}),
+    ];
+    const vs = budgetVsActual(cells, h, { year: 2026, today: '2026-03-31' });
+    const arriendo = vs.rows.find((r) => r.category === 'arriendo');
+    expect(arriendo?.months[0]?.light).toBe('verde');
+    expect(arriendo?.months[1]?.light).toBe('sin_datos');
+    expect(arriendo?.months[2]?.light).toBe('sin_datos');
+    expect(arriendo?.missingMonths).toEqual([2, 3]);
+    expect(missingExpensesNote(arriendo?.missingMonths ?? [])).toBe(
+      'faltan los gastos de febrero y marzo',
+    );
+    expect(missingExpensesNote([9])).toBe('faltan los gastos de septiembre');
+    expect(missingExpensesNote([])).toBe('');
+    // Una fila sin nada real en todo el acumulado queda gris, no verde.
+    const none = budgetVsActual(cells, [month('2026-01', 1_000, {})], {
+      year: 2026,
+      today: '2026-01-31',
+    });
+    expect(none.rows.find((r) => r.category === 'arriendo')?.ytd.light).toBe('sin_datos');
+    expect(none.totals.expensesMissing).toBe(true);
+    // Los ingresos nunca se marcan sin datos.
+    expect(none.rows.find((r) => r.category === 'ventas')?.missingMonths).toEqual([]);
   });
 
   it('closes a past year fully', () => {

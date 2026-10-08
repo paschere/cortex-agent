@@ -109,7 +109,7 @@ export function budgetFromActuals(
   return cells;
 }
 
-export type Light = 'verde' | 'amarillo' | 'rojo' | 'sin_presupuesto' | 'pendiente';
+export type Light = 'verde' | 'amarillo' | 'rojo' | 'sin_presupuesto' | 'pendiente' | 'sin_datos';
 
 export const LIGHT_LABEL: Record<Light, string> = {
   verde: 'Dentro de lo presupuestado',
@@ -117,10 +117,14 @@ export const LIGHT_LABEL: Record<Light, string> = {
   rojo: 'Fuera de lo presupuestado',
   sin_presupuesto: 'Sin presupuesto',
   pendiente: 'Todavía no pasa',
+  sin_datos: 'Sin datos reales',
 };
 
 export function lightFor(kind: BudgetKind, actual: number, budget: number): Light {
   if (budget <= 0.5) return actual > 0.5 ? 'sin_presupuesto' : 'verde';
+  // Un gasto presupuestado con cero real casi siempre es un gasto que no se
+  // cargó, no un ahorro: no se pinta verde, se dice que no hay datos.
+  if (kind === 'gasto' && actual < 0.5) return 'sin_datos';
   const ratio = actual / budget;
   if (kind === 'gasto') return ratio <= 1 ? 'verde' : ratio <= 1.1 ? 'amarillo' : 'rojo';
   return ratio >= 1 ? 'verde' : ratio >= 0.9 ? 'amarillo' : 'rojo';
@@ -144,6 +148,34 @@ export interface VsRow {
   months: VsCell[];
   ytd: { budget: number; actual: number; variance: number; pct: number | null; light: Light };
   yearBudget: number;
+  /** Meses (1–12) de un gasto presupuestado sin ningún real: probablemente faltan por cargar. */
+  missingMonths: number[];
+}
+
+const MONTH_NAMES = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+/** «faltan los gastos de agosto y septiembre»; vacío si no falta ninguno. */
+export function missingExpensesNote(months: readonly number[]): string {
+  const names = months.map((m) => MONTH_NAMES[m - 1]).filter((n): n is string => Boolean(n));
+  if (names.length === 0) return '';
+  const list =
+    names.length === 1
+      ? (names[0] as string)
+      : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`;
+  return `faltan los gastos de ${list}`;
 }
 
 export interface BudgetVsActual {
@@ -157,6 +189,11 @@ export interface BudgetVsActual {
     income: { budget: number; actual: number };
     expense: { budget: number; actual: number };
     margin: { budget: number; actual: number };
+    /**
+     * Hay ingresos reales y ningún gasto real: el margen real y el
+     * «dentro de lo presupuestado» de los gastos no significan nada.
+     */
+    expensesMissing: boolean;
   };
   /** Categorías con gasto real que no están en el presupuesto. */
   unbudgeted: string[];
@@ -246,6 +283,8 @@ export function budgetVsActual(
         light: throughMonth === 0 ? 'pendiente' : lightFor(kind, ytdActual, ytdBudget),
       },
       yearBudget: round2(budgets.reduce((s, v) => s + v, 0)),
+      missingMonths:
+        kind === 'gasto' ? months.filter((c) => c.light === 'sin_datos').map((c) => c.month) : [],
     });
   }
   rows.sort((a, b) =>
@@ -277,6 +316,7 @@ export function budgetVsActual(
         budget: round2(income.budget - expense.budget),
         actual: round2(income.actual - expense.actual),
       },
+      expensesMissing: income.actual > 0.5 && expense.actual < 0.5,
     },
     unbudgeted,
   };

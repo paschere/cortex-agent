@@ -148,7 +148,69 @@ export function repairArgs(
     }
     out[key] = value;
   }
-  return changed ? out : null;
+  // Lo último: textos y listas más largos de lo que el esquema admite. Visto en
+  // producción: ask_choice con una pregunta de ~250 caracteres (el tope es 180)
+  // tumbaba el turno entero. Se recorta en vez de perder la respuesta.
+  const clipped = clipToSchema(out, schema as JsonSchemaNode);
+  if (clipped.changed) changed = true;
+  return changed ? (clipped.value as Record<string, Json>) : null;
+}
+
+interface JsonSchemaNode {
+  type?: unknown;
+  properties?: Record<string, JsonSchemaNode>;
+  items?: JsonSchemaNode;
+  maxLength?: number;
+  maxItems?: number;
+}
+
+/** Recorta un texto a `max` caracteres por la última palabra entera, con «…». */
+export function clipText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const room = Math.max(1, max - 1);
+  const cut = text.slice(0, room);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > room * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * Ajusta un valor a los topes del JSON Schema (maxLength, maxItems) en todo el
+ * árbol. Puro; sólo acorta: nunca inventa contenido.
+ */
+export function clipToSchema(
+  value: Json,
+  node: JsonSchemaNode | undefined,
+): { value: Json; changed: boolean } {
+  if (!node) return { value, changed: false };
+  if (typeof value === 'string' && typeof node.maxLength === 'number')
+    return value.length > node.maxLength
+      ? { value: clipText(value, node.maxLength), changed: true }
+      : { value, changed: false };
+  if (Array.isArray(value)) {
+    let changed = false;
+    let list = value;
+    if (typeof node.maxItems === 'number' && list.length > node.maxItems) {
+      list = list.slice(0, node.maxItems);
+      changed = true;
+    }
+    const items = list.map((v) => {
+      const r = clipToSchema(v, node.items);
+      if (r.changed) changed = true;
+      return r.value;
+    });
+    return { value: items, changed };
+  }
+  if (value && typeof value === 'object' && node.properties) {
+    let changed = false;
+    const obj: Record<string, Json> = {};
+    for (const [k, v] of Object.entries(value as Record<string, Json>)) {
+      const r = clipToSchema(v, node.properties[k]);
+      if (r.changed) changed = true;
+      obj[k] = r.value;
+    }
+    return { value: obj, changed };
+  }
+  return { value, changed: false };
 }
 
 /** Las últimas frases de la conversación, en texto plano y recortadas. */

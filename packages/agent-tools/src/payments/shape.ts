@@ -284,8 +284,10 @@ export const MATCH_DAY_WINDOW = 5;
 const DAY_MS = 86_400_000;
 
 export function daysBetween(from: string, to: string): number | null {
-  const a = Date.parse(`${from}T00:00:00Z`);
-  const b = Date.parse(`${to}T00:00:00Z`);
+  // Una fecha con hora («2026-09-01T00:00:00Z») cuenta por su día: sin esto la
+  // factura se caía de la cartera vencida sin avisar.
+  const a = Date.parse(`${from.slice(0, 10)}T00:00:00Z`);
+  const b = Date.parse(`${to.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(a) || Number.isNaN(b)) return null;
   return Math.round((b - a) / DAY_MS);
 }

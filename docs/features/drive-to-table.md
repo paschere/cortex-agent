@@ -43,7 +43,24 @@ Formatos: PDF con texto, Word (.docx), Excel (.xlsx), CSV, texto, Documentos y H
 - La campana de quien la creó suena cuando entran o cambian filas o un archivo no se pudo leer: «Facturas: 3 filas nuevas — FE-4471, FE-4472, FE-4480. 1 por revisar.» (clase `table_sync`).
 
 ## Límites
-- Intervalo mínimo 10 minutos; 10 archivos por corrida; 50 registros por archivo; 30.000 caracteres por archivo.
-- Sólo la carpeta, no sus subcarpetas.
+- Intervalo mínimo 10 minutos; 10 archivos por corrida con modelo (más 30 hojas con mapeo, que no gastan modelo); 50 registros por archivo leído con modelo; 30.000 caracteres por archivo.
+- Subcarpetas: hasta 4 niveles; la sincronización lista hasta 20.000 archivos (sólo metadatos).
 - No hay pantalla propia: se configura y se consulta desde el chat; las filas se ven en `/trackers/<tabla>`.
 - Probado con pruebas unitarias (planeación, citas, claves, libro), un archivo de punta a punta contra una base falsa, y la migración contra PGlite. **No** probado contra Drive ni el modelo reales.
+
+
+## Carpetas grandes y de varios tipos (propuesta y sincronización)
+
+Pensado para carpetas de operación: un mes por carpeta, una subcarpeta por lote o vuelo («10.OCTUBRE / 33. FEDEX 3325 07102026») y dentro varios tipos de archivo. Sin migración: la configuración nueva vive en `extract_fields` y `sheet_mapping`.
+
+**Inventario sin techo ciego** (`trackers.propose_from_drive_folder`). Hasta 5.000 archivos y 4 niveles se miran completos. Pasado eso no se corta: se toma una **muestra estratificada** (subcarpeta × tipo de documento × extensión; si no caben, por carpeta de primer nivel × tipo, y al final por tipo), determinista, y se dice el conteo real (o estimado si el recorrido llegó a su tope de 20.000 archivos / 3.000 carpetas). Los conteos son de todo lo listado; las muestras de lectura salen de la muestra. La sincronización siempre lee todos.
+
+**Hojas grandes.** Ya no se rechaza una hoja por pasar de 50.000 celdas (esa regla sigue para Brain y las consultas del chat). Para proponer se lee el encabezado y las primeras 300 filas; para sincronizar, hasta 20.000 filas por archivo (tope de 200 columnas y 2 millones de celdas por archivo; `parseSpreadsheet(..., { rowLimit })`). Lo que pase del tope se dice («tiene N filas; leí las primeras 20.000») y el archivo queda por revisar. Las hojas con mapeo se leen en lote aparte (30 por corrida) porque no usan el modelo.
+
+**Tipos de documento** (`doc-types.ts`). Los archivos se agrupan por nombre sin números, fechas ni copias («PREALERTA 3325 (1).pdf» → «prealerta · pdf») y extensión; dos nombres con ≥60 % de palabras en común y la misma extensión son el mismo tipo. La propuesta muestra cada tipo con conteo, subcarpetas, ejemplo y papel: **base** (trae lo que la persona pidió), **complementa**, **no sirve** (p. ej. un formulario de trámite) u **hoja** (fila por fila). Se lee una muestra de cada uno de los 5 tipos más numerosos; con `goal` («guía, piezas, kilos») el modelo decide la base. Cada campo de documento lleva `docTypes`: se lee sólo de esos tipos, y varios tipos llenan campos distintos de la misma fila, unidos por la clave (si comparten un dato; si no, la propuesta lo dice). En la sincronización un archivo de un tipo que ningún campo usa **no se descarga ni se lee**. Si no hay `goal` y dos o más tipos cuentan, la propuesta trae `ask` (pregunta ≤180 caracteres, opciones ≤64) para hacerla con `ask_choice`.
+
+**Campos desde la ruta** (`path-fields.ts`). Por nivel de subcarpeta se detectan piezas con reglas generales: `secuencia` («33.»), `fecha` (DDMMAAAA, AAAAMMDD, DD-MM-AAAA, AAAA-MM-DD, validada), `mes` (nombre de mes), `codigo` (último token con dígitos, 2 a 8 caracteres) y `texto` (lo que sobra). Cuentan las que traen ≥60 % de los nombres del nivel. La propuesta muestra el patrón con 3 ejemplos reales («33. FEDEX 3325 07102026» → n.º 33, nombre FEDEX, código 3325, fecha 2026-10-07), los nombres que no encajan y los campos `fromPath` resultantes (el chat les pone su nombre: aerolínea, vuelo…). En cada archivo el motor llena esos campos; lo que el nombre no trae queda **vacío** y la fila «Por revisar» con el motivo. Nunca se deduce.
+
+**Idempotencia.** La clave de la fila no cambia: una fila de hoja con asignación por tipo usa la clave del documento (sin el id del archivo), así prealerta y manifiesto de la misma guía son una fila; el libro de archivos sigue leyendo cada archivo una vez por revisión (ahora paginado, sin el tope de 5.000 renglones).
+
+Pendiente: no probado contra Drive ni el modelo reales; los campos de la ruta son por nombre de subcarpeta (no del archivo).

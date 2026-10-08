@@ -153,6 +153,7 @@ export async function gatherBoardInput(
     company,
     today: opts.today,
     income: statements?.income ?? null,
+    headline: statements?.headline ?? null,
     budget,
     cash,
     working: {

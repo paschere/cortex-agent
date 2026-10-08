@@ -101,6 +101,11 @@ export async function MoneyAtRiskPanel({ organizationId }: { organizationId: str
           <p className="tabular mt-1.5 font-mono text-display font-semibold leading-none text-ink">
             {COP.format(cop.total)}
           </p>
+          <p className="mt-1.5 max-w-md text-micro text-ink-faint">
+            Suma la cartera ya vencida (lo que te deben) y los pagos y multas por vencer o vencidos
+            (lo que debes). La cartera que aún no vence no entra, y cada factura cuenta una sola
+            vez.
+          </p>
           {others.length > 0 && (
             <p className="mt-1.5 text-micro text-ink-faint">
               Además vencido en otras monedas:{' '}

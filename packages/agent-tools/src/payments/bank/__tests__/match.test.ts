@@ -204,3 +204,33 @@ describe('el extracto entero', () => {
     ]);
   });
 });
+
+describe('abonos que no pagan nada', () => {
+  it('un abono de cero o negativo no se empareja con ninguna factura', () => {
+    const inv = invoice();
+    for (const amount of [0, -4_200_000, Number.NaN]) {
+      const m = matchCredit(credit({ amount, description: 'PAGO FV-1043' }), { invoices: [inv] });
+      expect(m.status).toBe('unmatched');
+    }
+  });
+
+  it('con decimales: 4.200.000,50 contra un saldo de 4.200.000,50 es exacto', () => {
+    const m = matchCredit(credit({ amount: 4_200_000.5, description: 'PAGO FV-1043' }), {
+      invoices: [invoice({ balance: 4_200_000.5, total: 4_200_000.5 })],
+    });
+    expect(m.status).toBe('matched');
+    expect(m.best?.amountFit).toBe('exact');
+  });
+
+  it('una factura con varios abonos: el segundo se mide contra el saldo que queda', () => {
+    const first = matchCredit(credit({ amount: 1_000_000, description: 'ABONO FV-1043' }), {
+      invoices: [invoice()],
+    });
+    expect(first.status).toBe('suggested');
+    expect(first.best?.amountFit).toBe('partial');
+    const second = matchCredit(credit({ amount: 3_200_000, description: 'ABONO FV-1043' }), {
+      invoices: [invoice({ balance: 3_200_000 })],
+    });
+    expect(second.status).toBe('matched');
+  });
+});

@@ -4,28 +4,27 @@
  * cliente.
  */
 
+import {
+  formatMoney,
+  isNewFromZero,
+  pctChange,
+} from '@cortex/agent-tools/src/ledger/forecast-shared';
+
 const FULL = new Intl.NumberFormat('es-CO', {
   style: 'currency',
   currency: 'COP',
   maximumFractionDigits: 0,
 });
 const ONE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
-const TWO = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 });
-const WHOLE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
 
 /** «$ 12.345.678». */
 export function fullMoney(n: number): string {
   return FULL.format(Math.round(n)).replace(/ /g, ' ');
 }
 
-/** «$ 38,5 M», «$ 950 mil». */
+/** «$ 38,5 M», «$ 950 mil», «$ 1 mil M»: la misma regla de unidades que el resto de Finanzas. */
 export function shortMoney(n: number): string {
-  const sign = n < 0 ? '−' : '';
-  const a = Math.abs(Math.round(n));
-  if (a >= 1e9) return `${sign}$ ${TWO.format(a / 1e9)} mil M`;
-  if (a >= 1e6) return `${sign}$ ${ONE.format(a / 1e6)} M`;
-  if (a >= 1e3) return `${sign}$ ${WHOLE.format(a / 1e3)} mil`;
-  return `${sign}$ ${WHOLE.format(a)}`;
+  return formatMoney(n);
 }
 
 export function pct(fraction: number | null | undefined, signed = false): string {
@@ -34,10 +33,9 @@ export function pct(fraction: number | null | undefined, signed = false): string
   return `${signed && v > 0 ? '+' : ''}${ONE.format(v)} %`;
 }
 
-export function change(now: number, before: number | null | undefined): number | null {
-  if (before === null || before === undefined || Math.abs(before) < 0.5) return null;
-  return (now - before) / Math.abs(before);
-}
+/** El mismo cambio relativo de todo Finanzas (base cero → null; ver `pctChange`). */
+export const change = pctChange;
+export { isNewFromZero };
 
 export const MONTHS = [
   'enero',

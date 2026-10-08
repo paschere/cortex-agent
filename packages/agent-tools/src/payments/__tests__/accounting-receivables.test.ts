@@ -175,3 +175,84 @@ describe('la cartera con Siigo conectado', () => {
     expect(w.tables.receivable_notices?.[0]?.extraction_id).toBeUndefined();
   });
 });
+
+describe('duplicados entre fuentes, saldos a favor y fechas con hora', () => {
+  const confirmed = (over: Record<string, unknown> = {}) => ({
+    id: 'ext-1',
+    organization_id: ORG,
+    doc_type: 'invoice',
+    financial_role: 'receivable',
+    review_state: 'confirmed',
+    doc_number: 'FV-2-22',
+    client_id: 'cli-otro',
+    counterparty_nit: '800555111',
+    total_amount: 500_000,
+    currency: 'COP',
+    issued_on: '2026-07-15',
+    due_on: '2026-08-14',
+    ...over,
+  });
+
+  it('el mismo número de otro cliente NO es un duplicado: son dos facturas', async () => {
+    const w = world({
+      accounting_invoices: [siigoInvoice({ client_id: 'cli-coltrans', client_nit: '900123456' })],
+      document_extractions: [confirmed()],
+    });
+    const result = await receivables(w.db, { today: TODAY });
+    expect(result.accountingInvoices).toBe(1);
+    expect(result.byCurrency[0]?.outstanding).toBe(1_700_000);
+  });
+
+  it('la misma factura traída por dos programas cuenta una vez', async () => {
+    const w = world({
+      accounting_invoices: [
+        siigoInvoice(),
+        siigoInvoice({ id: 'acc-9', source_system: 'alegra', source_ref: 'a-9' }),
+      ],
+    });
+    const result = await receivables(w.db, { today: TODAY });
+    expect(result.accountingInvoices).toBe(1);
+    expect(result.byCurrency[0]?.outstanding).toBe(1_200_000);
+    const overdue = await overdueReceivableInvoices(w.db, { today: TODAY });
+    expect(overdue).toHaveLength(1);
+  });
+
+  it('una factura pagada de más se cuenta aparte y no esconde la deuda de otra', async () => {
+    const w = world({
+      document_extractions: [
+        confirmed({ id: 'ext-a', doc_number: 'FV-1', total_amount: 1_000_000, client_id: null }),
+        confirmed({ id: 'ext-b', doc_number: 'FV-2', total_amount: 400_000, client_id: null }),
+      ],
+      payments: [
+        {
+          id: 'p-1',
+          organization_id: ORG,
+          kind: 'payment',
+          amount: 1_100_000,
+          currency: 'COP',
+          paid_on: '2026-08-20',
+          extraction_id: 'ext-a',
+          invoice_number: 'FV-1',
+          state: 'confirmed',
+        },
+      ],
+    });
+    const result = await receivables(w.db, { today: TODAY });
+    const cop = result.byCurrency[0];
+    expect(cop?.outstanding).toBe(400_000);
+    expect(cop?.creditInvoices).toBe(1);
+    expect(cop?.creditBalance).toBe(100_000);
+    expect(result.sentence).toContain('saldo a favor del cliente');
+  });
+
+  it('un vencimiento escrito con hora sigue contando como vencido', async () => {
+    const w = world({
+      document_extractions: [
+        confirmed({ client_id: null, due_on: '2026-08-14T00:00:00Z', total_amount: 750_000 }),
+      ],
+    });
+    const overdue = await overdueReceivableInvoices(w.db, { today: TODAY });
+    expect(overdue).toHaveLength(1);
+    expect(overdue[0]?.daysOverdue).toBe(48);
+  });
+});

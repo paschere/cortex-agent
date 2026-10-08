@@ -1,3 +1,11 @@
+import { logger } from '@cortex/core';
+import {
+  MAX_SHEET_CELLS,
+  type RawSheet,
+  detectSpreadsheetFormat,
+  readSheetsByFormat,
+} from './spreadsheet-bytes';
+
 /**
  * LOS ESTADOS FINANCIEROS DEL PROGRAMA CONTABLE, A UNA SOLA FORMA (0191).
  *
@@ -451,21 +459,61 @@ export function trialBalanceFromRows(rows: unknown[][]): TrialBalanceRow[] {
   return out;
 }
 
-/** Un .xlsx (bytes) → filas de su primera hoja con datos. */
-export async function xlsxRows(bytes: Uint8Array): Promise<unknown[][]> {
-  const { default: ExcelJS } = await import('exceljs');
-  const workbook = new ExcelJS.Workbook();
-  // exceljs tipa `load` con el Buffer de una versión vieja de @types/node.
-  await workbook.xlsx.load(
-    Buffer.from(bytes) as unknown as Parameters<typeof workbook.xlsx.load>[0],
-  );
-  for (const sheet of workbook.worksheets) {
-    if (sheet.rowCount * Math.max(sheet.columnCount, 1) > 400_000) continue;
-    const rows: unknown[][] = [];
-    sheet.eachRow({ includeEmpty: true }, (row) => {
-      rows.push(Array.from({ length: sheet.columnCount }, (_, i) => row.getCell(i + 1).value));
-    });
-    if (trialBalanceFromRows(rows).length) return rows;
+/**
+ * Un archivo de hoja de cálculo (bytes) → filas de su primera hoja con datos
+ * de balance de prueba. Detecta el formato por firma (xlsx, HTML como .xls…);
+ * un .xlsx va por exceljs y, si éste falla, por el lector mínimo propio.
+ */
+export async function readSpreadsheetBytes(
+  bytes: Uint8Array,
+  opts: { contentType?: string | null } = {},
+): Promise<unknown[][]> {
+  const sheets = await readSheetsByFormat(bytes, {
+    tryPrimary: async (b) => {
+      const { default: ExcelJS } = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      // exceljs tipa `load` con el Buffer de una versión vieja de @types/node.
+      await workbook.xlsx.load(
+        Buffer.from(b) as unknown as Parameters<typeof workbook.xlsx.load>[0],
+      );
+      const out: RawSheet[] = [];
+      for (const sheet of workbook.worksheets) {
+        if (sheet.rowCount * Math.max(sheet.columnCount, 1) > MAX_SHEET_CELLS) continue;
+        const rows: unknown[][] = [];
+        sheet.eachRow({ includeEmpty: true }, (row) => {
+          rows.push(Array.from({ length: sheet.columnCount }, (_, i) => row.getCell(i + 1).value));
+        });
+        out.push({ name: sheet.name, rows: rows as RawSheet['rows'] });
+      }
+      return out;
+    },
+    onPrimaryFailure: (err, format) =>
+      logger.warn(
+        {
+          err: err instanceof Error ? err.message : String(err),
+          format,
+          contentType: opts.contentType ?? null,
+          bytes: bytes.length,
+        },
+        'exceljs no pudo leer la hoja; uso el lector mínimo',
+      ),
+  }).catch((err) => {
+    logger.warn(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        format: detectSpreadsheetFormat(bytes),
+        contentType: opts.contentType ?? null,
+        bytes: bytes.length,
+      },
+      'no se pudo leer la hoja de cálculo',
+    );
+    throw err;
+  });
+  for (const sheet of sheets) {
+    if (trialBalanceFromRows(sheet.rows).length) return sheet.rows;
   }
   return [];
 }
+
+/** Un .xlsx (bytes) → filas de su primera hoja con datos. */
+export const xlsxRows = readSpreadsheetBytes;

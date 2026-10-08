@@ -18,6 +18,7 @@ import {
   listDriveFolderSyncs,
   upsertDriveFolderSync,
 } from './engine';
+import { INVENTORY_MAX_DEPTH } from './inventory';
 import {
   CARPETA_KEY,
   DRIVE_TABLE_PRESETS,
@@ -28,6 +29,7 @@ import {
   parseFolderRef,
 } from './plan';
 import { proposeFromDriveFolder } from './propose-folder';
+import { SHEET_TYPES_KEY } from './sync-config';
 
 /**
  * Llenar una tabla de la empresa desde una carpeta de Google Drive (0164).
@@ -74,7 +76,7 @@ function resolveKey(fields: TrackerField[], ref: string): string | null {
 export const trackersSyncFromDriveFolder = registerTool({
   id: 'trackers.sync_from_drive_folder',
   description:
-    'Make a company table fill itself from the files dropped in a Google Drive folder, optionally including its subfolders. Spreadsheets inside (Google Sheets, .xlsx, .csv) are read row by row with no model — every row is a record, columns matched to fields by header — and re-reading updates rows instead of duplicating them. PDFs, Word and Google Docs are read by a model (fields -> row, or several rows if the file lists several records); photos and scanned PDFs (up to 15 pages) are read by the model as images. Values from documents are only stored when a literal sentence backs them; doubtful or missing ones leave the row marked "Por revisar". For a table that does not exist yet you MUST first call trackers.propose_from_drive_folder, show its markdown and wait for the person to approve or change it, then pass the approved `fields` here (each with sourceColumn for sheet columns, fromDocument for fields read from documents; the proposal also adds a `carpeta` field filled with each file\'s subfolder) plus keyFields, duplicates and recursive. Only the explicit `preset` (guias_aereas, facturas_proveedor, ordenes_compra) or an existing table may skip the proposal. Rows deleted from a sheet are NOT deleted from the table. Runs with the Google credentials of the person who asks. Requires confirmation.',
+    'Make a company table fill itself from the files dropped in a Google Drive folder, optionally including its subfolders. Spreadsheets inside (Google Sheets, .xlsx, .csv) are read row by row with no model — every row is a record, columns matched to fields by header — and re-reading updates rows instead of duplicating them. PDFs, Word and Google Docs are read by a model (fields -> row, or several rows if the file lists several records); photos and scanned PDFs (up to 15 pages) are read by the model as images. Values from documents are only stored when a literal sentence backs them; doubtful or missing ones leave the row marked "Por revisar". For a table that does not exist yet you MUST first call trackers.propose_from_drive_folder, show its markdown and wait for the person to approve or change it, then pass the approved `fields` here exactly as proposed (each with sourceColumn for sheet columns, fromDocument + docTypes for fields read from documents of given types, fromPath for fields taken from a subfolder name, fromFolder for the `carpeta` field filled with each file\'s subfolder) plus keyFields, duplicates, recursive and sheetTypes. Documents of a type no field uses are skipped without reading. Only the explicit `preset` (guias_aereas, facturas_proveedor, ordenes_compra) or an existing table may skip the proposal. Rows deleted from a sheet are NOT deleted from the table. Runs with the Google credentials of the person who asks. Requires confirmation.',
   inputSchema: z.object({
     folder: z
       .string()
@@ -124,6 +126,27 @@ export const trackersSyncFromDriveFolder = registerTool({
               .boolean()
               .optional()
               .describe('The carpeta field: filled with each file subfolder.'),
+            docTypes: z
+              .array(
+                z.object({
+                  type: z.string().trim().min(1).max(120),
+                  hint: z.string().trim().max(200).optional(),
+                }),
+              )
+              .max(6)
+              .optional()
+              .describe(
+                'Only with fromDocument: read this field only from documents of these types (the `type` keys from the proposal, with a hint of where the value is in that type). Several types fill different fields of the same row, joined by the key. Omit to read it from any document.',
+              ),
+            fromPath: z
+              .object({
+                level: z.number().int().min(1).max(5),
+                part: z.enum(['secuencia', 'texto', 'codigo', 'fecha', 'mes']),
+              })
+              .optional()
+              .describe(
+                'Fill this field from a piece of the NAME of the file subfolder at `level` (1 = first level below the folder): secuencia (leading number), texto (the words), codigo (the number/code), fecha (date as ISO), mes (month number). Empty and marked for review when the name does not have it. Copy it from the proposal.',
+              ),
           }),
         ),
       )
@@ -140,7 +163,14 @@ export const trackersSyncFromDriveFolder = registerTool({
       .boolean()
       .optional()
       .describe(
-        'Also read the subfolders (up to 3 levels, 2000 files). Pass what the proposal used.',
+        'Also read the subfolders (up to 4 levels, 20000 files). Pass what the proposal used.',
+      ),
+    sheetTypes: z
+      .array(z.string().trim().min(1).max(120))
+      .max(10)
+      .optional()
+      .describe(
+        'Document types (the `sheetTypes` of the proposal) whose spreadsheets are read row by row with the sourceColumn mapping. Pass it when the fields have docTypes; omit it otherwise.',
       ),
     keyFields: z
       .array(z.string().trim().min(1).max(60))
@@ -194,16 +224,39 @@ export const trackersSyncFromDriveFolder = registerTool({
       // Una llamada que dice qué es cada campo (hoja, documento, subcarpeta) se
       // toma al pie de la letra; una antigua, sin nada de eso, lee todo del documento.
       const explicit = input.fields.some(
-        (f) => f.sourceColumn !== undefined || f.fromDocument !== undefined || f.fromFolder,
+        (f) =>
+          f.sourceColumn !== undefined ||
+          f.fromDocument !== undefined ||
+          f.fromFolder ||
+          f.fromPath !== undefined,
       );
       wanted = input.fields.map(
-        ({ sourceColumn: _s, hint: _h, fromDocument: _d, fromFolder: _f, ...field }) =>
-          field as TrackerField,
+        ({
+          sourceColumn: _s,
+          hint: _h,
+          fromDocument: _d,
+          fromFolder: _f,
+          docTypes: _t,
+          fromPath: _p,
+          ...field
+        }) => field as TrackerField,
       );
-      extract = input.fields
-        .filter((f) => f.fromDocument ?? (!explicit && !f.sourceColumn))
-        .filter((f) => f.key !== CARPETA_KEY || f.fromDocument)
-        .map((f) => ({ key: f.key, hint: f.hint ?? '' }));
+      extract = input.fields.flatMap((f): ExtractField[] => {
+        if (f.fromPath) return [{ key: f.key, hint: '', fromPath: f.fromPath }];
+        if (!(f.fromDocument ?? (!explicit && !f.sourceColumn))) return [];
+        if (f.key === CARPETA_KEY && !f.fromDocument) return [];
+        if (f.docTypes?.length)
+          return f.docTypes.map((d) => ({
+            key: f.key,
+            hint: d.hint ?? f.hint ?? '',
+            docType: d.type,
+          }));
+        return [{ key: f.key, hint: f.hint ?? '' }];
+      });
+      if (extract.length > 20)
+        throw new ValidationError(
+          'Entre campos y tipos de documento hay más de 20 lecturas distintas. Quita campos o tipos que no necesites.',
+        );
       sheetMapping = Object.fromEntries(
         input.fields.flatMap((f) => (f.sourceColumn ? [[f.key, f.sourceColumn]] : [])),
       );
@@ -228,7 +281,7 @@ export const trackersSyncFromDriveFolder = registerTool({
         'Una tabla nueva desde una carpeta se propone primero: llama a trackers.propose_from_drive_folder con la carpeta, muéstrale a la persona el markdown (campos, de dónde sale cada uno, clave, duplicados, subcarpetas) y espera su aprobación o sus cambios; después vuelve a llamar aquí con esos `fields`, keyFields, duplicates y recursive.',
       );
     }
-    if (!extract.length && !Object.keys(sheetMapping).length)
+    if (!extract.some((e) => !e.fromPath) && !Object.keys(sheetMapping).length)
       throw new ValidationError(
         'Dime al menos un campo que se lea de los documentos o de las hojas.',
       );
@@ -272,6 +325,9 @@ export const trackersSyncFromDriveFolder = registerTool({
     sheetMapping = Object.fromEntries(
       Object.entries(sheetMapping).filter(([k]) => tracker.fields.some((f) => f.key === k)),
     );
+    // Las hojas de ciertos tipos de documento: la clave reservada del mapeo.
+    if (Object.keys(sheetMapping).length && input.sheetTypes?.length)
+      sheetMapping[SHEET_TYPES_KEY] = input.sheetTypes.join(',');
     // Los campos que alguien llena con algo: documento, hoja o subcarpeta.
     const filled = (key: string) =>
       extractable.some((e) => e.key === key) ||
@@ -327,7 +383,7 @@ export const trackersSyncFromDriveFolder = registerTool({
       notify: input.notify ?? true,
       sheetMapping,
       recursive: input.recursive ?? false,
-      maxDepth: 3,
+      maxDepth: INVENTORY_MAX_DEPTH,
     });
     const queued = await ctx.enqueueJob?.('drive-table/run', {
       organizationId: ctx.organizationId,
@@ -335,17 +391,29 @@ export const trackersSyncFromDriveFolder = registerTool({
     });
 
     const labelOf = (key: string) => tracker.fields.find((f) => f.key === key)?.label;
-    const read = extractable
+    const read = [...new Set(extractable.filter((e) => !e.fromPath).map((e) => e.key))]
+      .map((k) => labelOf(k))
+      .filter(Boolean)
+      .join(', ');
+    const pathRead = extractable
+      .filter((e) => e.fromPath)
       .map((e) => labelOf(e.key))
       .filter(Boolean)
       .join(', ');
-    const fromSheets = Object.keys(sheetMapping).map(labelOf).filter(Boolean).join(', ');
+    const fromSheets = Object.keys(sheetMapping)
+      .filter((k) => k !== SHEET_TYPES_KEY)
+      .map(labelOf)
+      .filter(Boolean)
+      .join(', ');
     const keyLabels = keyFields
       .map((k) => tracker.fields.find((f) => f.key === k)?.label ?? k)
       .join(' + ');
     const lines = [
       `${existing ? `La tabla **${tracker.name}**` : `Creé la tabla **${tracker.name}** (\`${tracker.slug}\`), que`} se va a llenar con los archivos de la carpeta «${folder.name}», cada ${sync.interval_minutes} minutos.`,
-      sync.recursive ? 'Incluye las subcarpetas (hasta 3 niveles).' : '',
+      sync.recursive ? `Incluye las subcarpetas (hasta ${INVENTORY_MAX_DEPTH} niveles).` : '',
+      pathRead
+        ? `Del nombre de las subcarpetas saco: ${pathRead}; si un nombre no trae el dato, queda vacío y la fila por revisar.`
+        : '',
       fromSheets
         ? `De las hojas leo cada fila sin modelo (${fromSheets}); si la hoja cambia, actualizo sus filas; las filas que borren de la hoja NO se borran de la tabla.`
         : '',
@@ -374,7 +442,7 @@ export const trackersSyncFromDriveFolder = registerTool({
 export const trackersProposeFromDriveFolder = registerTool({
   id: 'trackers.propose_from_drive_folder',
   description:
-    'Look inside a Google Drive folder and PROPOSE the company table that will be filled from it, without creating anything. It inventories the folder (spreadsheets, documents, images, files it cannot read, subfolders), reads the spreadsheets (headers and data) and a sample document, and returns the fields with where each comes from (sheet column, document, or the subfolder), why and examples, the key that identifies a record, a duplicate rule when it sees the risk, and whether subfolders are included (they are by default when the folder has them, with a `carpeta` field filled with each file subfolder). Spreadsheets with compatible headers are merged; if some have different headers it says so and asks whether to make one table or several. ALWAYS call this before trackers.sync_from_drive_folder creates a new table: show the returned markdown to the person and wait for their approval or changes, then pass the approved fields to trackers.sync_from_drive_folder. Accepts a folder link, id or name. Read-only; uses the Google credentials of the person who asks.',
+    'Look inside a Google Drive folder and PROPOSE the company table that will be filled from it, without creating anything. It inventories the folder (up to 5000 files and 4 levels of subfolders; beyond that it works from a representative stratified sample and says the estimated real count), reads the spreadsheets (headers and the first rows, however large) and one sample of EACH document type it finds (files grouped by name and extension: e.g. prealerta, manifiesto, formulario DIAN), and returns: the document types with counts, an example and the role of each (base of the rows, complementary, or not useful for what was asked); the fields with where each comes from (sheet column, document type, subfolder, or a piece of a subfolder NAME such as sequence, text, code, date or month, with the detected pattern and 3 real examples); the key that identifies a record (rows from different document types are joined by it); a duplicate rule when it sees the risk. Pass `goal` with what the person wants in the table (e.g. "guide number, pieces, kilos, content") so it picks the base documents; when it is ambiguous it returns `ask` (question <=180 chars, options <=64): ask it with ask_choice instead of guessing. ALWAYS call this before trackers.sync_from_drive_folder creates a new table: show the returned markdown to the person and wait for their approval or changes, then pass the approved fields to trackers.sync_from_drive_folder. Accepts a folder link, id or name. Read-only; uses the Google credentials of the person who asks.',
   inputSchema: z.object({
     folder: z
       .string()
@@ -386,7 +454,15 @@ export const trackersProposeFromDriveFolder = registerTool({
       .boolean()
       .optional()
       .describe(
-        'Omit to include subfolders when the folder has them (up to 3 levels, 500 files); false to read only the folder itself.',
+        'Omit to include subfolders when the folder has them (up to 4 levels, 5000 files before sampling); false to read only the folder itself.',
+      ),
+    goal: z
+      .string()
+      .trim()
+      .max(400)
+      .optional()
+      .describe(
+        'What the person wants to see in the table, in their words (e.g. "guía, piezas, kilos y contenido de cada vuelo"). Decides which document type is the base of each row.',
       ),
   }),
   outputSchema: z.object({
@@ -394,6 +470,9 @@ export const trackersProposeFromDriveFolder = registerTool({
     recursive: z.boolean(),
     inventory: z.object({
       total: z.number().int(),
+      estimatedTotal: z.number().int(),
+      sampled: z.boolean(),
+      sampleSize: z.number().int(),
       sheets: z.number().int(),
       documents: z.number().int(),
       images: z.number().int(),
@@ -402,6 +481,10 @@ export const trackersProposeFromDriveFolder = registerTool({
     }),
     name: z.string(),
     fields: z.array(z.record(z.unknown())),
+    types: z.array(z.record(z.unknown())),
+    sheetTypes: z.array(z.string()),
+    pathPatterns: z.array(z.record(z.unknown())),
+    ask: z.object({ question: z.string(), options: z.array(z.string()) }).nullable(),
     keyFields: z.array(z.string()),
     duplicates: z.record(z.unknown()).nullable(),
     markdown: z.string(),
@@ -412,6 +495,7 @@ export const trackersProposeFromDriveFolder = registerTool({
     const folder = await resolveFolder(drive, input.folder);
     const p = await proposeFromDriveFolder(drive, folder, {
       includeSubfolders: input.includeSubfolders,
+      goal: input.goal,
     });
     const { why: _why, ...duplicates } = p.duplicates ?? { why: '' };
     return {
@@ -419,6 +503,9 @@ export const trackersProposeFromDriveFolder = registerTool({
       recursive: p.recursive,
       inventory: {
         total: p.inventory.total,
+        estimatedTotal: p.inventory.estimatedTotal,
+        sampled: p.inventory.sampled,
+        sampleSize: p.inventory.sampleSize,
         sheets: p.inventory.counts.sheet,
         documents: p.inventory.counts.document,
         images: p.inventory.counts.image,
@@ -427,6 +514,10 @@ export const trackersProposeFromDriveFolder = registerTool({
       },
       name: p.name,
       fields: p.fields as unknown as Record<string, unknown>[],
+      types: p.types as unknown as Record<string, unknown>[],
+      sheetTypes: p.sheetTypes,
+      pathPatterns: p.pathPatterns as unknown as Record<string, unknown>[],
+      ask: p.ask,
       keyFields: p.keyFields,
       duplicates: p.duplicates ? (duplicates as Record<string, unknown>) : null,
       markdown: p.markdown,

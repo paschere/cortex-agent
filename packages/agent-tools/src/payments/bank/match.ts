@@ -296,6 +296,8 @@ export function scoreInvoice(
 ): InvoiceSuggestion | null {
   if (invoice.currency !== credit.currency) return null;
   if (invoice.balance <= 0.004) return null;
+  // Un abono de cero o negativo no paga nada (una reversa no se empareja).
+  if (!Number.isFinite(credit.amount) || credit.amount <= 0.004) return null;
   if (invoice.issuedOn) {
     const gap = daysBetween(invoice.issuedOn, credit.date);
     if (gap != null && gap < 0) return null;

@@ -1,6 +1,7 @@
 import { driveGet } from '../gdrive/client';
 import { XLSX_MIME } from '../kb/spreadsheets';
 import type { ToolContext } from '../types';
+import { docTypeKey } from './doc-types';
 import type { FolderFile } from './plan';
 
 /**
@@ -25,8 +26,18 @@ type DriveAccess = Pick<ToolContext, 'integrations' | 'signal'>;
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
 
-export const INVENTORY_MAX_DEPTH = 3;
-export const INVENTORY_MAX_FILES = 500;
+/** Niveles de subcarpetas que se abren (la raíz es el 0). */
+export const INVENTORY_MAX_DEPTH = 4;
+/**
+ * Archivos que se miran completos para proponer. Pasado este número no se
+ * corta a ciegas: se toma una MUESTRA ESTRATIFICADA (por subcarpeta, por tipo
+ * de documento y por extensión) y se estima cuántos hay de verdad.
+ */
+export const INVENTORY_MAX_FILES = 5000;
+/** Cuántos archivos se listan (sólo metadatos) antes de contar los demás sin guardarlos. */
+export const INVENTORY_LIST_FACTOR = 4;
+/** Subcarpetas que se abren como máximo en un recorrido. */
+export const INVENTORY_MAX_FOLDERS = 3000;
 
 export type FileClass = 'sheet' | 'document' | 'image' | 'unreadable';
 
@@ -80,8 +91,12 @@ export interface FolderNode {
 export interface FolderTree {
   files: FolderFile[];
   folders: FolderNode[];
-  /** Se llegó al tope de archivos: hay más de los que se listaron. */
+  /** Se llegó al tope de lo que se lista: hay más de los que se guardaron. */
   truncated: boolean;
+  /** Archivos vistos en el recorrido, también los que no se guardaron (0205+). */
+  seen?: number;
+  /** Subcarpetas que no se abrieron por el tope de carpetas. */
+  foldersLeft?: number;
   /** Subcarpetas que no se abrieron por la profundidad. */
   tooDeep: string[];
   /** Subcarpetas de la raíz que no se abrieron porque no se pidió recursivo. */
@@ -140,10 +155,12 @@ export async function listFolderTree(
 ): Promise<FolderTree> {
   const recursive = opts.recursive ?? false;
   const maxDepth = opts.maxDepth ?? INVENTORY_MAX_DEPTH;
-  const maxFiles = opts.maxFiles ?? INVENTORY_MAX_FILES;
+  const maxFiles = opts.maxFiles ?? INVENTORY_MAX_FILES * INVENTORY_LIST_FACTOR;
   const tree: FolderTree = {
     files: [],
     folders: [],
+    seen: 0,
+    foldersLeft: 0,
     truncated: false,
     tooDeep: [],
     skipped: [],
@@ -155,9 +172,16 @@ export async function listFolderTree(
   ];
   const seenFiles = new Set<string>();
 
+  let opened = 0;
   while (queue.length) {
     const here = queue.shift();
     if (!here) break;
+    if (opened >= INVENTORY_MAX_FOLDERS) {
+      tree.foldersLeft = (tree.foldersLeft ?? 0) + 1 + queue.length;
+      tree.truncated = true;
+      break;
+    }
+    opened += 1;
     let items: DriveItem[];
     try {
       items = await listChildren(drive, here.id);
@@ -192,12 +216,13 @@ export async function listFolderTree(
         continue;
       }
       if (seenFiles.has(id)) continue; // el mismo archivo por un atajo y directo
+      seenFiles.add(id);
+      count += 1;
+      tree.seen = (tree.seen ?? 0) + 1;
       if (tree.files.length >= maxFiles) {
         tree.truncated = true;
         continue;
       }
-      seenFiles.add(id);
-      count += 1;
       tree.files.push({
         id,
         name: item.name,
@@ -224,8 +249,11 @@ export async function listFolderTree(
 
 export interface FolderInventory {
   recursive: boolean;
+  /** Archivos listados (todos los que se guardaron del recorrido). */
   total: number;
+  /** Conteo por clase sobre TODOS los listados, no sólo la muestra. */
   counts: Record<FileClass, number>;
+  /** Con muestra estratificada, éstas son las de la muestra. */
   sheets: FolderFile[];
   documents: FolderFile[];
   images: FolderFile[];
@@ -237,6 +265,18 @@ export interface FolderInventory {
   problems: string[];
   maxDepth: number;
   maxFiles: number;
+  /** Había más de `maxFiles`: las listas son una muestra representativa. */
+  sampled: boolean;
+  /** Tamaño de la muestra (= total cuando no se muestreó). */
+  sampleSize: number;
+  /** Cuántos archivos hay, estimado cuando no se alcanzó a contar todo. */
+  estimatedTotal: number;
+  /** La estimación es aproximada (se cortó el recorrido). */
+  estimated: boolean;
+  /** Estratos (subcarpeta × tipo × extensión) que cubre la muestra. */
+  strata: number;
+  /** Todos los archivos listados: la propuesta agrupa los tipos sobre esto. */
+  all: FolderFile[];
 }
 
 /** Cuenta lo que hay por clase, con los nombres de lo que no se puede leer y las subcarpetas. */
@@ -247,14 +287,90 @@ export async function inventoryFolder(
 ): Promise<FolderInventory> {
   const maxDepth = opts.maxDepth ?? INVENTORY_MAX_DEPTH;
   const maxFiles = opts.maxFiles ?? INVENTORY_MAX_FILES;
-  const tree = await listFolderTree(drive, folderId, { ...opts, maxDepth, maxFiles });
+  const tree = await listFolderTree(drive, folderId, {
+    ...opts,
+    maxDepth,
+    maxFiles: maxFiles * INVENTORY_LIST_FACTOR,
+  });
   return inventoryOf(tree, { recursive: opts.recursive ?? false, maxDepth, maxFiles });
+}
+
+/**
+ * Una muestra de `n` archivos que representa al conjunto: se reparte entre
+ * ESTRATOS (subcarpeta × tipo de documento × extensión) en proporción a su
+ * tamaño, con al menos un archivo por estrato mientras quepa; dentro de cada
+ * estrato se toman archivos a intervalos regulares. Determinista: la misma
+ * carpeta da la misma muestra.
+ */
+export function stratifiedSample(
+  files: FolderFile[],
+  n: number,
+): { sample: FolderFile[]; strata: number } {
+  if (files.length <= n) return { sample: files, strata: 0 };
+  // Estratos finos (subcarpeta × tipo); si no caben en la muestra se agrupan por
+  // la subcarpeta de más arriba (el mes, el cliente) y, al final, sólo por tipo:
+  // mejor cubrir todo grueso que quedarse con los primeros estratos y olvidar el resto.
+  const keyers: Array<(f: FolderFile) => string> = [
+    (f) => `${f.path ?? ''}\u0000${docTypeKey(f.name, f.mimeType)}`,
+    (f) => `${(f.path ?? '').split(' / ')[0]}\u0000${docTypeKey(f.name, f.mimeType)}`,
+    (f) => docTypeKey(f.name, f.mimeType),
+  ];
+  let buckets = new Map<string, FolderFile[]>();
+  for (const keyer of keyers) {
+    buckets = new Map();
+    for (const f of files) {
+      const key = keyer(f);
+      const list = buckets.get(key) ?? [];
+      list.push(f);
+      buckets.set(key, list);
+    }
+    if (buckets.size <= n) break;
+  }
+  // Dentro de un estrato, ordenados por ruta: tomar a intervalos regulares recorre las subcarpetas.
+  const strata = [...buckets.values()]
+    .map((list) =>
+      list.sort((a, b) => (a.path ?? '').localeCompare(b.path ?? '') || a.id.localeCompare(b.id)),
+    )
+    .sort((a, b) => b.length - a.length);
+  const kept = strata.slice(0, n);
+  const total = kept.reduce((c, s) => c + s.length, 0);
+  const quota = kept.map((s) => Math.max(1, Math.floor((s.length / total) * n)));
+  // Sobran o faltan cupos por los redondeos: se reparte de a uno, del estrato más grande.
+  let used = quota.reduce((c, q) => c + q, 0);
+  for (let i = 0; used > n && i < 10 * kept.length; i++) {
+    const j = i % kept.length;
+    if ((quota[j] as number) > 1) {
+      quota[j] = (quota[j] as number) - 1;
+      used -= 1;
+    }
+  }
+  for (let i = 0; used < n && i < 10 * kept.length; i++) {
+    const j = i % kept.length;
+    if ((quota[j] as number) < (kept[j] as FolderFile[]).length) {
+      quota[j] = (quota[j] as number) + 1;
+      used += 1;
+    }
+  }
+  const sample: FolderFile[] = [];
+  kept.forEach((s, i) => {
+    const q = Math.min(quota[i] as number, s.length);
+    for (let k = 0; k < q; k++) sample.push(s[Math.floor((k * s.length) / q)] as FolderFile);
+  });
+  sample.sort((a, b) => (b.modifiedTime ?? '').localeCompare(a.modifiedTime ?? ''));
+  return { sample: sample.slice(0, n), strata: strata.length };
 }
 
 export function inventoryOf(
   tree: FolderTree,
   opts: { recursive: boolean; maxDepth: number; maxFiles: number },
 ): FolderInventory {
+  const { sample, strata } = stratifiedSample(tree.files, opts.maxFiles);
+  const sampled = sample.length < tree.files.length;
+  const seen = Math.max(tree.seen ?? tree.files.length, tree.files.length);
+  // Si el recorrido se cortó por carpetas sin abrir, se estima con el promedio por carpeta.
+  const opened = Math.max(1, tree.folders.length + 1);
+  const left = tree.foldersLeft ?? 0;
+  const estimatedTotal = left ? Math.round(seen + (seen / opened) * left) : seen;
   const inv: FolderInventory = {
     recursive: opts.recursive,
     total: tree.files.length,
@@ -270,10 +386,16 @@ export function inventoryOf(
     problems: tree.problems,
     maxDepth: opts.maxDepth,
     maxFiles: opts.maxFiles,
+    sampled,
+    sampleSize: sample.length,
+    estimatedTotal,
+    estimated: left > 0 || seen > tree.files.length,
+    strata,
+    all: tree.files,
   };
-  for (const f of tree.files) {
+  for (const f of tree.files) inv.counts[classifyFile(f.mimeType).class] += 1;
+  for (const f of sample) {
     const c = classifyFile(f.mimeType);
-    inv.counts[c.class] += 1;
     if (c.class === 'sheet') inv.sheets.push(f);
     else if (c.class === 'document') inv.documents.push(f);
     else if (c.class === 'image') inv.images.push(f);
@@ -290,9 +412,14 @@ export function inventoryMarkdown(inv: FolderInventory, folderName: string): str
     inv.counts.image ? `${inv.counts.image} imagen(es)` : '',
     inv.counts.unreadable ? `${inv.counts.unreadable} que no puedo leer` : '',
   ].filter(Boolean);
+  const nf = (n: number) => n.toLocaleString('es-CO');
   const lines = [
-    `En «${folderName}» hay ${inv.total} archivo(s)${parts.length ? `: ${parts.join(', ')}` : ''}.`,
+    `En «${folderName}» hay ${inv.estimated ? 'más de ' : ''}${nf(inv.estimated ? Math.max(inv.total, inv.estimatedTotal) : inv.total)} archivo(s)${parts.length ? `: ${parts.join(', ')}` : ''}.`,
   ];
+  if (inv.sampled)
+    lines.push(
+      `Son más de ${nf(inv.maxFiles)}, así que para proponer miré una MUESTRA representativa de ${nf(inv.sampleSize)} archivos repartida por subcarpeta y por tipo de documento (${nf(inv.strata)} combinaciones). La sincronización sí lee todos.`,
+    );
   if (inv.recursive && inv.folders.length)
     lines.push(
       `Incluí ${inv.folders.length} subcarpeta(s) (hasta ${inv.maxDepth} niveles): ${inv.folders
@@ -311,7 +438,10 @@ export function inventoryMarkdown(inv: FolderInventory, folderName: string): str
     lines.push(
       `${inv.tooDeep.length} subcarpeta(s) están a más de ${inv.maxDepth} niveles y no entran.`,
     );
-  if (inv.truncated) lines.push(`Sólo conté los primeros ${inv.maxFiles} archivos; hay más.`);
+  if (inv.truncated)
+    lines.push(
+      `El recorrido llegó a su tope (${nf(inv.total)} archivos guardados); la cifra real es mayor (estimo unos ${nf(inv.estimatedTotal)}).`,
+    );
   if (inv.problems.length)
     lines.push(`No pude abrir: ${inv.problems.map((p) => `«${p}»`).join(', ')} (sin acceso).`);
   for (const u of inv.unreadable.slice(0, 5)) lines.push(`- «${u.name}»: ${u.reason}`);

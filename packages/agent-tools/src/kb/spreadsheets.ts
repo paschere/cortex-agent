@@ -1,11 +1,52 @@
 import { Readable } from 'node:stream';
 import { ValidationError } from '@cortex/core';
 import type { CellValue, Worksheet } from 'exceljs';
+import {
+  detectSpreadsheetFormat,
+  readXlsxMinimal,
+} from '../accounting/providers/spreadsheet-bytes';
 
 export type SheetValue = string | number | boolean | null;
 export interface SheetData {
   name: string;
   rows: SheetValue[][];
+  /** Con `rowLimit`: la hoja tenía más filas que las leídas. */
+  truncated?: boolean;
+  /** Con `rowLimit`: filas que tiene la hoja (encabezado incluido) aunque no se hayan leído. */
+  totalRows?: number;
+}
+
+/**
+ * Cómo se lee una hoja GRANDE. Sin opciones, el comportamiento de siempre: más de
+ * 50.000 celdas se rechaza (consultas del chat, Brain). Con `rowLimit` no se
+ * rechaza nada: se leen el encabezado y las primeras `rowLimit` filas de cada
+ * pestaña, con un tope de columnas y de celdas por archivo, y se marca
+ * `truncated` con las filas que había.
+ */
+export interface ParseSpreadsheetOptions {
+  /** Filas por pestaña, encabezado incluido. */
+  rowLimit?: number;
+  /** Columnas que se leen por fila (por defecto 200). */
+  maxColumns?: number;
+  /** Celdas leídas en todo el archivo (por defecto 2.000.000). */
+  maxCells?: number;
+}
+
+const BLOCK_MAX_COLUMNS = 200;
+const BLOCK_MAX_CELLS = 2_000_000;
+
+/** Una hoja ya leída, recortada a `rowLimit` filas y `maxColumns` columnas. */
+function trimSheet(
+  sheet: SheetData,
+  opts: Required<Pick<ParseSpreadsheetOptions, 'rowLimit' | 'maxColumns'>>,
+): SheetData {
+  const totalRows = sheet.totalRows ?? sheet.rows.length;
+  const rows = sheet.rows.slice(0, opts.rowLimit).map((r) => r.slice(0, opts.maxColumns));
+  // El lector mínimo corta al llegar al tope y no sabe cuántas había: ahí se supone que hay más.
+  const truncated =
+    totalRows > rows.length ||
+    (sheet.totalRows === undefined && sheet.rows.length >= opts.rowLimit);
+  return { name: sheet.name, rows, truncated, totalRows };
 }
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -25,7 +66,30 @@ function cellValue(value: CellValue): SheetValue {
   return null;
 }
 
-export async function parseSpreadsheet(buffer: Buffer, mime: string): Promise<SheetData[]> {
+function limitSheets(raw: SheetData[]): SheetData[] {
+  if (raw.length > 20) throw new ValidationError('Usa un archivo de hasta 20 hojas.');
+  let cells = 0;
+  for (const sheet of raw) {
+    for (const row of sheet.rows) {
+      cells += row.length;
+      if (cells > 50_000) throw new ValidationError('El archivo supera 50.000 celdas. Divídelo.');
+    }
+  }
+  return raw;
+}
+
+export async function parseSpreadsheet(
+  buffer: Buffer,
+  mime: string,
+  options: ParseSpreadsheetOptions = {},
+): Promise<SheetData[]> {
+  const block = options.rowLimit
+    ? {
+        rowLimit: options.rowLimit,
+        maxColumns: options.maxColumns ?? BLOCK_MAX_COLUMNS,
+        maxCells: options.maxCells ?? BLOCK_MAX_CELLS,
+      }
+    : null;
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   if (mime === 'text/csv') {
@@ -44,12 +108,37 @@ export async function parseSpreadsheet(buffer: Buffer, mime: string): Promise<Sh
       },
     });
   } else {
-    await workbook.xlsx.load(buffer);
+    try {
+      await workbook.xlsx.load(buffer);
+    } catch (err) {
+      // Un .xlsx de otra librería que exceljs no entiende: lector mínimo propio.
+      if (detectSpreadsheetFormat(buffer) !== 'xlsx') throw err;
+      const raw = await readXlsxMinimal(buffer, block ? { maxRows: block.rowLimit } : {}).catch(
+        () => {
+          throw err;
+        },
+      );
+      if (block) return raw.map((sheet) => trimSheet(sheet, block));
+      return limitSheets(raw);
+    }
   }
   if (workbook.worksheets.length > 20)
     throw new ValidationError('Usa un archivo de hasta 20 hojas.');
   let cells = 0;
   const sheets = workbook.worksheets.map((sheet: Worksheet) => {
+    if (block) {
+      // Hoja grande: encabezado + primeras filas, sin rechazar por el tamaño.
+      const width = Math.min(sheet.columnCount, block.maxColumns);
+      const rows: SheetValue[][] = [];
+      let seen = 0;
+      sheet.eachRow({ includeEmpty: true }, (row) => {
+        seen += 1;
+        if (rows.length >= block.rowLimit || cells + width > block.maxCells) return;
+        cells += width;
+        rows.push(Array.from({ length: width }, (_, i) => cellValue(row.getCell(i + 1).value)));
+      });
+      return { name: sheet.name, rows, truncated: seen > rows.length, totalRows: seen };
+    }
     if (sheet.rowCount * sheet.columnCount > 50_000) {
       throw new ValidationError(
         'La hoja supera 50.000 celdas. Divide el archivo para consultarlo.',

@@ -8,8 +8,9 @@ const wait = () => new Promise((r) => setTimeout(r, 450));
 
 export function StatementsFixture({
   dark,
+  failRefresh,
   ...props
-}: Omit<StatementsScreenProps, 'actions'> & { dark: boolean }) {
+}: Omit<StatementsScreenProps, 'actions'> & { dark: boolean; failRefresh?: boolean }) {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   }, [dark]);
@@ -21,6 +22,12 @@ export function StatementsFixture({
           actions={{
             async refresh() {
               await wait();
+              if (failRefresh)
+                return {
+                  ok: false as const,
+                  error:
+                    'No pude leer el balance general de Siigo: el reporte llegó en un formato que no esperaba (de mentira).',
+                };
               return {
                 ok: true,
                 note: 'Traje el balance general y el estado de resultados (de mentira).',

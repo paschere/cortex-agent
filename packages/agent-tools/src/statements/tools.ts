@@ -3,6 +3,7 @@ import { bogotaToday } from '../commitments/shape';
 import { registerTool } from '../index';
 import { moneyText } from '../ledger/shape';
 import { providerName } from './balance';
+import { MISSING_EXPENSES_HELP } from './headline';
 import { INCOME_LINE_META, pctChange } from './income';
 import { pctText } from './indicators';
 import { type StatementsResult, loadStatements } from './store';
@@ -48,13 +49,26 @@ export function statementsMarkdown(
       `| Renglón | ${monthName(r.throughMonth)} | Acumulado ${r.year} | Acumulado ${r.year - 1} | Cambio |`,
       '|---|---:|---:|---:|---:|',
     );
+    const UTILIDAD = new Set(['utilidad_bruta', 'utilidad_operacional', 'utilidad_neta']);
     for (const line of INCOME_LINE_META) {
       const label = line.subtotal ? `**${line.label}**` : line.label;
       const ytdPrev = r.income.ytdPrev?.[line.key];
+      if (UTILIDAD.has(line.key) && r.income.expensesMissingYtd) {
+        out.push(`| ${label} | sin calcular | sin calcular | — | — |`);
+        continue;
+      }
       out.push(
         `| ${label} | ${money(r.income.month[line.key])} | ${money(r.income.ytd[line.key])} | ${ytdPrev === undefined ? '—' : money(ytdPrev)} | ${change(r.income.ytd[line.key], ytdPrev)} |`,
       );
     }
+    if (r.income.expensesMissingYtd)
+      out.push(
+        `ATENCIÓN: ${MISSING_EXPENSES_HELP} No des una utilidad ni un margen como si fueran reales.`,
+      );
+    else if (r.income.monthsWithoutExpenses.length)
+      out.push(
+        `Ojo: ${r.income.monthsWithoutExpenses.join(', ')} tienen ventas y ningún gasto registrado; la utilidad del año puede estar inflada.`,
+      );
     out.push(
       'De dónde sale: el libro de plata, lo que de verdad entró y salió (sin causación ni depreciaciones). Costo, variables y fijos según cómo se clasifican las categorías en /estados.',
     );

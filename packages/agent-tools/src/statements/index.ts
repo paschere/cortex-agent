@@ -21,6 +21,7 @@ export {
   INCOME_LINE_META,
   incomeStatement,
   incomeValues,
+  expensesMissing as incomeExpensesMissing,
   pctChange as statementPctChange,
 } from './income';
 export type { IncomeLineKey, IncomeLineMeta, IncomeStatement, IncomeValues } from './income';
@@ -31,6 +32,9 @@ export {
   providerName as accountingProviderLabel,
 } from './balance';
 export type { BalanceLine, BalanceSheet } from './balance';
+export { MISSING_EXPENSES_HELP, headline as statementsHeadline } from './headline';
+export type { Headline as StatementsHeadline } from './headline';
+export { humanReportError } from './report-errors';
 export { computeIndicators, daysText, pctText, ratioText } from './indicators';
 export type { Indicator, IndicatorInputs, IndicatorStatus } from './indicators';
 export {

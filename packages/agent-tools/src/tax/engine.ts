@@ -4,6 +4,7 @@ import {
   digitIndex,
   dueByDigit,
   nextMonth,
+  nextTaxBusinessDay,
   nthBusinessDay,
 } from './calendar-co';
 import {
@@ -443,8 +444,10 @@ export function buildTaxCalendar(profile: ProfileForEngine, year: number): TaxCa
     if (change && changeYear !== null) {
       const next = nextMonth(change.slice(0, 7), 1);
       const [ny, nm] = next.split('-').map(Number) as [number, number];
-      const due = new Date(Date.UTC(ny, nm, 0)).toISOString().slice(0, 10);
-      if (Number(due.slice(0, 4)) === year)
+      const monthEnd = new Date(Date.UTC(ny, nm, 0)).toISOString().slice(0, 10);
+      // Último día del mes siguiente; si es sábado, domingo o festivo, el hábil que sigue.
+      const due = nextTaxBusinessDay(monthEnd);
+      if (Number(monthEnd.slice(0, 4)) === year)
         push({
           key: `rub:${change}`,
           kind: 'rub',

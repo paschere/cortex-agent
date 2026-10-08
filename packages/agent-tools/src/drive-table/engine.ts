@@ -25,6 +25,8 @@ import {
   MAX_SCAN_PAGES,
   type PlannedFileRow,
   type RunTotals,
+  SHEETS_PER_RUN,
+  SHEET_ROWS_PER_FILE,
   extractionPrompt,
   extractionSchema,
   extractionSystem,
@@ -36,6 +38,7 @@ import {
   sameValues,
 } from './plan';
 import { readSheetRows } from './sheet-read';
+import { pathFieldValues, routeFile, syncConfigOf } from './sync-config';
 
 /**
  * UNA CARPETA DE DRIVE QUE LLENA UNA TABLA (migración 0164) — el motor.
@@ -66,7 +69,8 @@ export type DriveAccess = Pick<ToolContext, 'integrations' | 'signal'>;
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const MAX_FOLDER_FILES = 2000;
+/** Archivos de la carpeta que la sincronización lista (sólo metadatos); la lectura va de a 10 por corrida. */
+const MAX_FOLDER_FILES = 20_000;
 
 export interface DriveFolderSyncRow {
   id: string;
@@ -209,9 +213,10 @@ const READABLE_MIMES = new Set([
 
 const SHEET_NATIVE = 'application/vnd.google-apps.spreadsheet';
 
-async function parseSheets(bytes: Buffer, mime: string): Promise<SheetData[]> {
+async function parseSheets(bytes: Buffer, mime: string, rowLimit: number): Promise<SheetData[]> {
   try {
-    return await parseSpreadsheet(bytes, mime);
+    // Una hoja grande no se rechaza: se leen el encabezado y las primeras filas.
+    return await parseSpreadsheet(bytes, mime, { rowLimit });
   } catch (err) {
     throw new UnreadableFileError(`No pude abrir la hoja: ${(err as Error).message.slice(0, 160)}`);
   }
@@ -226,13 +231,19 @@ async function parseSheets(bytes: Buffer, mime: string): Promise<SheetData[]> {
 export async function readDriveFile(
   drive: DriveAccess,
   file: Pick<FolderFile, 'id' | 'name' | 'mimeType' | 'size'>,
-  opts: { sheetRows?: boolean } = {},
+  opts: {
+    sheetRows?: boolean;
+    /** Filas de datos que se leen de cada pestaña (por defecto, el tope de la sincronización). */
+    sheetRowLimit?: number;
+  } = {},
 ): Promise<DriveRead> {
+  const rowLimit = (opts.sheetRowLimit ?? SHEET_ROWS_PER_FILE) + 1; // + el encabezado
   const enc = encodeURIComponent(file.id);
   let text: string;
   if (file.mimeType === SHEET_NATIVE) {
     const bytes = await driveGetBytes(api(drive), `/files/${enc}/export`, { mimeType: XLSX_MIME });
-    if (opts.sheetRows) return { kind: 'sheet', sheets: await parseSheets(bytes, XLSX_MIME) };
+    if (opts.sheetRows)
+      return { kind: 'sheet', sheets: await parseSheets(bytes, XLSX_MIME, rowLimit) };
     text = (await parseDocument(bytes, XLSX_MIME)).text;
   } else if (
     file.mimeType === 'application/vnd.google-apps.document' ||
@@ -259,7 +270,7 @@ export async function readDriveFile(
       supportsAllDrives: 'true',
     });
     if (opts.sheetRows && (file.mimeType === XLSX_MIME || file.mimeType === 'text/csv'))
-      return { kind: 'sheet', sheets: await parseSheets(bytes, file.mimeType) };
+      return { kind: 'sheet', sheets: await parseSheets(bytes, file.mimeType, rowLimit) };
     let parsed: Awaited<ReturnType<typeof parseDocument>>;
     try {
       parsed = await parseDocument(bytes, file.mimeType);
@@ -416,14 +427,32 @@ export async function prepareDriveFolderRun(
     maxDepth: sync.max_depth ?? 3,
     maxFiles: MAX_FOLDER_FILES,
   });
-  const { data, error } = await db
-    .from('drive_folder_sync_files')
-    .select('file_id, revision, status, attempts, folder_path, tracker_row_ids')
-    .eq('sync_id', sync.id)
-    .limit(5000);
-  if (error) throw error;
-  const ledger = (data ?? []) as LedgerEntry[];
-  const picked = pickFiles(files, ledger, FILES_PER_RUN);
+  // El libro por páginas: con miles de archivos un solo select se queda corto
+  // y todo lo que no entrara se leería otra vez en cada corrida.
+  const ledger: LedgerEntry[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db
+      .from('drive_folder_sync_files')
+      .select('file_id, revision, status, attempts, folder_path, tracker_row_ids')
+      .eq('sync_id', sync.id)
+      .order('file_id')
+      .range(from, from + 999);
+    if (error) throw error;
+    const page = (data ?? []) as LedgerEntry[];
+    ledger.push(...page);
+    if (page.length < 1000) break;
+  }
+  const cfg = syncConfigOf(sync);
+  const hasMapping = Object.keys(cfg.mapping).length > 0;
+  // Las hojas con mapeo no pasan por el modelo: tienen su propio cupo por corrida.
+  const picked = pickFiles(
+    files,
+    ledger,
+    FILES_PER_RUN,
+    hasMapping
+      ? { cap: SHEETS_PER_RUN, isSheet: (f) => classifyFile(f.mimeType).class === 'sheet' }
+      : undefined,
+  );
   const due = new Set(picked.now.map((f) => f.id));
   return {
     tracker: {
@@ -586,20 +615,36 @@ export async function processDriveFile(
   };
 
   try {
-    // Una hoja de cálculo con mapeo aprobado se lee fila por fila, sin modelo.
-    const mapping = sync.sheet_mapping ?? {};
-    const sheetMode =
-      classifyFile(file.mimeType).class === 'sheet' && Object.keys(mapping).length > 0;
+    const cfg = syncConfigOf(sync);
+    const tableKeys = new Set(tracker.fields.map((f) => f.key));
+    const isSheetFile = classifyFile(file.mimeType).class === 'sheet';
+    const route = routeFile(cfg, file, isSheetFile, tableKeys);
+    if (route.kind === 'skip') {
+      // Un tipo de documento que la tabla no usa: ni se descarga ni se lee.
+      await record({
+        status: 'ok',
+        notes: [route.reason],
+        attempts: nextAttempts(input.ledger, file.revision, 'none'),
+      });
+      return { ...base, status: 'ok' };
+    }
+    const mapping = cfg.mapping;
+    const sheetMode = route.sheet;
     const read = await readDriveFile(drive, file, { sheetRows: sheetMode });
-    const extract = sync.extract_fields.filter((e) => tracker.fields.some((f) => f.key === e.key));
+    const extract = route.extract;
+    // Los campos de la ruta (mes, consecutivo, vuelo, fecha…) salen del nombre de
+    // las subcarpetas; lo que el nombre no trae queda vacío y por revisar.
+    const fromPath = pathFieldValues(cfg, path, tracker.fields);
     // «Carpeta» se llena sola con la subcarpeta del archivo, salvo que la
     // hoja o el documento ya traigan ese dato.
-    const fixed: Record<string, string | number> =
-      tracker.fields.some((f) => f.key === CARPETA_KEY) &&
+    const fixed: Record<string, string | number> = {
+      ...(tracker.fields.some((f) => f.key === CARPETA_KEY) &&
       !extract.some((e) => e.key === CARPETA_KEY) &&
       !(CARPETA_KEY in mapping)
         ? { [CARPETA_KEY]: path || '(raíz)' }
-        : {};
+        : {}),
+      ...fromPath.values,
+    };
 
     let plan: { rows: PlannedFileRow[]; notes: string[] };
     if (read.kind === 'sheet') {
@@ -610,6 +655,9 @@ export async function processDriveFile(
         fields: tracker.fields,
         keyFields: sync.key_fields,
         fileId: file.id,
+        cap: SHEET_ROWS_PER_FILE,
+        fixed,
+        joinByKey: cfg.byType,
       });
       plan = {
         rows: sheet.rows.map((r) => ({ ...r, values: { ...r.values, ...fixed } })),
@@ -668,6 +716,16 @@ export async function processDriveFile(
         });
       }
     }
+    // Lo que el nombre de la subcarpeta no trajo marca cada fila para revisar.
+    if (fromPath.review.length)
+      plan = {
+        ...plan,
+        rows: plan.rows.map((r) => ({
+          ...r,
+          review: [...new Set([...r.review, ...fromPath.review])],
+        })),
+        notes: plan.rows.length ? plan.notes : [...plan.notes, ...fromPath.review],
+      };
 
     // Un archivo de un solo registro que cambió de subcarpeta cuando la carpeta
     // es parte de su clave: la misma fila cambia de clave, no se duplica.

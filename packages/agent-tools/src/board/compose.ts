@@ -1,8 +1,9 @@
 import type { BudgetVsActual } from '../budget/shape';
 import { budgetOverruns } from '../budget/shape';
 import { formatMoney } from '../ledger/forecast-shared';
+import type { Headline } from '../statements/headline';
 import type { IncomeStatement } from '../statements/income';
-import { pctChange } from '../statements/income';
+import { isNewFromZero, pctChange } from '../statements/income';
 import type { Indicator } from '../statements/indicators';
 import { pctText } from '../statements/indicators';
 import {
@@ -28,6 +29,11 @@ export interface BoardInput {
   company: string;
   today: string;
   income: IncomeStatement | null;
+  /**
+   * Las cifras grandes del año con su fuente (la misma precedencia que las
+   * tarjetas de /estados): contable de Siigo si trae datos; si no, caja.
+   */
+  headline?: Headline | null;
   budget: { name: string; approved: boolean; vs: BudgetVsActual } | null;
   cash: {
     total: number | null;
@@ -86,7 +92,7 @@ export function composeBoard(input: BoardInput): Composed {
   };
   const change = (key: string, label: string, now: number, before: number | null | undefined) => {
     const c = pctChange(now, before);
-    if (c === null) return null;
+    if (c === null) return isNewFromZero(now, before) ? 'nuevo' : null;
     return fact(key, label, c * 100, `${c > 0 ? '+' : ''}${pctText(c)}`);
   };
   const year = Number(input.period.slice(0, 4));
@@ -119,41 +125,66 @@ export function composeBoard(input: BoardInput): Composed {
       inc.month.ingresos,
       inc.monthPrevYear?.ingresos,
     );
-    const neta = fact('utilidad_neta_mes', `Resultado neto de ${mName}`, inc.month.utilidad_neta);
-    const operacional = fact(
-      'utilidad_operacional_mes',
-      `Utilidad operacional de ${mName}`,
-      inc.month.utilidad_operacional,
-    );
-    const ventasYtd = fact('ventas_ytd', `Ventas de enero a ${mName}`, inc.ytd.ingresos);
-    const netaYtd = fact(
-      'utilidad_neta_ytd',
-      `Resultado neto de enero a ${mName}`,
-      inc.ytd.utilidad_neta,
-    );
-    const ytdPrev = inc.ytdPrev
-      ? fact(
-          'ventas_ytd_anio_anterior',
-          `Ventas de enero a ${mName} de ${year - 1}`,
-          inc.ytdPrev.ingresos,
-        )
-      : null;
+    const h = input.headline ?? null;
+    const contable = h?.basis === 'contable';
+    const missMonth = inc.expensesMissingMonth;
+    const missYtd = contable ? h.missingExpenses : inc.expensesMissingYtd;
+    const ytdSales = (contable ? h.sales.now : inc.ytd.ingresos) ?? 0;
+    const ytdSalesPrev = contable ? h.sales.prev : (inc.ytdPrev?.ingresos ?? null);
+    const ytdNet = contable ? h.net.now : inc.ytd.utilidad_neta;
+    // Sin gastos en la fuente no se afirma utilidad: se dice que faltan.
+    const neta = missMonth
+      ? 'sin calcular (faltan los gastos)'
+      : fact('utilidad_neta_mes', `Resultado neto de ${mName}`, inc.month.utilidad_neta);
+    const operacional = missMonth
+      ? 'sin calcular (faltan los gastos)'
+      : fact(
+          'utilidad_operacional_mes',
+          `Utilidad operacional de ${mName}`,
+          inc.month.utilidad_operacional,
+        );
+    const ventasYtd = fact('ventas_ytd', `Ventas de enero a ${mName}`, ytdSales);
+    const netaYtd =
+      missYtd || ytdNet === null
+        ? 'sin calcular (faltan los gastos)'
+        : fact('utilidad_neta_ytd', `Resultado neto de enero a ${mName}`, ytdNet);
+    const ytdPrev =
+      ytdSalesPrev !== null
+        ? fact(
+            'ventas_ytd_anio_anterior',
+            `Ventas de enero a ${mName} de ${year - 1}`,
+            ytdSalesPrev,
+          )
+        : null;
     const ytdCambio = change(
       'ventas_ytd_cambio',
       'Cambio de las ventas del año frente al anterior',
-      inc.ytd.ingresos,
-      inc.ytdPrev?.ingresos,
+      ytdSales,
+      ytdSalesPrev,
     );
     res.push(
       `Ventas de ${mName}: ${ventas}${ventasPrev ? ` (en ${mName} de ${year - 1}: ${ventasPrev}${ventasCambio ? `, ${ventasCambio}` : ''})` : ''}. Utilidad operacional ${operacional}; resultado neto ${neta}.`,
       `En el año: ventas ${ventasYtd}${ytdPrev ? ` contra ${ytdPrev} a la misma altura de ${year - 1}${ytdCambio ? ` (${ytdCambio})` : ''}` : ''}; resultado neto ${netaYtd}.`,
-      'Cifras de caja (lo que entró y salió del banco), sin causación ni depreciaciones.',
+      contable
+        ? `Fuente: del año, ${h.sourceLabel} (estado de resultados causado, el mismo de las tarjetas de /estados); las cifras de ${mName} son de caja (libro de plata: lo que entró y salió del banco), sin causación ni depreciaciones, así que pueden no cuadrar con las del año.`
+        : 'Fuente: libro de plata (de caja: lo que entró y salió del banco), sin causación ni depreciaciones.',
     );
+    if (missYtd || missMonth) {
+      res.push(
+        'Atención: hay ventas pero no hay gastos registrados en la fuente, así que el resultado y los márgenes no se afirman. Faltan los gastos: extractos del banco, el programa contable o las facturas de compra.',
+      );
+      next.push(
+        'Cargar los gastos (extractos del banco, Siigo o facturas de compra) para poder calcular la utilidad.',
+      );
+    } else if (inc.monthsWithoutExpenses.length)
+      res.push(
+        `Ojo: ${inc.monthsWithoutExpenses.length === 1 ? 'un mes tiene' : `${inc.monthsWithoutExpenses.length} meses tienen`} ventas y ningún gasto registrado (${inc.monthsWithoutExpenses.join(', ')}): el resultado del año puede estar inflado.`,
+      );
     summary.push(
       `En ${mName} las ventas fueron ${ventas}${ventasCambio ? ` (${ventasCambio} frente a ${mName} de ${year - 1})` : ''} y el resultado neto ${neta}.`,
       `En lo que va del año las ventas suman ${ventasYtd}${ytdCambio ? ` (${ytdCambio} frente al año anterior)` : ''} y el resultado ${netaYtd}.`,
     );
-    if (inc.month.utilidad_neta < 0)
+    if (!missMonth && inc.month.utilidad_neta < 0)
       next.push(`Revisar por qué ${mName} cerró con resultado negativo (${neta}).`);
   } else res.push('No se pudo leer el estado de resultados.');
 
@@ -184,11 +215,14 @@ export function composeBoard(input: BoardInput): Composed {
     const iA = fact('real_ingresos', 'Ingresos reales a la fecha', t.income.actual);
     const eB = fact('presupuesto_gastos', 'Gastos presupuestados a la fecha', t.expense.budget);
     const eA = fact('real_gastos', 'Gastos reales a la fecha', t.expense.actual);
+    const noExp = t.expensesMissing;
     res.push(
-      `Contra el presupuesto${b.approved ? '' : ' (borrador, no aprobado)'} de enero a ${mName}: ingresos ${iA} de ${iB}${iP ? ` (${iP})` : ''}; gastos ${eA} de ${eB}${eP ? ` (${eP})` : ''}.`,
+      `Contra el presupuesto${b.approved ? '' : ' (borrador, no aprobado)'} de enero a ${mName}: ingresos ${iA} de ${iB}${iP ? ` (${iP})` : ''}; ${noExp ? `gastos: no hay gastos registrados (presupuestados ${eB}), no se puede comparar` : `gastos ${eA} de ${eB}${eP ? ` (${eP})` : ''}`}.`,
     );
     summary.push(
-      `Contra el presupuesto, los ingresos del año van en ${iP ?? iA} y los gastos en ${eP ?? eA}.`,
+      noExp
+        ? `Contra el presupuesto, los ingresos del año van en ${iP ?? iA}; los gastos no se pueden comparar porque no hay gastos registrados.`
+        : `Contra el presupuesto, los ingresos del año van en ${iP ?? iA} y los gastos en ${eP ?? eA}.`,
     );
     table = {
       columns: [
@@ -204,9 +238,13 @@ export function composeBoard(input: BoardInput): Composed {
         return [
           r.label,
           fm(cell?.budgetToDate ?? 0),
-          cell?.actual === null || cell?.actual === undefined ? '—' : fm(cell.actual),
+          cell?.light === 'sin_datos'
+            ? 'sin datos'
+            : cell?.actual === null || cell?.actual === undefined
+              ? '—'
+              : fm(cell.actual),
           fm(r.ytd.budget),
-          fm(r.ytd.actual),
+          r.ytd.light === 'sin_datos' ? 'sin datos' : fm(r.ytd.actual),
         ];
       }),
     };

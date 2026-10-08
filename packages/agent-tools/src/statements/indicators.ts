@@ -48,6 +48,12 @@ export interface IndicatorInputs {
   fixedExpenses: number;
   operatingIncome: number;
   netIncome: number;
+  /**
+   * Hay ventas y ningún gasto en la fuente: márgenes, EBITDA y punto de
+   * equilibrio saldrían inflados (100 %), así que quedan sin calcular y la
+   * nota dice qué falta.
+   */
+  expensesMissing?: boolean;
   /** Ventas facturadas del período (cartera); sin dato, las ventas cobradas. */
   invoiced: number | null;
   /** Compras facturadas del período (proveedores); sin dato, costo + variables. */
@@ -112,8 +118,12 @@ export function computeIndicators(i: IndicatorInputs): Indicator[] {
   });
   const revenue = inp(`Ventas (${i.periodLabel})`, i.revenue, i.pnlSource);
   const hasRevenue = i.revenue > 0.5;
+  const noExpenses =
+    'Hay ventas pero ningún gasto registrado: no se puede calcular. Trae los gastos (extractos del banco, Siigo o facturas de compra).';
   const noRevenue = 'No hay ventas en el período: el margen no se puede calcular.';
-  const ratio = (num: number) => (hasRevenue ? num / i.revenue : null);
+  const blocked = Boolean(i.expensesMissing) && hasRevenue;
+  const ratio = (num: number) => (hasRevenue && !blocked ? num / i.revenue : null);
+  const profitNote = hasRevenue ? (blocked ? noExpenses : null) : noRevenue;
   const days = i.months * (365 / 12);
   const out: Indicator[] = [];
 
@@ -129,8 +139,8 @@ export function computeIndicators(i: IndicatorInputs): Indicator[] {
         unit: 'pct',
         formula: '(Ventas − costo de ventas) ÷ ventas',
         inputs: [revenue, inp('Costo de ventas', i.costOfSales, i.pnlSource)],
-        note: hasRevenue ? null : noRevenue,
-        status: hasRevenue ? (gross < 0 ? 'alerta' : null) : null,
+        note: profitNote,
+        status: hasRevenue && !blocked ? (gross < 0 ? 'alerta' : null) : null,
         goodWhen: 'up',
       },
       c,
@@ -146,8 +156,8 @@ export function computeIndicators(i: IndicatorInputs): Indicator[] {
         unit: 'pct',
         formula: 'Utilidad operacional ÷ ventas',
         inputs: [revenue, inp('Utilidad operacional', i.operatingIncome, i.pnlSource)],
-        note: hasRevenue ? null : noRevenue,
-        status: hasRevenue ? (i.operatingIncome < 0 ? 'alerta' : 'bien') : null,
+        note: profitNote,
+        status: hasRevenue && !blocked ? (i.operatingIncome < 0 ? 'alerta' : 'bien') : null,
         goodWhen: 'up',
       },
       c,
@@ -163,8 +173,8 @@ export function computeIndicators(i: IndicatorInputs): Indicator[] {
         unit: 'pct',
         formula: 'Utilidad neta ÷ ventas',
         inputs: [revenue, inp('Utilidad neta', i.netIncome, i.pnlSource)],
-        note: hasRevenue ? null : noRevenue,
-        status: hasRevenue ? (i.netIncome < 0 ? 'alerta' : 'bien') : null,
+        note: profitNote,
+        status: hasRevenue && !blocked ? (i.netIncome < 0 ? 'alerta' : 'bien') : null,
         goodWhen: 'up',
       },
       c,
@@ -176,12 +186,13 @@ export function computeIndicators(i: IndicatorInputs): Indicator[] {
         key: 'ebitda',
         label: 'EBITDA aproximado',
         group: 'rentabilidad',
-        value: i.operatingIncome,
+        value: i.expensesMissing && hasRevenue ? null : i.operatingIncome,
         unit: 'money',
         formula:
           'Utilidad operacional antes de gastos financieros e impuestos. Aproximado: no suma depreciaciones porque el libro de caja no las tiene.',
         inputs: [inp('Utilidad operacional', i.operatingIncome, i.pnlSource)],
-        status: i.operatingIncome < 0 ? 'alerta' : 'bien',
+        note: i.expensesMissing && hasRevenue ? noExpenses : null,
+        status: i.expensesMissing && hasRevenue ? null : i.operatingIncome < 0 ? 'alerta' : 'bien',
         goodWhen: 'up',
       },
       c,
@@ -415,7 +426,8 @@ export function computeIndicators(i: IndicatorInputs): Indicator[] {
   );
 
   // --- Punto de equilibrio ---------------------------------------------------
-  const contribution = hasRevenue ? 1 - (i.costOfSales + i.variableExpenses) / i.revenue : null;
+  const contribution =
+    hasRevenue && !blocked ? 1 - (i.costOfSales + i.variableExpenses) / i.revenue : null;
   const monthlyFixed = i.months > 0 ? i.fixedExpenses / i.months : i.fixedExpenses;
   const breakEven =
     contribution !== null && contribution > 0.001 ? monthlyFixed / contribution : null;
@@ -435,7 +447,7 @@ export function computeIndicators(i: IndicatorInputs): Indicator[] {
           inp('Costo de ventas', i.costOfSales, i.pnlSource),
           inp('Gastos variables', i.variableExpenses, i.pnlSource),
         ],
-        note: hasRevenue ? null : noRevenue,
+        note: profitNote,
         goodWhen: 'up',
       },
       c,
@@ -469,7 +481,7 @@ export function computeIndicators(i: IndicatorInputs): Indicator[] {
           breakEven === null
             ? contribution !== null
               ? 'El costo y los gastos variables se comen todas las ventas: no hay punto de equilibrio.'
-              : noRevenue
+              : profitNote
             : 'Depende de qué categorías son fijas y cuáles variables: cámbialo en «Cómo se clasifican los gastos».',
         status:
           breakEven === null

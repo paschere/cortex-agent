@@ -151,6 +151,20 @@ export function incomeValues(m: PnlMonth, classes: CategoryClasses): IncomeValue
   };
 }
 
+/** Lo que sale de la empresa en el período (todos los gastos, sin importar la clase). */
+export function totalExpenses(v: IncomeValues): number {
+  return round2(v.costo + v.gastos_variables + v.gastos_fijos + v.gastos_financieros + v.impuestos);
+}
+
+/**
+ * Hay ingresos pero NINGÚN gasto registrado: la utilidad y los márgenes serían
+ * el 100 % de las ventas, una cifra inventada por lo que falta en la fuente.
+ * Con eso no se afirma utilidad: se dice que faltan los gastos.
+ */
+export function expensesMissing(v: IncomeValues): boolean {
+  return v.ingresos + v.otros_ingresos > 0.5 && totalExpenses(v) < 0.5;
+}
+
 export function addValues(a: IncomeValues, b: IncomeValues): IncomeValues {
   const out = emptyValues();
   for (const k of INCOME_LINES) out[k] = round2(a[k] + b[k]);
@@ -173,7 +187,13 @@ export interface IncomeStatement {
   throughMonth: number;
   /** El mes `throughMonth` va en curso (hoy está dentro de él). */
   partialMonth: boolean;
-  months: Array<{ month: string; values: IncomeValues; hasData: boolean }>;
+  months: Array<{
+    month: string;
+    values: IncomeValues;
+    hasData: boolean;
+    /** Hubo ingresos y ningún gasto: la utilidad de ese mes no se puede afirmar. */
+    expensesMissing: boolean;
+  }>;
   /** Del 1 de enero al cierre de `throughMonth`. */
   ytd: IncomeValues;
   /** Los mismos meses del año anterior, si hay datos de ese año. */
@@ -184,6 +204,14 @@ export interface IncomeStatement {
   /** El mes anterior a `throughMonth`. */
   monthPrev: IncomeValues | null;
   categories: CategoryDetail[];
+  /** En el acumulado hay ingresos y ningún gasto registrado. */
+  expensesMissingYtd: boolean;
+  /** En `throughMonth` hay ingresos y ningún gasto registrado. */
+  expensesMissingMonth: boolean;
+  /** Meses con ingresos y sin gastos (la utilidad de esos meses no es confiable). */
+  monthsWithoutExpenses: string[];
+  /** Cuántos de los meses del tramo del año anterior tienen datos (de `throughMonth`). */
+  prevMonthsWithData: number;
   /** Hay nómina doblada como un solo total (quien mira no administra). */
   payrollConfidential: boolean;
 }
@@ -213,17 +241,26 @@ export function incomeStatement(
   let ytd = emptyValues();
   let prev = emptyValues();
   let prevHas = false;
+  let prevMonthsWithData = 0;
   const catYtd = new Map<string, number>();
   const catPrev = new Map<string, number>();
   for (let m = 1; m <= opts.throughMonth; m++) {
     const cur = byMonth.get(key(opts.year, m));
     const values = cur ? incomeValues(cur, opts.classes) : emptyValues();
-    months.push({ month: key(opts.year, m), values, hasData: hasData(cur) });
+    months.push({
+      month: key(opts.year, m),
+      values,
+      hasData: hasData(cur),
+      expensesMissing: expensesMissing(values),
+    });
     ytd = addValues(ytd, values);
     for (const [c, v] of Object.entries(cur?.byCategory ?? {}))
       catYtd.set(c, (catYtd.get(c) ?? 0) + v);
     const old = byMonth.get(key(opts.year - 1, m));
-    if (hasData(old)) prevHas = true;
+    if (hasData(old)) {
+      prevHas = true;
+      prevMonthsWithData += 1;
+    }
     if (old) {
       prev = addValues(prev, incomeValues(old, opts.classes));
       for (const [c, v] of Object.entries(old.byCategory))
@@ -257,6 +294,10 @@ export function incomeStatement(
     ytd,
     ytdPrev: prevHas ? prev : null,
     month: months[months.length - 1]?.values ?? emptyValues(),
+    expensesMissingYtd: expensesMissing(ytd),
+    expensesMissingMonth: months[months.length - 1]?.expensesMissing ?? false,
+    monthsWithoutExpenses: months.filter((x) => x.expensesMissing).map((x) => x.month),
+    prevMonthsWithData: prevHas ? prevMonthsWithData : 0,
     monthPrevYear: at(opts.year - 1, opts.throughMonth),
     monthPrev: at(prevMonthKey[0] as number, prevMonthKey[1] as number),
     categories,
@@ -266,8 +307,5 @@ export function incomeStatement(
   };
 }
 
-/** Cambio relativo; `null` si no hay base con qué comparar. */
-export function pctChange(now: number, before: number | null | undefined): number | null {
-  if (before === null || before === undefined || Math.abs(before) < 0.5) return null;
-  return (now - before) / Math.abs(before);
-}
+/** Una sola definición del cambio relativo (ver `pctChange` en forecast-shared). */
+export { isNewFromZero, pctChange } from '../ledger/forecast-shared';

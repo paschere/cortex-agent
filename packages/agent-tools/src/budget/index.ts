@@ -17,6 +17,7 @@ export {
   budgetOverruns,
   budgetVsActual,
   lightFor as budgetLightFor,
+  missingExpensesNote as budgetMissingExpensesNote,
   roundBudget,
 } from './shape';
 export type {

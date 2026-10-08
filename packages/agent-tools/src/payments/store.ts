@@ -803,6 +803,9 @@ export interface ReceivablesCurrency {
   ageDays: number | null;
   overdue: number;
   overdueInvoices: number;
+  /** Facturas pagadas de más (o con nota crédito): el cliente tiene saldo a favor. NO restan de la cartera. */
+  creditInvoices: number;
+  creditBalance: number;
 }
 
 export interface ReceivablesResult {
@@ -877,13 +880,14 @@ function applyPayments(payments: PaymentRow[]) {
  * que una persona revisó.
  */
 const ACCOUNTING_INVOICE_COLUMNS =
-  'id, source_system, doc_number, client_id, counterparty_name, currency, total, balance, issued_on, due_on';
+  'id, source_system, doc_number, client_id, client_nit, counterparty_name, currency, total, balance, issued_on, due_on';
 
 interface AccountingInvoiceRow {
   id: string;
   source_system: string;
   doc_number: string;
   client_id: string | null;
+  client_nit?: string | null;
   counterparty_name: string | null;
   currency: string;
   total: number | string;
@@ -913,21 +917,92 @@ async function openAccountingInvoices(
   return (data ?? []) as AccountingInvoiceRow[];
 }
 
-/** Los números de las facturas por cobrar confirmadas como documento. */
-async function confirmedReceivableNumbers(db: SupabaseClient): Promise<Set<string>> {
+/** Lo que identifica a una factura confirmada como documento, para no contarla dos veces. */
+export interface ConfirmedRef {
+  key: string;
+  clientId: string | null;
+  nit: string | null;
+}
+
+/** Las facturas por cobrar confirmadas como documento (número, cliente y NIT). */
+async function confirmedReceivableRefs(db: SupabaseClient): Promise<ConfirmedRef[]> {
   const { data, error } = await db
     .from('document_extractions')
-    .select('doc_number')
+    .select('doc_number, client_id, counterparty_nit')
     .eq('review_state', 'confirmed')
     .eq('doc_type', 'invoice')
     .eq('financial_role', 'receivable')
     .limit(SCAN_LIMIT);
   if (error) throw error;
-  return new Set(
-    ((data ?? []) as Array<{ doc_number: string | null }>)
-      .map((r) => docNumberKey(r.doc_number))
-      .filter(Boolean),
+  return (
+    (data ?? []) as Array<{
+      doc_number: string | null;
+      client_id: string | null;
+      counterparty_nit: string | null;
+    }>
+  )
+    .map((r) => ({
+      key: docNumberKey(r.doc_number),
+      clientId: r.client_id,
+      nit: r.counterparty_nit ? normalizeNit(r.counterparty_nit) : null,
+    }))
+    .filter((r) => r.key);
+}
+
+/**
+ * ¿Hablan de la misma parte? Con los dos clientes (o los dos NIT) conocidos
+ * tienen que coincidir: «FV-1001» de Coltrans y «FV-1001» de otro cliente son
+ * dos facturas, no un duplicado. Si falta el dato de un lado, el mismo número
+ * basta.
+ */
+function sameParty(
+  a: { clientId: string | null; nit: string | null },
+  b: { clientId: string | null; nit: string | null },
+): boolean {
+  if (a.clientId && b.clientId) return a.clientId === b.clientId;
+  const na = a.nit ? normalizeNit(a.nit) : '';
+  const nb = b.nit ? normalizeNit(b.nit) : '';
+  if (na && nb) return na === nb || na.startsWith(nb) || nb.startsWith(na);
+  return true;
+}
+
+/**
+ * Las facturas de un programa contable que de verdad se suman: sin las que ya
+ * existen como documento confirmado (cuenta la del documento) y sin repetidas
+ * entre programas (Siigo + otro, o la misma traída dos veces): mismo número,
+ * misma moneda y misma parte cuentan UNA vez.
+ */
+export function dedupeAccountingInvoices<
+  T extends {
+    source_system: string;
+    doc_number: string;
+    client_id: string | null;
+    client_nit?: string | null;
+    currency: string;
+  },
+>(accounting: T[], confirmed: ConfirmedRef[]): T[] {
+  const kept: T[] = [];
+  const ordered = [...accounting].sort(
+    (a, b) =>
+      a.source_system.localeCompare(b.source_system) || a.doc_number.localeCompare(b.doc_number),
   );
+  for (const inv of ordered) {
+    const key = docNumberKey(inv.doc_number);
+    const party = { clientId: inv.client_id, nit: inv.client_nit ?? null };
+    if (key && confirmed.some((c) => c.key === key && sameParty(c, party))) continue;
+    if (
+      key &&
+      kept.some(
+        (k) =>
+          docNumberKey(k.doc_number) === key &&
+          k.currency === inv.currency &&
+          sameParty({ clientId: k.client_id, nit: k.client_nit ?? null }, party),
+      )
+    )
+      continue;
+    kept.push(inv);
+  }
+  return kept;
 }
 
 /**
@@ -1016,9 +1091,8 @@ export async function overdueReceivableInvoices(
   // Las de un programa contable: su saldo, tal cual, sin restar pagos.
   const accounting = await openAccountingInvoices(db, { dueBefore: today });
   if (accounting.length) {
-    const confirmed = await confirmedReceivableNumbers(db);
-    for (const inv of accounting) {
-      if (confirmed.has(docNumberKey(inv.doc_number))) continue;
+    const confirmed = await confirmedReceivableRefs(db);
+    for (const inv of dedupeAccountingInvoices(accounting, confirmed)) {
       const balance = num(inv.balance);
       const days = inv.due_on ? daysBetween(inv.due_on, today) : null;
       if (balance == null || balance <= 0.005 || days == null || days <= 0 || !inv.due_on) continue;
@@ -1101,6 +1175,7 @@ export async function receivables(
     id: string;
     doc_number: string | null;
     client_id: string | null;
+    counterparty_nit?: string | null;
     total_amount: number | string | null;
     currency: string | null;
     issued_on: string | null;
@@ -1155,6 +1230,8 @@ export async function receivables(
       ageDays: null,
       overdue: 0,
       overdueInvoices: 0,
+      creditInvoices: 0,
+      creditBalance: 0,
       ages: [],
     };
     const paymentKey = `${invoice.id}\u0000${currencyBucket('pago', invoice.currency)}`;
@@ -1163,6 +1240,12 @@ export async function receivables(
     const balance = total - paid;
     bucket.invoiced += total;
     bucket.paid += paid;
+    if (balance < -0.005) {
+      // Pagada de más o con nota crédito: se cuenta aparte, nunca como negativo
+      // que esconda deuda de otras facturas.
+      bucket.creditInvoices += 1;
+      bucket.creditBalance += -balance;
+    }
     if (balance > 0.005) {
       bucket.openInvoices += 1;
       bucket.outstanding += balance;
@@ -1181,11 +1264,16 @@ export async function receivables(
   // que también están como documento confirmado cuentan una vez, la del
   // documento. Sólo las abiertas: la cartera es lo que falta por cobrar.
   const accounting = await openAccountingInvoices(db, { clientId: opts.clientId });
-  const confirmedNumbers = new Set(invoices.map((i) => docNumberKey(i.doc_number)).filter(Boolean));
+  const confirmedRefs: ConfirmedRef[] = invoices
+    .map((i) => ({
+      key: docNumberKey(i.doc_number),
+      clientId: i.client_id,
+      nit: i.counterparty_nit ? normalizeNit(i.counterparty_nit) : null,
+    }))
+    .filter((r) => r.key);
   let accountingInvoices = 0;
   const accountingSystems = new Set<string>();
-  for (const inv of accounting) {
-    if (confirmedNumbers.has(docNumberKey(inv.doc_number))) continue;
+  for (const inv of dedupeAccountingInvoices(accounting, confirmedRefs)) {
     const total = num(inv.total);
     const balance = num(inv.balance);
     if (total == null || balance == null || balance <= 0.005) continue;
@@ -1199,6 +1287,8 @@ export async function receivables(
       ageDays: null,
       overdue: 0,
       overdueInvoices: 0,
+      creditInvoices: 0,
+      creditBalance: 0,
       ages: [],
     };
     bucket.invoiced += total;
@@ -1322,6 +1412,12 @@ export function describeReceivables(input: {
   }
   if (input.withoutCurrency > 0) {
     caveats.push(`${input.withoutCurrency} factura(s) confirmada(s) no dicen su moneda`);
+  }
+  for (const c of input.byCurrency) {
+    if (c.creditInvoices > 0)
+      caveats.push(
+        `${c.creditInvoices} factura(s) en ${c.currency} tienen saldo a favor del cliente por ${formatAmount(c.creditBalance)} (pagadas de más o con nota crédito); no restan de la cartera`,
+      );
   }
   if (caveats.length > 0) lines.push(`Ojo: ${caveats.join('; ')}.`);
   return lines.join(' ');

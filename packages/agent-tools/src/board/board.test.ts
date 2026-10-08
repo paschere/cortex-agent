@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { ProviderPnl } from '../accounting/providers/reports';
 import { budgetVsActual } from '../budget/shape';
 import type { PnlMonth } from '../ledger/plans';
 import { mergeClasses } from '../statements/classify';
+import { headline } from '../statements/headline';
 import { incomeStatement } from '../statements/income';
 import { computeIndicators } from '../statements/indicators';
 import { type BoardInput, composeBoard } from './compose';
@@ -101,6 +103,95 @@ describe('compose', () => {
     expect(c.nextSteps.join(' ')).toMatch(/Cali/);
     expect(c.sections.find((s) => s.key === 'riesgos')?.lines.join(' ')).toMatch(/IVA/);
     expect(c.sections.find((s) => s.key === 'resultados')?.table?.rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe('compose: la misma fuente que las tarjetas de /estados', () => {
+  const pnl = (over: Partial<ProviderPnl> = {}): ProviderPnl => ({
+    provider: 'siigo',
+    from: '2026-01-01',
+    to: '2026-09-30',
+    currency: 'COP',
+    revenue: 600_000_000,
+    costOfSales: 300_000_000,
+    operatingExpenses: 150_000_000,
+    otherIncome: 0,
+    otherExpenses: 10_000_000,
+    incomeTax: null,
+    netIncome: 140_000_000,
+    lines: [],
+    notes: [],
+    ...over,
+  });
+  const text = (c: ReturnType<typeof composeBoard>) =>
+    c.sections.find((s) => s.key === 'resultados')?.lines.join(' ') ?? '';
+
+  it('con Siigo contable, el año sale del contable y se rotula la fuente', () => {
+    const base = input();
+    if (!base.income) throw new Error('falta el estado de resultados');
+    const c = composeBoard({
+      ...base,
+      headline: headline(base.income, { pnl: pnl(), pnlPrev: null }, 'Siigo'),
+    });
+    const facts = Object.fromEntries(c.facts.map((f) => [f.key, f]));
+    expect(facts.ventas_ytd?.value).toBe(600_000_000);
+    expect(facts.utilidad_neta_ytd?.value).toBe(140_000_000);
+    // El mes sigue siendo de caja, y se dice.
+    expect(facts.ventas_mes?.display).toBe('$ 50 M');
+    expect(text(c)).toMatch(/Siigo \(contable\)/);
+    expect(text(c)).toMatch(/de caja/);
+  });
+
+  it('sin contable, el año sale de caja y la fuente dice libro de plata', () => {
+    const base = input();
+    if (!base.income) throw new Error('falta el estado de resultados');
+    const c = composeBoard({
+      ...base,
+      headline: headline(base.income, { pnl: null, pnlPrev: null }, null),
+    });
+    const facts = Object.fromEntries(c.facts.map((f) => [f.key, f]));
+    expect(facts.ventas_ytd?.value).toBe(base.income.ytd.ingresos);
+    expect(text(c)).toMatch(/Fuente: libro de plata/);
+  });
+
+  it('contable con ventas y sin gastos no afirma utilidad', () => {
+    const base = input();
+    if (!base.income) throw new Error('falta el estado de resultados');
+    const c = composeBoard({
+      ...base,
+      headline: headline(
+        base.income,
+        {
+          pnl: pnl({
+            costOfSales: 0,
+            operatingExpenses: 0,
+            otherExpenses: 0,
+            netIncome: 600_000_000,
+          }),
+          pnlPrev: null,
+        },
+        'Siigo',
+      ),
+    });
+    expect(c.facts.some((f) => f.key === 'utilidad_neta_ytd')).toBe(false);
+    expect(text(c)).toMatch(/sin calcular/);
+  });
+
+  it('en la tabla del presupuesto un gasto sin real dice «sin datos», no cero', () => {
+    const base = input();
+    const vs = budgetVsActual(
+      [
+        { category: 'ventas', kind: 'ingreso', month: 9, amount: 48_000_000 },
+        { category: 'arriendo', kind: 'gasto', month: 9, amount: 5_000_000 },
+      ],
+      history,
+      { year: 2026, today: '2026-09-30' },
+    );
+    const c = composeBoard({ ...base, budget: { name: 'P', approved: true, vs } });
+    const rows = c.sections.find((s) => s.key === 'resultados')?.table?.rows ?? [];
+    const arriendo = rows.find((r) => r[0] === 'Arriendo');
+    expect(arriendo?.[2]).toBe('sin datos');
+    expect(arriendo?.[4]).toBe('sin datos');
   });
 });
 

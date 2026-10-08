@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { quoteSupportsAmount } from '../documents/verify';
 import type { DuplicateRule } from '../trackers/duplicates';
 import type { FieldType, TrackerField } from '../trackers/schema';
+import type { PathRule } from './path-fields';
 
 /**
  * UNA CARPETA DE DRIVE QUE LLENA UNA TABLA (migración 0164) — la parte pura.
@@ -39,17 +40,43 @@ import type { FieldType, TrackerField } from '../trackers/schema';
 export interface ExtractField {
   key: string;
   hint: string;
+  /**
+   * Sólo se lee de los archivos de este tipo de documento (doc-types.ts). Sin
+   * él, de cualquiera. Una tabla puede llenar campos distintos de la misma fila
+   * con tipos distintos (prealerta + manifiesto), unidos por la clave.
+   */
+  docType?: string;
+  /**
+   * El campo no se lee del documento: sale del nombre de una subcarpeta
+   * (path-fields.ts). Se llena en todas las filas del archivo.
+   */
+  fromPath?: PathRule;
 }
 
 export const extractFieldSchema = z.object({
   key: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
   hint: z.string().trim().max(200).default(''),
+  docType: z.string().trim().max(120).optional(),
+  fromPath: z
+    .object({
+      level: z.number().int().min(1).max(5),
+      part: z.enum(['secuencia', 'texto', 'codigo', 'fecha', 'mes']),
+    })
+    .optional(),
 });
 
 /** Cuántos registros se aceptan de un solo archivo. */
 export const MAX_ROWS_PER_FILE = 50;
-/** Filas que se leen de UNA hoja de cálculo de la carpeta (sin modelo). */
-export const SHEET_ROWS_PER_FILE = 5000;
+/**
+ * Filas que se leen de UNA hoja de cálculo de la carpeta (sin modelo): el tope
+ * sano por archivo. Una hoja más larga no se rechaza: se leen estas filas, se
+ * dice cuántas tenía y el archivo queda «por revisar».
+ */
+export const SHEET_ROWS_PER_FILE = 20_000;
+/** Filas de datos que se miran de cada hoja para PROPONER la tabla (más el encabezado). */
+export const SHEET_SAMPLE_ROWS = 300;
+/** Hojas de cálculo que se leen por corrida, además del tope de `FILES_PER_RUN` (no gastan modelo). */
+export const SHEETS_PER_RUN = 30;
 /** Lo más que pesa una foto, un escaneo o un archivo que se baja entero. */
 export const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 /** Una imagen más pesada que esto la rechaza el modelo. */
@@ -795,12 +822,18 @@ export function pickFiles(
   files: FolderFile[],
   ledger: LedgerEntry[],
   cap = FILES_PER_RUN,
+  /** Cupo aparte para hojas de cálculo con mapeo (no pasan por el modelo). */
+  sheets?: { cap: number; isSheet: (f: FolderFile) => boolean },
 ): { now: FolderFile[]; backlog: number } {
   const byId = new Map(ledger.map((l) => [l.file_id, l]));
   const due = files
     .filter((f) => shouldProcess(byId.get(f.id), f.revision, f.path ?? ''))
     .sort((a, b) => (b.modifiedTime ?? '').localeCompare(a.modifiedTime ?? ''));
-  return { now: due.slice(0, cap), backlog: Math.max(0, due.length - cap) };
+  if (!sheets) return { now: due.slice(0, cap), backlog: Math.max(0, due.length - cap) };
+  const sheetDue = due.filter(sheets.isSheet);
+  const otherDue = due.filter((f) => !sheets.isSheet(f));
+  const now = [...otherDue.slice(0, cap), ...sheetDue.slice(0, sheets.cap)];
+  return { now, backlog: due.length - now.length };
 }
 
 // ---------------------------------------------------------------------------

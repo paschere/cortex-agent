@@ -22,8 +22,10 @@ import {
   daysBetween,
   formatDay,
   formatMoney,
+  isNewFromZero,
   mondayOf,
   normalizeName,
+  pctChange,
 } from '@cortex/agent-tools/src/ledger/forecast-shared';
 import {
   PAYROLL_CONFIDENTIAL_KEY,
@@ -100,8 +102,10 @@ export interface CategoryChange {
   label: string;
   amount: number;
   previous: number | null;
-  /** Fracción de cambio contra el mes anterior; null si el anterior era 0. */
+  /** Fracción de cambio contra el mes anterior; null si no hay base (ver `isNew`). */
   change: number | null;
+  /** La categoría aparece donde el mes anterior no tenía nada: se rotula «nuevo». */
+  isNew: boolean;
   confidential: boolean;
 }
 
@@ -607,10 +611,7 @@ export function findMonth(months: readonly PnlMonth[], month: string): PnlMonth 
   return months.find((m) => m.month === month) ?? null;
 }
 
-export function pctChange(now: number, before: number | null | undefined): number | null {
-  if (before == null || before === 0) return null;
-  return (now - before) / Math.abs(before);
-}
+export { isNewFromZero, pctChange };
 
 const INCOME_KEYS = new Set(['ventas', 'otros_ingresos']);
 
@@ -642,6 +643,7 @@ export function categoryChanges(
       amount: Math.round(amount),
       previous: before == null ? null : Math.round(before),
       change: pctChange(amount, before),
+      isNew: isNewFromZero(amount, before),
       confidential,
     });
   }

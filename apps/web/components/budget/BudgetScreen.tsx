@@ -21,6 +21,7 @@ import {
   shortMonthKey,
 } from '@/lib/statements/format';
 import type { BudgetVsRow } from '@cortex/agent-tools';
+import { missingExpensesNote as budgetMissingExpensesNote } from '@cortex/agent-tools/src/budget/shape';
 import { clsx } from 'clsx';
 import { ArrowRight, CheckCircle2, Loader2, PencilLine, Target, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
@@ -379,6 +380,7 @@ function VsTab(props: BudgetScreenProps) {
         tone: LIGHT_TONE[value] ?? 'neutral',
       })),
     },
+    { key: 'nota', label: 'Nota', type: 'text', width: 230 },
     { key: 'anio', label: `Presupuesto ${props.year}`, type: 'money', width: 150 },
   ];
   const rows: GridRow[] = vs.rows.map((r: BudgetVsRow) => {
@@ -396,6 +398,7 @@ function VsTab(props: BudgetScreenProps) {
         ry: r.ytd.actual,
         ej: r.ytd.pct === null ? null : Math.round(r.ytd.pct * 1000) / 10,
         semaforo: r.ytd.light,
+        nota: budgetMissingExpensesNote(r.missingMonths),
         anio: r.yearBudget,
       },
     };
@@ -404,6 +407,21 @@ function VsTab(props: BudgetScreenProps) {
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-3">
         {cards.map((c) => {
+          const noExpenses = t.expensesMissing && c.label !== 'Ingresos';
+          if (noExpenses)
+            return (
+              <Panel key={c.label} className="px-4 py-3">
+                <p className="field-label text-ink-faint">{c.label} a la fecha</p>
+                <p className="tabular stat-num mt-1 font-mono text-xl font-bold text-ink-faint">
+                  —
+                </p>
+                <p className="mt-1 text-micro text-ink-muted">
+                  Hay ingresos pero ningún gasto registrado: no se compara con el presupuesto de{' '}
+                  {shortMoney(c.budget)}. Trae los gastos (extractos del banco, Siigo o facturas de
+                  compra).
+                </p>
+              </Panel>
+            );
           const ratio = c.budget > 0.5 ? c.real / c.budget : null;
           const good = ratio === null ? null : c.kind === 'gasto' ? ratio <= 1 : ratio >= 1;
           return (
@@ -481,7 +499,8 @@ function VsTab(props: BudgetScreenProps) {
       )}
       <p className="text-xs text-ink-muted">
         Lo real es de caja (el libro de plata). Gasto: verde hasta el 100 %, amarillo hasta 110 %,
-        rojo más. Ingreso al revés.
+        rojo más. Ingreso al revés. En gris, «sin datos reales»: un gasto presupuestado sin ningún
+        real casi siempre es un gasto que falta cargar, no un ahorro.
       </p>
     </div>
   );

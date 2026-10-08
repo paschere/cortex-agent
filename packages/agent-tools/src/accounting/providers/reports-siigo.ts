@@ -71,7 +71,9 @@ async function trialBalance(
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (bytes.length > 25 * 1024 * 1024)
     throw new Error('El balance de prueba de Siigo es demasiado grande.');
-  const rows = trialBalanceFromRows(await xlsxRows(bytes));
+  const rows = trialBalanceFromRows(
+    await xlsxRows(bytes, { contentType: res.headers.get('content-type') }),
+  );
   if (!rows.length)
     throw new Error(
       'No reconocí las columnas del balance de prueba de Siigo (código, débito, crédito, saldo final).',

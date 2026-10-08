@@ -10,6 +10,7 @@ import {
   saveCategoryClasses,
   toolErrorMessage,
 } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 
 /**
@@ -41,10 +42,17 @@ export async function refreshStatementsAction(year: number, month: number): Prom
     if (!out.fetched.length) return { ok: false, error: out.errors.join(' ') || 'No llegó nada.' };
     return {
       ok: true,
-      note: `Traje ${out.fetched.join(', ')}.${out.errors.length ? ` ${out.errors.join(' ')}` : ''}`,
+      note: `Traje ${out.fetched.join(', ')}.`,
+      warning: out.errors.length ? out.errors.join(' ') : undefined,
     };
   } catch (err) {
-    return { ok: false, error: toolErrorMessage(err) };
+    // Nunca un mensaje técnico a la vista: el detalle queda en el log.
+    logger.warn({ err }, 'estados: falló traer los estados del programa contable');
+    return {
+      ok: false,
+      error:
+        'No pude traer los estados del programa contable. Vuelve a intentar en unos minutos; si sigue igual, revisa la conexión en Integraciones.',
+    };
   }
 }
 

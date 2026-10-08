@@ -1,4 +1,4 @@
-import { ForbiddenError } from '@cortex/core';
+import { ForbiddenError, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ProviderBalance, ProviderPnl } from '../accounting/providers/reports';
 import { listAccountingConnections, openAccountingSession } from '../accounting/store';
@@ -23,16 +23,19 @@ import {
   isExpenseClass,
   mergeClasses,
 } from './classify';
+import { type Headline, headline } from './headline';
 import {
   INCOME_LINES,
   type IncomeStatement,
   type IncomeValues,
   addValues,
   emptyValues,
+  expensesMissing,
   incomeStatement,
   incomeValues,
 } from './income';
 import { type Indicator, computeIndicators } from './indicators';
+import { humanReportError } from './report-errors';
 
 /**
  * LO QUE LOS ESTADOS FINANCIEROS LEEN Y GUARDAN (0191).
@@ -201,7 +204,14 @@ export async function refreshAccountingReports(
   const conn = conns[0];
   if (!conn) return { provider: null, fetched: [], errors: [] };
   const name = providerName(conn.provider);
-  const session = await (opts.open ?? openAccountingSession)(db, conn.id);
+  let session: Awaited<ReturnType<typeof openAccountingSession>>;
+  try {
+    session = await (opts.open ?? openAccountingSession)(db, conn.id);
+  } catch (err) {
+    const h = humanReportError(err, 'los estados financieros', name);
+    logger.warn({ err, provider: conn.provider }, 'statements: no abrió la sesión contable');
+    return { provider: conn.provider, fetched: [], errors: [h.message] };
+  }
   if (!session.reports)
     return {
       provider: conn.provider,
@@ -255,9 +265,13 @@ export async function refreshAccountingReports(
       if (error) throw error;
       fetched.push(job.label);
     } catch (err) {
-      errors.push(
-        `No pude leer ${job.label} de ${name}: ${err instanceof Error ? err.message : 'error'}`,
+      // El detalle técnico va al log; al dueño, una frase humana.
+      const h = humanReportError(err, job.label, name);
+      logger.warn(
+        { err, provider: conn.provider, kind: job.kind, period: job.key },
+        'statements: no pude leer el estado del programa contable',
       );
+      errors.push(h.message);
     }
   }
   return { provider: conn.provider, fetched, errors };
@@ -275,6 +289,8 @@ export interface StatementsResult {
   classes: CategoryClasses;
   customClasses: Record<string, ExpenseClass>;
   income: IncomeStatement;
+  /** Las cifras grandes con su fuente y sin inventar utilidad si faltan gastos. */
+  headline: Headline;
   /** Últimos 12 meses de caja (contando el actual), para indicadores y pronóstico. */
   trailing: { from: string; to: string; months: number; values: IncomeValues };
   balance: BalanceSheet;
@@ -296,6 +312,20 @@ export interface StatementsResult {
   gaps: string[];
   /** Lo que pasó al pedirle de nuevo los estados al programa contable. */
   refresh?: RefreshOutcome | null;
+}
+
+/**
+ * Los meses que de verdad cubren los últimos 12 «con el actual»: el mes en
+ * curso va a medias, así que cuenta por la fracción transcurrida. Dividir por
+ * 12 enteros inflaba los días de cartera y achicaba el promedio mensual.
+ */
+export function effectiveMonths(months: number, today: string): number {
+  if (months <= 0) return 1;
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  const inMonth = Number(monthEnd(y, m).slice(8, 10));
+  const elapsed = Math.min(Math.max(Number(today.slice(8, 10)) / inMonth, 1 / inMonth), 1);
+  return Math.max(months - 1 + elapsed, 0.1);
 }
 
 function sideTotals(movements: LedgerMovement[], kind: 'receivable' | 'payable', today: string) {
@@ -445,7 +475,7 @@ export async function loadStatements(
   const indicators = computeIndicators({
     currency: COP,
     periodLabel: 'últimos 12 meses',
-    months: Math.max(trailing.months, 1),
+    months: effectiveMonths(trailing.months, today),
     pnlSource,
     revenue: trailingValues.ingresos,
     costOfSales: trailingValues.costo,
@@ -453,6 +483,7 @@ export async function loadStatements(
     fixedExpenses: trailingValues.gastos_fijos,
     operatingIncome: trailingValues.utilidad_operacional,
     netIncome: trailingValues.utilidad_neta,
+    expensesMissing: expensesMissing(trailingValues),
     invoiced: invoiced12,
     purchases: purchases12,
     balance: {
@@ -485,6 +516,11 @@ export async function loadStatements(
     classes,
     customClasses: settings?.custom ?? {},
     income,
+    headline: headline(
+      income,
+      { pnl: acc.pnl?.report ?? null, pnlPrev: acc.pnlPrev?.report ?? null },
+      acc.provider ? providerName(acc.provider) : null,
+    ),
     trailing,
     balance,
     approxBalance,

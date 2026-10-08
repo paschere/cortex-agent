@@ -14,6 +14,7 @@ import { detectRecurring } from '@cortex/agent-tools/src/ledger/recurring';
 import { describeScenario } from '@cortex/agent-tools/src/ledger/scenario';
 import { listAccounts, loadLedger } from '@cortex/agent-tools/src/ledger/store';
 import type { ForecastResult } from '@cortex/agent-tools/src/ledger/types';
+import { withPayablesOverlay } from '@cortex/agent-tools/src/payables/overlay';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type FinanceDashboard,
@@ -68,7 +69,12 @@ export async function readFinanceDashboard(
 
   const [accounts, ledger, run, scenarios, pnl, decisions, settings] = await Promise.all([
     settle(() => listAccounts(db), 'No se pudieron leer las cuentas.'),
-    settle(() => loadLedger(db, { today, historyDays: 400 }), 'No se pudo leer el libro.'),
+    // Con lo decidido en Por pagar (pagadas y rechazadas no cuentan), igual que
+    // /estados y la proyección: la misma cifra no puede dar distinto en dos pantallas.
+    settle(async () => {
+      const l = await loadLedger(db, { today, historyDays: 400 });
+      return { ...l, movements: await withPayablesOverlay(db, l.movements) };
+    }, 'No se pudo leer el libro.'),
     settle(
       () =>
         runForecast(db, {

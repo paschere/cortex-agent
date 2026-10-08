@@ -11,6 +11,7 @@ import {
   LIGHT_LABEL,
   budgetCategoryLabel,
   budgetOverruns,
+  missingExpensesNote,
 } from './shape';
 import {
   type BudgetReport,
@@ -47,7 +48,7 @@ export function budgetMarkdown(r: BudgetReport, opts: { month?: number | null } 
     for (const row of vs.rows) {
       const cell = row.months[m - 1];
       out.push(
-        `| ${row.label}${row.kind === 'ingreso' ? ' (ingreso)' : ''} | ${fm(cell?.budgetToDate ?? 0)} | ${cell?.actual === null || cell?.actual === undefined ? '—' : fm(cell.actual)} | ${fm(row.ytd.budget)} | ${fm(row.ytd.actual)} | ${LIGHT_LABEL[row.ytd.light]}${row.ytd.pct !== null ? ` (${pctText(row.ytd.pct)})` : ''} |`,
+        `| ${row.label}${row.kind === 'ingreso' ? ' (ingreso)' : ''} | ${fm(cell?.budgetToDate ?? 0)} | ${cell?.actual === null || cell?.actual === undefined ? '—' : fm(cell.actual)} | ${fm(row.ytd.budget)} | ${fm(row.ytd.actual)} | ${LIGHT_LABEL[row.ytd.light]}${row.ytd.pct !== null && row.ytd.light !== 'sin_datos' ? ` (${pctText(row.ytd.pct)})` : ''}${row.missingMonths.length ? ` — ${missingExpensesNote(row.missingMonths)}` : ''} |`,
       );
     }
     const overruns = budgetOverruns(vs);

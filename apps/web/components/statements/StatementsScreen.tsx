@@ -14,6 +14,7 @@ import {
   pct,
   shortDay,
   shortMoney,
+  shortMonthKey,
 } from '@/lib/statements/format';
 import type { BalanceSheet, Indicator } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
@@ -49,6 +50,8 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
+const PROFIT_LINES = new Set(['utilidad_bruta', 'utilidad_operacional', 'utilidad_neta']);
+
 const GROUP_TITLE: Record<Indicator['group'], string> = {
   rentabilidad: 'Rentabilidad',
   liquidez: 'Liquidez y endeudamiento',
@@ -64,6 +67,9 @@ export function StatementsScreen(props: StatementsScreenProps) {
   const [tab, setTab] = useState<TabId>('resultados');
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
+  // Un solo estado para «traer del programa»: cargando, falló (con motivo
+  // humano) o ya se trajo. Lo pinta BasisNotice, no una nota aparte.
+  const [refreshIssue, setRefreshIssue] = useState<string | null>(null);
   const y = data.year;
   const m = data.throughMonth;
   const inc = data.income;
@@ -72,31 +78,33 @@ export function StatementsScreen(props: StatementsScreenProps) {
 
   const refresh = () =>
     start(async () => {
-      const r = await props.actions.refresh(y, m);
-      setNote(r.ok ? { ok: true, text: r.note ?? 'Listo.' } : { ok: false, text: r.error });
+      setRefreshIssue(null);
+      setNote(null);
+      try {
+        const r = await props.actions.refresh(y, m);
+        if (r.ok) {
+          setRefreshIssue(r.warning ?? null);
+          setNote({ ok: true, text: r.note ?? 'Listo.' });
+        } else setRefreshIssue(r.error);
+      } catch {
+        setRefreshIssue(
+          'No pude traer los estados del programa contable. Vuelve a intentar en unos minutos.',
+        );
+      }
     });
 
+  const h = data.headline;
   const kpis = [
+    { label: `Ventas ${y}`, figure: h.sales },
     {
-      label: `Ventas ${y}`,
-      now: inc.ytd.ingresos,
-      prev: inc.ytdPrev?.ingresos,
-      good: 'up' as const,
+      label:
+        h.basis === 'contable' ? 'Utilidad operacional' : 'Utilidad operacional (EBITDA aprox.)',
+      figure: h.operating,
     },
-    {
-      label: 'Utilidad operacional (EBITDA aprox.)',
-      now: inc.ytd.utilidad_operacional,
-      prev: inc.ytdPrev?.utilidad_operacional,
-      good: 'up' as const,
-    },
-    {
-      label: 'Utilidad neta',
-      now: inc.ytd.utilidad_neta,
-      prev: inc.ytdPrev?.utilidad_neta,
-      good: 'up' as const,
-    },
+    { label: h.basis === 'contable' ? 'Utilidad neta' : 'Utilidad neta (de caja)', figure: h.net },
   ];
-  const netMargin = inc.ytd.ingresos > 0.5 ? inc.ytd.utilidad_neta / inc.ytd.ingresos : null;
+  const sourceHint =
+    h.basis === 'contable' ? `Según ${h.sourceLabel}` : 'Según el libro de plata, de caja';
 
   return (
     <div className="space-y-6">
@@ -138,25 +146,47 @@ export function StatementsScreen(props: StatementsScreenProps) {
 
       <section aria-label="Resumen del año" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((k) => (
-          <Kpi key={k.label} label={k.label} now={k.now} prev={k.prev} year={y} />
+          <Kpi
+            key={k.label}
+            label={k.label}
+            figure={k.figure}
+            year={y}
+            missing={h.missingExpenses && k.figure !== h.sales}
+            prevNote={h.prevNote}
+            links={links}
+          />
         ))}
         <Panel className="px-4 py-3">
           <p className="field-label text-ink-faint">Margen neto</p>
           <p
             className={clsx(
               'tabular stat-num mt-1 font-mono text-xl font-bold',
-              netMargin !== null && netMargin < 0 ? 'text-rose' : 'text-ink',
+              h.netMargin !== null && h.netMargin < 0 ? 'text-rose' : 'text-ink',
+              h.netMargin === null && 'text-ink-faint',
             )}
           >
-            {pct(netMargin)}
+            {h.netMargin === null ? '—' : pct(h.netMargin)}
           </p>
           <p className="mt-1 text-micro text-ink-muted">
-            Utilidad neta ÷ ventas, enero a {monthName(m)}
+            {h.missingExpenses
+              ? 'No se calcula: faltan los gastos'
+              : `Utilidad neta ÷ ventas, enero a ${monthName(m)}`}
           </p>
         </Panel>
       </section>
 
-      <BasisNotice data={data} providerLabel={props.providerLabel} links={links} />
+      <p className="-mt-3 text-micro text-ink-faint">{sourceHint}.</p>
+
+      <BasisNotice
+        data={data}
+        providerLabel={props.providerLabel}
+        links={links}
+        refresh={{
+          pending,
+          issue: refreshIssue,
+          retry: props.canEdit ? refresh : null,
+        }}
+      />
 
       <div
         className="flex flex-wrap gap-1 border-b border-border"
@@ -244,28 +274,51 @@ function PeriodPicker(p: {
 
 function Kpi({
   label,
-  now,
-  prev,
+  figure,
   year,
-}: { label: string; now: number; prev: number | null | undefined; year: number }) {
-  const c = change(now, prev);
+  missing,
+  prevNote,
+  links,
+}: {
+  label: string;
+  figure: { now: number | null; prev: number | null };
+  year: number;
+  /** Hay ventas y ningún gasto: la cifra no se puede afirmar. */
+  missing: boolean;
+  prevNote: string | null;
+  links: StatementsScreenProps['links'];
+}) {
+  if (missing || figure.now === null)
+    return (
+      <Panel className="px-4 py-3">
+        <p className="field-label text-ink-faint">{label}</p>
+        <p className="tabular stat-num mt-1 font-mono text-xl font-bold text-ink-faint">—</p>
+        <p className="mt-1 text-micro text-ink-muted">
+          Faltan los gastos: sin ellos no se puede afirmar utilidad.{' '}
+          <Link href={links.finance} className="font-semibold underline underline-offset-2">
+            Traer gastos
+          </Link>
+        </p>
+      </Panel>
+    );
+  const c = change(figure.now, figure.prev);
   return (
     <Panel className="px-4 py-3">
       <p className="field-label text-ink-faint">{label}</p>
       <p
         className={clsx(
           'tabular stat-num mt-1 font-mono text-xl font-bold',
-          now < 0 ? 'text-rose' : 'text-ink',
+          figure.now < 0 ? 'text-rose' : 'text-ink',
         )}
       >
-        {shortMoney(now)}
+        {shortMoney(figure.now)}
       </p>
       <p className="mt-1 text-micro text-ink-muted">
-        {prev === null || prev === undefined ? (
-          `Sin datos de ${year - 1} para comparar`
+        {figure.prev === null ? (
+          (prevNote ?? `Sin datos de ${year - 1} para comparar`)
         ) : (
           <>
-            {shortMoney(prev)} en {year - 1}
+            {shortMoney(figure.prev)} en {year - 1}
             {c !== null && (
               <span
                 className={clsx('ml-1.5 font-semibold', c >= 0 ? 'text-emerald' : 'text-amber')}
@@ -273,6 +326,7 @@ function Kpi({
                 {pct(c, true)}
               </span>
             )}
+            {prevNote && <span className="block text-ink-faint">{prevNote}</span>}
           </>
         )}
       </p>
@@ -284,24 +338,78 @@ function BasisNotice({
   data,
   providerLabel,
   links,
+  refresh,
 }: {
   data: StatementsScreenProps['data'];
   providerLabel: string | null;
   links: StatementsScreenProps['links'];
+  refresh: { pending: boolean; issue: string | null; retry: (() => void) | null };
 }) {
   const items: Array<{ tone: 'neutral' | 'amber'; text: React.ReactNode }> = [
     {
       tone: 'neutral',
-      text: 'Resultados de caja: lo que entró y salió del banco según el libro de plata, sin causación ni depreciaciones.',
+      text:
+        data.headline.basis === 'contable'
+          ? `Resultados contables de ${providerLabel ?? 'el programa contable'} (con causación). Abajo, el detalle de caja del libro de plata.`
+          : 'Resultados de caja: lo que entró y salió del banco según el libro de plata, sin causación ni depreciaciones.',
     },
   ];
-  if (data.balance.basis === 'aproximado')
+  if (data.headline.missingExpenses)
+    items.push({
+      tone: 'amber',
+      text: (
+        <>
+          Hay ventas pero ningún gasto registrado, por eso no se muestra utilidad ni margen. Trae
+          los gastos: sube los extractos del banco en{' '}
+          <Link href={links.finance} className="font-semibold underline underline-offset-2">
+            Finanzas
+          </Link>
+          ,{' '}
+          {data.accounting.connected
+            ? `actualiza ${providerLabel ?? 'el programa contable'}`
+            : 'conecta Siigo, Alegra o QuickBooks'}{' '}
+          o carga las facturas de compra.
+        </>
+      ),
+    });
+  else if (data.income.monthsWithoutExpenses.length && data.headline.basis === 'caja')
+    items.push({
+      tone: 'amber',
+      text: `Sin gastos registrados en ${data.income.monthsWithoutExpenses.map((k) => shortMonthKey(k)).join(', ')}: la utilidad del año puede verse mejor de lo que es.`,
+    });
+  if (refresh.pending)
+    items.push({
+      tone: 'neutral',
+      text: `Trayendo los estados de ${providerLabel ?? 'el programa contable'}…`,
+    });
+  else if (refresh.issue)
+    items.push({
+      tone: 'amber',
+      text: (
+        <>
+          {refresh.issue}
+          {refresh.retry && (
+            <>
+              {' '}
+              <button
+                type="button"
+                onClick={refresh.retry}
+                className="font-semibold underline underline-offset-2"
+              >
+                Reintentar
+              </button>
+            </>
+          )}
+        </>
+      ),
+    });
+  if (data.balance.basis === 'aproximado' && !refresh.pending && !refresh.issue)
     items.push({
       tone: 'amber',
       text: data.accounting.connected ? (
         <>
-          Balance aproximado: todavía no traje el balance de {providerLabel}. Usa «Traer de{' '}
-          {providerLabel}».
+          Balance aproximado: todavía no traje el balance de {providerLabel}.{' '}
+          {refresh.retry ? `Usa «Traer de ${providerLabel}».` : 'Quien administra puede traerlo.'}
         </>
       ) : (
         <>
@@ -313,7 +421,7 @@ function BasisNotice({
         </>
       ),
     });
-  else
+  else if (data.balance.basis === 'contable')
     items.push({
       tone: 'neutral',
       text: `Balance contable de ${providerLabel ?? 'el programa contable'} al ${shortDay(data.balance.asOf)}${data.balance.fetchedAt ? `, leído el ${shortDay(data.balance.fetchedAt)}` : ''}.`,
@@ -373,10 +481,14 @@ function IncomeTab(props: StatementsScreenProps) {
   );
   const rows: GridRow[] = lines.map((l) => {
     const values: Record<string, unknown> = { renglon: l.subtotal ? `= ${l.label}` : l.label };
-    for (const mo of months) values[mo.month] = mo.values[l.key];
-    values.ytd = inc.ytd[l.key];
+    // Las utilidades de un período con ventas y sin gastos no se afirman.
+    const isProfit = PROFIT_LINES.has(l.key);
+    for (const mo of months)
+      values[mo.month] = isProfit && mo.expensesMissing ? null : mo.values[l.key];
+    const hideYtd = isProfit && inc.expensesMissingYtd;
+    values.ytd = hideYtd ? null : inc.ytd[l.key];
     values.prev = inc.ytdPrev ? inc.ytdPrev[l.key] : null;
-    const c = change(inc.ytd[l.key], inc.ytdPrev?.[l.key]);
+    const c = hideYtd ? null : change(inc.ytd[l.key], inc.ytdPrev?.[l.key]);
     values.cambio = c === null ? null : Math.round(c * 1000) / 10;
     return { id: l.key, values, locked: true };
   });
@@ -396,10 +508,13 @@ function IncomeTab(props: StatementsScreenProps) {
       },
     };
   });
+  // Una utilidad sin gastos registrados no se dibuja: sería la barra de ventas otra vez.
+  const netOf = (mo: (typeof months)[number]) => (mo.expensesMissing ? 0 : mo.values.utilidad_neta);
   const maxBar = Math.max(
     1,
-    ...months.map((mo) => Math.max(mo.values.ingresos, Math.abs(mo.values.utilidad_neta))),
+    ...months.map((mo) => Math.max(mo.values.ingresos, Math.abs(netOf(mo)))),
   );
+  const monthsWithData = months.filter((mo) => mo.hasData).length;
 
   return (
     <div className="space-y-6">
@@ -422,12 +537,12 @@ function IncomeTab(props: StatementsScreenProps) {
         >
           {months.map((mo) => {
             const sales = (Math.max(mo.values.ingresos, 0) / maxBar) * 100;
-            const net = (Math.abs(mo.values.utilidad_neta) / maxBar) * 100;
+            const net = (Math.abs(netOf(mo)) / maxBar) * 100;
             return (
               <li
                 key={mo.month}
                 className="flex h-full flex-col justify-end"
-                title={`${mo.month}: ventas ${fullMoney(mo.values.ingresos)} · utilidad ${fullMoney(mo.values.utilidad_neta)}`}
+                title={`${mo.month}: ventas ${fullMoney(mo.values.ingresos)} · ${mo.expensesMissing ? 'utilidad sin calcular (faltan los gastos)' : `utilidad ${fullMoney(mo.values.utilidad_neta)}`}`}
               >
                 <div className="flex h-full items-end justify-center gap-0.5">
                   <span
@@ -437,9 +552,11 @@ function IncomeTab(props: StatementsScreenProps) {
                   <span
                     className={clsx(
                       'w-1/2 max-w-4 rounded-t',
-                      mo.values.utilidad_neta < 0 ? 'bg-rose/80' : 'bg-primary/80',
+                      netOf(mo) < 0 ? 'bg-rose/80' : 'bg-primary/80',
                     )}
-                    style={{ height: `${Math.max(net, mo.hasData ? 2 : 0)}%` }}
+                    style={{
+                      height: `${mo.expensesMissing ? 0 : Math.max(net, mo.hasData ? 2 : 0)}%`,
+                    }}
                   />
                 </div>
                 <span className="mt-1 text-center text-micro uppercase text-ink-faint">
@@ -449,6 +566,23 @@ function IncomeTab(props: StatementsScreenProps) {
             );
           })}
         </ol>
+        {monthsWithData === 0 ? (
+          <p className="mt-3 text-xs text-ink-muted">
+            Todavía no hay movimientos en {data.year}: cuando el libro tenga ventas y gastos, salen
+            aquí mes a mes.
+          </p>
+        ) : monthsWithData === 1 ? (
+          <p className="mt-3 text-xs text-ink-muted">
+            Sólo hay datos de un mes: no alcanza para ver una tendencia.
+          </p>
+        ) : null}
+        {inc.monthsWithoutExpenses.length > 0 && (
+          <p className="mt-2 text-xs text-ink-muted">
+            Sin barra de utilidad en{' '}
+            {inc.monthsWithoutExpenses.map((k) => shortMonthKey(k)).join(', ')}: hay ventas pero
+            ningún gasto registrado.
+          </p>
+        )}
         {props.data.accounting.pnl && (
           <AccountingPnl data={props.data} providerLabel={props.providerLabel} />
         )}
@@ -572,7 +706,9 @@ function AccountingPnl({
       <p className="mt-2 text-micro text-ink-faint">
         Con causación: puede diferir de las cifras de caja de arriba. Entre paréntesis, el mismo
         tramo del año anterior.
-        {p.revenue > 0.5 ? ` Margen neto contable ${pct(p.netIncome / p.revenue)}.` : ''}
+        {p.revenue > 0.5 && !data.headline.missingExpenses
+          ? ` Margen neto contable ${pct(p.netIncome / p.revenue)}.`
+          : ''}
       </p>
     </div>
   );

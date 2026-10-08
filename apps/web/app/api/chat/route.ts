@@ -1332,7 +1332,25 @@ export async function POST(req: NextRequest) {
     getErrorMessage: (error) => {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('chat stream error', { message });
-      return message.slice(0, 300);
+      return humanChatError(message);
     },
   });
+}
+
+/**
+ * Lo que ve la persona cuando el turno se cae: una frase en español y qué
+ * hacer, nunca el error técnico (en inglés, con JSON) — ése queda en el log.
+ * Visto en producción: «Invalid arguments for tool ask_choice: Type validation
+ * failed: Value: {…}» en rojo en mitad de una respuesta.
+ */
+function humanChatError(message: string): string {
+  if (/Invalid arguments for tool|Type validation failed|InvalidToolArguments/i.test(message))
+    return 'Se me enredó una pregunta que te iba a hacer. Escríbeme «sigue» y continúo desde aquí.';
+  if (/rate.?limit|429|overloaded|529/i.test(message))
+    return 'Hay mucha demanda en este momento. Espera unos segundos y escríbeme «sigue».';
+  if (/timeout|timed out|aborted|ETIMEDOUT|ECONNRESET|fetch failed/i.test(message))
+    return 'Se cortó la conexión mientras respondía. Escríbeme «sigue» y retomo.';
+  if (/context|too long|maximum.*tokens|prompt is too long/i.test(message))
+    return 'La conversación quedó demasiado larga para seguir aquí. Abre una nueva y te resumo lo importante.';
+  return 'Algo falló mientras respondía. Escríbeme «sigue» para retomar; si se repite, avísale al equipo de Cortex.';
 }

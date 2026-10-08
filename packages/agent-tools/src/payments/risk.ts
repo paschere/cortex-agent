@@ -39,6 +39,22 @@ export interface MoneyAtRisk {
     fines: number;
     total: number;
   };
+  /**
+   * De dónde sale cada parte del total, escrito: «cartera vencida: 3 facturas
+   * confirmadas o de Siigo, saldo al día de hoy». La respuesta a «¿y esto de
+   * dónde sale?» no se adivina.
+   */
+  sources: Array<{
+    key: 'cartera_vencida' | 'pagos_comprometidos' | 'multas';
+    label: string;
+    amount: number;
+    count: number;
+    /** Hacia dónde va la plata: lo que nos deben o lo que debemos pagar. */
+    direction: 'por_cobrar' | 'por_pagar';
+    from: string;
+  }>;
+  /** Cuántos pagos comprometidos repetidos (mismo título, día y valor) se contaron una sola vez. */
+  duplicatePaymentsIgnored: number;
   /** Cartera vencida en monedas distintas del peso, cada una por su lado. */
   otherCurrencies: Array<{ currency: string; receivablesOverdue: number; overdueInvoices: number }>;
   /** Las facturas vencidas de mayor saldo, para el correo y la pantalla. */
@@ -55,6 +71,42 @@ function isCop(currency: string): boolean {
   return currency.trim().toUpperCase() === 'COP';
 }
 
+export interface PaymentCommitmentRow {
+  id?: string | null;
+  title?: string | null;
+  amount_cop: number | string | null;
+  due_on: string;
+}
+
+/**
+ * Los pagos comprometidos que de verdad suman: valor positivo y, si el mismo
+ * pago se extrajo dos veces (mismo título, mismo día, mismo valor), una sola
+ * vez. Un valor negativo o ilegible no resta ni suma.
+ */
+export function dedupePaymentCommitments(rows: PaymentCommitmentRow[]): {
+  rows: Array<{ amount: number; due_on: string }>;
+  duplicates: number;
+} {
+  const seen = new Set<string>();
+  const out: Array<{ amount: number; due_on: string }> = [];
+  let duplicates = 0;
+  for (const r of rows) {
+    const amount = Number(r.amount_cop);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const title = (r.title ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const key = title ? `${title}|${r.due_on}|${amount}` : null;
+    if (key) {
+      if (seen.has(key)) {
+        duplicates += 1;
+        continue;
+      }
+      seen.add(key);
+    }
+    out.push({ amount, due_on: r.due_on });
+  }
+  return { rows: out, duplicates };
+}
+
 export async function moneyAtRisk(
   db: SupabaseClient,
   opts: { today?: string } = {},
@@ -64,7 +116,7 @@ export async function moneyAtRisk(
     overdueReceivableInvoices(db, { today }),
     db
       .from('commitments')
-      .select('amount_cop, due_on')
+      .select('id, title, amount_cop, due_on')
       .eq('kind', 'payment')
       .eq('review_state', 'confirmed')
       .not('state', 'in', '(met,dropped)')
@@ -94,18 +146,17 @@ export async function moneyAtRisk(
 
   let paymentsOverdue = 0;
   let paymentsDueSoon = 0;
-  const paymentRows = (commitments.data ?? []) as Array<{
-    amount_cop: number | string;
-    due_on: string;
-  }>;
-  for (const c of paymentRows) {
-    const amount = Number(c.amount_cop) || 0;
-    if (c.due_on < today) paymentsOverdue += amount;
-    else paymentsDueSoon += amount;
+  const paid = dedupePaymentCommitments((commitments.data ?? []) as PaymentCommitmentRow[]);
+  for (const c of paid.rows) {
+    if (c.due_on < today) paymentsOverdue += c.amount;
+    else paymentsDueSoon += c.amount;
   }
+  const paymentCount = paid.rows.length;
 
-  const fineRows = (fines.data ?? []) as Array<{ amount_cop: number | string }>;
-  const finesPending = fineRows.reduce((sum, f) => sum + (Number(f.amount_cop) || 0), 0);
+  const fineRows = ((fines.data ?? []) as Array<{ amount_cop: number | string }>).filter(
+    (f) => Number.isFinite(Number(f.amount_cop)) && Number(f.amount_cop) > 0,
+  );
+  const finesPending = fineRows.reduce((sum, f) => sum + Number(f.amount_cop), 0);
 
   return {
     today,
@@ -114,11 +165,38 @@ export async function moneyAtRisk(
       overdueInvoices,
       paymentsOverdue,
       paymentsDueSoon,
-      paymentCommitments: paymentRows.length,
+      paymentCommitments: paymentCount,
       finesPending,
       fines: fineRows.length,
       total: receivablesOverdue + paymentsOverdue + paymentsDueSoon + finesPending,
     },
+    sources: [
+      {
+        key: 'cartera_vencida',
+        label: 'Cartera vencida',
+        amount: receivablesOverdue,
+        count: overdueInvoices,
+        direction: 'por_cobrar',
+        from: 'Saldo de facturas por cobrar ya vencidas (confirmadas como documento o traídas del programa contable, cada una una vez), contado con el día de Bogotá.',
+      },
+      {
+        key: 'pagos_comprometidos',
+        label: 'Pagos comprometidos',
+        amount: paymentsOverdue + paymentsDueSoon,
+        count: paymentCount,
+        direction: 'por_pagar',
+        from: `Vencimientos de pago confirmados, vencidos o que vencen en ${DUE_SOON_DAYS} días. No incluye las facturas de proveedor de Por pagar.`,
+      },
+      {
+        key: 'multas',
+        label: 'Multas de tránsito',
+        amount: finesPending,
+        count: fineRows.length,
+        direction: 'por_pagar',
+        from: 'Comparendos pendientes que reportó el SIMIT.',
+      },
+    ],
+    duplicatePaymentsIgnored: paid.duplicates,
     otherCurrencies: [...others.entries()]
       .map(([currency, b]) => ({ currency, ...b }))
       .sort((a, b) => b.receivablesOverdue - a.receivablesOverdue),

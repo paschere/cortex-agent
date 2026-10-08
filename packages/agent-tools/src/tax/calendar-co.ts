@@ -105,6 +105,21 @@ export function isTaxBusinessDay(day: string): boolean {
   return !taxHolidays(t.getUTCFullYear()).has(day);
 }
 
+/**
+ * Si `day` cae en sábado, domingo o festivo, el siguiente día hábil: un plazo
+ * que vence en día no hábil se corre al siguiente hábil (art. 62 Código Civil
+ * y art. 1.6.1.13.2.x DUR 1625). Sirve a los plazos «el último día del mes».
+ */
+export function nextTaxBusinessDay(day: string): string {
+  let t = new Date(`${day}T00:00:00Z`).getTime();
+  for (let i = 0; i < 10; i++) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    if (isTaxBusinessDay(d)) return d;
+    t += 86_400_000;
+  }
+  return day;
+}
+
 /** El n-ésimo día hábil (1 = el primero) del mes `YYYY-MM`. */
 export function nthBusinessDay(month: string, n: number): string {
   const [y, m] = month.split('-').map(Number) as [number, number];
@@ -394,7 +409,7 @@ function byRule(year: number): CoCalendarYear {
     exogena: null,
     nomina,
     nominaUnverifiedMonths: [],
-    camaraComercio: `${year}-03-31`,
+    camaraComercio: nextTaxBusinessDay(`${year}-03-31`),
     ica: null,
   };
 }

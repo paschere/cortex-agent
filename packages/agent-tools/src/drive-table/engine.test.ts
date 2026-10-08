@@ -15,6 +15,7 @@ vi.mock('../kb/parsers', async (orig) => {
     parseDocument: (b: Buffer, m: string) => (parse.fn ? parse.fn(b, m) : real.parseDocument(b, m)),
   };
 });
+import { docTypeKey } from './doc-types';
 import {
   type DriveAccess,
   type DriveFolderSyncRow,
@@ -599,5 +600,116 @@ describe('subcarpetas', () => {
     });
     expect(tables.tracker_rows).toHaveLength(1);
     expect(row.external_key).toBe('FE1 | CLIENTEB');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Varios tipos de documento por fila y campos que salen de la ruta
+// ---------------------------------------------------------------------------
+
+describe('una carpeta organizada por mes y vuelo, con varios tipos de documento', () => {
+  const vFields: TrackerField[] = [
+    { key: 'guia', label: 'Guía', type: 'text', required: false },
+    { key: 'piezas', label: 'Piezas', type: 'number', required: false },
+    { key: 'kilos', label: 'Kilos', type: 'number', required: false },
+    { key: 'vuelo', label: 'Vuelo', type: 'text', required: false },
+    { key: 'fecha', label: 'Fecha del vuelo', type: 'date', required: false },
+    preset.fields.find((f) => f.key === 'revision') as TrackerField,
+  ];
+  const vTracker = { id: 't3', slug: 'vlos', name: 'VLOS', description: '', fields: vFields };
+  const PREALERTA = docTypeKey('PREALERTA 1.pdf', 'application/pdf');
+  const MANIFIESTO = docTypeKey('MANIFIESTO AEROLINEAS.csv', 'text/csv');
+  const vSync: DriveFolderSyncRow = {
+    ...sync,
+    id: 's3',
+    tracker_id: 't3',
+    extract_fields: [
+      { key: 'guia', hint: '', docType: PREALERTA },
+      { key: 'piezas', hint: '', docType: PREALERTA },
+      { key: 'vuelo', hint: '', fromPath: { level: 2, part: 'codigo' } },
+      { key: 'fecha', hint: '', fromPath: { level: 2, part: 'fecha' } },
+    ],
+    key_fields: ['guia'],
+    defaults: {},
+    sheet_mapping: { guia: 'GUIA', kilos: 'KILOS', '@tipos': MANIFIESTO },
+    recursive: true,
+  };
+  const at = (name: string, mimeType: string, path: string, id: string): FolderFile => ({
+    id,
+    name,
+    mimeType,
+    revision: 'r1',
+    modifiedTime: null,
+    size: null,
+    path,
+  });
+  const PATH = '10.OCTUBRE / 33. FEDEX 3325 07102026';
+  const PRE_TEXT = 'PREALERTA FEDEX 3325\nGUIA 045-111\nPIEZAS 12';
+  const extractor: DriveRowExtractor = async () => ({
+    filas: [{ campos: { guia: c('045-111', 'GUIA 045-111'), piezas: c('12', 'PIEZAS 12') } }],
+    observacion: null,
+  });
+  const run = (db: SupabaseClient, file: FolderFile, body: string) => {
+    stubBody(body);
+    parse.fn = async () => ({ text: body });
+    return processDriveFile(db, drive, { sync: vSync, tracker: vTracker, file, extractor });
+  };
+
+  it('prealerta + manifiesto llenan la MISMA fila; la ruta pone vuelo y fecha; el formulario no se lee', async () => {
+    const { db, tables } = fakeDb();
+    const pre = await run(db, at('PREALERTA 33.pdf', 'application/pdf', PATH, 'a'), PRE_TEXT);
+    expect(pre).toMatchObject({ status: 'ok', inserted: 1 });
+    const man = await run(
+      db,
+      at('MANIFIESTO AEROLINEAS.csv', 'text/csv', PATH, 'b'),
+      'GUIA,KILOS\n045-111,340.5\n045-222,10',
+    );
+    // La fila de la guía 045-111 se completa; la 045-222 es nueva.
+    expect(man).toMatchObject({ inserted: 1, updated: 1 });
+    const dian = vi.fn(async () => new Response('x'));
+    vi.stubGlobal('fetch', dian);
+    const form = await processDriveFile(db, drive, {
+      sync: vSync,
+      tracker: vTracker,
+      file: at('FORMULARIO DIAN DESCARGUE 33.pdf', 'application/pdf', PATH, 'c'),
+      extractor: neverModel,
+    });
+    expect(form.status).toBe('ok');
+    expect(dian).not.toHaveBeenCalled();
+    expect(tables.drive_folder_sync_files?.find((f) => f.file_id === 'c')).toMatchObject({
+      status: 'ok',
+    });
+
+    const rows = (tables.tracker_rows ?? []) as Array<{ values: Row; external_key: string }>;
+    expect(rows).toHaveLength(2);
+    const uno = rows.find((r) => r.external_key === '045111');
+    expect(uno?.values).toMatchObject({
+      guia: '045-111',
+      piezas: 12,
+      kilos: 340.5,
+      vuelo: '3325',
+      fecha: '2026-10-07',
+      revision: 'OK',
+    });
+
+    // Idempotente: releer los dos no duplica ni cambia nada.
+    const again = await run(db, at('PREALERTA 33.pdf', 'application/pdf', PATH, 'a'), PRE_TEXT);
+    expect(again).toMatchObject({ inserted: 0, updated: 0 });
+    expect(tables.tracker_rows).toHaveLength(2);
+  });
+
+  it('un nombre de subcarpeta que no encaja deja el campo vacío y la fila por revisar', async () => {
+    const { db, tables } = fakeDb();
+    const res = await run(
+      db,
+      at('PREALERTA 9.pdf', 'application/pdf', '10.OCTUBRE / KALITTA 1176', 'k'),
+      PRE_TEXT,
+    );
+    expect(res).toMatchObject({ inserted: 1, needsReview: 1 });
+    const row = (tables.tracker_rows?.[0] as { values: Row }).values;
+    expect(row.vuelo).toBe('1176');
+    expect(row.fecha).toBeUndefined();
+    expect(row.revision).toBe('Por revisar');
+    expect(String((tables.drive_folder_sync_files?.[0] as Row).notes)).toContain('Fecha del vuelo');
   });
 });

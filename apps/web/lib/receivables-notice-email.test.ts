@@ -13,6 +13,8 @@ const risk = {
     fines: 0,
     total: 42_700_000,
   },
+  sources: [],
+  duplicatePaymentsIgnored: 0,
   otherCurrencies: [{ currency: 'USD', receivablesOverdue: 1200, overdueInvoices: 1 }],
   topInvoices: [],
 };

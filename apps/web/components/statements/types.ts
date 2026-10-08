@@ -1,7 +1,13 @@
 import type { IncomeLineMeta, StatementsResult } from '@cortex/agent-tools';
 
 /** Lo que una acción de /estados, /presupuesto o /informe-socios contesta. */
-export type ScreenResult = { ok: true; note?: string } | { ok: false; error: string };
+export type ScreenResult =
+  | {
+      ok: true;
+      note?: string /** Algo salió a medias: se muestra aparte, no como éxito. */;
+      warning?: string;
+    }
+  | { ok: false; error: string };
 
 export interface StatementsLinks {
   self: string;

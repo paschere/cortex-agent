@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { collectBorradores } from './autopilot-drafts';
+import { nextTaxBusinessDay } from './calendar-co';
 import { pickObligation } from './draft-tools';
 import { buildTaxCalendar } from './engine';
 import type { TaxObligation } from './shape';
@@ -120,5 +121,19 @@ describe('el piloto cuenta el borrador una semana antes', () => {
     expect(collectBorradores([{ ...row, draftStatus: 'revisado' }], '2026-11-05')).toHaveLength(0);
     expect(collectBorradores([row], '2026-11-08')).toHaveLength(0);
     expect(collectBorradores([{ ...row, periodClosed: false }], '2026-11-05')).toHaveLength(0);
+  });
+});
+
+describe('plazos de «último día del mes» que caen en día no hábil', () => {
+  it('se corren al siguiente día hábil (sábado, domingo y festivo)', () => {
+    expect(nextTaxBusinessDay('2026-04-30')).toBe('2026-04-30'); // jueves
+    expect(nextTaxBusinessDay('2026-05-31')).toBe('2026-06-01'); // domingo
+    expect(nextTaxBusinessDay('2026-10-31')).toBe('2026-11-03'); // sábado + festivo lunes 2 nov
+    expect(nextTaxBusinessDay('2026-01-31')).toBe('2026-02-02'); // sábado
+  });
+
+  it('el RUB de un cambio en abril vence el lunes 1 de junio porque el 31 de mayo es domingo', () => {
+    const { obligations } = buildTaxCalendar({ ...BASE, rubLastChange: '2026-04-10' }, 2026);
+    expect(obligations.find((o) => o.key === 'rub:2026-04-10')?.dueDate).toBe('2026-06-01');
   });
 });

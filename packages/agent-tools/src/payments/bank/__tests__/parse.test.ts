@@ -342,3 +342,23 @@ describe('Excel de verdad', () => {
     expect(r.credits[0]).toMatchObject({ date: '2026-09-05', amount: 250000, balance: 1250000 });
   });
 });
+
+describe('el signo en columnas separadas de crédito y débito', () => {
+  const rows = [
+    ['FECHA', 'DESCRIPCIÓN', 'DÉBITOS', 'CRÉDITOS', 'SALDO'],
+    ['1/09/2026', 'PAGO PSE COLTRANS FV-1043', '', '4.200.000,50', '10.200.000,50'],
+    ['2/09/2026', 'REVERSA PAGO DEVUELTO', '', '-300.000,25', '9.900.000,25'],
+    ['3/09/2026', 'AJUSTE A FAVOR', '-50.000,10', '', '9.950.000,35'],
+    ['4/09/2026', 'COMISION', '12.000,00', '', '9.938.000,35'],
+  ];
+
+  it('un negativo en créditos es una salida, uno en débitos es una entrada, y los decimales se conservan', () => {
+    const p = ready(parseStatementRows(rows));
+    expect(p.credits.map((c) => [c.date, c.amount])).toEqual([
+      ['2026-09-01', 4200000.5],
+      ['2026-09-03', 50000.1],
+    ]);
+    expect(p.debits).toBe(2);
+    expect(p.debitsTotal).toBe(312000.25);
+  });
+});

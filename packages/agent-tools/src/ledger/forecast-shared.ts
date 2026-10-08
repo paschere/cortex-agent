@@ -104,16 +104,54 @@ const WHOLE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
 /**
  * Plata para leer de un vistazo. Pesos: «$ 38,5 M», «$ 950 mil», «−$ 3,2 M».
  * Otra moneda nunca se escribe con el signo del peso: «12.000 USD».
+ *
+ * La unidad se elige DESPUÉS de redondear: 999.950.000 es «$ 1 mil M» (no
+ * «$ 1.000 M» ni «$ 999,9 M») y 999.500 es «$ 1 M» (no «$ 1.000 mil»).
  */
 export function formatMoney(value: number, currency = 'COP'): string {
-  const sign = value < 0 ? '−' : '';
+  if (!Number.isFinite(value)) return '—';
+  const sign = value < 0 && Math.round(value) !== 0 ? '−' : '';
   const n = Math.abs(Math.round(value));
   if (currency.toUpperCase() !== 'COP')
     return `${sign}${WHOLE.format(n)} ${currency.toUpperCase()}`;
-  if (n >= 1e9) return `${sign}$ ${ONE_DECIMAL.format(n / 1e9)} mil M`;
-  if (n >= 1e6) return `${sign}$ ${ONE_DECIMAL.format(n / 1e6)} M`;
-  if (n >= 1e3) return `${sign}$ ${WHOLE.format(n / 1e3)} mil`;
+  // Décimas de millón y de mil millones ya redondeadas, para decidir la unidad.
+  const tenthsOfM = Math.round(n / 1e5);
+  if (tenthsOfM >= 10_000) return `${sign}$ ${ONE_DECIMAL.format(Math.round(n / 1e8) / 10)} mil M`;
+  if (Math.round(n / 1e3) >= 1000) return `${sign}$ ${ONE_DECIMAL.format(tenthsOfM / 10)} M`;
+  if (n >= 1e3) return `${sign}$ ${WHOLE.format(Math.round(n / 1e3))} mil`;
   return `${sign}$ ${WHOLE.format(n)}`;
+}
+
+/** Con una base menor a esto (en la moneda) el cambio relativo no se calcula: base cero. */
+export const PCT_BASE_MIN = 0.5;
+/** Un cambio de más de 100 veces la base (+10.000 %) no informa: se dice «nuevo». */
+export const PCT_MAX = 100;
+
+/**
+ * Cambio relativo de `now` frente a `before` como fracción (0,12 = +12 %).
+ * Con base negativa se divide por su valor absoluto: pasar de −100 a −50 es
+ * +50 % (mejoró). Devuelve `null` —nunca ±Infinity ni NaN— si no hay base con
+ * qué comparar: falta el dato, es cero (< `PCT_BASE_MIN`), o el salto supera
+ * `PCT_MAX` veces la base. En esos casos `isNewFromZero` dice si se rotula
+ * «nuevo» en vez de un porcentaje.
+ */
+export function pctChange(now: number, before: number | null | undefined): number | null {
+  if (before === null || before === undefined) return null;
+  if (!Number.isFinite(now) || !Number.isFinite(before)) return null;
+  if (Math.abs(before) < PCT_BASE_MIN) return null;
+  const c = (now - before) / Math.abs(before);
+  return Number.isFinite(c) && Math.abs(c) <= PCT_MAX ? c : null;
+}
+
+/**
+ * El valor aparece donde antes no había (base cero o salto inmenso): se rotula
+ * «nuevo», no un porcentaje. Falso si no hay dato anterior o si ambos son cero.
+ */
+export function isNewFromZero(now: number, before: number | null | undefined): boolean {
+  if (before === null || before === undefined) return false;
+  if (!Number.isFinite(now) || !Number.isFinite(before)) return false;
+  if (Math.abs(now) < PCT_BASE_MIN) return false;
+  return pctChange(now, before) === null;
 }
 
 /** «92%». */

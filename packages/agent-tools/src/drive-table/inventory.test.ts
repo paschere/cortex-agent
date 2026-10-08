@@ -102,11 +102,18 @@ describe('inventario de una carpeta', () => {
     expect(inv.documents.find((d) => d.id === 'd2')?.path).toBe('Cliente A / Octubre');
   });
 
-  it('para en maxFiles y avisa', async () => {
+  it('pasado maxFiles no corta a ciegas: muestrea, cuenta todo y lo dice', async () => {
     const inv = await inventoryFolder(drive, 'root', { recursive: true, maxFiles: 4 });
-    expect(inv.total).toBe(4);
-    expect(inv.truncated).toBe(true);
-    expect(inventoryMarkdown(inv, 'Raíz')).toContain('primeros 4');
+    expect(inv.sampled).toBe(true);
+    expect(inv.sampleSize).toBe(4);
+    expect(inv.total).toBe(10); // listó todo
+    expect(inv.counts.sheet + inv.counts.document + inv.counts.image + inv.counts.unreadable).toBe(
+      10,
+    );
+    expect(
+      inv.sheets.length + inv.documents.length + inv.images.length + inv.unreadable.length,
+    ).toBe(4);
+    expect(inventoryMarkdown(inv, 'Raíz')).toContain('MUESTRA');
   });
 
   it('una subcarpeta sin acceso se anota y no tumba el inventario; la raíz sí propaga', async () => {
