@@ -41,7 +41,7 @@ export function ChatErrorCard({
 }) {
   const Icon = isLimit ? Gauge : AlertTriangle;
   return (
-    <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-2 sm:px-6">
+    <div className="mx-auto w-full max-w-[45rem] shrink-0 px-4 pb-2 sm:px-6">
       <div
         role="alert"
         className={clsx(

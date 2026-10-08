@@ -600,6 +600,19 @@ export async function listViews(db: SupabaseClient, limit = 60): Promise<CustomV
   return (data ?? []).map((r) => adapt(r as Record<string, unknown>));
 }
 
+/** Las archivadas (sin pantallas de app), la más reciente primero. */
+export async function listArchivedViews(db: SupabaseClient, limit = 60): Promise<CustomViewRow[]> {
+  const { data, error } = await db
+    .from('custom_views')
+    .select(VIEW_COLUMNS)
+    .not('archived_at', 'is', null)
+    .is('app_id', null)
+    .order('archived_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((r) => adapt(r as Record<string, unknown>));
+}
+
 export async function listPinnedViews(db: SupabaseClient, limit = 3): Promise<CustomViewRow[]> {
   const { data, error } = await db
     .from('custom_views')
@@ -627,9 +640,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function getView(
   db: SupabaseClient,
   ref: string,
-  options: { appScreens?: boolean } = {},
+  options: { appScreens?: boolean; includeArchived?: boolean } = {},
 ): Promise<CustomViewRow | null> {
-  let q = db.from('custom_views').select(VIEW_COLUMNS).is('archived_at', null);
+  let q = db.from('custom_views').select(VIEW_COLUMNS);
+  if (!options.includeArchived) q = q.is('archived_at', null);
   if (!options.appScreens) q = q.is('app_id', null);
   const { data, error } = await (UUID_RE.test(ref)
     ? q.eq('id', ref)
@@ -642,7 +656,7 @@ export async function getView(
 export async function mustGetView(
   db: SupabaseClient,
   ref: string,
-  options: { appScreens?: boolean } = {},
+  options: { appScreens?: boolean; includeArchived?: boolean } = {},
 ): Promise<CustomViewRow> {
   const view = await getView(db, ref, options);
   if (!view) throw new NotFoundError(`No hay una vista «${ref}» en este espacio.`);
@@ -873,6 +887,44 @@ export async function archiveView(
     .eq('id', id)
     .is('archived_at', null);
   // Una pantalla de app (0208) se archiva sólo desde su app.
+  if (!options.appScreen) q = q.is('app_id', null);
+  const { data, error } = await q.select('id').maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/**
+ * Saca una vista del archivo. Archivar le quitó el enlace y la fijó en nada,
+ * así que vuelve sólo para el equipo. Si su nombre corto ya lo usa otra vista
+ * activa, recibe uno libre. Devuelve false si no estaba archivada.
+ */
+export async function restoreView(
+  db: SupabaseClient,
+  id: string,
+  options: { appScreen?: boolean } = {},
+): Promise<boolean> {
+  const { data: row, error: readErr } = await db
+    .from('custom_views')
+    .select('id, slug')
+    .eq('id', id)
+    .not('archived_at', 'is', null)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!row) return false;
+  const slug = String((row as { slug: string }).slug);
+  const patch: Record<string, unknown> = { archived_at: null };
+  if (!options.appScreen) {
+    const { data: clash, error: clashErr } = await db
+      .from('custom_views')
+      .select('id')
+      .eq('slug', slug)
+      .is('archived_at', null)
+      .neq('id', id)
+      .limit(1);
+    if (clashErr) throw clashErr;
+    if ((clash ?? []).length > 0) patch.slug = await freeSlug(db, slug);
+  }
+  let q = db.from('custom_views').update(patch).eq('id', id).not('archived_at', 'is', null);
   if (!options.appScreen) q = q.is('app_id', null);
   const { data, error } = await q.select('id').maybeSingle();
   if (error) throw error;

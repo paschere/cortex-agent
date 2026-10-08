@@ -1,8 +1,9 @@
 'use client';
 
 import { MENU_CONTENT, MenuItem } from '@/components/apps/editor/shared';
+import { type ArchivedItem, ArchivedSection } from '@/components/ui/ArchivedSection';
 import { DeleteDialog } from '@/components/ui/DeleteDialog';
-import { createAppAction, deleteAppAction } from '@/lib/apps/actions';
+import { createAppAction, deleteAppAction, restoreAppAction } from '@/lib/apps/actions';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import { LayoutGrid, MoreHorizontal, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
@@ -43,10 +44,13 @@ const SECONDARY =
 
 export function AppsLibrary({
   apps,
+  archived = [],
   canManage,
   templates,
 }: {
   apps: AppSummary[];
+  /** Las archivadas; sólo llegan si quien mira administra. */
+  archived?: ArchivedItem[];
   canManage: boolean;
   templates: TemplateSummary[];
 }) {
@@ -184,7 +188,22 @@ export function AppsLibrary({
       />
 
       {canManage && (
-        <section aria-labelledby="nueva-app">
+        <ArchivedSection
+          items={archived}
+          noun="aplicación"
+          onRestore={restoreAppAction}
+          onDelete={deleteAppAction}
+          deleteTitle="¿Eliminar esta aplicación archivada?"
+          confirmLabel="Eliminar la aplicación"
+          consequences={[
+            'Se borran para siempre sus pantallas, roles, miembros, usuarios externos, kioscos, automatizaciones y avisos. No se puede deshacer.',
+            'Los datos de las tablas no se tocan.',
+          ]}
+        />
+      )}
+
+      {canManage && (
+        <section aria-labelledby="nueva-app" className="mt-10">
           <h2 id="nueva-app" className="mb-3 text-sm font-semibold text-ink">
             Nueva aplicación
           </h2>

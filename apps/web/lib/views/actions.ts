@@ -15,6 +15,7 @@ import {
   editViewSubmission,
   getTrackerBySlug,
   mustGetView,
+  restoreView,
   restoreViewVersion,
   runViewAction,
   setViewAccess,
@@ -244,13 +245,30 @@ export async function archiveViewAction(viewId: string): Promise<ViewActionResul
   }
 }
 
+export async function restoreViewAction(viewId: string): Promise<ViewActionResult> {
+  try {
+    const user = await requireSession();
+    if (!viewerFromSession(user).companyAdmin)
+      throw new ValidationError('Sólo quien administra la empresa puede restaurar una vista.');
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId, { includeArchived: true });
+    if (!(await restoreView(db, view.id)))
+      throw new ValidationError('Esa vista no está archivada.');
+    revalidatePath('/views');
+    revalidatePath('/dashboard');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo restaurar la vista.') };
+  }
+}
+
 export async function deleteViewAction(viewId: string): Promise<ViewActionResult> {
   try {
     const user = await requireSession();
     if (!viewerFromSession(user).companyAdmin)
       throw new ValidationError('Sólo quien administra la empresa puede eliminar una vista.');
     const db = getOrgScopedClient(user.organization.id);
-    const view = await mustGetView(db, viewId);
+    const view = await mustGetView(db, viewId, { includeArchived: true });
     await deleteView(db, view.id);
     revalidatePath('/views');
     revalidatePath(`/views/${view.slug}`);

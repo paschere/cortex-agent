@@ -507,6 +507,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   views_update: { label: 'Cambiar una vista', icon: 'LayoutPanelTop' },
   views_share: { label: 'Compartir una vista', icon: 'Link2' },
   views_archive: { label: 'Archivar una vista', icon: 'Archive' },
+  views_restore: { label: 'Restaurar una vista archivada', icon: 'Archive' },
   views_delete: { label: 'Eliminar una vista', icon: 'Trash2' },
   views_company_pulse: { label: 'Armar el pulso de la empresa', icon: 'LayoutPanelTop' },
   views_refresh_summary: { label: 'Actualizar el resumen del día', icon: 'LayoutPanelTop' },

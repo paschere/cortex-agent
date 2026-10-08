@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { VIEW_TIMEZONE, computeView, todayIn } from '../views/compute';
-import { type ViewSpec, filterSchema, viewSpecSchema } from '../views/spec';
+import { VIEW_TIMEZONE, computeView, todayIn, viewShortDate } from '../views/compute';
+import { type ViewFilter, type ViewSpec, filterSchema, viewSpecSchema } from '../views/spec';
 import { loadViewSources } from '../views/store';
 import { type ResolvedRole, rowAccessFor, rowScopeFor } from './permissions';
 import type { AppAccess } from './store';
@@ -215,6 +215,55 @@ const HOME_VIEW_BASE = {
 /** Cuántas filas de ejemplo lleva una tarjeta de pendientes. */
 const PENDING_SAMPLE = 3;
 
+/** Cuántos días lleva el micrográfico de una tarjeta de contador. */
+export const SERIES_DAYS = 7;
+
+const DATE_TOKENS = new Set(['{hoy}', '{ayer}', '{manana}']);
+
+/**
+ * Cómo se sacan los últimos días de una tarjeta de contador, con LA MISMA
+ * tabla y los mismos filtros que su cifra:
+ * - sin filtros de fecha de «hoy»: filas por día de creación (`created_at`);
+ * - con `{hoy}`/`{ayer}`/`{manana}` en igualdad sobre un solo campo: ese campo
+ *   es el día y sus filtros de fecha se sueltan (la serie recorre los días);
+ * - cualquier otra forma: no hay serie (nunca se inventa una).
+ */
+export function seriesPlan(card: HomeCard): { groupBy: string; filters: ViewFilter[] } | null {
+  if (card.kind !== 'counter') return null;
+  const dated = card.filters.filter((f) => typeof f.value === 'string' && DATE_TOKENS.has(f.value));
+  if (dated.length === 0) return { groupBy: 'created_at', filters: card.filters };
+  const fields = new Set(dated.map((f) => f.field));
+  if (fields.size !== 1 || dated.some((f) => f.op !== 'eq')) return null;
+  return {
+    groupBy: dated[0]?.field ?? 'created_at',
+    filters: card.filters.filter((f) => !dated.includes(f)),
+  };
+}
+
+/** Los últimos `days` días (el más viejo primero) que acaban hoy, en la fecha de Bogotá. */
+export function lastDays(now: Date, days = SERIES_DAYS): string[] {
+  const today = todayIn(now);
+  const base = Date.parse(`${today}T12:00:00Z`);
+  return Array.from({ length: days }, (_, i) =>
+    todayIn(new Date(base - (days - 1 - i) * 86_400_000)),
+  );
+}
+
+/**
+ * Los puntos de un gráfico por día → una cifra por cada uno de los últimos días
+ * (los días sin filas son cero). Sin ninguna fila en la ventana no hay serie:
+ * una línea plana en cero no dice nada.
+ */
+export function seriesFromPoints(
+  points: Array<{ label: string; value: number }>,
+  now: Date,
+  days = SERIES_DAYS,
+): number[] | undefined {
+  const byLabel = new Map(points.map((p) => [p.label, p.value]));
+  const series = lastDays(now, days).map((d) => Math.round(byLabel.get(viewShortDate(d)) ?? 0));
+  return series.some((v) => v > 0) ? series : undefined;
+}
+
 /** El spec sintético que calcula todas las tarjetas de una vez: una cifra por tarjeta y 3 filas por pendiente. */
 export function homeSpecFor(cards: HomeCard[], now: Date): ViewSpec | null {
   const blocks: unknown[] = [];
@@ -229,6 +278,20 @@ export function homeSpecFor(cards: HomeCard[], now: Date): ViewSpec | null {
       filters,
       aggregate: 'count',
     });
+    const plan = seriesPlan(card);
+    if (plan)
+      blocks.push({
+        id: `s_${card.id}`,
+        type: 'chart',
+        title: card.id,
+        tracker: card.source,
+        filters: resolveFilterTokens(plan.filters, now),
+        chart: 'bar',
+        groupBy: plan.groupBy,
+        bucket: 'day',
+        aggregate: 'count',
+        limit: 24,
+      });
     if (card.kind === 'pending')
       blocks.push({
         id: `r_${card.id}`,
@@ -355,6 +418,8 @@ export async function computeHome(
     const rows =
       table?.type === 'table' ? table.rows.map((r) => r.cells[0] ?? '').filter(Boolean) : [];
     const target = card.screen && visibleScreenSlugs.has(card.screen) ? card.screen : null;
+    const chart = block(`s_${card.id}`);
+    const series = chart?.type === 'chart' ? seriesFromPoints(chart.points, now) : undefined;
     return {
       id: card.id,
       kind: card.kind,
@@ -370,6 +435,7 @@ export async function computeHome(
           : null,
       rows,
       empty: n === 0,
+      ...(series ? { series } : {}),
     };
   });
   return {

@@ -95,8 +95,7 @@ function icon(name: string): typeof Brain {
  */
 const CORTEX_COPY = {
   title: '¿Qué resolvemos hoy?',
-  subtitle:
-    'Pregúntame por tu cartera, tus clientes o tus pendientes, o pídeme que haga algo por ti.',
+  subtitle: 'Pregúntame por tus pendientes, tu plata o tu equipo, o pídeme que haga algo por ti.',
 };
 
 const COPY: Record<string, { title: string; subtitle: string }> = { cortex: CORTEX_COPY };
@@ -208,14 +207,17 @@ function Mark() {
 export function EmptyState({
   agent,
   waiting,
+  companyName,
   onSuggestion,
   onAsk,
 }: {
   agent?: AgentInfo;
+  companyName?: string;
   waiting?: WaitingNoticeData;
   onSuggestion: (text: string) => void;
   onAsk?: (text: string) => void;
 }) {
+  const company = companyName?.trim();
   const copy = (agent && COPY[agent.slug]) ?? {
     title: agent?.name ?? CORTEX_COPY.title,
     subtitle: agent?.greeting ?? CORTEX_COPY.subtitle,
@@ -251,7 +253,9 @@ export function EmptyState({
       ? clipTitle(lead.title, 90)
       : waitingOn
         ? (waiting?.sentence ?? '')
-        : copy.title;
+        : company && agent?.slug === 'cortex'
+          ? `¿Qué resolvemos hoy en ${clipTitle(company, 40)}?`
+          : copy.title;
 
   const askWaiting = () => {
     if (lead) (onAsk ?? onSuggestion)(lead.ask);

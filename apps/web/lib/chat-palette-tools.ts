@@ -426,6 +426,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'apps.automations.update': 'Cambia la automatización ',
   'apps.automations.pause': 'Pausa la automatización ',
   'views.archive': 'Archiva la vista ',
+  'views.restore': 'Restaura la vista archivada ',
   'views.delete': 'Elimina la vista ',
   'views.company_pulse': 'Dime cómo va la empresa en una vista',
   'views.refresh_summary': 'Actualiza el resumen de hoy de la vista ',

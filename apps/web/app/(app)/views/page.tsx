@@ -8,6 +8,7 @@ import {
   BLOCK_LABEL,
   internalShareRefusal,
   internalSourcesOf,
+  listArchivedViews,
   listTrackers,
   listViews,
   publicViewUrl,
@@ -35,8 +36,11 @@ export const dynamic = 'force-dynamic';
 export default async function ViewsPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
-  const [views, trackers, brandRow, modulesOff] = await Promise.all([
+  const canRestore = viewerFromSession(user).companyAdmin;
+  const [views, archivedViews, trackers, brandRow, modulesOff] = await Promise.all([
     listViews(db, 60),
+    // «Archivadas»: sólo para quien administra; el servidor lo vuelve a exigir en cada acción.
+    canRestore ? listArchivedViews(db, 60) : Promise.resolve([]),
     listTrackers(db, 6),
     // La marca (0170), una vez: las miniaturas se tiñen con ella. Sin marca, índigo.
     readBranding(db),
@@ -124,6 +128,11 @@ export default async function ViewsPage() {
   return (
     <ViewsLibrary
       views={summaries}
+      archived={archivedViews.map((v) => ({
+        id: v.id,
+        name: v.name,
+        when: relativeTime(v.archived_at ?? v.updated_at, now),
+      }))}
       suggestions={suggestions}
       brand={brand}
       modulesOff={modulesOff}

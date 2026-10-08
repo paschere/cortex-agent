@@ -154,12 +154,18 @@ function visibleSet(def: VoiceDef, values: Record<string, string>): Set<string> 
 }
 
 /** Lo que el formulario valida: «viewer» lo pone el servidor, no se exige. */
-function violations(def: VoiceDef, values: Record<string, string>): Record<string, string> {
+function violations(
+  def: VoiceDef,
+  values: Record<string, string>,
+  ctx: VoiceCtx,
+): Record<string, string> {
   const prep = def.prepare ?? ((v: string) => v);
   return violationsByKey(
     validateRowValues(
       def.fields.map((f) => (f.default === 'viewer' ? { ...f, required: false } : f)),
       Object.fromEntries(Object.entries(values).map(([k, v]) => [k, prep(v)])),
+      // La fecha de la conversación manda: «futura» es respecto a `ctx.today`, no al reloj.
+      { today: ctx.today, now: ctx.now },
     ),
   );
 }
@@ -810,9 +816,10 @@ function setValue(
   state: VoiceState,
   key: string,
   value: string,
+  ctx: VoiceCtx,
 ): { ok: true; state: VoiceState } | { ok: false; say: string } {
   const values = { ...state.values, [key]: value };
-  const msg = violations(def, values)[key];
+  const msg = violations(def, values, ctx)[key];
   if (msg) return { ok: false, say: msg };
   return {
     ok: true,
@@ -865,7 +872,7 @@ export function applyLocation(
     const skipped = { ...state, skipped: [...state.skipped, key] };
     return afterFill(def, skipped, key, ctx, 'No pude tomar tu ubicación, la dejo vacía.');
   }
-  const set = setValue(def, state, key, value);
+  const set = setValue(def, state, key, value, ctx);
   if (!set.ok) return { state, say: set.say };
   return afterFill(def, set.state, key, ctx, 'Ubicación puesta.');
 }
@@ -1019,7 +1026,7 @@ export function answer(
   const res = interpret(def, f, text, ctx);
   if (res.kind === 'unknown') return { state, say: '', server: true };
   if (res.kind === 'invalid') return { state, say: res.say };
-  const set = setValue(def, state, f.key, res.value);
+  const set = setValue(def, state, f.key, res.value, ctx);
   if (!set.ok) return { state: { ...state, misses: 0 }, say: join(set.say, promptFor(f)) };
   return afterFill(def, set.state, f.key, ctx, '');
 }
@@ -1055,7 +1062,7 @@ function answerConfirming(
         state,
         say: `Falta ${missing.map(label).join(', ')}: llénalo en la pantalla y di enviar.`,
       };
-    const found = violations(def, state.values);
+    const found = violations(def, state.values, ctx);
     const key = orderedKeys(def).find((k) => found[k]);
     if (key) {
       const f = fieldOf(def, key) as TrackerField;
@@ -1127,7 +1134,7 @@ export function applyServerTurn(
     if (!f || raw === undefined || blank(raw) || isScreenOnly(f) || !visible.has(k)) continue;
     const value =
       f.type === 'checkbox' ? (parseCheckbox(raw) === 0 ? '0' : '1') : String(raw).trim();
-    const set = setValue(def, s, k, value);
+    const set = setValue(def, s, k, value, ctx);
     if (set.ok) {
       s = set.state;
       done.push(label(f));

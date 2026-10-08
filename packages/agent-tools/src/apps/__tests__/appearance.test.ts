@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { computeView } from '../../views/compute';
+import type { ViewSource } from '../../views/compute';
 import {
   type AppHome,
   type HomeCard,
@@ -11,10 +13,13 @@ import {
   greetingFor,
   homeEnabled,
   homeSpecFor,
+  lastDays,
   mergeBrand,
   parseBrand,
   parseHome,
   resolveFilterTokens,
+  seriesFromPoints,
+  seriesPlan,
 } from '../appearance';
 import { type ResolvedRole, adminRole, rowScopeFor } from '../permissions';
 
@@ -201,10 +206,10 @@ describe('tarjetas por rol', () => {
 
   it('el spec lleva una cifra por tarjeta y 3 filas de ejemplo por pendiente, con la fecha de hoy ya puesta', () => {
     const spec = homeSpecFor([counter, pending], NOW);
-    expect(spec?.blocks.map((b) => b.id)).toEqual(['n_hoy', 'n_dup', 'r_dup']);
+    expect(spec?.blocks.map((b) => b.id)).toEqual(['n_hoy', 's_hoy', 'n_dup', 'r_dup']);
     const metric = spec?.blocks[0];
     expect(metric && 'filters' in metric ? metric.filters[0]?.value : null).toBe('2026-10-07');
-    const table = spec?.blocks[2];
+    const table = spec?.blocks[3];
     expect(table && 'limit' in table ? table.limit : null).toBe(3);
   });
 
@@ -236,5 +241,112 @@ describe('forma del inicio', () => {
     expect(parseHome('basura')).toBeNull();
     expect(homeEnabled(parseHome({}))).toBe(false);
     expect(homeEnabled(HOME)).toBe(true);
+  });
+});
+
+describe('micrográfico de las tarjetas (series)', () => {
+  const plain: HomeCard = {
+    ...counter,
+    id: 'nuevos',
+    filters: [{ field: 'estado', op: 'eq', value: 'Activo' }],
+  };
+
+  it('sin fecha de hoy en los filtros cuenta por día de creación con los mismos filtros', () => {
+    expect(seriesPlan(plain)).toEqual({ groupBy: 'created_at', filters: plain.filters });
+  });
+
+  it('con {hoy} en un solo campo, ese campo es el día y su filtro de fecha se suelta', () => {
+    const extra: HomeCard = {
+      ...counter,
+      filters: [...counter.filters, { field: 'estado', op: 'eq', value: 'Activo' }],
+    };
+    expect(seriesPlan(extra)).toEqual({
+      groupBy: 'fecha',
+      filters: [{ field: 'estado', op: 'eq', value: 'Activo' }],
+    });
+  });
+
+  it('no hay serie para pendientes, accesos directos ni fechas en varios campos u otros operadores', () => {
+    expect(seriesPlan(pending)).toBeNull();
+    expect(seriesPlan(shortcut)).toBeNull();
+    const two: HomeCard = {
+      ...counter,
+      filters: [
+        { field: 'a', op: 'eq', value: '{hoy}' },
+        { field: 'b', op: 'eq', value: '{ayer}' },
+      ],
+    };
+    expect(seriesPlan(two)).toBeNull();
+    expect(
+      seriesPlan({ ...counter, filters: [{ field: 'fecha', op: 'gte', value: '{hoy}' }] }),
+    ).toBeNull();
+  });
+
+  it('los últimos 7 días acaban hoy en la fecha de Bogotá', () => {
+    expect(lastDays(NOW)).toEqual([
+      '2026-10-01',
+      '2026-10-02',
+      '2026-10-03',
+      '2026-10-04',
+      '2026-10-05',
+      '2026-10-06',
+      '2026-10-07',
+    ]);
+  });
+
+  it('rellena con cero los días sin filas y descarta lo que cae fuera de la ventana', () => {
+    const points = [
+      { label: '28 sep 2026', value: 9 },
+      { label: '3 oct 2026', value: 2 },
+      { label: '7 oct 2026', value: 5 },
+      { label: '9 oct 2026', value: 4 },
+    ];
+    expect(seriesFromPoints(points, NOW)).toEqual([0, 0, 2, 0, 0, 0, 5]);
+  });
+
+  it('sin filas en la ventana no hay serie', () => {
+    expect(seriesFromPoints([], NOW)).toBeUndefined();
+    expect(seriesFromPoints([{ label: '1 ene 2026', value: 3 }], NOW)).toBeUndefined();
+  });
+
+  it('el bloque del spec, calculado con filas reales, da la serie del contador', () => {
+    const spec = homeSpecFor([plain], NOW);
+    expect(spec?.blocks.map((b) => b.id)).toEqual(['n_nuevos', 's_nuevos']);
+    if (!spec) return;
+    const mk = (id: string, created: string, estado: string) => ({
+      id,
+      label: id,
+      values: { estado },
+      created_at: created,
+      updated_at: created,
+    });
+    const sources = new Map<string, ViewSource>([
+      [
+        'vuelos',
+        {
+          tracker: {
+            slug: 'vuelos',
+            name: 'Vuelos',
+            fields: [{ key: 'estado', label: 'Estado', type: 'text', required: false }],
+          },
+          rows: [
+            mk('1', '2026-10-07T15:00:00Z', 'Activo'),
+            mk('2', '2026-10-07T16:00:00Z', 'Activo'),
+            mk('3', '2026-10-05T15:00:00Z', 'Activo'),
+            mk('4', '2026-10-06T15:00:00Z', 'Cerrado'),
+          ],
+          truncated: false,
+        },
+      ],
+    ]);
+    const view = computeView(spec, sources, NOW, {
+      writable: false,
+      audience: 'team',
+      filters: {},
+    });
+    const chart = view.blocks.find((b) => b.id === 's_nuevos');
+    if (chart?.type !== 'chart') throw new Error('se esperaba el gráfico');
+    // Los filtros de la tarjeta valen: la fila «Cerrado» no cuenta.
+    expect(seriesFromPoints(chart.points, NOW)).toEqual([0, 0, 0, 0, 1, 0, 2]);
   });
 });

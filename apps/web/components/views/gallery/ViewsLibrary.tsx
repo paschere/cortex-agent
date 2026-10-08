@@ -1,11 +1,13 @@
 'use client';
 
+import { type ArchivedItem, ArchivedSection } from '@/components/ui/ArchivedSection';
 import { DeleteDialog } from '@/components/ui/DeleteDialog';
 import type { ViewBrand } from '@/lib/branding/shape';
 import {
   archiveViewAction,
   deleteViewAction,
   duplicateViewAction,
+  restoreViewAction,
   setViewPinnedAction,
 } from '@/lib/views/actions';
 import { startersFor } from '@/lib/views/starter-templates';
@@ -115,11 +117,14 @@ const MENU_ITEM =
 
 export function ViewsLibrary({
   views,
+  archived = [],
   suggestions,
   brand = null,
   modulesOff = [],
 }: {
   views: ViewSummary[];
+  /** Las archivadas; sólo llegan si quien mira administra la empresa. */
+  archived?: ArchivedItem[];
   suggestions: string[];
   /** Los módulos apagados de la empresa: sus plantillas no se ofrecen. */
   modulesOff?: ModuleKey[];
@@ -370,6 +375,19 @@ export function ViewsLibrary({
         />
       )}
       {launch && <ViewStudio launch={launch} onExit={() => setLaunch(null)} />}
+
+      <ArchivedSection
+        items={archived}
+        noun="vista"
+        onRestore={restoreViewAction}
+        onDelete={deleteViewAction}
+        deleteTitle="¿Eliminar esta vista archivada?"
+        confirmLabel="Eliminar la vista"
+        consequences={[
+          'La vista se borra para siempre, con sus versiones y los envíos de sus formularios. No se puede deshacer.',
+          'Los datos de las tablas no se tocan.',
+        ]}
+      />
 
       {notice && (
         <output

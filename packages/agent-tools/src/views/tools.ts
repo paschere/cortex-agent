@@ -1,4 +1,4 @@
-import { ForbiddenError } from '@cortex/core';
+import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { z } from 'zod';
 import { isCompanyManager } from '../directory/store';
 import { registerTool } from '../index';
@@ -8,9 +8,11 @@ import {
   archiveView,
   createView,
   deleteView,
+  listArchivedViews,
   listViews,
   mustGetView,
   publicViewUrl,
+  restoreView,
   setViewAccess,
   updateView,
   validateSpec,
@@ -273,6 +275,37 @@ export const viewsArchive = registerTool({
       markdown: archived
         ? `Vista **${view.name}** archivada. Los datos de sus tablas siguen intactos.`
         : 'Esa vista ya no estaba activa.',
+    };
+  },
+});
+
+export const viewsRestore = registerTool({
+  id: 'views.restore',
+  description:
+    'Restore an ARCHIVED custom view: it comes back to the list, shared with the team only (its outside link was removed when it was archived). Find it by id, slug or name among the archived ones. Requires confirmation; company owners/admins only.',
+  inputSchema: z.object({
+    view: z.string().trim().min(1).max(80).describe('Id, slug or name of the archived view.'),
+  }),
+  outputSchema: z.object({ restored: z.boolean(), markdown: z.string() }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    if (!(await isCompanyManager(ctx.db, ctx.userId)))
+      throw new ForbiddenError(
+        'Sólo quien administra la empresa o es su dueño puede restaurar una vista.',
+      );
+    const wanted = input.view.trim().toLowerCase();
+    const archived = await listArchivedViews(ctx.db, 100);
+    const view = archived.find(
+      (v) => v.id === input.view || v.slug === input.view || v.name.trim().toLowerCase() === wanted,
+    );
+    if (!view) throw new NotFoundError(`No hay una vista archivada «${input.view}».`);
+    const restored = await restoreView(ctx.db, view.id);
+    return {
+      restored,
+      markdown: restored
+        ? `Vista **${view.name}** restaurada. Vuelve sólo para el equipo; si la compartías por enlace, hay que compartirla otra vez.`
+        : 'Esa vista ya no estaba archivada.',
     };
   },
 });

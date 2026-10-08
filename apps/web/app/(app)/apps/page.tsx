@@ -1,7 +1,14 @@
 import { type AppSummary, AppsLibrary } from '@/components/apps/AppsLibrary';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { APP_TEMPLATES, listApps, listScreens, viewerFromSession } from '@cortex/agent-tools';
+import { relativeTime } from '@/lib/views/studio';
+import {
+  APP_TEMPLATES,
+  listApps,
+  listArchivedApps,
+  listScreens,
+  viewerFromSession,
+} from '@cortex/agent-tools';
 
 /**
  * Aplicaciones: varias pantallas con roles, para quien no es «del equipo».
@@ -20,6 +27,9 @@ export default async function AppsPage() {
   const db = getOrgScopedClient(user.organization.id);
   const canManage = viewerFromSession(user).companyAdmin;
   const apps = await listApps(db);
+  // «Archivadas»: sólo para quien administra; el servidor las vuelve a exigir al restaurar o eliminar.
+  const archivedApps = canManage ? await listArchivedApps(db) : [];
+  const now = new Date();
   const screens = await Promise.all(apps.map((a) => listScreens(db, a.id)));
 
   const summaries: AppSummary[] = apps
@@ -38,6 +48,12 @@ export default async function AppsPage() {
   return (
     <AppsLibrary
       apps={summaries}
+      archived={archivedApps.map((a) => ({
+        id: a.id,
+        name: a.name,
+        icon: a.icon,
+        when: relativeTime(a.archived_at ?? a.updated_at, now),
+      }))}
       canManage={canManage}
       templates={APP_TEMPLATES.map((t) => ({ id: t.id, name: t.name, icon: t.icon, body: t.body }))}
     />

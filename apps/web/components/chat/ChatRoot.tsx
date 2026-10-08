@@ -6,6 +6,7 @@ import { type ChatErrorKind, classifyClientChatError } from '@/lib/chat-error';
 import { type ScreenFrame, rememberFrame } from '@/lib/screen-marks';
 import type { ScreenGlance } from '@/lib/tab-recorder';
 import { type WaitingNoticeData, clipTitle } from '@/lib/waiting-shape';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
@@ -19,7 +20,7 @@ import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { Presence } from './Presence';
 import { useScreenView } from './ScreenView';
-import { ThreadHistory } from './ThreadHistory';
+import { ThreadAside, ThreadHistory } from './ThreadHistory';
 import { WaitingNotice } from './WaitingNotice';
 
 interface AgentInfo {
@@ -76,6 +77,8 @@ interface ChatRootProps {
    * para los badges del rail. Ausente no dibuja nada.
    */
   waiting?: WaitingNoticeData;
+  /** Nombre de la empresa, para saludar en la pantalla de un chat nuevo. */
+  companyName?: string;
   /**
    * De qué va esta conversación — el título que ya se le puso al hilo.
    *
@@ -97,6 +100,7 @@ export function ChatRoot({
   initialGlances,
   initialBrainSources,
   waiting,
+  companyName,
   title,
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
@@ -367,6 +371,17 @@ export function ChatRoot({
     [conversationId],
   );
 
+  // La lista de chats se entera de que hay uno nuevo (o un título nuevo) cuando
+  // termina un turno, no un minuto después.
+  const queryClient = useQueryClient();
+  const wasLoading = useRef(false);
+  useEffect(() => {
+    if (wasLoading.current && !isLoading) {
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    }
+    wasLoading.current = isLoading;
+  }, [isLoading, queryClient]);
+
   const handleRegenerate = useCallback(() => void reload(), [reload]);
   const handleAgentChange = useCallback(
     (slug: string) => {
@@ -377,107 +392,111 @@ export function ChatRoot({
   );
 
   return (
-    <div className="cortex-chat relative flex h-full flex-col overflow-hidden bg-canvas">
-      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
-        <button
-          type="button"
-          onClick={() => setSidebarOpen(true)}
-          aria-label="Abrir menú"
-          className="rounded-full p-1.5 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink motion-reduce:transition-none md:hidden"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
-          <div className="min-w-0 truncate text-base font-semibold tracking-[-0.01em] text-ink">
-            {title ??
-              (!conversationId && waiting?.lead
-                ? clipTitle(waiting.lead.title, 48)
-                : !conversationId && waiting && waiting.total > 0
-                  ? waiting.sentence
-                  : conversationId
-                    ? 'Conversación'
-                    : 'Conversación nueva')}
+    <div className="flex h-full min-w-0 overflow-hidden">
+      <ThreadAside />
+      <div className="cortex-chat relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Abrir menú"
+            className="rounded-full p-1.5 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink motion-reduce:transition-none md:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
+            <div className="min-w-0 truncate text-base font-semibold tracking-[-0.01em] text-ink">
+              {title ??
+                (!conversationId && waiting?.lead
+                  ? clipTitle(waiting.lead.title, 48)
+                  : !conversationId && waiting && waiting.total > 0
+                    ? waiting.sentence
+                    : conversationId
+                      ? 'Conversación'
+                      : 'Conversación nueva')}
+            </div>
           </div>
-        </div>
-        {messages.length > 0 && waiting && (waiting.total > 0 || waiting.lead) ? (
-          <WaitingNotice waiting={waiting} onAsk={handleSend} />
-        ) : null}
-        <div className="ml-auto flex min-w-0 shrink items-center gap-3">
-          <Link href="/management" className="chat-header-link">
-            Agenda
-          </Link>
-          <Link href="/onboarding" className="chat-header-link hidden sm:inline-flex">
-            Mi empresa
-          </Link>
-          <ThreadHistory />
-        </div>
-      </header>
+          {messages.length > 0 && waiting && (waiting.total > 0 || waiting.lead) ? (
+            <WaitingNotice waiting={waiting} onAsk={handleSend} />
+          ) : null}
+          <div className="ml-auto flex min-w-0 shrink items-center gap-3">
+            <Link href="/management" className="chat-header-link">
+              Agenda
+            </Link>
+            <Link href="/onboarding" className="chat-header-link hidden sm:inline-flex">
+              Mi empresa
+            </Link>
+            <ThreadHistory />
+          </div>
+        </header>
 
-      {/*
+        {/*
         `onAnswer` es `handleSend`, el mismo del compositor, y eso es la
         decisión y no un ahorro: elegir una opción en una tarjeta y escribir la
         respuesta a mano entran al hilo por la misma puerta, así que la
         conversación se relee igual dentro de dos semanas — con la decisión
         dicha en voz de quien la tomó. Ver ChoicePrompt.
       */}
-      <ChatComposeProvider compose={setDraft} ask={handleSend}>
-        <MessageList
-          messages={messages}
-          isLoading={isLoading}
+        <ChatComposeProvider compose={setDraft} ask={handleSend}>
+          <MessageList
+            messages={messages}
+            isLoading={isLoading}
+            conversationId={conversationId}
+            agent={activeAgent}
+            onConfirmed={reload}
+            onRegenerate={handleRegenerate}
+            onSuggestion={setDraft}
+            onAnswer={handleSend}
+            storedFollowups={initialFollowups}
+            glances={initialGlances ? { ...initialGlances, ...glances } : glances}
+            initialBrainSources={initialBrainSources}
+            frames={frames}
+            waiting={waiting}
+            {...(companyName ? { companyName } : {})}
+          />
+        </ChatComposeProvider>
+
+        {blocked && (
+          <ChatErrorCard
+            message={blocked.message}
+            isLimit={blocked.isLimit}
+            interrupted={blocked.kind === 'interrupted'}
+            busy={isLoading}
+            onRetry={() => {
+              setBlocked(null);
+              void reload();
+            }}
+            onContinue={() => {
+              setBlocked(null);
+              handleSend('sigue');
+            }}
+            onDismiss={() => setBlocked(null)}
+          />
+        )}
+
+        <InputBar
+          onSend={handleSend}
+          onStop={stop}
+          voiceHistory={messages
+            .filter((message) => message.role === 'user' || message.role === 'assistant')
+            .slice(-10)
+            .map((message) => ({
+              role: message.role === 'user' ? 'you' : 'cortex',
+              text: message.content.slice(0, 2000),
+            }))}
+          disabled={isLoading}
           conversationId={conversationId}
-          agent={activeAgent}
-          onConfirmed={reload}
-          onRegenerate={handleRegenerate}
-          onSuggestion={setDraft}
-          onAnswer={handleSend}
-          storedFollowups={initialFollowups}
-          glances={initialGlances ? { ...initialGlances, ...glances } : glances}
-          initialBrainSources={initialBrainSources}
-          frames={frames}
-          waiting={waiting}
+          agents={agents}
+          agentSlug={agentSlug}
+          onAgentChange={handleAgentChange}
+          draft={draft}
+          onDraftConsumed={() => setDraft('')}
+          scope={scope}
+          onScopeChange={handleScopeChange}
+          screen={screen}
         />
-      </ChatComposeProvider>
-
-      {blocked && (
-        <ChatErrorCard
-          message={blocked.message}
-          isLimit={blocked.isLimit}
-          interrupted={blocked.kind === 'interrupted'}
-          busy={isLoading}
-          onRetry={() => {
-            setBlocked(null);
-            void reload();
-          }}
-          onContinue={() => {
-            setBlocked(null);
-            handleSend('sigue');
-          }}
-          onDismiss={() => setBlocked(null)}
-        />
-      )}
-
-      <InputBar
-        onSend={handleSend}
-        onStop={stop}
-        voiceHistory={messages
-          .filter((message) => message.role === 'user' || message.role === 'assistant')
-          .slice(-10)
-          .map((message) => ({
-            role: message.role === 'user' ? 'you' : 'cortex',
-            text: message.content.slice(0, 2000),
-          }))}
-        disabled={isLoading}
-        conversationId={conversationId}
-        agents={agents}
-        agentSlug={agentSlug}
-        onAgentChange={handleAgentChange}
-        draft={draft}
-        onDraftConsumed={() => setDraft('')}
-        scope={scope}
-        onScopeChange={handleScopeChange}
-        screen={screen}
-      />
+      </div>
     </div>
   );
 }

@@ -17,6 +17,7 @@ export {
   viewsDelete,
   viewsGet,
   viewsList,
+  viewsRestore,
   viewsShare,
   viewsUpdate,
 } from './tools';

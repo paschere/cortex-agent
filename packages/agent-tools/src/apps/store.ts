@@ -25,6 +25,7 @@ import {
   editViewRow,
   editViewSubmission,
   loadViewSources,
+  restoreView,
   runViewAction,
   submitViewForm,
   updateView,
@@ -225,9 +226,26 @@ export async function listApps(db: SupabaseClient, limit = 60): Promise<CustomAp
   return (data ?? []).map((r) => adaptApp(r as Record<string, unknown>));
 }
 
+/** Las archivadas, de la más reciente a la más antigua (para «Archivadas» de /apps). */
+export async function listArchivedApps(db: SupabaseClient, limit = 60): Promise<CustomAppRow[]> {
+  const { data, error } = await db
+    .from('custom_apps')
+    .select(APP_COLUMNS)
+    .not('archived_at', 'is', null)
+    .order('archived_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((r) => adaptApp(r as Record<string, unknown>));
+}
+
 /** Por id o por slug: el chat nombra apps como la gente, la app por id. */
-export async function getApp(db: SupabaseClient, ref: string): Promise<CustomAppRow | null> {
-  const q = db.from('custom_apps').select(APP_COLUMNS).is('archived_at', null);
+export async function getApp(
+  db: SupabaseClient,
+  ref: string,
+  options: { includeArchived?: boolean } = {},
+): Promise<CustomAppRow | null> {
+  let q = db.from('custom_apps').select(APP_COLUMNS);
+  if (!options.includeArchived) q = q.is('archived_at', null);
   const { data, error } = await (UUID_RE.test(ref)
     ? q.eq('id', ref)
     : q.eq('slug', ref)
@@ -236,8 +254,12 @@ export async function getApp(db: SupabaseClient, ref: string): Promise<CustomApp
   return data ? adaptApp(data as Record<string, unknown>) : null;
 }
 
-export async function mustGetApp(db: SupabaseClient, ref: string): Promise<CustomAppRow> {
-  const app = await getApp(db, ref);
+export async function mustGetApp(
+  db: SupabaseClient,
+  ref: string,
+  options: { includeArchived?: boolean } = {},
+): Promise<CustomAppRow> {
+  const app = await getApp(db, ref, options);
   if (!app) throw new NotFoundError(`No hay una aplicación «${ref}» en este espacio.`);
   return app;
 }
@@ -360,6 +382,27 @@ export async function archiveApp(db: SupabaseClient, id: string): Promise<boolea
 }
 
 /**
+ * Saca una app del archivo: vuelve como borrador (quien administra decide si
+ * la publica otra vez) con sus pantallas. Devuelve false si no estaba archivada.
+ */
+export async function restoreApp(db: SupabaseClient, id: string): Promise<boolean> {
+  const app = await getApp(db, id, { includeArchived: true });
+  if (!app?.archived_at) return false;
+  const { data, error } = await db
+    .from('custom_apps')
+    .update({ archived_at: null, status: 'draft' })
+    .eq('id', app.id)
+    .not('archived_at', 'is', null)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return false;
+  const screens = await listScreens(db, app.id);
+  for (const s of screens) await restoreView(db, s.view_id, { appScreen: true });
+  return true;
+}
+
+/**
  * Borra la app de verdad. Sus pantallas son vistas con su `app_id` (nacieron
  * para ella): se van con ella, igual que sus roles, miembros, usuarios
  * externos, kioscos, automatizaciones y suscripciones push (ON DELETE
@@ -367,7 +410,8 @@ export async function archiveApp(db: SupabaseClient, id: string): Promise<boolea
  * tablas no se tocan.
  */
 export async function deleteApp(db: SupabaseClient, id: string): Promise<boolean> {
-  const app = await getApp(db, id);
+  // También las archivadas: «Eliminar» desde la sección de archivadas.
+  const app = await getApp(db, id, { includeArchived: true });
   if (!app) return false;
   const { error: viewsErr } = await db.from('custom_views').delete().eq('app_id', app.id);
   if (viewsErr) throw viewsErr;

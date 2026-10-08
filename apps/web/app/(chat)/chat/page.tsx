@@ -25,6 +25,7 @@ export default async function NewChatPage({
       initialDraft={typeof prompt === 'string' ? prompt.slice(0, 4000) : undefined}
       agents={agents}
       waiting={waiting}
+      companyName={user.organization.name}
     />
   );
 }

@@ -20,6 +20,7 @@ import {
   removeMember,
   removeScreen,
   reorderScreens,
+  restoreApp,
   roleInputSchema,
   saveRoles,
   setMember,
@@ -166,10 +167,25 @@ export async function archiveAppAction(appId: string): Promise<AppActionResult> 
   }
 }
 
+export async function restoreAppAction(appId: string): Promise<AppActionResult> {
+  try {
+    const { db } = await admin();
+    const app = await mustGetApp(db, appId, { includeArchived: true });
+    if (!(await restoreApp(db, app.id)))
+      throw new ValidationError('Esa aplicación no está archivada.');
+    touched(app);
+    revalidatePath('/views');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo restaurar la aplicación.') };
+  }
+}
+
 export async function deleteAppAction(appId: string): Promise<AppActionResult> {
   try {
     const { db } = await admin();
-    const app = await mustGetApp(db, appId);
+    // Incluye las archivadas: se eliminan desde «Archivadas».
+    const app = await mustGetApp(db, appId, { includeArchived: true });
     await deleteApp(db, app.id);
     touched(app);
     revalidatePath('/views');

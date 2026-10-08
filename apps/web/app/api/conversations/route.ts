@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
@@ -16,6 +16,6 @@ export async function GET() {
     .eq('user_id', user.id)
     .neq('surface', 'mcp')
     .order('updated_at', { ascending: false })
-    .limit(20);
+    .limit(100);
   return NextResponse.json({ conversations: data ?? [] });
 }

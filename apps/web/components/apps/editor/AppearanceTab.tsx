@@ -227,7 +227,13 @@ export function AppearanceTab({ data }: { data: AppEditorData }) {
           </p>
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-3">
-              <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-card border border-border bg-white p-1">
+              <div
+                className={clsx(
+                  'grid h-16 w-16 place-items-center overflow-hidden rounded-card border border-border p-1',
+                  // Un logo con fondo transparente se ve sobre blanco; el «Sin logo» sigue al tema.
+                  logoShown ? 'bg-white' : 'bg-surface-2',
+                )}
+              >
                 {logoShown ? (
                   <img
                     src={logoShown}
@@ -238,7 +244,12 @@ export function AppearanceTab({ data }: { data: AppEditorData }) {
                   <span className="text-xs text-ink-faint">Sin logo</span>
                 )}
               </div>
-              <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-[22%] border border-border bg-white">
+              <div
+                className={clsx(
+                  'grid h-16 w-16 place-items-center overflow-hidden rounded-[22%] border border-border',
+                  iconShown ? 'bg-white' : 'bg-surface-2',
+                )}
+              >
                 {iconShown ? (
                   <img src={iconShown} alt="Ícono" className="h-full w-full object-contain" />
                 ) : (
@@ -515,7 +526,12 @@ export function AppearanceTab({ data }: { data: AppEditorData }) {
             <BrandScope className="overflow-hidden rounded-[1.4rem] bg-canvas">
               <div style={{ fontFamily: FONTS.find((f) => f.value === font)?.stack }}>
                 <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
-                  <span className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-sm bg-white">
+                  <span
+                    className={clsx(
+                      'grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-sm',
+                      iconShown ? 'bg-white' : 'bg-primary-soft',
+                    )}
+                  >
                     {iconShown ? (
                       <img src={iconShown} alt="" className="h-full w-full object-contain" />
                     ) : (

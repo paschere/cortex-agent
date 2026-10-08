@@ -368,6 +368,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   views_update: 'Cambiar una vista',
   views_share: 'Compartir una vista',
   views_archive: 'Archivar una vista',
+  views_restore: 'Restaurar una vista archivada',
   views_delete: 'Eliminar una vista',
   views_company_pulse: 'Armar el pulso de la empresa',
   views_refresh_summary: 'Actualizar el resumen del día',

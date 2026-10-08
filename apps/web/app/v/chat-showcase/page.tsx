@@ -7,7 +7,7 @@ import { ChatShowcase } from './Showcase';
  * /chat pide sesión; aquí se pintan los casos que se salían de la burbuja
  * (URLs de Drive, tabla de ocho columnas, código largo, chips con argumentos
  * largos, el aviso de error). Parámetros: `?modo=oscuro`, `?error=limite`,
- * `?error=ninguno`.
+ * `?error=ninguno`, `?vacio=1` (chat nuevo).
  */
 export const dynamic = 'force-dynamic';
 
@@ -19,5 +19,11 @@ export default async function ChatShowcasePage({
   if (process.env.NODE_ENV === 'production') notFound();
   const q = await searchParams;
   const one = (k: string) => (typeof q[k] === 'string' ? (q[k] as string) : null);
-  return <ChatShowcase dark={one('modo') === 'oscuro'} error={one('error')} />;
+  return (
+    <ChatShowcase
+      dark={one('modo') === 'oscuro'}
+      error={one('error')}
+      empty={one('vacio') === '1'}
+    />
+  );
 }

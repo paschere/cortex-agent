@@ -853,7 +853,7 @@ export function InputBar({
           onClose={() => setVoiceOpen(false)}
         />
       ) : null}
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-[45rem]">
         {/*
           EL COMPOSITOR VA DENTRO DE LA BANDEJA, no debajo. La bandeja es la
           zona de soltar, y la zona de soltar tiene que ser el sitio donde

@@ -217,6 +217,7 @@ interface MessageListProps {
    * día; con un hilo abierto no se dibuja aquí — el rail ya lleva el total.
    */
   waiting?: WaitingNoticeData;
+  companyName?: string;
 }
 
 export function MessageList({
@@ -233,6 +234,7 @@ export function MessageList({
   initialBrainSources,
   frames,
   waiting,
+  companyName,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
@@ -456,12 +458,13 @@ export function MessageList({
           <EmptyState
             agent={agent}
             waiting={waiting}
+            {...(companyName ? { companyName } : {})}
             onSuggestion={(t) => onSuggestion?.(t)}
             onAsk={(t) => onAnswer?.(t)}
           />
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-3xl space-y-11 px-4 py-8 sm:px-6">
+        <div className="mx-auto w-full max-w-[45rem] space-y-11 px-4 py-8 sm:px-6">
           {turns.map((turn) => (
             // 14px por dentro contra los 44px de `space-y-11` que separan los
             // turnos. Ver `turnsOf` para por qué la diferencia es el diseño.

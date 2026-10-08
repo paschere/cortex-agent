@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+// Estático a propósito: `apps/design` arrastra el barril de herramientas; importarlo dentro del
+// test lo cargaba (y transformaba) con el reloj de 5 s corriendo y fallaba bajo carga.
+import { designWarnings } from '../apps/design';
 import { addDay, eventsByDay, step, weekDays, weekStart } from './agenda';
 import { EMPTY_CARD_FILTER, filterCards, groupCards, pageOf, sortCards } from './cards-filter';
 import { type ViewRow, type ViewSource, computeView } from './compute';
@@ -701,7 +704,6 @@ describe('quién hizo qué, según quién mira', () => {
 
 describe('diseño por rol de una app', () => {
   it('avisa de listas sin detalle, formularios de planta sin diseño operario y TV con formularios', async () => {
-    const { designWarnings } = await import('../apps/design');
     const form = { id: 'f', type: 'form', tracker: 'guias', title: 'Registrar', fields: [] };
     const table = { id: 't', type: 'table', tracker: 'vuelos', title: 'Vuelos' };
     const roles = [

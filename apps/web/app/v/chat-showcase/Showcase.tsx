@@ -2,8 +2,26 @@
 
 import { ChatErrorCard } from '@/components/chat/ChatErrorCard';
 import { MessageList } from '@/components/chat/MessageList';
+import { ThreadAside, ThreadHistory } from '@/components/chat/ThreadHistory';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Message } from 'ai';
 import { useEffect, useState } from 'react';
+
+const ago = (days: number, h = 10) =>
+  new Date(Date.now() - days * 86_400_000 - h * 0).toISOString();
+const THREADS = [
+  { id: 'c1', title: '¿Qué tengo pendiente hoy?', updated_at: ago(0) },
+  {
+    id: 'c2',
+    title:
+      'Revisa esta carpeta de Drive y dime cuánto nos deben los clientes de la costa con todo el detalle posible',
+    updated_at: ago(0.2),
+  },
+  { id: 'c3', title: 'Resumen de la plata de la semana', updated_at: ago(1) },
+  { id: 'c4', title: 'Crear tabla de proveedores', updated_at: ago(4) },
+  { id: 'c5', title: null, updated_at: ago(12) },
+  { id: 'c6', title: 'Conectar hoja de Google', updated_at: ago(70) },
+];
 
 const DRIVE = 'https://drive.google.com/drive/folders/12ZKgFFQW5jZ4rTxK97b43QQvXV4tG-AI';
 const SHEET =
@@ -76,35 +94,54 @@ const MESSAGES: Message[] = [
   } as Message,
 ];
 
-export function ChatShowcase({ dark, error }: { dark: boolean; error: string | null }) {
+export function ChatShowcase({
+  dark,
+  error,
+  empty = false,
+}: { dark: boolean; error: string | null; empty?: boolean }) {
+  const [client] = useState(() => {
+    const c = new QueryClient();
+    c.setQueryData(['conversations'], THREADS);
+    return c;
+  });
   const [shown, setShown] = useState(error !== 'ninguno');
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   }, [dark]);
   return (
-    <div className="cortex-workspace cortex-chat flex h-[100dvh] flex-col overflow-hidden bg-canvas">
-      <MessageList
-        messages={MESSAGES}
-        isLoading={false}
-        agent={{ slug: 'cortex', name: 'Cortex' } as never}
-        onRegenerate={() => {}}
-        onSuggestion={() => {}}
-        onAnswer={() => {}}
-      />
-      {shown && (
-        <ChatErrorCard
-          message={
-            error === 'limite'
-              ? 'Usaste todo el consumo incluido este mes. Pasa a un plan mayor para seguir.'
-              : `Se cortó la conexión mientras respondía. Escríbeme «sigue» y retomo. ${DRIVE}`
-          }
-          isLimit={error === 'limite'}
-          onRetry={() => setShown(false)}
-          onContinue={() => setShown(false)}
-          onDismiss={() => setShown(false)}
-        />
-      )}
-      <div className="h-24 shrink-0 border-t border-border bg-surface" />
-    </div>
+    <QueryClientProvider client={client}>
+      <div className="cortex-workspace flex h-[100dvh] overflow-hidden">
+        <ThreadAside />
+        <div className="cortex-chat flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
+            <span className="text-base font-semibold text-ink">Conversación</span>
+            <ThreadHistory />
+          </header>
+          <MessageList
+            companyName="Distribuciones del Caribe S.A.S."
+            messages={empty ? [] : MESSAGES}
+            isLoading={false}
+            agent={{ slug: 'cortex', name: 'Cortex' } as never}
+            onRegenerate={() => {}}
+            onSuggestion={() => {}}
+            onAnswer={() => {}}
+          />
+          {shown && (
+            <ChatErrorCard
+              message={
+                error === 'limite'
+                  ? 'Usaste todo el consumo incluido este mes. Pasa a un plan mayor para seguir.'
+                  : `Se cortó la conexión mientras respondía. Escríbeme «sigue» y retomo. ${DRIVE}`
+              }
+              isLimit={error === 'limite'}
+              onRetry={() => setShown(false)}
+              onContinue={() => setShown(false)}
+              onDismiss={() => setShown(false)}
+            />
+          )}
+          <div className="h-24 shrink-0 border-t border-border bg-surface" />
+        </div>
+      </div>
+    </QueryClientProvider>
   );
 }
