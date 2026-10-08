@@ -453,3 +453,56 @@ html:root
     transition: none;
   }
 }
+
+/* --- Tacto (rediseño de las apps, 0217) -----------------------------------
+   Lo que se toca se hunde un poco: botones, chips y tarjetas que abren algo.
+   Apagado con prefers-reduced-motion. */
+.view-press {
+  transition: transform 120ms ease-out, background-color 150ms ease, border-color 150ms ease,
+    box-shadow 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.view-press:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .view-press,
+  .view-press:active {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Los chips de estado y las pestañas de un detalle, a la medida del dedo. */
+.view-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: rgb(var(--surface-2));
+  border: 1px solid rgb(var(--border));
+}
+
+/* El «listo» de un formulario: el check entra con un rebote corto, una vez. */
+@keyframes view-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.view-pop {
+  animation: view-pop 260ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .view-pop {
+    animation: none;
+  }
+}

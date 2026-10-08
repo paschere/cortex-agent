@@ -396,7 +396,7 @@ export function RowActions({
     setTimeout(() => setNote(null), 4000);
   };
   return (
-    <span className="inline-flex flex-wrap items-center gap-1">
+    <span className="inline-flex flex-wrap items-center gap-1.5">
       {writer.assign && picking && (
         <AssignPicker
           open
@@ -435,7 +435,7 @@ export function RowActions({
             setTimeout(() => setNote(null), 3000);
           }}
           className={clsx(
-            'inline-flex items-center gap-1 rounded-pill border border-border px-2 py-0.5 text-micro font-semibold transition-colors disabled:opacity-45',
+            'view-press inline-flex items-center gap-1 rounded-pill border border-border px-2 py-0.5 text-micro font-semibold transition-colors disabled:opacity-45 max-sm:min-h-11 max-sm:px-4 max-sm:text-xs',
             TONE_BTN[a.tone],
           )}
         >

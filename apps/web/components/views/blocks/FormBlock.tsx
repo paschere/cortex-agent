@@ -53,7 +53,7 @@ import { queueKeyFor, useFormQueue, useOnline } from './useFormQueue';
 const INPUT_OPERATOR =
   'h-14 w-full rounded-sm border-2 border-border-strong bg-surface px-4 text-lg text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary focus-visible:ring-4 focus-visible:ring-primary/20';
 const INPUT_BASE =
-  'h-11 w-full rounded-sm border border-border-strong bg-surface px-3.5 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint hover:border-ink-faint/50 focus:border-primary focus-visible:ring-4 focus-visible:ring-primary/15';
+  'h-12 w-full rounded-sm border border-border-strong bg-surface px-3.5 text-base text-ink outline-none sm:h-11 sm:text-sm transition-colors duration-150 placeholder:text-ink-faint hover:border-ink-faint/50 focus:border-primary focus-visible:ring-4 focus-visible:ring-primary/15';
 
 type Done = {
   message: string;
@@ -362,7 +362,7 @@ export function FormBlock({
         <output className="flex flex-col items-center gap-3 py-8 text-center">
           <span
             className={clsx(
-              'grid h-14 w-14 place-items-center rounded-pill ring-8',
+              'view-pop grid h-16 w-16 place-items-center rounded-pill ring-8',
               done.offline
                 ? 'bg-amber-soft text-amber ring-amber-soft/40'
                 : 'bg-emerald-soft text-emerald ring-emerald-soft/40',
@@ -617,14 +617,14 @@ export function FormBlock({
     else setStep(Math.max(0, stepIndex - 1));
   };
 
-  const BIG = operator ? 'h-14 text-lg' : 'h-11 px-6 text-sm';
+  const BIG = operator ? 'h-14 text-lg' : 'h-12 px-6 text-base sm:h-11 sm:text-sm';
   const PRIMARY = clsx(
     BIG,
-    'cortex-primary-button inline-flex items-center justify-center gap-2 rounded-pill bg-primary font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong hover:shadow-pop disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
+    'view-press cortex-primary-button inline-flex items-center justify-center gap-2 rounded-pill bg-primary font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong hover:shadow-pop disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
   );
   const GHOST = clsx(
     BIG,
-    'inline-flex items-center justify-center gap-2 rounded-pill border border-border-strong px-5 font-semibold text-ink transition-colors hover:bg-surface-2 disabled:opacity-45',
+    'view-press inline-flex items-center justify-center gap-2 rounded-pill border border-border-strong px-5 font-semibold text-ink transition-colors hover:bg-surface-2 disabled:opacity-45',
   );
 
   return (
@@ -738,29 +738,28 @@ export function FormBlock({
           </p>
         )}
         {steps && current && (
-          <div className="mb-5" aria-live="polite">
-            <p className="mb-2 flex items-baseline justify-between gap-2 text-xs font-semibold text-ink-muted">
-              <span>
-                {reviewing
-                  ? 'Revisa antes de enviar'
-                  : `Paso ${stepIndex + 1} de ${steps.length} — ${current.title}`}
-              </span>
-              <span className="tabular font-mono text-micro text-ink-faint">
-                {reviewing ? steps.length : stepIndex + 1}/{steps.length}
-              </span>
+          <div className="mb-6" aria-live="polite">
+            <p className="text-xs font-semibold text-ink-muted">
+              {reviewing ? 'Último paso' : `Paso ${stepIndex + 1} de ${steps.length}`}
+            </p>
+            <p className="mt-0.5 text-lg font-extrabold leading-tight tracking-tight text-ink">
+              {reviewing ? 'Revisa antes de enviar' : current.title}
             </p>
             <progress
               className="sr-only"
               max={steps.length}
               value={reviewing ? steps.length : stepIndex + 1}
             />
-            <div aria-hidden className="h-2 overflow-hidden rounded-pill bg-surface-2">
-              <div
-                className="h-full rounded-pill bg-primary transition-all duration-300"
-                style={{
-                  width: `${((reviewing ? steps.length : stepIndex + 1) / steps.length) * 100}%`,
-                }}
-              />
+            <div aria-hidden className="mt-3 flex gap-1.5">
+              {steps.map((s, i) => (
+                <span
+                  key={s.title}
+                  className={clsx(
+                    'h-1.5 flex-1 rounded-pill transition-colors duration-300 motion-reduce:transition-none',
+                    i < (reviewing ? steps.length : stepIndex + 1) ? 'bg-primary' : 'bg-surface-2',
+                  )}
+                />
+              ))}
             </div>
           </div>
         )}

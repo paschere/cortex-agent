@@ -263,6 +263,12 @@ export interface ComputedHomeCard {
   rows: string[];
   /** La cifra es cero: la tarjeta guía en vez de celebrar. */
   empty: boolean;
+  /**
+   * Opcional, sólo presentación: los últimos valores de la cifra (del más viejo al
+   * más nuevo) para dibujar su micrográfico y su tendencia. Si no viene, la
+   * tarjeta no dibuja nada: nunca se inventa una serie.
+   */
+  series?: number[];
 }
 
 export interface ComputedHome {

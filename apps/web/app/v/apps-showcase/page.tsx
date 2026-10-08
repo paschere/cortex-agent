@@ -9,7 +9,9 @@ import { AppsFixture } from './Showcase';
  * `/v` porque el prefijo ya es público.
  *
  * Parámetros: `?marca=amarillo|verde` (color propio de la app),
- * `?pantallas=3|8` (cuántas pestañas), `?vacio=1` (sin tarjetas).
+ * `?pantallas=3|8` (cuántas pestañas), `?vacio=1` (sin tarjetas),
+ * `?vista=entrada|kiosco|error|carga|desconectado` (la puerta con código, el
+ * kiosco con PIN, y los estados de error, carga y sin señal).
  *
  * En producción responde 404: no es una página del producto.
  */
@@ -27,6 +29,7 @@ export default async function AppsShowcasePage({
       marca={q.marca === 'amarillo' || q.marca === 'verde' ? q.marca : null}
       pantallas={q.pantallas === '8' ? 8 : 3}
       vacio={q.vacio === '1'}
+      vista={typeof q.vista === 'string' ? q.vista : null}
     />
   );
 }

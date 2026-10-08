@@ -8,7 +8,7 @@ import { previewQuery } from '@/lib/apps/preview-query';
 import type { ComputedHome, ComputedView, LocationStatus } from '@cortex/agent-tools';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { Ellipsis, Info, Menu, Pencil, Plus, X } from 'lucide-react';
+import { Ellipsis, Info, Pencil, Plus, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -133,17 +133,45 @@ function AppMark({
         alt=""
         decoding="async"
         onError={() => setFailed(true)}
-        className={clsx('shrink-0 rounded-card bg-white object-contain p-0.5', className)}
+        className={clsx(
+          'shrink-0 rounded-sm bg-white object-contain p-1 shadow-card ring-1 ring-border',
+          className,
+        )}
       />
     );
   return (
     <span
       className={clsx(
-        'grid shrink-0 place-items-center rounded-card bg-primary-soft text-primary-ink',
+        'grid shrink-0 place-items-center rounded-sm bg-primary-soft text-primary-ink shadow-card ring-1 ring-primary/15',
         className,
       )}
     >
-      <Glyph name={app.icon} className="h-4.5 w-4.5 text-base" />
+      <Glyph name={app.icon} className="h-5 w-5 text-lg" />
+    </span>
+  );
+}
+
+/** Las iniciales de una persona («Ana Gómez» → «AG»): su cara en el menú. */
+function initialsOf(name: string): string {
+  const letters = name
+    .split(/\s+/)
+    .filter((w) => /^[\p{L}\p{N}]/u.test(w))
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toLocaleUpperCase('es-CO'))
+    .join('');
+  return letters || '·';
+}
+
+function Avatar({ name, className }: { name: string; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={clsx(
+        'grid shrink-0 place-items-center rounded-pill bg-primary-soft font-extrabold text-primary-ink ring-1 ring-primary/20',
+        className,
+      )}
+    >
+      {initialsOf(name)}
     </span>
   );
 }
@@ -230,43 +258,57 @@ export function AppRunner({
         <AppThemeScope />
         <div style={look ? { fontFamily: look.font } : undefined}>
           <BrandScope className="md:flex md:gap-6">
-            <aside className="view-no-print hidden w-56 shrink-0 md:block">
+            <aside className="view-no-print hidden w-60 shrink-0 md:block">
               <div className="sticky top-4 flex flex-col gap-4">
-                <div className="flex items-center gap-2.5">
-                  <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-9 w-9" />
-                  <span className="min-w-0 text-sm font-semibold text-ink">{app.name}</span>
+                <div className="app-hero flex items-center gap-3 rounded-card border border-border p-4 shadow-card">
+                  <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-11 w-11" />
+                  <div className="min-w-0 leading-tight">
+                    <p className="truncate text-base font-extrabold tracking-tight text-ink">
+                      {app.name}
+                    </p>
+                    <p className="mt-0.5 truncate text-micro font-semibold text-ink-muted">
+                      {role.name}
+                      {session?.external ? ` · ${session.name}` : ''}
+                    </p>
+                  </div>
                 </div>
-                <nav aria-label={`Pantallas de ${app.name}`} className="flex flex-col gap-0.5">
-                  {screens.map((s) => (
-                    <Link
-                      key={s.slug}
-                      href={hrefFor(s.slug)}
-                      aria-current={s.slug === current ? 'page' : undefined}
-                      className={clsx(
-                        'flex items-center gap-2.5 rounded-card px-3 py-2 text-sm font-medium transition-colors',
-                        s.slug === current
-                          ? 'bg-primary-soft text-primary-ink'
-                          : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-                      )}
-                    >
-                      <Glyph name={s.icon} className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{s.title}</span>
-                    </Link>
-                  ))}
+                <nav
+                  aria-label={`Pantallas de ${app.name}`}
+                  className="flex flex-col gap-1 rounded-card border border-border bg-surface p-1.5 shadow-card"
+                >
+                  {screens.map((s) => {
+                    const active = s.slug === current;
+                    return (
+                      <Link
+                        key={s.slug}
+                        href={hrefFor(s.slug)}
+                        aria-current={active ? 'page' : undefined}
+                        className={clsx(
+                          'app-press relative flex min-h-11 items-center gap-3 rounded-sm px-3 text-sm font-semibold',
+                          active
+                            ? 'bg-primary-soft text-primary-ink'
+                            : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                        )}
+                      >
+                        {active && (
+                          <span
+                            aria-hidden
+                            className="absolute inset-y-2.5 left-0 w-1 rounded-r-pill bg-primary"
+                          />
+                        )}
+                        <Glyph name={s.icon} className="h-5 w-5 shrink-0" />
+                        <span className="truncate">{s.title}</span>
+                      </Link>
+                    );
+                  })}
                 </nav>
-                <div className="flex flex-col items-start gap-2">
-                  <span className="inline-flex h-6 items-center rounded-pill border border-border bg-surface px-2.5 text-micro font-semibold text-ink-muted">
-                    {role.name}
-                  </span>
-                  {session?.external && (
-                    <span className="text-xs text-ink-muted">{session.name}</span>
-                  )}
+                <div className="flex flex-col items-start gap-3 px-1">
                   {accountActions}
-                  {standalone && <AppThemeToggle />}
+                  {standalone && <AppThemeToggle className="w-full" />}
                   {canManage && (
                     <Link
                       href={editHref}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar la app
                     </Link>
@@ -278,21 +320,25 @@ export function AppRunner({
             <main className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
               {standalone && (
                 <header
-                  className="app-header-bar view-no-print sticky top-0 z-30 -mx-4 mb-3 border-b border-border bg-surface/90 pt-[env(safe-area-inset-top)] backdrop-blur sm:-mx-6"
+                  className="app-header-bar view-no-print sticky top-0 z-30 -mx-4 mb-4 bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl sm:-mx-6"
                   style={{ transform: hidden ? 'translateY(-100%)' : 'translateY(0)' }}
                 >
-                  <div className="flex min-h-12 items-center gap-2.5 px-4 sm:px-6">
-                    <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-8 w-8" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
-                      {title}
-                    </span>
+                  <span aria-hidden className="view-brand-stripe block h-[3px]" />
+                  <div className="flex min-h-14 items-center gap-3 border-b border-border px-4 sm:px-6">
+                    <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-9 w-9" />
+                    <div className="min-w-0 flex-1 leading-tight">
+                      <p className="truncate text-micro font-semibold text-ink-muted">{app.name}</p>
+                      <p className="truncate text-base font-extrabold tracking-tight text-ink">
+                        {title}
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setSheet(true)}
                       aria-label="Abrir el menú de la app"
-                      className="-mr-2 grid h-11 w-11 place-items-center rounded-pill text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                      className="app-press -mr-1.5 grid h-11 w-11 place-items-center rounded-pill"
                     >
-                      <Menu className="h-5 w-5" aria-hidden />
+                      <Avatar name={session?.name || role.name} className="h-9 w-9 text-xs" />
                     </button>
                   </div>
                 </header>
@@ -309,7 +355,7 @@ export function AppRunner({
               )}
               {session && <OfflineBanner computedAt={computedAt} />}
               {readOnly && (
-                <output className="view-no-print mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-amber/40 bg-amber-soft px-4 py-2.5 text-sm font-medium text-ink">
+                <output className="view-no-print mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-amber/40 bg-amber-soft px-4 py-3 text-sm font-semibold text-ink">
                   <span>Viendo como {role.name}. Nada se guarda.</span>
                   <Link
                     href={editHref}
@@ -328,7 +374,13 @@ export function AppRunner({
                 )}
                 {!readOnly && !home && <PushToggle appId={app.id} />}
                 {home ? (
-                  <AppHome home={home} base={base} como={como} appName={app.name} />
+                  <AppHome
+                    home={home}
+                    base={base}
+                    como={como}
+                    appName={app.name}
+                    roleName={role.name}
+                  />
                 ) : (
                   computed &&
                   target && (
@@ -338,7 +390,7 @@ export function AppRunner({
                           {emptyHints.map((h) => (
                             <li
                               key={h.blockId}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-dashed border-border-strong bg-surface px-4 py-2.5"
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-border-strong bg-surface px-4 py-3"
                             >
                               <span className="flex min-w-0 items-center gap-2 text-sm text-ink-muted">
                                 <Info className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
@@ -353,7 +405,7 @@ export function AppRunner({
                               {h.screen && !readOnly && (
                                 <Link
                                   href={hrefFor(h.screen)}
-                                  className="inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-primary-soft px-4 text-xs font-semibold text-primary-ink transition-colors hover:bg-primary-soft/70"
+                                  className="app-press inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-primary-soft px-4 text-xs font-semibold text-primary-ink hover:bg-primary-soft/70"
                                 >
                                   <Plus className="h-3.5 w-3.5" aria-hidden />
                                   {h.screenTitle ? `Registrar en ${h.screenTitle}` : 'Registrar'}
@@ -383,7 +435,7 @@ export function AppRunner({
             {screens.length > 1 && (
               <nav
                 aria-label={`Pantallas de ${app.name}`}
-                className="view-no-print fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur md:hidden"
+                className="app-tabbar view-no-print fixed inset-x-0 bottom-0 z-40 flex rounded-t-[1.25rem] bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-1 backdrop-blur-xl md:hidden"
               >
                 {tabs.map((s) => {
                   const active = s.slug === current;
@@ -392,14 +444,26 @@ export function AppRunner({
                       key={s.slug}
                       href={hrefFor(s.slug)}
                       aria-current={active ? 'page' : undefined}
-                      aria-label={s.title}
-                      className={clsx(
-                        'flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-micro font-semibold transition-colors',
-                        active ? 'text-primary' : 'text-ink-faint',
-                      )}
+                      className="app-press flex min-h-[3.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-micro font-semibold"
                     >
-                      <Glyph name={s.icon} className="h-5 w-5 text-lg" />
-                      {active && <span className="max-w-full truncate">{s.title}</span>}
+                      <span
+                        className={clsx(
+                          'grid h-8 w-14 place-items-center rounded-pill transition-colors duration-200 motion-reduce:transition-none',
+                          active
+                            ? 'app-pill-in bg-primary-soft text-primary-ink'
+                            : 'text-ink-faint',
+                        )}
+                      >
+                        <Glyph name={s.icon} className="h-[1.375rem] w-[1.375rem] text-xl" />
+                      </span>
+                      <span
+                        className={clsx(
+                          'max-w-full truncate',
+                          active ? 'font-bold text-ink' : 'text-ink-faint',
+                        )}
+                      >
+                        {s.title}
+                      </span>
                     </Link>
                   );
                 })}
@@ -408,13 +472,21 @@ export function AppRunner({
                     type="button"
                     onClick={() => setSheet(true)}
                     aria-label="Más pantallas y cuenta"
-                    className={clsx(
-                      'flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-micro font-semibold transition-colors',
-                      moreActive ? 'text-primary' : 'text-ink-faint',
-                    )}
+                    className="app-press flex min-h-[3.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-micro font-semibold"
                   >
-                    <Ellipsis className="h-5 w-5" aria-hidden />
-                    {moreActive && <span>Más</span>}
+                    <span
+                      className={clsx(
+                        'grid h-8 w-14 place-items-center rounded-pill transition-colors duration-200 motion-reduce:transition-none',
+                        moreActive
+                          ? 'app-pill-in bg-primary-soft text-primary-ink'
+                          : 'text-ink-faint',
+                      )}
+                    >
+                      <Ellipsis className="h-[1.375rem] w-[1.375rem]" aria-hidden />
+                    </span>
+                    <span className={moreActive ? 'font-bold text-ink' : 'text-ink-faint'}>
+                      Más
+                    </span>
                   </button>
                 )}
               </nav>
@@ -422,63 +494,86 @@ export function AppRunner({
 
             <Dialog.Root open={sheet} onOpenChange={setSheet}>
               <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 md:hidden" />
-                <Dialog.Content
-                  aria-describedby={undefined}
-                  className="app-sheet fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-card border-t border-border bg-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-pop md:hidden"
-                >
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <Dialog.Title className="text-sm font-bold text-ink">{app.name}</Dialog.Title>
-                    <Dialog.Close
-                      aria-label="Cerrar"
-                      className="-mr-2 grid h-11 w-11 place-items-center rounded-pill text-ink-faint hover:text-ink"
-                    >
-                      <X className="h-5 w-5" aria-hidden />
-                    </Dialog.Close>
-                  </div>
-                  {more.length > 0 && (
-                    <nav aria-label="Más pantallas" className="mb-3 flex flex-col gap-0.5">
-                      {more.map((s) => (
-                        <Link
-                          key={s.slug}
-                          href={hrefFor(s.slug)}
-                          onClick={() => setSheet(false)}
-                          aria-current={s.slug === current ? 'page' : undefined}
-                          className={clsx(
-                            'flex min-h-12 items-center gap-3 rounded-card px-3 text-sm font-medium',
-                            s.slug === current
-                              ? 'bg-primary-soft text-primary-ink'
-                              : 'text-ink hover:bg-surface-2',
-                          )}
-                        >
-                          <Glyph name={s.icon} className="h-5 w-5 shrink-0" />
-                          <span className="truncate">{s.title}</span>
-                        </Link>
-                      ))}
-                    </nav>
-                  )}
-                  <div className="space-y-3 border-t border-border pt-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex h-6 items-center rounded-pill border border-border bg-surface px-2.5 text-micro font-semibold text-ink-muted">
-                        {role.name}
-                      </span>
-                      {session?.external && (
-                        <span className="text-xs text-ink-muted">{session.name}</span>
-                      )}
-                    </div>
-                    {accountActions}
-                    <AppThemeToggle />
-                    {canManage && (
-                      <Link
-                        href={editHref}
-                        className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-ink-faint hover:text-ink"
+                <BrandScope>
+                  <Dialog.Overlay className="app-overlay fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] md:hidden" />
+                  <Dialog.Content
+                    aria-describedby={undefined}
+                    className="app-sheet fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] overflow-y-auto rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-2 shadow-pop md:hidden"
+                  >
+                    <div
+                      aria-hidden
+                      className="mx-auto mb-3 h-1.5 w-10 rounded-pill bg-border-strong"
+                    />
+                    <div className="mb-4 flex items-center gap-3">
+                      <Avatar name={session?.name || role.name} className="h-11 w-11 text-sm" />
+                      <div className="min-w-0 flex-1 leading-tight">
+                        <Dialog.Title className="truncate text-base font-extrabold tracking-tight text-ink">
+                          {session?.external ? session.name : app.name}
+                        </Dialog.Title>
+                        <p className="mt-0.5 truncate text-xs text-ink-muted">
+                          {role.name}
+                          {session?.external ? ` · ${app.name}` : ''}
+                        </p>
+                      </div>
+                      <Dialog.Close
+                        aria-label="Cerrar"
+                        className="app-press -mr-1.5 grid h-11 w-11 place-items-center rounded-pill bg-surface-2 text-ink-muted"
                       >
-                        <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar la app
-                      </Link>
+                        <X className="h-5 w-5" aria-hidden />
+                      </Dialog.Close>
+                    </div>
+                    {more.length > 0 && (
+                      <nav aria-label="Más pantallas" className="mb-4 grid grid-cols-2 gap-2">
+                        {more.map((s) => {
+                          const active = s.slug === current;
+                          return (
+                            <Link
+                              key={s.slug}
+                              href={hrefFor(s.slug)}
+                              onClick={() => setSheet(false)}
+                              aria-current={active ? 'page' : undefined}
+                              className={clsx(
+                                'app-press flex min-h-14 items-center gap-3 rounded-card border px-3 text-sm font-semibold',
+                                active
+                                  ? 'border-primary/40 bg-primary-soft text-primary-ink'
+                                  : 'border-border bg-surface text-ink',
+                              )}
+                            >
+                              <span
+                                className={clsx(
+                                  'grid h-9 w-9 shrink-0 place-items-center rounded-sm',
+                                  active
+                                    ? 'bg-surface text-primary'
+                                    : 'bg-surface-2 text-ink-muted',
+                                )}
+                              >
+                                <Glyph name={s.icon} className="h-5 w-5 text-lg" />
+                              </span>
+                              <span className="min-w-0 truncate">{s.title}</span>
+                            </Link>
+                          );
+                        })}
+                      </nav>
                     )}
-                    {standalone && <p className="text-micro text-ink-faint">Hecho con Cortex</p>}
-                  </div>
-                </Dialog.Content>
+                    <div className="space-y-4 rounded-card bg-surface-2/70 p-4">
+                      {accountActions}
+                      <AppThemeToggle />
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3 px-1">
+                      {canManage ? (
+                        <Link
+                          href={editHref}
+                          className="app-press inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink"
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar la app
+                        </Link>
+                      ) : (
+                        <span />
+                      )}
+                      {standalone && <p className="text-micro text-ink-faint">Hecho con Cortex</p>}
+                    </div>
+                  </Dialog.Content>
+                </BrandScope>
               </Dialog.Portal>
             </Dialog.Root>
           </BrandScope>

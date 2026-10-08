@@ -1,7 +1,8 @@
 'use client';
 
+import { AppIllustration } from '@/components/apps/AppIllustration';
 import { claimKioskPairingAction } from '@/lib/apps/kiosk-actions';
-import { Loader2, Smartphone } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -15,17 +16,20 @@ export function ClaimForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   return (
-    <div className="mx-auto mt-10 max-w-sm rounded-card border border-border bg-surface p-6 shadow-card sm:mt-16">
-      <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-soft text-primary">
-        <Smartphone className="h-5 w-5" aria-hidden />
-      </span>
-      <h1 className="mt-4 text-lg font-bold text-ink">Dejar este celular en modo kiosco</h1>
-      <p className="mt-1 text-sm text-ink-muted">
+    <div className="app-hero mx-auto mt-2 max-w-sm rounded-[1.75rem] border border-border p-6 text-center shadow-pop sm:mt-10">
+      <AppIllustration kind="lock" className="mx-auto" />
+      <h1 className="mt-4 text-xl font-extrabold leading-tight tracking-tight text-ink">
+        Dejar este celular en modo kiosco
+      </h1>
+      <p className="mt-2 text-sm text-ink-muted">
         {appName} quedará en este celular para que cada persona entre con su PIN. Hazlo sólo en el
         celular que se queda en la planta.
       </p>
       {error && (
-        <p role="alert" className="mt-3 text-xs text-rose">
+        <p
+          role="alert"
+          className="mt-3 rounded-sm bg-rose-soft px-3 py-2 text-xs font-semibold text-rose"
+        >
           {error}
         </p>
       )}
@@ -40,7 +44,7 @@ export function ClaimForm({
             router.refresh();
           })
         }
-        className="cortex-primary-button mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-pill bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-primary-strong disabled:opacity-45"
+        className="app-press cortex-primary-button mt-5 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-pill bg-primary px-4 text-base font-bold text-white shadow-pop hover:bg-primary-strong disabled:opacity-45"
       >
         {pending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
         Dejar este celular en modo kiosco

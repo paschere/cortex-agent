@@ -10,43 +10,40 @@ export function SkeletonBlock({ className }: { className?: string }) {
   return <div aria-hidden className={clsx('app-skeleton', className)} />;
 }
 
-/** Una pantalla de app mientras llega: título, tres cifras y una lista. */
+/** Una pantalla de app mientras llega: título, tres cifras y una lista de tarjetas. */
 export function ScreenSkeleton() {
   return (
     <div aria-busy="true" className="space-y-4">
       <output className="sr-only">Cargando la pantalla</output>
-      <SkeletonBlock className="h-8 w-48" />
+      <SkeletonBlock className="h-7 w-44 !rounded-pill" />
       <div className="grid grid-cols-3 gap-3">
-        <SkeletonBlock className="h-24" />
-        <SkeletonBlock className="h-24" />
-        <SkeletonBlock className="h-24" />
+        <SkeletonBlock className="h-24 !rounded-card" />
+        <SkeletonBlock className="h-24 !rounded-card" />
+        <SkeletonBlock className="h-24 !rounded-card" />
       </div>
-      <SkeletonBlock className="h-10 w-full" />
-      <div className="space-y-2">
-        <SkeletonBlock className="h-14 w-full" />
-        <SkeletonBlock className="h-14 w-full" />
-        <SkeletonBlock className="h-14 w-full" />
-        <SkeletonBlock className="h-14 w-full" />
+      <SkeletonBlock className="h-12 w-full !rounded-pill" />
+      <div className="space-y-3">
+        <SkeletonBlock className="h-28 w-full !rounded-card" />
+        <SkeletonBlock className="h-28 w-full !rounded-card" />
+        <SkeletonBlock className="h-28 w-full !rounded-card" />
       </div>
     </div>
   );
 }
 
-/** El Inicio mientras llega: saludo y cuatro tarjetas. */
+/** El Inicio mientras llega: saludo, cuatro cifras y un acceso rápido. */
 export function HomeSkeleton() {
   return (
-    <div aria-busy="true" className="space-y-5">
+    <div aria-busy="true" className="space-y-6">
       <output className="sr-only">Cargando el inicio</output>
-      <div className="space-y-2">
-        <SkeletonBlock className="h-8 w-60" />
-        <SkeletonBlock className="h-4 w-36" />
+      <SkeletonBlock className="h-32 w-full !rounded-card" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <SkeletonBlock className="h-36 !rounded-card" />
+        <SkeletonBlock className="h-36 !rounded-card" />
+        <SkeletonBlock className="h-36 !rounded-card" />
+        <SkeletonBlock className="h-36 !rounded-card" />
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <SkeletonBlock className="h-32" />
-        <SkeletonBlock className="h-32" />
-        <SkeletonBlock className="h-32" />
-        <SkeletonBlock className="h-32" />
-      </div>
+      <SkeletonBlock className="h-28 w-full !rounded-card" />
     </div>
   );
 }

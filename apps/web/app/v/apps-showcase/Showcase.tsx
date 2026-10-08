@@ -1,6 +1,12 @@
 'use client';
 
+import { EntryForm } from '@/app/a/[app]/EntryForm';
+import { PublicShell } from '@/app/v/[token]/PublicShell';
+import { AppErrorState } from '@/components/apps/AppErrorState';
+import { AppIllustration } from '@/components/apps/AppIllustration';
 import { AppRunner } from '@/components/apps/AppRunner';
+import { HomeSkeleton, ScreenSkeleton } from '@/components/apps/AppSkeleton';
+import { KioskScreen } from '@/components/apps/KioskScreen';
 import { ViewBrandProvider } from '@/components/views/blocks/brand';
 import type { ComputedHome } from '@cortex/agent-tools';
 
@@ -31,6 +37,21 @@ const HOME: ComputedHome = {
       filter: null,
       rows: [],
       empty: false,
+      series: [4, 6, 5, 9, 8, 11, 12],
+    },
+    {
+      id: 'entregadas',
+      kind: 'counter',
+      tone: 'emerald',
+      text: 'Entregas a tiempo',
+      hint: null,
+      n: 38,
+      icon: null,
+      screen: 'guias',
+      filter: null,
+      rows: [],
+      empty: false,
+      series: [30, 34, 33, 36, 35, 41, 38],
     },
     {
       id: 'dup',
@@ -96,13 +117,71 @@ export function AppsFixture({
   marca,
   pantallas,
   vacio,
+  vista,
 }: {
   marca: 'amarillo' | 'verde' | null;
   pantallas: 3 | 8;
   vacio: boolean;
+  vista: string | null;
 }) {
   const colors = marca ? BRANDS[marca] : { primary: null, secondary: null };
   const brand = { name: 'Control en planta', logoUrl: null, ...colors };
+  if (vista) {
+    const shellBrand = { name: 'Control en planta', logoUrl: null, ...colors };
+    return (
+      <div className="cortex-workspace min-h-screen bg-canvas">
+        {vista === 'entrada' && (
+          <PublicShell brand={shellBrand}>
+            <EntryForm
+              appId="demo"
+              appName="Control en planta"
+              welcome={{
+                title: 'Bienvenido a Control en planta',
+                text: 'Registra y consulta lo que pasa en la bodega.',
+                imageUrl: null,
+              }}
+            />
+          </PublicShell>
+        )}
+        {vista === 'kiosco' && (
+          <PublicShell brand={shellBrand}>
+            <KioskScreen
+              appId="demo"
+              appName="Control en planta"
+              deviceName="Celular de bodega 1"
+              people={[
+                { id: '1', name: 'Ana Gómez' },
+                { id: '2', name: 'Luis Pérez' },
+                { id: '3', name: 'Marta Ríos' },
+              ]}
+            />
+          </PublicShell>
+        )}
+        {vista === 'error' && (
+          <ViewBrandProvider brand={shellBrand}>
+            <div className="mx-auto max-w-5xl px-4 py-4">
+              <AppErrorState error={new Error('demo')} reset={() => undefined} />
+            </div>
+          </ViewBrandProvider>
+        )}
+        {vista === 'carga' && (
+          <div className="mx-auto max-w-5xl space-y-8 px-4 py-4">
+            <HomeSkeleton />
+            <ScreenSkeleton />
+          </div>
+        )}
+        {vista === 'desconectado' && (
+          <div className="mx-auto flex max-w-sm flex-col items-center gap-3 px-4 py-16 text-center">
+            <AppIllustration kind="offline" />
+            <p className="text-base font-bold text-ink">Sin señal</p>
+            <p className="text-sm text-ink-muted">
+              Lo que registres se guarda y se envía al volver.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="cortex-workspace min-h-screen bg-canvas">
       <ViewBrandProvider brand={brand}>

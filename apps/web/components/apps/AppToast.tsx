@@ -52,7 +52,7 @@ export function AppToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="view-no-print pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:inset-x-auto md:bottom-6 md:right-6 md:items-end"
+        className="view-no-print pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:inset-x-auto md:bottom-6 md:right-6 md:items-end"
       >
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onClose={() => drop(t.id)} />
@@ -71,10 +71,10 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   return (
     <div
       role={toast.tone === 'error' ? 'alert' : 'status'}
-      className="app-sheet pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-2.5 shadow-pop"
+      className="app-sheet pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-card border border-border bg-surface px-4 py-3 shadow-pop"
     >
       <Icon className={clsx('h-4.5 w-4.5 shrink-0', cls)} aria-hidden />
-      <p className="min-w-0 flex-1 text-xs font-medium text-ink">{toast.text}</p>
+      <p className="min-w-0 flex-1 text-sm font-semibold text-ink">{toast.text}</p>
       {toast.action && (
         <button
           type="button"

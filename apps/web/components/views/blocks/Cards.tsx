@@ -17,7 +17,7 @@ import { useFlashClass } from '../flash-context';
 import { RowActions } from '../view-writes';
 import { useRecordOpener } from './RecordDrawer';
 import { RichValue } from './RichValue';
-import { Card, EmptyState, StatusChip, useViewTheme } from './theme';
+import { Card, EmptyState, StatusChip, TONE_BAR, useViewTheme } from './theme';
 
 /**
  * LA LISTA DE TARJETAS CON FILTROS RÁPIDOS.
@@ -68,7 +68,7 @@ function Chip({
       aria-pressed={active}
       onClick={onClick}
       className={clsx(
-        'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-3.5 text-xs font-semibold transition-colors duration-150',
+        'view-press inline-flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-4 text-xs font-semibold transition-colors duration-150 sm:h-9 sm:px-3.5',
         active
           ? 'border-primary/50 bg-primary-soft text-primary-ink'
           : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
@@ -107,7 +107,7 @@ function CardHero({ card }: { card: CardItem }) {
   return (
     <div
       aria-hidden
-      className="grid h-20 w-full place-items-center bg-primary-soft text-xl font-extrabold tracking-tight text-primary-ink"
+      className="grid h-24 w-full place-items-center bg-gradient-to-br from-primary-soft to-surface-2 text-xl font-extrabold tracking-tight text-primary-ink"
     >
       {initialsOf(card.title)}
     </div>
@@ -177,7 +177,7 @@ export function CardsBlock({ block }: { block: Cards }) {
                 <label
                   className={clsx(
                     'flex min-w-0 flex-1 basis-48 items-center gap-2 rounded-pill border border-border bg-surface-2/70 px-4 transition-colors focus-within:border-border-strong focus-within:bg-surface',
-                    operator ? 'h-14' : 'h-10',
+                    operator ? 'h-14' : 'h-11 sm:h-10',
                   )}
                 >
                   <Search className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
@@ -209,7 +209,7 @@ export function CardsBlock({ block }: { block: Cards }) {
                             },
                       )
                     }
-                    className="h-10 rounded-pill border border-border bg-surface px-3 text-xs font-semibold text-ink-muted outline-none focus-visible:border-border-strong"
+                    className="h-11 rounded-pill border border-border bg-surface px-3 text-xs font-semibold text-ink-muted outline-none focus-visible:border-border-strong sm:h-10"
                   >
                     <option value="">Orden de siempre</option>
                     {block.sortOptions.map((o, i) => (
@@ -223,7 +223,7 @@ export function CardsBlock({ block }: { block: Cards }) {
                       type="button"
                       aria-label={sort.dir === 'asc' ? 'Orden ascendente' : 'Orden descendente'}
                       onClick={() => setSort({ ...sort, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
-                      className="grid h-10 w-10 place-items-center rounded-pill border border-border bg-surface text-ink-muted transition-colors hover:text-ink"
+                      className="view-press grid h-11 w-11 place-items-center rounded-pill border border-border bg-surface text-ink-muted transition-colors hover:text-ink sm:h-10 sm:w-10"
                     >
                       {sort.dir === 'asc' ? (
                         <ArrowUpAZ className="h-4 w-4" aria-hidden />
@@ -316,11 +316,21 @@ export function CardsBlock({ block }: { block: Cards }) {
                     className={clsx(
                       flash(block.id, card.id),
                       'group relative flex flex-col overflow-hidden rounded-card border shadow-card transition-all duration-150',
+                      open && 'active:scale-[0.985] motion-reduce:active:scale-100',
                       card.alert ? 'border-rose/50 bg-rose-soft' : 'border-border bg-surface',
                       open &&
                         'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-pop focus-within:ring-2 focus-within:ring-primary/40',
                     )}
                   >
+                    {card.status?.tone && (
+                      <span
+                        aria-hidden
+                        className={clsx(
+                          'absolute inset-y-0 left-0 z-10 w-1',
+                          TONE_BAR[card.status.tone],
+                        )}
+                      />
+                    )}
                     {block.cards.some((c) => c.image) && <CardHero card={card} />}
                     <div className="flex flex-1 flex-col p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -386,7 +396,7 @@ export function CardsBlock({ block }: { block: Cards }) {
                 <button
                   type="button"
                   onClick={() => setPage(page + 1)}
-                  className="h-10 rounded-pill border border-border bg-surface px-5 text-xs font-semibold text-ink transition-colors hover:border-border-strong"
+                  className="view-press h-11 rounded-pill border border-border bg-surface px-6 text-xs font-semibold text-ink transition-colors hover:border-border-strong"
                 >
                   Ver más ({more})
                 </button>

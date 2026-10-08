@@ -127,6 +127,7 @@ function CopyLink() {
 export function DetailBlock({ block }: { block: Detail }) {
   const nav = useRecordNav();
   const { density } = useViewTheme();
+  const [tab, setTab] = useState<'data' | 'media' | 'related' | 'history'>('data');
 
   const back = nav ? (
     <button
@@ -165,40 +166,52 @@ export function DetailBlock({ block }: { block: Detail }) {
   const { header } = block;
   const rowId = block.rowId ?? '';
   const edited = header.updatedAt !== header.createdAt;
+  // En el celular, el detalle se parte en pestañas; en pantalla ancha se ve todo junto.
+  const tabs: Array<{ id: typeof tab; label: string }> = [
+    { id: 'data', label: 'Datos' },
+    ...(block.gallery.length > 0 ? [{ id: 'media' as const, label: 'Fotos' }] : []),
+    ...(block.related.length > 0 ? [{ id: 'related' as const, label: 'Relacionados' }] : []),
+    ...(block.timeline ? [{ id: 'history' as const, label: 'Historial' }] : []),
+  ];
+  const only = (id: typeof tab) => (tabs.length < 2 || tab === id ? '' : 'hidden lg:block');
   return (
     <div className="space-y-4">
       {back}
-      <Card className="relative !h-auto overflow-hidden">
-        <span aria-hidden className="view-brand-stripe absolute inset-x-0 top-0 h-1" />
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="break-words text-xl font-extrabold leading-tight tracking-tight text-ink">
-              {header.title}
-            </h2>
-            {header.subtitle && <p className="mt-1 text-sm text-ink-muted">{header.subtitle}</p>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {header.status && <StatusChip value={header.status.label} tone={header.status.tone} />}
+      <Card className="relative !h-auto overflow-hidden !p-0">
+        <div className="view-hero-glow relative px-4 pb-4 pt-5 sm:px-6 sm:pb-5 sm:pt-6">
+          <span aria-hidden className="view-brand-stripe absolute inset-x-0 top-0 h-1" />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              {header.status && (
+                <div className="mb-2">
+                  <StatusChip value={header.status.label} tone={header.status.tone} />
+                </div>
+              )}
+              <h2 className="break-words text-xl font-extrabold leading-tight tracking-tight text-ink sm:text-display">
+                {header.title}
+              </h2>
+              {header.subtitle && <p className="mt-1 text-sm text-ink-muted">{header.subtitle}</p>}
+            </div>
             <CopyLink />
           </div>
+          <p className="mt-3 text-micro text-ink-muted">
+            Creado{' '}
+            <span className="tabular font-mono" suppressHydrationWarning>
+              {formatWhen(header.createdAt)}
+            </span>
+            {edited && (
+              <>
+                {' '}
+                · Actualizado{' '}
+                <span className="tabular font-mono" suppressHydrationWarning>
+                  {formatWhen(header.updatedAt)}
+                </span>
+              </>
+            )}
+          </p>
         </div>
-        <p className="mt-3 text-micro text-ink-faint">
-          Creado{' '}
-          <span className="tabular font-mono" suppressHydrationWarning>
-            {formatWhen(header.createdAt)}
-          </span>
-          {edited && (
-            <>
-              {' '}
-              · Actualizado{' '}
-              <span className="tabular font-mono" suppressHydrationWarning>
-                {formatWhen(header.updatedAt)}
-              </span>
-            </>
-          )}
-        </p>
         {block.actions.length > 0 && (
-          <div className="mt-4 border-t border-border pt-4">
+          <div className="border-t border-border bg-surface px-4 py-3 sm:px-6">
             <RowActions
               blockId={block.id}
               actions={block.actions}
@@ -209,10 +222,40 @@ export function DetailBlock({ block }: { block: Detail }) {
         )}
       </Card>
 
+      {tabs.length > 1 && (
+        <div
+          role="tablist"
+          aria-label="Secciones del registro"
+          className="view-tabs view-no-print scroll-slim overflow-x-auto lg:hidden"
+        >
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={clsx(
+                'view-press inline-flex h-11 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-pill px-4 text-xs font-semibold',
+                tab === t.id
+                  ? 'bg-surface text-ink shadow-card ring-1 ring-border'
+                  : 'text-ink-muted hover:text-ink',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className={clsx('min-w-0', density === 'compact' ? 'space-y-3' : 'space-y-4')}>
           {block.sections.map((section) => (
-            <Card key={section.title} title={section.title} className="!h-auto">
+            <Card
+              key={section.title}
+              title={section.title}
+              className={clsx('!h-auto', only('data'))}
+            >
               <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
                 {section.items.map((item) => (
                   <div
@@ -244,7 +287,7 @@ export function DetailBlock({ block }: { block: Detail }) {
           ))}
 
           {block.gallery.length > 0 && (
-            <Card title="Fotos y documentos" className="!h-auto">
+            <Card title="Fotos y documentos" className={clsx('!h-auto', only('media'))}>
               <div className="space-y-4">
                 {block.gallery.map((g) => (
                   <div key={g.key}>
@@ -261,7 +304,7 @@ export function DetailBlock({ block }: { block: Detail }) {
               key={rel.blockKey}
               title={rel.title}
               source={`${rel.total} · ${rel.source}`}
-              className="!h-auto"
+              className={clsx('!h-auto', only('related'))}
             >
               {rel.problem ? (
                 <p className="text-xs text-ink-muted">{rel.problem}</p>
@@ -319,7 +362,10 @@ export function DetailBlock({ block }: { block: Detail }) {
         </div>
 
         {block.timeline && (
-          <Card title="Línea de tiempo" className="!h-auto lg:sticky lg:top-4">
+          <Card
+            title="Línea de tiempo"
+            className={clsx('!h-auto lg:sticky lg:top-4', only('history'))}
+          >
             {block.timeline.length === 0 ? (
               <p className="text-xs text-ink-muted">Todavía no hay movimientos.</p>
             ) : (

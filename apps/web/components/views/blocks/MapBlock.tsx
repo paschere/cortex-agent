@@ -233,7 +233,7 @@ export function MapBlock({ block, target }: { block: MapData; target: SubmitTarg
           aria-label="Filtrar personas por rol"
           value={role}
           onChange={(e) => setRole(e.target.value)}
-          className="h-8 rounded-pill border border-border bg-surface px-2.5 text-micro font-semibold text-ink-muted"
+          className="h-11 rounded-pill border border-border bg-surface px-3.5 sm:h-8 sm:px-2.5 text-micro font-semibold text-ink-muted"
         >
           <option value="">Todos los roles</option>
           {roles.map(([key, name]) => (
@@ -246,7 +246,7 @@ export function MapBlock({ block, target }: { block: MapData; target: SubmitTarg
       <button
         type="button"
         onClick={() => setFitKey((k) => k + 1)}
-        className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-border bg-surface px-2.5 text-micro font-semibold text-ink-muted transition-colors hover:text-ink"
+        className="view-press inline-flex h-11 items-center gap-1.5 rounded-pill border border-border bg-surface px-3.5 sm:h-8 sm:px-2.5 text-micro font-semibold text-ink-muted transition-colors hover:text-ink"
       >
         <Crosshair className="h-3.5 w-3.5" aria-hidden /> Centrar
       </button>
@@ -451,7 +451,7 @@ function LayerToggle({
       aria-pressed={on}
       onClick={onClick}
       className={clsx(
-        'inline-flex h-8 items-center gap-1.5 rounded-pill border px-2.5 text-micro font-semibold transition-colors',
+        'view-press inline-flex h-11 items-center gap-1.5 rounded-pill border px-3.5 sm:h-8 sm:px-2.5 text-micro font-semibold transition-colors',
         on
           ? 'border-primary/40 bg-primary-soft text-primary-ink'
           : 'border-border bg-surface text-ink-faint',
