@@ -242,7 +242,7 @@ function SharingBadge() {
   return (
     <output
       aria-live="polite"
-      className="view-no-print block fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-3 z-40 max-w-[calc(100vw-1.5rem)] md:bottom-4"
+      className="view-no-print block fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-3 z-40 max-w-[calc(100vw-1.5rem)] md:hidden"
     >
       <div
         className={clsx(

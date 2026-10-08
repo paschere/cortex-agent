@@ -401,6 +401,9 @@ interface LocationRow {
  * Une la posición con el consentimiento vigente y con la persona activa de ESTA
  * app: quien revocó, terminó turno, fue desactivada o ya no está no aparece.
  */
+/** El rol con que se pinta a un admin de la empresa que no es miembro de la app. */
+const ADMIN_ROLE_KEY = '__admin';
+
 export async function listLivePeople(
   db: SupabaseClient,
   access: AppAccess,
@@ -499,15 +502,20 @@ export async function listLivePeople(
       name = u?.name;
       roleKey = u?.role_key;
     }
+    const isSelf = l.subject_kind === self.kind && l.subject_id === self.id;
+    // Un dueño o admin de la empresa entra a la app sin ser miembro con rol:
+    // sólo pudo compartir porque `canShareLocation` lo deja a los admins, así
+    // que se pinta como «Administrador» en vez de desaparecer del mapa.
+    if (l.subject_kind === 'member' && name && !roleKey) roleKey = ADMIN_ROLE_KEY;
     if (!name || !roleKey) continue;
-    if (wantedRoles && !wantedRoles.has(roleKey)) continue;
+    if (wantedRoles && !wantedRoles.has(roleKey) && !isSelf) continue;
     const age = Math.max(0, Math.round((now.getTime() - Date.parse(l.recorded_at)) / 1000));
     if (age > HIDE_AFTER_SECONDS) continue;
     out.push({
       ref: personRef(l.subject_kind, l.subject_id),
       name,
       roleKey,
-      roleName: roleName.get(roleKey) ?? roleKey,
+      roleName: roleName.get(roleKey) ?? (roleKey === ADMIN_ROLE_KEY ? 'Administrador' : roleKey),
       lat: l.lat,
       lng: l.lng,
       accuracyM: l.accuracy_m,
@@ -519,7 +527,7 @@ export async function listLivePeople(
       stale: age > STALE_AFTER_SECONDS,
       onShift: true,
       shiftSince: shift.get(`${l.subject_kind}:${l.subject_id}`) ?? null,
-      self: l.subject_kind === self.kind && l.subject_id === self.id,
+      self: isSelf,
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name, 'es'));

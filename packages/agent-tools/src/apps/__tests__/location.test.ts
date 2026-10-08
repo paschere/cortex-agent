@@ -222,6 +222,7 @@ function seed(options: { enabled?: boolean } = {}) {
       { id: LUCIA, organization_id: ORG, name: 'Lucía', email: 'lucia@example.com' },
       { id: MARIO, organization_id: ORG, name: 'Mario', email: 'mario@example.com' },
       { id: OBS, organization_id: ORG, name: 'Olga', email: 'olga@example.com' },
+      { id: ADMIN, organization_id: ORG, name: 'Ana', email: 'ana@example.com' },
     ],
     custom_app_location_consents: [],
     custom_app_locations: [],
@@ -527,6 +528,17 @@ describe('ubicación: quién ve a quién', () => {
     expect(JSON.stringify(people)).not.toContain('@');
     // Pasado un rato sin señal se marca apagada.
     expect((await listLivePeople(db, lucia, {}, at(400)))[0]?.stale).toBe(true);
+  });
+
+  it('un admin de la empresa sin rol en la app aparece en el mapa como Administrador', async () => {
+    const { db } = world();
+    const admin = await member(db, ADMIN, true);
+    expect((await onShift(db, admin)).saved).toBe(true);
+    const people = await listLivePeople(db, admin, {}, at(10));
+    expect(people).toHaveLength(1);
+    expect(people[0]).toMatchObject({ roleName: 'Administrador', self: true });
+    // Aunque el mapa filtre por otro rol, cada quien se ve a sí mismo.
+    expect(await listLivePeople(db, admin, { roles: ['terreno'] }, at(10))).toHaveLength(1);
   });
 
   it('el filtro por rol funciona; quien terminó turno o revocó no aparece', async () => {
