@@ -91,7 +91,7 @@ import { type NextRequest, NextResponse, after } from 'next/server';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 /**
  * How many Brain Knowledge fragments get pasted above the question when nobody
