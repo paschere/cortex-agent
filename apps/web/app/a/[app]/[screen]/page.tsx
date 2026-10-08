@@ -14,6 +14,7 @@ import {
   getKioskSettings,
   isHomeRoute,
   loadHome,
+  locationStatus,
   navScreens,
   readScreen,
   screenButtons,
@@ -50,12 +51,14 @@ export default async function ExternalScreenPage({
   const screen = isHome ? null : screenFor(opened.access, screenRef);
   if (!isHome && !screen) notFound();
   const { db, access, external, actor, kiosk } = opened;
-  const [read, home, brand, kioskSettings, buttons] = await Promise.all([
+  const [read, home, brand, kioskSettings, buttons, location] = await Promise.all([
     screen ? readScreen(db, access, screen, { fila: query.fila, detail: query.d }) : null,
     isHome ? loadHome(db, access) : null,
     externalBrand(db, ext.app),
     external ? getKioskSettings(db, ext.app.id) : null,
     screen ? screenButtons(db, ext.app.id, screen.slug) : [],
+    // Compartir ubicación (0216): sólo si la app lo tiene encendido y el rol puede.
+    locationStatus(db, access),
   ]);
   const emptyHints = screen && read ? await emptyHintsFor(db, access, screen, read) : [];
   const { app, role } = access;
@@ -84,6 +87,7 @@ export default async function ExternalScreenPage({
             title={screen?.title ?? HOME_NAV.title}
             basePath={`/a/${app.id}`}
             buttons={buttons}
+            location={location.canShare ? location : null}
             session={{
               appId: app.id,
               userKey: actor.id,

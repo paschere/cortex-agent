@@ -214,14 +214,16 @@ describe('lo que se crea, se crea de verdad y se puede deshacer', () => {
 
   it('un espacio lo crea sólo un administrador', async () => {
     const w = world({ guided_setup_sessions: [{ id: 's1', organization_id: ACME }] });
-    const item = only(await seedPlan(w.acme, 's1', [
-      {
-        kind: 'space',
-        title: 'Contratos de transporte',
-        rationale: '',
-        payload: { name: 'Contratos de transporte', description: '' },
-      },
-    ]));
+    const item = only(
+      await seedPlan(w.acme, 's1', [
+        {
+          kind: 'space',
+          title: 'Contratos de transporte',
+          rationale: '',
+          payload: { name: 'Contratos de transporte', description: '' },
+        },
+      ]),
+    );
 
     const refused = await createOne(ctx(w.acme, { canCreateGlobalSpace: false }), item);
     expect(refused.ok).toBe(false);

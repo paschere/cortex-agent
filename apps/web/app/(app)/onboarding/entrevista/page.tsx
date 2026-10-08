@@ -9,6 +9,8 @@ import Link from 'next/link';
 import { GuidedSetup } from './_components/GuidedSetup';
 
 export const dynamic = 'force-dynamic';
+// Aplicar puede diseñar vistas, aplicaciones y reglas con el modelo, una tras otra.
+export const maxDuration = 300;
 
 /**
  * /onboarding/entrevista — configurar el producto contándole cómo funciona la

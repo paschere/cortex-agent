@@ -35,6 +35,7 @@ import { CardsBlock } from './blocks/Cards';
 import { DetailBlock } from './blocks/Detail';
 import { FormBlock } from './blocks/FormBlock';
 import { GalleryBlock } from './blocks/Gallery';
+import { MapBlock } from './blocks/MapBlock';
 import { LinksBlock, MediaBlock } from './blocks/Media';
 import { MetricBlock } from './blocks/Metric';
 import { ProgressBlock } from './blocks/Progress';
@@ -364,6 +365,8 @@ function Block({
       return <CalendarBlock block={block} />;
     case 'cards':
       return <CardsBlock block={block} />;
+    case 'map':
+      return <MapBlock block={block} target={target} />;
     case 'detail':
       return <DetailBlock block={block} />;
     case 'progress':

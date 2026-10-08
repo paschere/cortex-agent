@@ -98,6 +98,9 @@ export const JOBS: JobSpec[] = [
   // Automatizaciones de las apps (0210): cada minuto reclama los horarios que
   // tocan y reparte lo que espera un reintento. Ver apps/web/inngest/functions/app-automations.ts.
   { name: 'apps/automation.dispatch', cron: '* * * * *', retryLimit: 1, concurrency: 1 },
+  // Ubicación del equipo (0216): cada hora borra el rastro que pasó la retención de su app
+  // y cierra los turnos que se quedaron abiertos. Ver apps/web/inngest/functions/app-location.ts.
+  { name: 'apps/location.sweep', cron: '5 * * * *', retryLimit: 1, concurrency: 1 },
   // Cobro (0187): 13:00 UTC = 8:00 en Bogotá, para que el recordatorio llegue en horario.
   { name: 'billing/renewals', cron: '0 13 * * *', retryLimit: 1, concurrency: 1 },
   // El registro de trabajo (0174): 06:45 de Bogotá todos los días, después de

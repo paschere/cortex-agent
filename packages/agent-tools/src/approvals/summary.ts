@@ -342,6 +342,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   trackers_drive_syncs: 'Ver las carpetas de Drive que llenan tablas',
   trackers_retry_sync: 'Volver a correr una sincronización',
   accounting_status: 'Ver cómo va el programa contable',
+  accounting_payroll_summary: 'Ver la nómina según la contabilidad',
   accounting_sync_now: 'Traer ya los datos del programa contable',
   trackers_define: 'Crear o cambiar una tabla',
   trackers_list: 'Ver las tablas inventadas',

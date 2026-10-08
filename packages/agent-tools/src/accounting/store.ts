@@ -4,9 +4,11 @@ import { getAccountingProvider } from './providers';
 import type { PurchaseCursor } from './purchase-plan';
 import {
   ACCOUNTING_ENTITIES,
+  ACCOUNTING_OPTIONS,
   type AccountingEntity,
   type AccountingProvider,
   type AccountingProviderId,
+  type AccountingSelection,
   type ProviderRuntime,
   type ProviderSession,
   type ProviderToken,
@@ -75,9 +77,12 @@ export interface AccountingConnectionRow {
   provider: AccountingProviderId;
   created_by: string;
   account_label: string;
-  entities: AccountingEntity[];
+  entities: AccountingSelection[];
   trackers: Partial<Record<AccountingEntity, string>>;
-  cursors: Partial<Record<AccountingEntity, EntityCursor>> & { purchases?: PurchaseCursor };
+  cursors: Partial<Record<AccountingEntity, EntityCursor>> & {
+    purchases?: PurchaseCursor;
+    payroll?: PurchaseCursor;
+  };
   interval_minutes: number;
   notify: boolean;
   enabled: boolean;
@@ -102,11 +107,14 @@ export function requireProvider(id: string): AccountingProvider {
 export function cleanEntities(
   provider: AccountingProvider,
   raw: readonly string[] | undefined,
-): AccountingEntity[] {
+): AccountingSelection[] {
   const wanted = new Set(raw ?? []);
-  const entities = ACCOUNTING_ENTITIES.filter(
+  const entities: AccountingSelection[] = ACCOUNTING_ENTITIES.filter(
     (e) => wanted.has(e) && provider.entities.includes(e),
   );
+  // 0217: lo opcional (nómina) sólo si el programa lo sabe traer.
+  for (const o of ACCOUNTING_OPTIONS)
+    if (wanted.has(o) && provider.options?.includes(o)) entities.push(o);
   if (!entities.length)
     throw new ValidationError(`Elige al menos una cosa para traer de ${provider.name}.`);
   return entities;

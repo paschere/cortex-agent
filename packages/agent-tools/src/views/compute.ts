@@ -1,4 +1,4 @@
-import { type TrackerField, displayTrackerValue } from '../trackers/schema';
+import { type TrackerField, displayTrackerValue, parseLocation } from '../trackers/schema';
 import { computeCards } from './cards';
 import { type EmbedProvider, embedSrc, httpsUrl, safeHref } from './embeds';
 import { buildDetail, findDetailTarget } from './record';
@@ -257,6 +257,7 @@ export type ComputedBlock =
       record: ComputedRecords | null;
     })
   | (BlockBase & ComputedCards)
+  | (BlockBase & ComputedMap)
   | (BlockBase & ComputedRecordDetail)
   | (BlockBase & {
       type: 'progress';
@@ -306,6 +307,45 @@ export type ComputedBlock =
       autoStart: boolean;
     })
   | (BlockBase & { type: 'problem'; title: string; message: string });
+
+/** El mapa (ver `mapBlockSchema`): los marcadores de la tabla y lo que las personas pueden pedirle. */
+export interface ComputedMap {
+  type: 'map';
+  title: string;
+  source: string;
+  markers: Array<{
+    id: string;
+    lat: number;
+    lng: number;
+    title: string;
+    subtitle: string | null;
+    /** La opción de `colorField` de esta fila (el filtro por estado del mapa). */
+    tag: string | null;
+    tone: Tone | null;
+  }>;
+  legend: Array<{ label: string; tone: Tone }>;
+  /** Filas que cumplen los filtros pero no tienen una ubicación válida. */
+  withoutLocation: number;
+  /** Filas que no cupieron en el tope del bloque. */
+  hidden: number;
+  /**
+   * La capa de personas en vivo. Null = no se pinta: el bloque no la pide, la
+   * app no comparte ubicación, o quien mira no tiene permiso (y un enlace
+   * público NUNCA la trae: ahí `opts.location` no existe).
+   */
+  people: { roles: string[]; pollSeconds: number } | null;
+  /** «Asignar tarea» al tocar una persona; null = quien mira no asigna. */
+  assign: {
+    titleLabel: string;
+    descriptionLabel: string | null;
+    dueLabel: string | null;
+    dueTimeLabel: string | null;
+    priority: { label: string; options: string[] } | null;
+    roles: string[];
+  } | null;
+  actions: ComputedAction[];
+  record: ComputedRecords | null;
+}
 
 /** La lista de tarjetas con filtros rápidos (ver `cardsBlockSchema`). */
 export interface ComputedCards {
@@ -540,7 +580,7 @@ export interface ComputedDetail {
 export interface ComputedAction {
   id: string;
   label: string;
-  kind: 'set_field' | 'notify';
+  kind: 'set_field' | 'notify' | 'assign';
   confirm: boolean;
   tone: Tone;
   /** Si viene, el botón sólo aparece en estas filas (Aprobar / Rechazar: las pendientes). */
@@ -921,6 +961,12 @@ function actionsFor(
 }
 
 export interface ComputeOptions {
+  /**
+   * Ubicación del equipo (0216). Sólo dentro de una aplicación: la pone
+   * `readScreen` con el rol de quien mira. Sin esto (vista del equipo, enlace
+   * público, vista previa) un mapa no trae la capa de personas ni «Asignar».
+   */
+  location?: { enabled: boolean; canView: boolean; canAssign: boolean } | null;
   /** Aprobación por tabla (slug → formulario con `approval`); la arma `computeView`. */
   approval?: Map<string, FormApproval>;
   /** Quien mira puede editar y usar botones (lo decide el servidor, no el spec). */
@@ -1015,7 +1061,7 @@ const READONLY_DEFAULT_FIELDS = 8;
 
 type RecordBlock = Extract<
   ViewBlock,
-  { type: 'table' | 'board' | 'zones' | 'gallery' | 'calendar' | 'cards' }
+  { type: 'table' | 'board' | 'zones' | 'gallery' | 'calendar' | 'cards' | 'map' }
 >;
 
 /**
@@ -1082,6 +1128,7 @@ export function blockWriteFields(block: ViewBlock): string[] {
     block.type === 'gallery' ||
     block.type === 'calendar' ||
     block.type === 'cards' ||
+    block.type === 'map' ||
     block.type === 'detail'
   )
     return [...record];
@@ -1275,6 +1322,14 @@ function computeBlock(
           ...block.dataFields,
           ...block.sortOptions,
           ...(block.sort ? [block.sort.field] : []),
+        ]
+      : []),
+    ...(block.type === 'map'
+      ? [
+          block.locationField,
+          block.titleField,
+          ...opt(block.subtitleField),
+          ...opt(block.colorField),
         ]
       : []),
     ...(block.type === 'detail'
@@ -1684,6 +1739,86 @@ function computeBlock(
     case 'cards':
       return computeCards(block, { src, rows, today, opts });
 
+    case 'map': {
+      const colorOptions = block.colorField
+        ? (tracker.fields.find((f) => f.key === block.colorField)?.options ?? [])
+        : [];
+      const placed: Array<{ row: ViewRow; point: { lat: number; lng: number } }> = [];
+      let withoutLocation = 0;
+      for (const r of rows) {
+        const point = parseLocation(rawValue(r, block.locationField));
+        if (point) placed.push({ row: r, point });
+        else withoutLocation += 1;
+      }
+      const kept = placed.slice(0, block.limit);
+      const text = (r: ViewRow, key: string | undefined) => {
+        if (!key) return null;
+        const v = displayValue(tracker, r, key);
+        return v === '—' ? null : v;
+      };
+      const location = opts.location ?? null;
+      const asks = block.assign;
+      const field = (key: string | undefined) => (key ? fieldLabel(tracker, key) : null);
+      return {
+        type: 'map',
+        id: block.id,
+        width: block.width,
+        title: block.title,
+        source: tracker.name,
+        markers: kept.map(({ row, point }) => {
+          const tag = block.colorField ? rawValue(row, block.colorField) : undefined;
+          const at = tag === undefined ? -1 : colorOptions.indexOf(String(tag));
+          return {
+            id: row.id,
+            lat: point.lat,
+            lng: point.lng,
+            title: text(row, block.titleField) ?? row.label,
+            subtitle: text(row, block.subtitleField),
+            tag: tag === undefined ? null : String(tag),
+            tone: at >= 0 ? toneAt(at) : null,
+          };
+        }),
+        legend: colorOptions.map((label, i) => ({ label, tone: toneAt(i) })),
+        withoutLocation,
+        hidden: placed.length - kept.length,
+        people:
+          block.people && location?.enabled && location.canView
+            ? { roles: block.peopleRoles, pollSeconds: 20 }
+            : null,
+        assign:
+          asks && opts.writable && location?.canAssign
+            ? {
+                titleLabel: field(asks.titleField) ?? 'Tarea',
+                descriptionLabel: field(asks.descriptionField),
+                dueLabel: field(asks.dueField),
+                dueTimeLabel: field(asks.dueTimeField),
+                priority: asks.priorityField
+                  ? {
+                      label: field(asks.priorityField) ?? 'Prioridad',
+                      options:
+                        tracker.fields.find((f) => f.key === asks.priorityField)?.options ?? [],
+                    }
+                  : null,
+                roles: asks.roles ?? [],
+              }
+            : null,
+        actions: actionsFor(
+          opts,
+          block.actions,
+          tracker,
+          kept.map((k) => k.row),
+        ),
+        record: buildRecords(
+          block,
+          tracker,
+          kept.map((k) => k.row),
+          [block.titleField, ...opt(block.subtitleField), ...opt(block.colorField)],
+          writes,
+          opts,
+        ),
+      };
+    }
+
     case 'detail':
       return buildDetail(block, { src, rows, sources, today, opts });
 
@@ -1972,6 +2107,7 @@ export function computeView(
         b.type === 'form' && b.approval ? ([[b.tracker, b.approval]] as const) : [],
       ),
     ),
+    location: opts.location ?? null,
   };
   const sources = applyFilterBar(spec, unfiltered, options.filters);
   // El registro abierto: qué detalle lo muestra. Sólo ese bloque sale «listo».

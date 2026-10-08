@@ -16,6 +16,7 @@ import {
   type CustomAppRow,
   adaptApp,
   attributesSchema,
+  eraseLocationOf,
   getApp,
   listRoles,
   listScreens,
@@ -386,12 +387,16 @@ export async function setAppUserStatus(
     .select(USER_COLUMNS)
     .single();
   if (error) throw error;
-  if (status === 'disabled') await revokeUserSessions(db, id);
+  if (status === 'disabled') {
+    await revokeUserSessions(db, id);
+    await eraseLocationOf(db, appId, 'app_user', id);
+  }
   return adaptUser(data as Record<string, unknown>);
 }
 
 export async function removeAppUser(db: SupabaseClient, appId: string, id: string) {
   await revokeUserSessions(db, id);
+  await eraseLocationOf(db, appId, 'app_user', id);
   const { error } = await db.from('custom_app_users').delete().eq('app_id', appId).eq('id', id);
   if (error) throw error;
 }

@@ -435,7 +435,8 @@ async function liveness(db: SupabaseClient, item: SetupItem): Promise<Liveness> 
           item,
           alive: true,
           used: runs > 0,
-          evidence: runs > 0 ? `Ha corrido ${runs} ${runs === 1 ? 'vez' : 'veces'}.` : 'Nunca ha corrido.',
+          evidence:
+            runs > 0 ? `Ha corrido ${runs} ${runs === 1 ? 'vez' : 'veces'}.` : 'Nunca ha corrido.',
         };
       }
       case 'flow': {
@@ -450,7 +451,10 @@ async function liveness(db: SupabaseClient, item: SetupItem): Promise<Liveness> 
           item,
           alive: true,
           used: times > 0,
-          evidence: times > 0 ? `Lo han corrido ${times} ${times === 1 ? 'vez' : 'veces'}.` : 'Nadie lo ha corrido.',
+          evidence:
+            times > 0
+              ? `Lo han corrido ${times} ${times === 1 ? 'vez' : 'veces'}.`
+              : 'Nadie lo ha corrido.',
         };
       }
       case 'client': {
@@ -488,7 +492,73 @@ async function liveness(db: SupabaseClient, item: SetupItem): Promise<Liveness> 
           item,
           alive: true,
           used: docs > 0,
-          evidence: docs > 0 ? `Tiene ${docs} ${docs === 1 ? 'documento' : 'documentos'}.` : 'Sigue vacío.',
+          evidence:
+            docs > 0 ? `Tiene ${docs} ${docs === 1 ? 'documento' : 'documentos'}.` : 'Sigue vacío.',
+        };
+      }
+      case 'table': {
+        const { data } = await db
+          .from('trackers')
+          .select('id')
+          .eq('slug', item.targetId)
+          .maybeSingle();
+        if (!data) return { item, ...DEAD };
+        const { count } = await db
+          .from('tracker_rows')
+          .select('id', { count: 'exact', head: true })
+          .eq('tracker_id', (data as Row).id as string);
+        const rows = count ?? 0;
+        return {
+          item,
+          alive: true,
+          used: rows > 0,
+          evidence: rows > 0 ? `Tiene ${rows} ${rows === 1 ? 'fila' : 'filas'}.` : 'Sigue vacía.',
+        };
+      }
+      case 'view': {
+        const { data } = await db
+          .from('custom_views')
+          .select('version, archived_at')
+          .eq('slug', item.targetId)
+          .maybeSingle();
+        if (!data || (data as Row).archived_at) return { item, ...DEAD };
+        const edited = Number((data as Row).version ?? 1) > 1;
+        return {
+          item,
+          alive: true,
+          used: edited,
+          evidence: edited ? 'La han editado después.' : 'Ahí está, sin cambios.',
+        };
+      }
+      case 'app': {
+        const { data } = await db
+          .from('custom_apps')
+          .select('status, archived_at')
+          .eq('id', item.targetId)
+          .maybeSingle();
+        if (!data || (data as Row).archived_at) return { item, ...DEAD };
+        const published = (data as Row).status === 'published';
+        return {
+          item,
+          alive: true,
+          used: published,
+          evidence: published ? 'Ya la publicaron.' : 'Sigue como borrador.',
+        };
+      }
+      case 'automation': {
+        const [, automationId] = item.targetId.split(':');
+        const { data } = await db
+          .from('custom_app_automations')
+          .select('enabled')
+          .eq('id', automationId ?? '')
+          .maybeSingle();
+        if (!data) return { item, ...DEAD };
+        const on = (data as Row).enabled === true;
+        return {
+          item,
+          alive: true,
+          used: on,
+          evidence: on ? 'Ya la activaron.' : 'Sigue en pausa.',
         };
       }
     }
@@ -497,4 +567,3 @@ async function liveness(db: SupabaseClient, item: SetupItem): Promise<Liveness> 
     return { item, alive: true, used: false, evidence: 'No se pudo revisar ahora.' };
   }
 }
-

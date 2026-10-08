@@ -508,6 +508,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // empresa en ese programa; la segunda, su cartera.
   accounting_connections: tenant(),
   accounting_invoices: tenant(),
+  // 0217: líneas de los comprobantes de nómina traídos del programa contable.
+  // Tenant en el sentido más fuerte: llevan salarios por persona.
+  accounting_payroll_lines: tenant(),
   // Migración 0166: cuándo bajó el saldo de una factura de programa contable
   // avisada. Tenant: la escribe el vigilante de cartera de ese espacio.
   receivable_balance_drops: tenant(),
@@ -560,6 +563,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // 0211: dispositivos compartidos de planta (modo kiosco). Tenant: un dispositivo
   // ajeno dejaría entrar con un PIN a una app que no es de esta empresa.
   custom_app_devices: tenant(),
+  // 0216: ubicación del equipo (consentimientos, última posición e historial corto).
+  // Tenant: dónde está una persona es el dato más sensible de una app; una fila ajena en la lista sería una fuga.
+  custom_app_location_consents: tenant(),
+  custom_app_locations: tenant(),
+  custom_app_location_history: tenant(),
   // 0178: las vistas guardadas del visualizador de datos (filtros, orden,
   // columnas) por alcance — una tabla de la empresa, la lista de clientes.
   // Tenant: el nombre y los filtros de una vista dicen qué mira una empresa

@@ -14,6 +14,7 @@ import {
   attributesSchema,
   createApp,
   installAppTemplate,
+  locationSettingsPatchSchema,
   mustGetApp,
   removeMember,
   removeScreen,
@@ -129,6 +130,26 @@ export async function updateAppAction(
     return { ok: true, status: app.status };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo guardar la aplicación.') };
+  }
+}
+
+/**
+ * «Compartir ubicación del equipo»: encender o apagar y cuántos días se guarda el
+ * rastro. Es de quien administra: decide si una app sabe dónde está su gente.
+ * Apagarla borra todas las posiciones guardadas.
+ */
+export async function saveLocationSettingsAction(
+  appId: string,
+  raw: unknown,
+): Promise<AppActionResult<{ enabled: boolean; retentionDays: number }>> {
+  try {
+    const patch = locationSettingsPatchSchema.parse(raw);
+    const { user, db } = await admin();
+    const app = await updateApp(db, appId, { location: patch, userId: user.id });
+    touched(app);
+    return { ok: true, ...app.location };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar la ubicación del equipo.') };
   }
 }
 

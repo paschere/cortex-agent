@@ -12,6 +12,7 @@ const siigo: AccountingProviderInfo = {
     { key: 'access_key', label: 'Access key', secret: true },
   ],
   entities: ['customers', 'products', 'invoices', 'payments'],
+  options: ['payroll'],
   paymentsLabel: 'Recibos de caja',
   connect: 'credentials',
   setupMissing: null,
@@ -23,6 +24,7 @@ const alegra: AccountingProviderInfo = {
   credentialsHelp: '',
   credentialFields: [],
   entities: [],
+  options: [],
   paymentsLabel: 'Pagos recibidos',
   connect: 'credentials',
   setupMissing: null,
@@ -87,6 +89,26 @@ describe('la tarjeta de un programa contable', () => {
       },
     ]);
     expect(soon).toMatchObject({ connected: false, status: 'Próximamente.', tone: 'idle' });
+  });
+
+  it('la nómina es opcional, no lleva enlace a una tabla y no se activa sola', () => {
+    const [off] = buildAccountingCards([siigo], [], slug, NOW);
+    expect(off?.entities).not.toContain('payroll');
+    const [on] = buildAccountingCards(
+      [siigo],
+      [
+        conn({
+          entities: ['invoices', 'payroll'],
+          cursors: { payroll: { since: '2026-10-08T00:00:00Z' } },
+        }),
+      ],
+      slug,
+      NOW,
+    );
+    expect(on?.lines.find((l) => l.entity === 'payroll')).toMatchObject({
+      href: null,
+      text: expect.stringContaining('Carga inicial finalizada'),
+    });
   });
 
   it('con error muestra el motivo; en pausa lo dice', () => {

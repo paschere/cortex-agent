@@ -10,6 +10,7 @@ import {
   type ProposedItem,
   SETUP_KINDS,
   type SetupKind,
+  TABLE_FIELD_TYPES,
   normalizeProposal,
 } from '@/lib/guided-setup-shape';
 import { NO_THINKING, chatModel, repairStructured } from '@cortex/agent-tools';
@@ -49,7 +50,7 @@ import type { Turn } from './store';
  * ===========================================================================
  * EL MODELO NO ELIGE EL CATÁLOGO
  * ===========================================================================
- * El esquema sólo admite los cinco tipos creables, y después de eso todo pasa
+ * El esquema sólo admite los tipos creables, y después de eso todo pasa
  * por `normalizeProposal`. Un modelo que se invente «alertas por WhatsApp
  * cuando cambie el estado en el puerto» no produce una propuesta rota: no
  * produce ninguna propuesta, y lo que la persona pidió sale en la lista de lo
@@ -97,6 +98,40 @@ const ItemSchema = z.object({
   nit: z.string().optional(),
   city: z.string().optional(),
   notes: z.string().optional(),
+
+  columns: z
+    .array(
+      z.object({
+        label: z.string(),
+        type: z.enum(TABLE_FIELD_TYPES),
+        required: z.boolean().optional(),
+        options: z.array(z.string()).optional().describe('Sólo si type es select.'),
+      }),
+    )
+    .optional()
+    .describe('Tabla: las columnas que dijeron que anotan, entre 1 y 20.'),
+  sourceKind: z
+    .enum(['sheet', 'drive'])
+    .optional()
+    .describe('Tabla: sólo si la persona nombró una hoja de Google o una carpeta de Drive.'),
+  sourceUrl: z
+    .string()
+    .optional()
+    .describe('Tabla: el enlace https de esa hoja o carpeta, tal como lo dijeron.'),
+  request: z
+    .string()
+    .optional()
+    .describe(
+      'Pantalla o aplicación: qué registran o ven, quién lo usa (roles) y desde dónde. Concreto, con sus palabras.',
+    ),
+  appName: z
+    .string()
+    .optional()
+    .describe('Automatización: el título de la aplicación (propuesta aquí o ya existente).'),
+  rule: z
+    .string()
+    .optional()
+    .describe('Automatización: «cuando X, si Y, haz Z», en palabras de la persona.'),
 });
 
 type RawItem = z.infer<typeof ItemSchema>;
@@ -131,6 +166,11 @@ export interface InterviewContext {
   today: string;
   /** Si es falso, no se le ofrecen espacios: sólo un administrador los crea. */
   canCreateGlobalSpace: boolean;
+  /**
+   * Si es falso, no se le ofrecen aplicaciones ni automatizaciones: sólo quien
+   * administra la empresa las crea. Por defecto igual a `canCreateGlobalSpace`.
+   */
+  canManageApps?: boolean;
 }
 
 const CATALOG = [
@@ -154,6 +194,32 @@ const CATALOG = [
   '',
   '5. space — un sitio de la empresa para guardar documentos de un tema y poder',
   '   citarlos después.',
+  '',
+  '6. table — una tabla propia: lo que hoy anotan en cuadernos, hojas sueltas o',
+  '   en la cabeza (remates, contenedores, inspecciones, pedidos). Pasa en',
+  '   `columns` las columnas que dijeron, cada una con su tipo (text, longtext,',
+  '   number, date, time, money, select con options, checkbox, file, location).',
+  '   Si la persona mencionó una HOJA DE GOOGLE o una CARPETA DE DRIVE con enlace,',
+  '   NO inventes columnas: pon sourceKind (sheet o drive) y sourceUrl con el',
+  '   enlace; Cortex primero lee esa fuente y propone la tabla en el chat.',
+  '',
+  '7. view — una pantalla interna para el equipo sobre las tablas: un tablero por',
+  '   estado, un formulario de captura o una lista. En `request` di qué muestra',
+  '   o qué se llena y para quién. Queda como borrador, sin compartir.',
+  '',
+  '8. app — una aplicación, SÓLO cuando hay gente con funciones distintas',
+  '   (operarios, supervisores, clientes, gerencia) o se va a usar desde el',
+  '   celular. Si es una sola pantalla para el equipo, es una view, no una app.',
+  '   En `request` di quién la usa, qué hace cada uno y desde dónde entran los',
+  '   datos. Queda sin publicar.',
+  '',
+  '9. automation — una regla sobre una aplicación, escrita en palabras: «cuando',
+  '   X, si Y, haz Z» (avisar a un supervisor cuando una fila cambia de estado,',
+  '   un resumen diario). En `appName` el título de la app (la que propones en',
+  '   este mismo plan o una ya existente) y en `rule` la regla. Nace en pausa.',
+  '   Avisa sólo por notificación y correo: no por WhatsApp.',
+  '',
+  'SI UNA TABLA, VISTA O APP DEPENDE DE UNA TABLA, propón también la tabla.',
   '',
   'LO QUE EL PRODUCTO HACE PERO NO SE CONFIGURA HABLANDO (van en handoffs, no',
   'en items, y no se crea nada):',
@@ -223,6 +289,11 @@ export async function askNext(
     '  mejor". Prohibido preguntar algo que ya te contestaron.',
     '- Si lo que falta es una FECHA para un vencimiento que ya se mencionó, esa es',
     '  casi siempre la mejor pregunta que puedes hacer.',
+    '- Si mencionaron algo que anotan o controlan a mano, lo que desbloquea una',
+    '  tabla, pantalla o aplicación son tres cosas: QUÉ REGISTRAN (qué datos, uno',
+    '  por fila), QUIÉN LO USA (¿operarios en celular, supervisores, clientes?) y',
+    '  DESDE DÓNDE LLEGAN LOS DATOS (¿ya viven en una hoja de Google o carpeta de',
+    '  Drive? pídeles el enlace). Pregunta la que falte, una por turno.',
     '',
     'PARA EN CUANTO PUEDAS. Si con lo que ya sabes puedes proponer dos o tres cosas',
     'útiles, pon enough en true aunque te queden preguntas. Sobra información nunca;',
@@ -282,6 +353,10 @@ export async function propose(turns: readonly Turn[], ctx: InterviewContext): Pr
     ctx.canCreateGlobalSpace
       ? '- Puedes proponer un espacio de documentos si hay un tema con papeles claros.'
       : '- NO propongas espacios de documentos: esta persona no puede crearlos.',
+    (ctx.canManageApps ?? ctx.canCreateGlobalSpace)
+      ? '- Puedes proponer aplicaciones y automatizaciones, pero sólo si hay roles distintos o uso en celular (app) y una regla clara (automation). Cada una con una descripción concreta: quién, qué y desde dónde.'
+      : '- NO propongas aplicaciones ni automatizaciones: esta persona no puede crearlas. Una tabla o una pantalla sí.',
+    '- Una tabla, pantalla o aplicación se propone sólo si dijeron qué registran. Con hoja o carpeta nombrada, la tabla va con el enlace y sin columnas inventadas.',
     '',
     'Y lo más importante: si te pidieron algo que no está en el catálogo, ponlo en',
     'outOfScope con sus palabras y di que todavía no se puede. No lo maquilles',
@@ -312,6 +387,17 @@ export async function propose(turns: readonly Turn[], ctx: InterviewContext): Pr
   }));
 
   for (const raw of object.items) {
+    if (
+      (raw.kind === 'app' || raw.kind === 'automation') &&
+      !(ctx.canManageApps ?? ctx.canCreateGlobalSpace)
+    ) {
+      rejected.push({
+        kind: raw.kind,
+        title: raw.title,
+        reason: 'Sólo quien administra la empresa crea aplicaciones y automatizaciones.',
+      });
+      continue;
+    }
     if (raw.kind === 'space' && !ctx.canCreateGlobalSpace) {
       rejected.push({
         kind: raw.kind,
@@ -396,5 +482,29 @@ function toPayload(kind: SetupKind, raw: RawItem): Record<string, unknown> {
       return { name: raw.title, nit: raw.nit, city: raw.city, notes: raw.notes };
     case 'space':
       return { name: raw.title, description: raw.description ?? '' };
+    case 'table':
+      return {
+        name: raw.title,
+        description: raw.description ?? '',
+        fields: raw.columns ?? [],
+        source:
+          raw.sourceKind && raw.sourceUrl
+            ? { kind: raw.sourceKind, url: raw.sourceUrl.trim() }
+            : undefined,
+      };
+    case 'view':
+      return {
+        name: raw.title,
+        description: raw.description ?? '',
+        request: raw.request ?? raw.description,
+      };
+    case 'app':
+      return {
+        name: raw.title,
+        description: raw.description ?? '',
+        request: raw.request ?? raw.description,
+      };
+    case 'automation':
+      return { name: raw.title, app: raw.appName, rule: raw.rule };
   }
 }

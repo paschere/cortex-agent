@@ -32,6 +32,7 @@ import {
   actionsSweepWorkspaceJob,
 } from '@/inngest/functions/actions-sweep';
 import { appAutomationDispatchJob, appAutomationRunJob } from '@/inngest/functions/app-automations';
+import { appLocationSweepJob } from '@/inngest/functions/app-location';
 import {
   autopilotDispatchJob,
   autopilotRemindJob,
@@ -131,6 +132,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'views/digest.dispatch': viewDigestDispatchJob,
   // Automatizaciones de las apps (0210): cada minuto, horarios y reintentos.
   'apps/automation.dispatch': appAutomationDispatchJob,
+  // Ubicación del equipo (0216): cada hora borra el rastro vencido y cierra turnos olvidados.
+  'apps/location.sweep': appLocationSweepJob,
   // Cobro (0187): estado efectivo y recordatorios, una vez al día.
   'billing/renewals': billingRenewalsJob,
   'work/sync.dispatch': workSyncDispatchJob,

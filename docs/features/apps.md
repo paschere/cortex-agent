@@ -2,6 +2,8 @@
 
 Un conjunto de pantallas con menú y roles, armado sobre las mismas tablas (`trackers`) y vistas que ya usa la empresa. El operario de planta ve «Registrar» y «Mis registros» (sólo sus filas), el supervisor aprueba, gerencia mira el tablero y exporta. Migración `0208_custom_apps.sql`. Plan completo: [docs/plans/aplicaciones.md](../plans/aplicaciones.md).
 
+Mapa y tareas: ver «Mapa y tareas (0216)» más abajo.
+
 Estado: **fase 1** (miembros de Cortex con rol) y **fase 2** (usuarios externos con código por correo e instalable, migración `0209_custom_app_users.sql`). Automatizaciones y Web Push son la fase 3; el modo kiosco, el portal de clientes y `apps.design` son la **fase 4** (migración `0211_custom_app_kiosk.sql`, ver abajo).
 
 ## Principio: una pantalla ES una vista
@@ -276,6 +278,160 @@ ve sale con aviso, no vacía). `readScreen` acepta `fila` y `detail`.
   bloquear— de listas sin detalle, formularios de planta sin diseño operario y
   tableros TV con formularios o botones. La plantilla `control_planta` ahora
   trae un detalle en «Mis registros» y «Por aprobar».
+
+## Mapa y tareas (0216)
+
+Un mapa donde se ve, en tiempo real, dónde están las personas que usan la app, y poder
+asignarles tareas. Migración `0216_custom_app_location.sql` (hay que aplicarla antes de
+desplegar: las consultas de apps leen `custom_apps.location`). Plantilla lista:
+**«Equipo en campo: mapa y tareas»** (`equipo_en_campo`).
+
+Es el dato más delicado que guarda Cortex sobre una persona, así que se diseña con la Ley
+1581 de 2012 (habeas data): apagado por defecto, consentimiento claro y revocable, sólo con
+la app abierta y en turno, mínimo necesario, retención corta y acceso por rol.
+
+### Las cuatro puertas (todo en el servidor)
+
+`packages/agent-tools/src/apps/location.ts` (la parte pura, sin base, en `location-shape.ts`).
+Una posición sólo se guarda si pasa LAS CUATRO; si falta una, `recordPosition` no guarda nada
+y el navegador ni siquiera pide el GPS:
+
+1. **La app** lo permite: «Compartir ubicación del equipo» (`custom_apps.location =
+   {enabled, retentionDays}`), apagado por defecto. Se enciende en la pestaña «Roles y
+   permisos» del editor, o por chat con `apps.update` (`location`). Apagarlo BORRA todas las
+   posiciones y cierra los turnos.
+2. **El rol** puede compartir: `permissions.location.share`. Aparte, `view` (ve dónde están) y
+   `assign` (asigna tareas). Nada se hereda; el administrador de la empresa ve y asigna siempre.
+3. **La persona** aceptó el texto vigente y no lo revocó (`custom_app_location_consents`: una
+   fila por persona y app, con versión del texto y fecha). Si cambia `LOCATION_TEXT_VERSION`
+   (`location-shape.ts`), hay que aceptar de nuevo.
+4. **La persona tiene el turno abierto** (Iniciar / Terminar turno). Aceptar no abre el turno.
+
+### Consentimiento, turno y control (lado de la persona)
+
+`components/apps/LocationShare.tsx`, montado en `AppRunner` (`LocationProvider` arriba, para que
+no se desmonte al abrir el menú; `LocationMenu` en el menú de la app).
+
+- «Iniciar turno» sin consentimiento abre el texto: qué se comparte (posición, precisión y, si
+  el teléfono lo da, rumbo, velocidad y batería), cuándo (app abierta y turno), para qué, quién
+  lo ve (los roles con permiso de ver, que el servidor pone, más quienes administran), cuánto se
+  guarda (la retención de ESA app) y cómo apagarlo. «Acepto: iniciar turno» registra y abre el turno.
+- **Sin consentimiento no se toca `navigator.geolocation`**: el efecto que lo pide depende de
+  `consentido && turno abierto`. Con la pestaña oculta se deja de pedir; al volver, se retoma.
+- Mientras hay turno, un aviso fijo «Compartiendo ubicación» en todas las pantallas, honesto: si
+  el navegador negó el permiso o el teléfono no da ubicación, dice eso y no «compartiendo».
+- «Terminar turno» (aviso y menú) borra la posición actual; «Dejar de compartir mi ubicación»
+  retira la autorización y borra la posición Y el rastro guardado de esa persona.
+- Quitar a alguien de la app o desactivarlo borra todo lo suyo (`eraseLocationOf`).
+- Server actions (`lib/apps/location-actions.ts`): sirven igual a un usuario externo (cookie) que
+  a un miembro; en «Ver como…» no se comparte ni se asigna nada.
+
+### Datos (0216)
+
+| Tabla | Qué guarda |
+|---|---|
+| `custom_apps.location` | `{enabled, retentionDays}` (1–365, 30 por defecto). |
+| `custom_app_location_consents` | persona (`member`/`app_user` + id), versión y fecha del texto, `revoked_at`, `on_shift`, inicio/fin del turno. |
+| `custom_app_locations` | LA ÚLTIMA posición por persona: lat, lng, precisión, rumbo, velocidad, batería, hora (la pone el servidor, no el teléfono). Se borra al terminar el turno o revocar. |
+| `custom_app_location_history` | rastro corto: una muestra por minuto como mucho. |
+
+Todas con `organization_id`, `tenant()` en `tenancy/tables.ts` y RLS sólo para `service_role`.
+
+- **Ingesta**: una persona manda su posición cada ~20 s con la app a la vista; el servidor acepta
+  una cada 15 s por persona (la comparación va condicionada en el UPDATE: dos envíos a la vez
+  dejan uno; lo que llega antes se descarta sin error, `reason: 'rate'`). Valida coordenadas
+  (rango, no 0,0, precisión ≤ 5 km, rumbo 0–360, velocidad ≥ 0, batería 0–100). La persona de
+  una posición es SIEMPRE la de la sesión: no hay forma de enviar la de otro.
+- **Retención**: el trabajo `apps/location.sweep` (cada hora, `inngest/functions/app-location.ts`,
+  en `services/jobs/src/manifest.ts`, `lib/jobs-registry.ts` y la lista de `tenancy-guard.test.ts`)
+  borra el rastro que pasó la retención de cada app y cierra los turnos que llevan más de 16 h
+  abiertos (borrando su posición actual).
+
+### Bloque `map` (vistas y pantallas de app)
+
+```json
+{ "id":"mapa", "type":"map", "tracker":"tareas", "title":"Equipo y tareas",
+  "locationField":"lugar", "titleField":"titulo", "subtitleField":"asignado_nombre",
+  "colorField":"estado", "people":true, "peopleRoles":[], "limit":300,
+  "filters":[{"field":"estado","op":"neq","value":"Cancelada"}],
+  "assign":{"assigneeField":"asignado","nameField":"asignado_nombre","titleField":"titulo",
+            "descriptionField":"descripcion","dueField":"limite","dueTimeField":"hora_limite",
+            "priorityField":"prioridad","statusField":"estado","pendingValue":"Pendiente",
+            "screen":"mis_tareas"},
+  "actions":[{"id":"asignar","label":"Asignar a…","kind":"assign","field":"asignado",
+              "nameField":"asignado_nombre","statusField":"estado","value":"Pendiente"}] }
+```
+
+- **Capa de registros**: cada fila con un punto válido en `locationField` (campo tipo `location`)
+  es un marcador, con color por estado (`colorField`, que además filtra desde la leyenda). Tocarlo
+  abre una tarjeta con «Abrir» (la ficha de la fila), «Cómo llegar» y los botones del bloque. Llega
+  con el cálculo de la vista, así que se refresca con ella (`refreshSeconds`) y lleva el scope del rol.
+- **Capa de personas** (`people:true`): sólo si la app comparte ubicación Y el rol puede ver. NO viene
+  en el cálculo: el navegador la pide aparte cada 20 s (`livePeopleAction`), con nombre, rol, «hace
+  cuánto» (apagado a los 5 min: «sin señal»; no sale pasadas 2 h) y turno. El filtro por rol sale del
+  bloque guardado (`peopleRoles`), no del navegador. Filtro por rol en el mapa, «Centrar» y lista de
+  personas debajo (teclado y celular).
+- Mapa con Leaflet + teselas de OpenStreetMap (atribución visible), carga dinámica sin SSR
+  (`blocks/MapBlock.tsx` → `MapCanvas.tsx`), claro/oscuro (teselas invertidas por CSS) y responsive.
+- Validación en `checkSpecAgainst` (`locationField` de tipo ubicación, `colorField`/`priorityField`/
+  `statusField` de opciones, campos de `assign`); gramática en `SPEC_GRAMMAR` y `VIEW_DESIGNER_SYSTEM`;
+  editor: paleta, inspector («Mapa») y miniatura.
+- Escaparate de desarrollo: `/v/views-showcase?pantalla=mapa` (personas de mentira; 404 en producción).
+
+### Tareas
+
+Plantilla `equipo_en_campo` (`templates.ts`): tabla `tareas` con título, detalle, persona (id) y
+nombre, lugar (`location`), fecha y hora límite, prioridad (Baja/Media/Alta), estado (Pendiente,
+En curso, Hecha, Cancelada), foto y nota de cierre. Roles **Coordinador** (ve todo, ve y asigna) y
+**Persona en terreno** (comparte ubicación). Pantallas: «Mapa» y «Tareas» (coordinador) y «Mis
+tareas» (terreno). Todo es configurable desde el editor y por chat: no hay un tipo especial de
+pantalla, son piezas generales.
+
+- **`$user.id`**: el atributo reservado de la persona misma. «Mis tareas» es
+  `read: {field:"asignado", equals:"$user.id"}`: el servidor filtra ANTES de calcular, el id sale de
+  la sesión (un atributo llamado `id` no lo reemplaza) y no se pide al invitar.
+- **Asignar desde el mapa**: tocar a una persona → «Asignar tarea» → crea una fila (`createViewTask`)
+  con los campos que el `assign` del bloque nombra, estado inicial y, si se quiere, el lugar (donde
+  está la persona, o uno elegido tocando el mapa). Exige el permiso `assign` del rol Y poder crear en la tabla.
+- **Asignar desde una lista**: botón de fila `kind:"assign"` («Asignar a…»): abre las personas de la
+  app (sin coordenadas, filtradas por los roles del botón), guarda su id y nombre en la fila y puede
+  poner el estado. Sólo roles con `assign` y que puedan editar la tabla; la fila tiene que ser visible.
+- La persona asignada tiene que ser un usuario activo de ESTA app o un miembro con rol en ella
+  (`resolveAssignee`); una de otra app o empresa es «no existe».
+- **Aviso al asignar** (`lib/apps/assign-notify.ts`): usuario externo → push a sus suscripciones en
+  esa app y, si no le llegó, correo con el enlace; miembro de Cortex → campana y push. El enlace abre
+  la pantalla que dice el bloque (`screen`, «Mis tareas») con la fila.
+- **Empezar / Terminar**: botones `set_field` de «Mis tareas»; `requireFields: ["foto_cierre",
+  "nota_cierre"]` hace que «Terminar» no funcione hasta que la fila tenga foto y nota (la persona las
+  llena desde la ficha, `recordEditable`). El servidor lo comprueba y dice qué falta.
+
+### Permisos y aislamiento
+
+- `listLivePeople` exige app encendida y rol con `view`; un externo cuyo rol no ve NO ve la ubicación
+  de otro, ni forzando la lectura de una pantalla (`block.people` llega nulo). Une la posición con el
+  consentimiento vigente y con la persona ACTIVA de esa app: quien revocó, terminó turno, fue
+  desactivada o ya no está no aparece.
+- La **vista pública por enlace NUNCA muestra personas**: no tiene `AppAccess`, `computeView` no
+  recibe `location` y el bloque sale con `people: null` y `assign: null`; el servidor además lo exige
+  en la acción de personas.
+- Dos empresas con personas en turno: cada lectura va con el cliente acotado y por `app_id`.
+
+### Pruebas
+
+`src/apps/__tests__/location.test.ts` (37): sin consentimiento no se guarda, consentimiento vencido,
+tope de 15 s, historial a un minuto, validación, apagar/revocar/quitar borran, retención y turnos
+olvidados, quién ve a quién, aislamiento entre empresas, capa de personas por rol y en enlace
+público, asignar desde el mapa y desde una lista con persona de otra app/empresa, «Mis tareas» por
+id, Terminar con foto y nota. Web: `lib/apps/assign-notify.test.ts`, `jobs-registry.test.ts` y
+`tenancy-guard.test.ts`.
+
+### Pendiente
+
+- Aplicar la 0216 antes de desplegar; las llaves VAPID siguen haciendo falta para el push.
+- El navegador sólo comparte con la app a la vista: no hay seguimiento en segundo plano (es lo
+  prometido en el texto; una app instalada podría pedir más adelante «siempre», con otro texto y versión).
+- Medir de nuevo `src/evaluation` (`EVAL_MEASURE=1`): cambiaron las descripciones de `views.*`,
+  `apps.update` y `apps.create` (bloque `map`, botón `assign`, `location`).
 
 ## Pruebas
 

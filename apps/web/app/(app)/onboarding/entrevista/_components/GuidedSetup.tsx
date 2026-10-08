@@ -11,7 +11,9 @@ import {
   type OutOfScope,
   type SetupItem,
   type SetupKind,
+  chatHref,
   itemFields,
+  resultHref,
   undoability,
 } from '@/lib/guided-setup-shape';
 import { chipClass } from '@/lib/status-chip';
@@ -25,10 +27,15 @@ import {
   Check,
   Clock,
   CornerDownLeft,
+  LayoutDashboard,
   Loader2,
+  MessageSquare,
   RotateCcw,
   Route,
+  Smartphone,
+  Table2,
   Undo2,
+  Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -71,6 +78,17 @@ const ICON: Record<SetupKind, ReactNode> = {
   flow: <Route className="h-4 w-4" />,
   client: <Building2 className="h-4 w-4" />,
   space: <BookOpen className="h-4 w-4" />,
+  table: <Table2 className="h-4 w-4" />,
+  view: <LayoutDashboard className="h-4 w-4" />,
+  app: <Smartphone className="h-4 w-4" />,
+  automation: <Zap className="h-4 w-4" />,
+};
+
+/** Lo que la persona tiene que saber de lo que quedó como borrador. */
+const DRAFT_NOTE: Partial<Record<SetupKind, string>> = {
+  view: 'Quedó interna: sólo la ve tu equipo hasta que la compartas.',
+  app: 'Quedó sin publicar y sin miembros. Revísala, asigna personas y publícala cuando esté lista.',
+  automation: 'Quedó en pausa. Actívala cuando hayas revisado la regla.',
 };
 
 interface Turn {
@@ -640,6 +658,7 @@ function Receipt({
 
   const live = items.filter((i) => i.status === 'created' || i.status === 'merged');
   const failed = items.filter((i) => i.status === 'failed');
+  const handoff = items.filter((i) => i.status === 'handoff');
   const undone = items.filter((i) => i.status === 'undone');
 
   async function one(itemId: string) {
@@ -690,16 +709,21 @@ function Receipt({
                       <span className="text-sm font-semibold text-ink">{item.title}</span>
                       <Provenance source={copy.where} detail={copy.noun} />
                     </div>
+                    {DRAFT_NOTE[item.kind] && (
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
+                        {DRAFT_NOTE[item.kind]}
+                      </p>
+                    )}
                     {item.status === 'merged' && (
                       <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">{undo.note}</p>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <Link
-                      href={copy.href}
+                      href={resultHref(item) ?? copy.href}
                       className="text-xs font-semibold text-primary hover:underline"
                     >
-                      Abrir {copy.where}
+                      {resultHref(item) ? 'Ver lo creado' : `Abrir ${copy.where}`}
                     </Link>
                     {undo.can && (
                       <button
@@ -722,6 +746,40 @@ function Receipt({
             );
           })}
         </ul>
+      )}
+
+      {handoff.length > 0 && (
+        <section>
+          <h2 className="mb-2.5 text-base font-semibold text-ink">Esto sigue en el chat</h2>
+          <ul className="space-y-2.5">
+            {handoff.map((item) => (
+              <li key={item.id}>
+                <Panel className="flex flex-wrap items-start justify-between gap-3 p-4">
+                  <div className="min-w-0 max-w-xl">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                      <span className="text-ink-muted">{ICON[item.kind]}</span>
+                      <span className="text-sm font-semibold text-ink">{item.title}</span>
+                    </div>
+                    {item.error && (
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">{item.error}</p>
+                    )}
+                    <p className="mt-1 text-micro text-ink-faint">
+                      No creé nada todavía. El pedido ya va escrito: no tienes que explicarlo otra
+                      vez.
+                    </p>
+                  </div>
+                  <Link
+                    href={chatHref(item)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border-strong px-3.5 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-2"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Seguir en el chat
+                  </Link>
+                </Panel>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {failed.length > 0 && (

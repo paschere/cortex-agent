@@ -47,6 +47,8 @@ export interface AppTemplate {
   roles: RoleInput[];
   screens: AppTemplateScreen[];
   homeScreen: string;
+  /** «Compartir ubicación del equipo» de la app nueva (apagado si se omite). */
+  location?: { enabled: boolean; retentionDays?: number };
 }
 
 const GUIAS = 'guias';
@@ -764,7 +766,306 @@ export const PORTAL_CLIENTES: AppTemplate = {
   homeScreen: 'mis_pedidos',
 };
 
-export const APP_TEMPLATES: readonly AppTemplate[] = [CONTROL_EN_PLANTA, PORTAL_CLIENTES];
+// ---------------------------------------------------------------------------
+// Equipo en campo: mapa y tareas (0216)
+// ---------------------------------------------------------------------------
+//
+// Quien coordina ve en un mapa dónde están las personas en turno (sólo si
+// aceptaron compartir su ubicación) y las tareas por estado, y asigna una tarea
+// tocando a una persona o desde la lista. Cada persona ve SÓLO sus tareas
+// (`read: asignado = $user.id`, el id lo pone el servidor), las empieza y las
+// termina con foto y nota. «Compartir ubicación» nace ENCENDIDO en esta plantilla
+// porque es para lo que sirve; cada persona igual tiene que aceptar y abrir turno.
+
+const TAREAS = 'tareas';
+
+const tareasFields: TrackerField[] = [
+  { key: 'titulo', label: 'Tarea', type: 'text', required: true, placeholder: 'Qué hay que hacer' },
+  { key: 'descripcion', label: 'Detalle', type: 'longtext', required: false },
+  { key: 'asignado', label: 'Persona (id)', type: 'text', required: false },
+  { key: 'asignado_nombre', label: 'Asignada a', type: 'text', required: false },
+  { key: 'lugar', label: 'Lugar', type: 'location', required: false },
+  { key: 'limite', label: 'Fecha límite', type: 'date', required: false },
+  { key: 'hora_limite', label: 'Hora límite', type: 'time', required: false },
+  {
+    key: 'prioridad',
+    label: 'Prioridad',
+    type: 'select',
+    required: false,
+    options: ['Baja', 'Media', 'Alta'],
+    default: 'Media',
+  },
+  {
+    key: 'estado',
+    label: 'Estado',
+    type: 'select',
+    required: false,
+    options: ['Pendiente', 'En curso', 'Hecha', 'Cancelada'],
+    default: 'Pendiente',
+  },
+  { key: 'foto_cierre', label: 'Foto de cierre', type: 'file', required: false, accept: 'image' },
+  { key: 'nota_cierre', label: 'Nota de cierre', type: 'longtext', required: false },
+] as TrackerField[];
+
+const ASSIGN_BUTTON = {
+  id: 'asignar',
+  label: 'Asignar a…',
+  kind: 'assign',
+  field: 'asignado',
+  nameField: 'asignado_nombre',
+  statusField: 'estado',
+  value: 'Pendiente',
+  screen: 'mis_tareas',
+} as const;
+
+const mapaEquipo: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'sky',
+  refreshSeconds: 30,
+  editing: 'team',
+  alerts: [],
+  theme: { accent: 'sky', density: 'compact' },
+  blocks: [
+    {
+      id: 'pendientes',
+      type: 'metric',
+      width: 'third',
+      tracker: TAREAS,
+      title: 'Pendientes',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Pendiente' }],
+      tone: 'amber',
+    },
+    {
+      id: 'en_curso',
+      type: 'metric',
+      width: 'third',
+      tracker: TAREAS,
+      title: 'En curso',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'En curso' }],
+      tone: 'sky',
+    },
+    {
+      id: 'hechas',
+      type: 'metric',
+      width: 'third',
+      tracker: TAREAS,
+      title: 'Hechas',
+      aggregate: 'count',
+      filters: [{ field: 'estado', op: 'eq', value: 'Hecha' }],
+      tone: 'emerald',
+    },
+    {
+      id: 'mapa',
+      type: 'map',
+      width: 'full',
+      tracker: TAREAS,
+      title: 'Equipo y tareas',
+      locationField: 'lugar',
+      titleField: 'titulo',
+      subtitleField: 'asignado_nombre',
+      colorField: 'estado',
+      people: true,
+      limit: 300,
+      filters: [{ field: 'estado', op: 'neq', value: 'Cancelada' }],
+      assign: {
+        assigneeField: 'asignado',
+        nameField: 'asignado_nombre',
+        titleField: 'titulo',
+        descriptionField: 'descripcion',
+        dueField: 'limite',
+        dueTimeField: 'hora_limite',
+        priorityField: 'prioridad',
+        statusField: 'estado',
+        pendingValue: 'Pendiente',
+        screen: 'mis_tareas',
+      },
+      actions: [ASSIGN_BUTTON],
+    },
+  ],
+});
+
+const listaTareas: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'sky',
+  refreshSeconds: 30,
+  editing: 'team',
+  alerts: [],
+  theme: { accent: 'sky', density: 'compact' },
+  filtersBar: [{ id: 'estado', label: 'Estado', source: TAREAS, field: 'estado', kind: 'select' }],
+  blocks: [
+    {
+      id: 'todas',
+      type: 'table',
+      width: 'full',
+      tracker: TAREAS,
+      title: 'Tareas',
+      columns: ['titulo', 'asignado_nombre', 'prioridad', 'limite', 'estado'],
+      editable: ['estado', 'prioridad'],
+      actions: [ASSIGN_BUTTON],
+      sort: { field: 'created_at', dir: 'desc' },
+      limit: 200,
+    },
+    {
+      id: 'nueva',
+      type: 'form',
+      width: 'full',
+      tracker: TAREAS,
+      title: 'Nueva tarea',
+      intro: 'Créala y asígnala después con «Asignar a…», o desde el mapa tocando a una persona.',
+      fields: ['titulo', 'descripcion', 'lugar', 'limite', 'hora_limite', 'prioridad'],
+      submitLabel: 'Crear tarea',
+      successMessage: 'Tarea creada. Asígnala desde la lista.',
+    },
+  ],
+});
+
+const TERMINAR = {
+  id: 'terminar',
+  label: 'Terminar',
+  kind: 'set_field',
+  field: 'estado',
+  value: 'Hecha',
+  requireFields: ['foto_cierre', 'nota_cierre'],
+  tone: 'emerald',
+} as const;
+const EMPEZAR = {
+  id: 'empezar',
+  label: 'Empezar',
+  kind: 'set_field',
+  field: 'estado',
+  value: 'En curso',
+  tone: 'sky',
+} as const;
+
+const misTareas: ViewSpec = viewSpecSchema.parse({
+  version: 1,
+  accent: 'sky',
+  refreshSeconds: 30,
+  editing: 'team',
+  alerts: [
+    {
+      id: 'nueva_tarea',
+      source: TAREAS,
+      on: 'new',
+      message: 'Te asignaron una tarea',
+      sound: true,
+      desktop: false,
+      bell: false,
+    },
+  ],
+  theme: { accent: 'sky', layout: 'operator', density: 'comfortable' },
+  blocks: [
+    {
+      id: 'lista',
+      type: 'cards',
+      width: 'full',
+      tracker: TAREAS,
+      title: 'Mis tareas',
+      titleField: 'titulo',
+      subtitleField: 'limite',
+      statusField: 'estado',
+      dataFields: ['prioridad', 'lugar', 'hora_limite'],
+      dateField: 'limite',
+      chips: ['status', 'today'],
+      filters: [{ field: 'estado', op: 'neq', value: 'Cancelada' }],
+      actions: [EMPEZAR, TERMINAR],
+    },
+    {
+      id: 'ficha',
+      type: 'detail',
+      width: 'full',
+      tracker: TAREAS,
+      titleField: 'titulo',
+      subtitleField: 'limite',
+      statusField: 'estado',
+      sections: [
+        {
+          title: 'La tarea',
+          fields: ['descripcion', 'lugar', 'limite', 'hora_limite', 'prioridad', 'estado'],
+        },
+        { title: 'Cierre', fields: ['foto_cierre', 'nota_cierre'] },
+      ],
+      recordEditable: ['foto_cierre', 'nota_cierre'],
+      actions: [EMPEZAR, TERMINAR],
+      timeline: false,
+    },
+  ],
+});
+
+export const EQUIPO_EN_CAMPO: AppTemplate = {
+  id: 'equipo_en_campo',
+  name: 'Equipo en campo: mapa y tareas',
+  icon: '🗺️',
+  body: 'Quien coordina ve en un mapa dónde está cada persona en turno (si aceptó compartir su ubicación) y las tareas por estado, y asigna tareas desde el mapa o una lista. Cada persona ve sólo las suyas y las empieza y termina con foto y nota.',
+  accent: 'sky',
+  trackers: [
+    {
+      slug: TAREAS,
+      name: 'Tareas',
+      description:
+        'Tareas asignadas al equipo: quién, dónde, para cuándo, prioridad, estado y cierre con foto.',
+      fields: tareasFields,
+    },
+  ],
+  roles: [
+    {
+      key: 'coordinador',
+      name: 'Coordinador',
+      description: 'Ve el mapa con las personas en turno, crea y asigna tareas.',
+      permissions: {
+        tables: { [TAREAS]: { read: 'all', create: true, edit: 'all', actions: ['asignar'] } },
+        export: true,
+        location: { view: true, assign: true },
+      },
+    },
+    {
+      key: 'terreno',
+      name: 'Persona en terreno',
+      description:
+        'Ve sólo sus tareas, las empieza y las termina con foto y nota; puede compartir su ubicación en el turno.',
+      permissions: {
+        tables: {
+          [TAREAS]: {
+            read: { field: 'asignado', equals: '$user.id' },
+            create: false,
+            edit: 'all',
+            fields: ['foto_cierre', 'nota_cierre'],
+            actions: ['empezar', 'terminar'],
+          },
+        },
+        export: false,
+        location: { share: true },
+      },
+    },
+  ],
+  screens: [
+    { slug: 'mapa', title: 'Mapa', icon: 'Map', roles: ['coordinador'], spec: mapaEquipo },
+    {
+      slug: 'tareas',
+      title: 'Tareas',
+      icon: 'ListChecks',
+      roles: ['coordinador'],
+      spec: listaTareas,
+    },
+    {
+      slug: 'mis_tareas',
+      title: 'Mis tareas',
+      icon: 'ListChecks',
+      roles: ['terreno'],
+      spec: misTareas,
+    },
+  ],
+  homeScreen: 'mapa',
+  location: { enabled: true, retentionDays: 30 },
+};
+
+export const APP_TEMPLATES: readonly AppTemplate[] = [
+  CONTROL_EN_PLANTA,
+  PORTAL_CLIENTES,
+  EQUIPO_EN_CAMPO,
+];
 
 export function appTemplate(id: string): AppTemplate | null {
   return APP_TEMPLATES.find((t) => t.id === id) ?? null;

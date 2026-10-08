@@ -146,6 +146,7 @@ export const KNOWN_BLOCK_TYPES = [
   'gallery',
   'calendar',
   'cards',
+  'map',
   'detail',
   'progress',
   'form',
@@ -167,6 +168,7 @@ export const BLOCK_LABEL: Record<string, string> = {
   gallery: 'Galería',
   calendar: 'Calendario',
   cards: 'Tarjetas con filtros',
+  map: 'Mapa',
   detail: 'Detalle de un registro',
   progress: 'Avance',
   media: 'Imagen o video',
@@ -182,6 +184,7 @@ export const RECORD_BLOCK_TYPES = [
   'gallery',
   'calendar',
   'cards',
+  'map',
 ] as const;
 
 export const PERIODS = ['day', 'week', 'month'] as const;

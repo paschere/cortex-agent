@@ -44,6 +44,7 @@ const SHELF: Record<string, string> = {
   gallery: 'Listas y tableros',
   calendar: 'Listas y tableros',
   cards: 'Listas y tableros',
+  map: 'Listas y tableros',
   detail: 'Listas y tableros',
   form: 'Para recibir datos',
   text: 'Contenido',

@@ -184,6 +184,27 @@ export function BlockGlyph({
           ))}
         </div>
       );
+    case 'map':
+      return (
+        <div
+          className={clsx(
+            'relative overflow-hidden rounded-sm bg-surface-2',
+            large ? 'h-14' : 'h-12',
+          )}
+        >
+          {[
+            ['18%', '30%'],
+            ['52%', '58%'],
+            ['74%', '24%'],
+          ].map(([left, top]) => (
+            <span
+              key={`${left}${top}`}
+              className={clsx('absolute h-2 w-2 rounded-pill', t.bar)}
+              style={{ left, top }}
+            />
+          ))}
+        </div>
+      );
     case 'calendar':
       return (
         <div className={clsx('grid grid-cols-7 gap-px p-1', large ? 'h-14' : 'h-12')}>

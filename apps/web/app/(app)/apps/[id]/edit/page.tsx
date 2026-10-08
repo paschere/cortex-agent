@@ -114,6 +114,7 @@ export default async function EditAppPage({
       icon: app.icon,
       status: app.status,
       homeScreen: app.home_screen,
+      location: app.location,
     },
     screens: screens.map((s) => ({
       id: s.id,

@@ -61,6 +61,9 @@ export function blockFingerprints(blocks: ReadonlyArray<ComputedBlock>): Map<str
             c.alert ? 1 : 0,
           ].join('\u0002'),
         );
+    } else if (b.type === 'map') {
+      for (const m of b.markers)
+        out.set(`${b.id}:${m.id}`, [m.title, m.subtitle, m.tag, m.lat, m.lng].join('\u0002'));
     } else if (b.type === 'cards') {
       for (const c of b.cards)
         out.set(

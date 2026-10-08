@@ -40,6 +40,29 @@ Un administrador conecta el programa de contabilidad de la empresa una vez y Cor
 - Moneda: un documento de Siigo sin `currency` está en pesos (la moneda de la empresa en Siigo Nube Colombia); uno en dólares se queda en dólares. En Alegra, sin `currency` va la moneda de la empresa (`GET /company`); en QuickBooks, sin `CurrencyRef`, la de `Preferences.CurrencyPrefs.HomeCurrency` (cada una se pregunta una vez por sesión y sólo si hace falta).
 - NIT: Alegra trae la identificación del cliente en la factura (se cruza con `clients.tax_id`). QuickBooks devuelve el número tributario enmascarado, así que sus facturas entran sin NIT y se nombran por el cliente.
 
+## Nómina
+
+**Siigo Nube no tiene API de nómina.** Revisado el 2026-10-08 en la documentación oficial (siigoapi.docs.apiary.io, developers.siigo.com/docs/siigoapi) y en el SDK oficial (github.com/SiigoSAS/siigo_sdk_javascript, `README.md` y `docs/`): los recursos son productos, clientes, facturas de venta, compras, notas crédito, recibos de caja y de pago, cotizaciones, documento soporte, comprobantes contables (`/v1/journals`), reportes (balance de prueba, por tercero, cuentas por pagar), centros de costo, activos fijos y usuarios. No hay endpoint de nómina, nómina electrónica ni empleados; un «empleado» en Siigo es un tercero más (`/v1/customers`, tipo `Other`), sin salario. Siigo Nómina es un producto aparte y la API pública no lo expone. No se verificó contra una cuenta real.
+
+Lo que sí hay es la **contabilidad de la nómina**: Siigo Nómina (o el contador) deja un comprobante contable por periodo. Cortex lo lee de `GET /v1/journals` (filtro `date_start`, paginado de a 100; cada comprobante trae `items[].account.code` y `.movement`, `items[].customer.identification` y `items[].value`) y se queda con las líneas de estas cuentas PUC (`accounting/payroll.ts`):
+
+| Cuenta | Qué es | Grupo |
+| --- | --- | --- |
+| 5105, 5205, 7205 (subcuenta: 06 sueldos, 15 extras, 27 aux. transporte, 30 cesantías, 36 prima, 39 vacaciones, 68–78 aportes) | Gastos de personal (administración, ventas, producción) | devengado, prestaciones, aportes, otros |
+| 2505 | Salarios por pagar | neto a pagar |
+| 2370, 2365, 2380 | Retenciones y aportes de nómina, retención en la fuente, acreedores varios | deducciones |
+| 2510–2525 | Cesantías, intereses, prima y vacaciones consolidadas | provisiones |
+
+Un comprobante cuenta como nómina si trae sueldos (débito a 510503/506/512, 520…, 720…) o salarios por pagar a crédito; de él sólo se guardan las líneas de esas cuentas (el banco y lo demás no). Si la empresa no contabiliza la nómina con estas cuentas, no hay qué leer.
+
+- **Se activa** en Integraciones → Programa contable → Siigo → «Qué traer» → «Nómina». Viene apagada. Es opcional (`ACCOUNTING_OPTIONS`), no es una tabla: la migración 0217 amplía el `check` de `accounting_connections.entities`.
+- **Dónde queda**: `accounting_payroll_lines` (una fila por línea: periodo AAAA-MM, concepto, cuenta, sentido, valor, identificación del tercero). **No** va a Tablas («Empleados (Siigo)», «Nómina (Siigo)» no existen a propósito): las Tablas se comparten con el equipo y llevarían salarios por persona.
+- **Cómo corre**: un paso `payroll` en `accounting-sync.ts`, igual que las compras. Primera carga de dos años, reanudable (`cursors.payroll`); luego sólo los últimos 60 días en cada corrida y un repaso de los dos años cada 30 días. Cada comprobante reemplaza sus líneas (`journal_id` + `line_index`), así que volver a traerlo no duplica y uno corregido con menos líneas queda bien.
+- **Privacidad** (`accounting/payroll-store.ts`, `readPayrollView`): quien administra la empresa o es su dueño (`isCompanyManager`, la misma regla de `payroll/store.ts`) ve el detalle por persona (por identificación, y con nombre si esa persona está en la nómina de Cortex); cualquier otro ve totales por periodo y concepto, sin una identificación. Si no se sabe quién mira, se oculta. La regla vive en el servidor, no en la pantalla.
+- **Chat**: `accounting.payroll_summary` — costo para la empresa, devengado, prestaciones, aportes, neto, deducciones y provisiones por mes, y por concepto.
+- **Cifras causadas, no caja**: no entran al libro de plata. Lo pagado ya llega por los extractos y la PILA con categoría «nómina»; sumar también el comprobante contaría el costo dos veces en el estado de resultados de caja. La nómina que se liquida en Cortex (pantalla Nómina) sigue siendo la fuente para pagar; esta lectura sirve para ver cuánto costó según la contabilidad.
+- **Si algún día Siigo publica un endpoint de nómina**, va en `providers/siigo.ts` como `listPayroll`; el resto (tabla, privacidad, chat) no cambia. Mientras tanto, la importación del Excel que exporta Siigo Nómina queda como alternativa por el flujo de «Tablas desde archivo».
+
 ## Cómo corre
 - `accounting/dispatch` cada 15 min (pg-boss en `services/jobs` + Inngest de respaldo) → `accounting/run` por conexión vencida. La toma (`claimAccountingConnection`) impide dos corridas a la vez.
 - Primera vez: Siigo recorre todos los terceros (incluidos proveedores e inactivos), los productos, el historial de facturas de venta, recibos de caja y facturas de compra disponible por API. Las compras se reanudan por página y tienen un repaso histórico cada 30 días. Alegra y QuickBooks conservan el último año inicial de facturas y pagos. Una vez al día se repasan las facturas de los últimos 6 meses, porque un abono no siempre marca la factura como modificada. Después, lo incremental depende del programa (10 min de margen en todos):

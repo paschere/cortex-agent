@@ -19,6 +19,8 @@ export {
   appsUpdate,
 } from './tools';
 export * from './permissions';
+export * from './location-shape';
+export * from './location';
 export * from './store';
 export * from './templates';
 export * from './install';

@@ -333,6 +333,22 @@ export function withSource(block: ViewBlock, source: EditorSource): ViewBlock {
         detailFields: undefined,
         recordEditable: undefined,
       };
+    case 'map': {
+      const place = fields.find((f) => f.type === 'location');
+      return {
+        ...block,
+        tracker: source.slug,
+        filters: [],
+        locationField: place?.key ?? block.locationField,
+        titleField: 'label',
+        subtitleField: undefined,
+        colorField: select?.key,
+        assign: undefined,
+        actions: [],
+        detailFields: undefined,
+        recordEditable: undefined,
+      };
+    }
     case 'detail':
       return {
         ...block,
@@ -405,6 +421,8 @@ export function sourceRefusal(type: string, source: EditorSource): string | null
   // `created_at` siempre existe, pero un calendario de «cuándo se creó cada
   // fila» casi nunca es lo que alguien quiere: pide una fecha de verdad.
   if (type === 'detail' && source.opaque) return 'No puedes ver esta tabla del Feed.';
+  if (type === 'map' && !source.fields.some((f) => f.type === 'location'))
+    return 'Un mapa necesita un campo de ubicación (el lugar de una entrega, una visita, una tarea).';
   if (type === 'calendar' && !source.fields.some((f) => f.type === 'date'))
     return 'Un calendario necesita un campo de fecha (una cita, una entrega, un vencimiento).';
   return null;
@@ -458,6 +476,7 @@ export function newBlock(
     gallery: 'galeria',
     calendar: 'calendario',
     cards: 'tarjetas',
+    map: 'mapa',
     detail: 'detalle',
     progress: 'avance',
     media: 'imagen',
@@ -666,6 +685,25 @@ export function newBlock(
         actions: [],
       };
     }
+    case 'map': {
+      const place = fields.find((f) => f.type === 'location');
+      if (!place) return null;
+      return {
+        id,
+        type: 'map',
+        width: 'full',
+        tracker: source.slug,
+        filters: [],
+        title: clip(`${name} en el mapa`),
+        locationField: place.key,
+        titleField: 'label',
+        colorField: select?.key,
+        people: false,
+        peopleRoles: [],
+        limit: 200,
+        actions: [],
+      };
+    }
     case 'calendar':
       return {
         id,
@@ -795,6 +833,7 @@ export function specWrites(spec: Pick<ViewSpec, 'blocks'>): boolean {
       recordEditable?: unknown[];
     };
     if ((loose.recordEditable?.length ?? 0) > 0 || (loose.actions?.length ?? 0) > 0) return true;
+    if (loose.type === 'map' && (b as { assign?: unknown }).assign) return true;
     if (loose.type === 'table') return (loose.editable?.length ?? 0) > 0;
     return (loose.type === 'board' || loose.type === 'zones') && Boolean(loose.draggable);
   });

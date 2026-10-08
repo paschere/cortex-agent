@@ -53,6 +53,7 @@ export async function installAppTemplate(
   const home = screens.find((s) => s.slug === template.homeScreen);
   const updated = await updateApp(db, app.id, {
     homeScreen: home?.slug ?? null,
+    location: template.location,
     userId: input.userId,
   });
   return { app: updated, screens, createdTrackers };

@@ -5,11 +5,18 @@ import {
   MAX_QUESTIONS,
   MIN_OPENING_CHARS,
   type SetupItem,
+  TABLE_FIELD_TYPES,
+  chatHref,
+  chatPromptFor,
   cronPhrase,
   decideStop,
+  fieldKeyOf,
+  identifierOf,
   isThinAnswer,
   itemFields,
+  needsManager,
   normalizeProposal,
+  resultHref,
   slugify,
   undoability,
 } from './guided-setup-shape';
@@ -209,8 +216,16 @@ describe('una rutina no puede prometer lo que la fila creada no hace', () => {
         payload: {
           name: 'Llegada de contenedor',
           steps: [
-            { title: 'Revisar', detail: 'Revisar la documentación del contenedor.', checkpoint: false },
-            { title: 'Avisar', detail: 'El auxiliar envía el correo al cliente.', checkpoint: true },
+            {
+              title: 'Revisar',
+              detail: 'Revisar la documentación del contenedor.',
+              checkpoint: false,
+            },
+            {
+              title: 'Avisar',
+              detail: 'El auxiliar envía el correo al cliente.',
+              checkpoint: true,
+            },
           ],
         },
       },
@@ -365,5 +380,125 @@ describe('qué se puede deshacer', () => {
   it('lo que nunca se creó no ofrece deshacer', () => {
     expect(undoability({ ...base, status: 'proposed' }).can).toBe(false);
     expect(undoability({ ...base, status: 'failed' }).can).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lo que la entrevista construye: tablas, pantallas, aplicaciones, automatizaciones
+// ---------------------------------------------------------------------------
+
+describe('tipos que construyen', () => {
+  const ok = (kind: string, title: string, payload: unknown) =>
+    normalizeProposal({ kind, title, rationale: 'lo dijeron', payload }, TODAY);
+
+  it('los tipos de columna que pide una entrevista existen en el módulo de tablas', async () => {
+    const { FIELD_TYPES } = await import('@cortex/agent-tools');
+    for (const t of TABLE_FIELD_TYPES) expect(FIELD_TYPES as readonly string[]).toContain(t);
+  });
+
+  it('acepta una tabla con sus columnas', () => {
+    const r = ok('table', 'Remates', {
+      name: 'Remates',
+      fields: [
+        { label: 'Fecha', type: 'date' },
+        { label: 'Estado', type: 'select', options: ['Abierto', 'Cerrado'] },
+      ],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('rechaza una tabla sin columnas ni fuente, y una lista de opciones vacía', () => {
+    expect(ok('table', 'Remates', { name: 'Remates', fields: [] }).ok).toBe(false);
+    expect(
+      ok('table', 'Remates', { name: 'Remates', fields: [{ label: 'Estado', type: 'select' }] }).ok,
+    ).toBe(false);
+  });
+
+  it('una tabla con hoja de Google se acepta sin inventar columnas, y su pedido manda a leerla', () => {
+    const r = ok('table', 'Guías', {
+      name: 'Guías',
+      source: { kind: 'sheet', url: 'https://docs.google.com/spreadsheets/d/abc' },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(chatPromptFor(r.item)).toContain('trackers.propose_from_source');
+    expect(chatHref(r.item).startsWith('/chat?prompt=')).toBe(true);
+  });
+
+  it('una carpeta de Drive manda a propose_from_drive_folder', () => {
+    const r = ok('table', 'Facturas', {
+      name: 'Facturas',
+      source: { kind: 'drive', url: 'https://drive.google.com/drive/folders/xyz' },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(chatPromptFor(r.item)).toContain('trackers.propose_from_drive_folder');
+  });
+
+  it('rechaza una fuente que no es un enlace https', () => {
+    expect(
+      ok('table', 'Guías', { name: 'Guías', source: { kind: 'sheet', url: 'mi hoja' } }).ok,
+    ).toBe(false);
+  });
+
+  it('acepta pantalla, aplicación y automatización con pedido concreto, y rechaza el vago', () => {
+    expect(
+      ok('view', 'Tablero de despachos', {
+        name: 'Tablero de despachos',
+        request: 'Despachos por estado, para el jefe de turno.',
+      }).ok,
+    ).toBe(true);
+    expect(
+      ok('app', 'Control de planta', {
+        name: 'Control de planta',
+        request: 'Operarios registran guías desde el celular; el supervisor aprueba.',
+      }).ok,
+    ).toBe(true);
+    expect(
+      ok('automation', 'Avisar duplicadas', {
+        name: 'Avisar duplicadas',
+        app: 'Control de planta',
+        rule: 'Cuando una guía salga duplicada, avisa al supervisor.',
+      }).ok,
+    ).toBe(true);
+    expect(ok('view', 'X', { name: 'Vista', request: 'algo' }).ok).toBe(false);
+  });
+
+  it('sólo apps y automatizaciones piden ser administrador', () => {
+    expect(needsManager('app')).toBe(true);
+    expect(needsManager('automation')).toBe(true);
+    expect(needsManager('table')).toBe(false);
+    expect(needsManager('view')).toBe(false);
+  });
+
+  it('las llaves de columna salen en snake_case y no se repiten', () => {
+    expect(fieldKeyOf('Número de guía')).toBe('numero_de_guia');
+    expect(fieldKeyOf('Estado', new Set(['estado']))).toBe('estado_2');
+    expect(fieldKeyOf('123')).toBe('campo');
+    expect(identifierOf('Remates de carga')).toMatch(/^[a-z][a-z0-9_]{1,47}$/);
+  });
+
+  it('el enlace al resultado es el de cada módulo, y sólo para lo creado', () => {
+    expect(resultHref({ kind: 'table', targetId: 'remates', status: 'created' })).toBe(
+      '/trackers/remates',
+    );
+    expect(resultHref({ kind: 'view', targetId: 'tablero', status: 'created' })).toBe(
+      '/views/tablero',
+    );
+    expect(resultHref({ kind: 'app', targetId: 'a1', status: 'created' })).toBe('/apps/a1/edit');
+    expect(resultHref({ kind: 'automation', targetId: 'a1:r9', status: 'created' })).toBe(
+      '/apps/a1/edit',
+    );
+    expect(resultHref({ kind: 'view', targetId: 'tablero', status: 'handoff' })).toBeNull();
+  });
+
+  it('muestra los campos de lo que va a crear antes de crearlo', () => {
+    const r = ok('table', 'Remates', {
+      name: 'Remates',
+      fields: [{ label: 'Estado', type: 'select', options: ['Abierto', 'Cerrado'] }],
+    });
+    if (!r.ok) throw new Error('debía pasar');
+    const fields = itemFields(r.item);
+    expect(fields.map((f) => f.value).join(' ')).toContain('Abierto, Cerrado');
   });
 });

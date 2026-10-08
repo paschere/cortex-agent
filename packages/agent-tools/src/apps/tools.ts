@@ -10,6 +10,7 @@ import { SPEC_GRAMMAR } from '../views/tools';
 import { appBrandPatchSchema, appHomeSchema, mergeBrand } from './appearance';
 import { inviteAppUser, listAppUsers } from './external';
 import { installAppTemplate } from './install';
+import { locationSettingsPatchSchema } from './location-shape';
 import { appPermissionsSchema, roleKeySchema } from './permissions';
 import {
   MAX_APP_ROLES,
@@ -70,7 +71,7 @@ const summarySchema = z.object({
   updatedAt: z.string(),
 });
 
-const PERMISSIONS_GRAMMAR = `Role permissions: {tables: {"<table slug>": {read: "all" | "own" | {field, equals: "$user.<attribute>"}, create: boolean, edit: "none"|"own"|"all", fields?: [field keys the role may write], actions?: [row action ids; "__approve" and "__reject" for approval]}}, export: boolean}. A table NOT listed is invisible to that role (deny by default). "own" = rows the person created. Company owners/admins always enter as "administrador" (everything); do not define that role.`;
+const PERMISSIONS_GRAMMAR = `Role permissions: {tables: {"<table slug>": {read: "all" | "own" | {field, equals: "$user.<attribute>"}, create: boolean, edit: "none"|"own"|"all", fields?: [field keys the role may write], actions?: [row action ids; "__approve" and "__reject" for approval]}}, export: boolean, location?: {share?: boolean, view?: boolean, assign?: boolean}}. A table NOT listed is invisible to that role (deny by default). "own" = rows the person created; the special attribute "$user.id" is the person themself (a task table with read {field:"asignado", equals:"$user.id"} shows each person only the tasks assigned to them, nothing to type when inviting). location (all off by default; only works when the app has location.enabled): share = people of this role may share their location (they must accept the consent text and start a shift), view = this role sees where people on shift are on the map, assign = this role assigns tasks to people (map or "assign" row buttons). Company owners/admins always enter as "administrador" (everything); do not define that role.`;
 
 export const appsList = registerTool({
   id: 'apps.list',
@@ -130,7 +131,7 @@ const roleInput = z.object({
 
 export const appsCreate = registerTool({
   id: 'apps.create',
-  description: `Create an application: several screens with a menu, roles with row-level permissions, and members of this workspace assigned to roles. Two ways: template ("control_planta": operators register shipping guides with photo and offline, supervisor approves and resolves duplicates, management sees the dashboard and exports) or a custom design (name, roles, screens). Each screen is a view spec, same grammar as views.create. Before designing on a Google Sheet or a Drive folder, ALWAYS call trackers.propose_from_source / trackers.propose_from_drive_folder first and wait for approval of the table. Tables named by screens must exist (trackers.list) unless the template creates them. The app is created as a draft; the person publishes it and assigns members from /apps/<id>/edit. Requires confirmation.
+  description: `Create an application: several screens with a menu, roles with row-level permissions, and members of this workspace assigned to roles. Two ways: template ("control_planta": operators register shipping guides with photo and offline, supervisor approves and resolves duplicates, management sees the dashboard and exports; "portal_clientes": customers see only their own orders and documents; "equipo_en_campo": a coordinator sees a map with the people on shift (who accepted to share their location) and the tasks by status and assigns tasks from the map or a list, each person sees only their tasks and starts/finishes them with photo and note) or a custom design (name, roles, screens). Each screen is a view spec, same grammar as views.create. Before designing on a Google Sheet or a Drive folder, ALWAYS call trackers.propose_from_source / trackers.propose_from_drive_folder first and wait for approval of the table. Tables named by screens must exist (trackers.list) unless the template creates them. The app is created as a draft; the person publishes it and assigns members from /apps/<id>/edit. Requires confirmation.
 ${PERMISSIONS_GRAMMAR}
 ${SPEC_GRAMMAR}`,
   inputSchema: z
@@ -306,6 +307,7 @@ const screenPatch = z.object({
 });
 
 const APPEARANCE_GRAMMAR = `APPEARANCE (field "brand", optional): the app's OWN look on top of the company's brand (which stays the default). Partial: only the keys you send change, null clears one. { primary?: "#RRGGBB", accent?: "#RRGGBB", shortName?: <=12 chars (name under the installed icon), font?: "system"|"serif"|"rounded", welcome?: { title?, text? } (shown on the entry screen) }. Colors are adjusted automatically to pass WCAG AA in light and dark. Logo and welcome image are uploaded from the editor's "Apariencia" tab, not from chat.
+LOCATION (field "location", optional, partial {enabled?, retentionDays? 1-365, default 30}): "Compartir ubicación del equipo", OFF by default. When on, people whose role has location.share can share where they are while the app is open and they are "on shift"; each person accepts a clear consent text once (stored with date and text version) and can withdraw any time (their position and trail are deleted); the position trail is deleted automatically after retentionDays. Only roles with location.view see people on a "map" block (people:true); a public link never shows people. Turning it off deletes every stored position. Colombian data-protection law (Ley 1581): never turn it on without telling the owner what it shares.
 HOME (field "home", optional): replaces the whole "Inicio" screen: { enabled, greeting (name + date), cards: [<=8] }. Each card has id, roles (role keys that see it; [] = all) and one of: { kind:"counter", source:<table slug>, filters:[...same filter grammar as view blocks; value "{hoy}", "{ayer}" or "{manana}" = that date], text:"Hoy llegan {n} vuelos", zeroText?:"Aún no hay vuelos hoy", screen?:<screen slug it opens>, tone? } | { kind:"pending", same fields as counter, shows the first 3 rows; openFilterId/openFilterValue open the target screen already filtered by one of its filter-bar items } | { kind:"shortcut", label:"Registrar atención", hint?, screen:<screen slug>, icon? }. Counts respect each role's row scope; a card over a table the role cannot read is hidden. "inicio" is a reserved screen slug. enabled:true makes Inicio the first screen.`;
 
 export const appsUpdate = registerTool({
@@ -319,6 +321,7 @@ ${SPEC_GRAMMAR}`,
       app: z.string().trim().min(1).max(80).describe('App id or slug.'),
       brand: appBrandPatchSchema.optional(),
       home: appHomeSchema.optional(),
+      location: locationSettingsPatchSchema.optional(),
       name: z.string().trim().min(1).max(80).optional(),
       description: z.string().trim().max(500).optional(),
       icon: z.string().trim().max(400).optional(),
@@ -345,6 +348,7 @@ ${SPEC_GRAMMAR}`,
         v.homeScreen !== undefined ||
         v.brand !== undefined ||
         v.home !== undefined ||
+        v.location !== undefined ||
         v.addScreens?.length ||
         v.updateScreens?.length ||
         v.removeScreens?.length ||
@@ -463,7 +467,8 @@ ${SPEC_GRAMMAR}`,
       input.icon !== undefined ||
       input.homeScreen !== undefined ||
       input.brand !== undefined ||
-      input.home !== undefined
+      input.home !== undefined ||
+      input.location !== undefined
     ) {
       if (input.homeScreen) {
         const exists = (await listScreens(ctx.db, app.id)).some((s) => s.slug === input.homeScreen);
@@ -477,10 +482,15 @@ ${SPEC_GRAMMAR}`,
         homeScreen: input.homeScreen,
         brand: input.brand ? mergeBrand(app.brand, input.brand) : undefined,
         home,
+        location: input.location,
         userId: ctx.userId,
       });
       changes.push(
-        input.brand || input.home ? 'datos, apariencia o inicio de la app' : 'datos de la app',
+        input.brand || input.home
+          ? 'datos, apariencia o inicio de la app'
+          : input.location
+            ? `ubicación del equipo ${app.location.enabled ? 'encendida' : 'apagada'}`
+            : 'datos de la app',
       );
     }
     const summary = appSummary(app, await listScreens(ctx.db, app.id));

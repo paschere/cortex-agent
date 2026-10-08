@@ -11,6 +11,7 @@ import {
   LayoutPanelTop,
   ListChecks,
   type LucideIcon,
+  Map as MapIcon,
   Package,
   Table2,
   Truck,
@@ -32,6 +33,8 @@ export interface EditorApp {
   icon: string;
   status: 'draft' | 'published';
   homeScreen: string | null;
+  /** Compartir ubicación del equipo (0216). */
+  location: { enabled: boolean; retentionDays: number };
 }
 
 export interface EditorScreen {
@@ -140,7 +143,8 @@ export function requiredAttributesOf(permissions: AppPermissions): string[] {
   for (const perm of Object.values(permissions.tables)) {
     if (typeof perm.read !== 'object') continue;
     const attr = /^\$user\.([a-z][a-z0-9_]{0,39})$/.exec(perm.read.equals)?.[1];
-    if (attr && !out.includes(attr)) out.push(attr);
+    // `$user.id` lo pone el servidor (la persona misma): no se pide al invitar.
+    if (attr && attr !== 'id' && !out.includes(attr)) out.push(attr);
   }
   return out;
 }
@@ -157,6 +161,7 @@ export const SCREEN_ICONS: Array<{ name: string; label: string; icon: LucideIcon
   { name: 'Home', label: 'Inicio', icon: Home },
   { name: 'Calendar', label: 'Calendario', icon: Calendar },
   { name: 'Package', label: 'Paquete', icon: Package },
+  { name: 'Map', label: 'Mapa', icon: MapIcon },
 ];
 
 export function ScreenIcon({ name, className }: { name: string; className?: string }) {

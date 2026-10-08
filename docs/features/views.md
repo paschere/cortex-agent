@@ -269,6 +269,17 @@ conocen.
   «Ver más» o carga al final. Los filtros corren en el navegador sobre lo
   entregado (instantáneos). «Mío» = lo que creó quien mira; sin «quién mira»
   (enlace público) el chip no se ofrece.
+- **Mapa** (`type: "map"`, `blocks/MapBlock.tsx` + `MapCanvas.tsx`, Leaflet y
+  teselas de OpenStreetMap con su atribución). Capa de registros: las filas con
+  un punto válido en un campo de tipo ubicación, con color por estado y tarjeta
+  que abre su ficha; se refresca con la vista. Capa de personas en turno
+  (`people: true`): SÓLO dentro de una aplicación con «Compartir ubicación del
+  equipo» y para los roles con permiso de ver; en una vista normal o en un
+  enlace público nunca sale. `assign` permite «Asignar tarea» al tocar a una
+  persona; el botón de fila `kind: "assign"` («Asignar a…») lo hace desde una
+  lista, y `requireFields` en un botón `set_field` exige campos llenos antes
+  (foto y nota para «Terminar»). Detalle, permisos y privacidad:
+  [docs/features/apps.md](apps.md#mapa-y-tareas-0216).
 - **Agenda** (`calendar` con `mode: "week" | "day"`, `timeField`, `modes`).
   Eventos por hora con el color del estado; `modes` deja alternar día / semana /
   mes; las flechas se detienen en el rango (tres meses) que el cálculo cubre.
@@ -282,7 +293,7 @@ conocen.
   formularios, voz ni enlaces.
 
 Todo es opcional y sin valores por defecto nuevos: los specs guardados no
-cambian. Escaparate: `/v/views-showcase?pantalla=detalle|tarjetas|agenda|tv`
+cambian. Escaparate: `/v/views-showcase?pantalla=detalle|tarjetas|agenda|tv|mapa`
 (`screens-fixture.ts` calcula con el `computeView` real; `&fila=<id>` abre un
 registro).
 

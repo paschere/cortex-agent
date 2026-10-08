@@ -1,9 +1,13 @@
 'use client';
 
-import { saveRolesAction, updateScreenAction } from '@/lib/apps/actions';
+import {
+  saveLocationSettingsAction,
+  saveRolesAction,
+  updateScreenAction,
+} from '@/lib/apps/actions';
 import type { AppPermissions } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { Plus, Trash2 } from 'lucide-react';
+import { MapPin, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import {
@@ -456,6 +460,24 @@ export function RolesTab({ data }: { data: AppEditorData }) {
         </form>
       </section>
 
+      {/* 1b. Ubicación del equipo y tareas */}
+      <LocationSection
+        appId={app.id}
+        location={app.location}
+        roles={roles}
+        onRole={(key, location) =>
+          patchRole(key, {
+            permissions: {
+              ...(roles.find((r) => r.key === key)?.permissions ?? { tables: {}, export: false }),
+              location,
+            },
+          })
+        }
+        dirty={dirty}
+        onSaveRoles={save}
+        pending={pending}
+      />
+
       {/* 2. Rol × pantalla */}
       {saved.length > 0 && screens.length > 0 && (
         <section className={clsx(CARD, 'space-y-3')}>
@@ -555,5 +577,157 @@ export function RolesTab({ data }: { data: AppEditorData }) {
         )}
       </div>
     </div>
+  );
+}
+
+type LocationPerm = NonNullable<AppPermissions['location']>;
+
+/**
+ * «Compartir ubicación del equipo»: el interruptor de la app y, por rol, quién
+ * comparte, quién ve y quién asigna tareas. Apagado por defecto: el dato más
+ * delicado que guarda Cortex sobre una persona es dónde está, y sólo existe si
+ * alguien administrador lo enciende aquí y cada persona lo acepta.
+ */
+function LocationSection({
+  appId,
+  location,
+  roles,
+  onRole,
+  dirty,
+  onSaveRoles,
+  pending,
+}: {
+  appId: string;
+  location: { enabled: boolean; retentionDays: number };
+  roles: EditorRole[];
+  onRole: (key: string, next: LocationPerm | undefined) => void;
+  dirty: boolean;
+  onSaveRoles: () => void;
+  pending: boolean;
+}) {
+  const router = useRouter();
+  const [busy, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(location.enabled);
+  const [days, setDays] = useState(String(location.retentionDays));
+  const daysNumber = Number(days);
+  const daysValid = Number.isInteger(daysNumber) && daysNumber >= 1 && daysNumber <= 365;
+  const changed =
+    enabled !== location.enabled || (daysValid && daysNumber !== location.retentionDays);
+
+  function saveSettings() {
+    setError(null);
+    start(async () => {
+      if (
+        location.enabled &&
+        !enabled &&
+        !window.confirm(
+          'Al apagar «Compartir ubicación» se borran todas las posiciones guardadas y se cierran los turnos. ¿Apagar?',
+        )
+      )
+        return;
+      const res = await saveLocationSettingsAction(appId, {
+        enabled,
+        ...(daysValid ? { retentionDays: daysNumber } : {}),
+      });
+      if (!res.ok) return setError(res.error);
+      router.refresh();
+    });
+  }
+
+  return (
+    <section className={clsx(CARD, 'space-y-3')}>
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+        <MapPin className="h-4 w-4 text-ink-muted" aria-hidden /> Ubicación del equipo y tareas
+      </h3>
+      <p className="text-xs leading-relaxed text-ink-muted">
+        Un mapa con dónde están las personas que usan la app y la posibilidad de asignarles tareas.
+        Es voluntario y sensible (Ley 1581): está apagado hasta que lo enciendas, cada persona
+        acepta un texto claro y puede retirarlo cuando quiera, sólo se comparte con la app abierta y
+        en turno, y el rastro se borra solo.
+      </p>
+      <ErrorLine error={error} />
+      <label className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        Compartir ubicación del equipo
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="inline-flex items-center gap-2 text-xs text-ink">
+          Guardar el rastro
+          <input
+            value={days}
+            onChange={(e) => setDays(e.target.value.replace(/\D/g, '').slice(0, 3))}
+            inputMode="numeric"
+            aria-label="Días que se guarda el rastro"
+            className={clsx(INPUT, 'w-16 text-center')}
+          />
+          días (de 1 a 365; después se borra solo)
+        </label>
+        <button
+          type="button"
+          onClick={saveSettings}
+          disabled={busy || !changed || !daysValid}
+          className={BTN_PRIMARY}
+        >
+          Guardar
+        </button>
+      </div>
+      {!daysValid && <p className="text-micro text-rose">Escribe un número de 1 a 365.</p>}
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[30rem] text-left text-xs">
+          <thead>
+            <tr className="text-micro text-ink-muted">
+              <th className="py-1.5 pr-3 font-semibold">Rol</th>
+              <th className="px-2 py-1.5 font-semibold">Comparte su ubicación</th>
+              <th className="px-2 py-1.5 font-semibold">Ve dónde están</th>
+              <th className="px-2 py-1.5 font-semibold">Asigna tareas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {roles.map((r) => {
+              const loc = r.permissions.location ?? {};
+              const set = (patch: Partial<LocationPerm>) => {
+                const next = { ...loc, ...patch };
+                for (const k of Object.keys(next) as Array<keyof LocationPerm>)
+                  if (!next[k]) delete next[k];
+                onRole(r.key, Object.keys(next).length ? next : undefined);
+              };
+              return (
+                <tr key={r.key} className="border-t border-border/70">
+                  <td className="py-2 pr-3 font-semibold text-ink">{r.name}</td>
+                  {(['share', 'view', 'assign'] as const).map((k) => (
+                    <td key={k} className="px-2 py-2">
+                      <input
+                        type="checkbox"
+                        checked={loc[k] === true}
+                        onChange={(e) => set({ [k]: e.target.checked })}
+                        aria-label={`${r.name}: ${
+                          k === 'share'
+                            ? 'comparte su ubicación'
+                            : k === 'view'
+                              ? 've dónde están'
+                              : 'asigna tareas'
+                        }`}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-micro leading-relaxed text-ink-muted">
+        Quien administra la empresa siempre ve y asigna. «Asigna tareas» funciona aunque no
+        compartas ubicación (botón «Asignar a…» en una lista). Estos permisos se guardan con
+        «Guardar roles».
+      </p>
+      {dirty && (
+        <button type="button" onClick={onSaveRoles} disabled={pending} className={BTN_PRIMARY}>
+          Guardar roles
+        </button>
+      )}
+    </section>
   );
 }

@@ -11,6 +11,7 @@ import {
   Link2,
   ListFilter,
   type LucideIcon,
+  Map as MapIcon,
   MapPinned,
   Mic,
   SquareKanban,
@@ -31,6 +32,7 @@ export const BLOCK_ICON: Record<string, LucideIcon> = {
   gallery: GalleryVerticalEnd,
   calendar: CalendarDays,
   cards: ListFilter,
+  map: MapIcon,
   detail: FileText,
   progress: Target,
   media: ImageIcon,
@@ -59,6 +61,7 @@ export const BLOCK_PITCH: Record<string, string> = {
   calendar:
     'Citas, entregas o vencimientos por día, semana o mes, con la hora y el color del estado.',
   cards: 'Tarjetas grandes con buscador y chips: estado, hoy, esta semana, mías.',
+  map: 'Un mapa con los registros que tienen lugar y, en una app, las personas en turno; desde ahí se asignan tareas.',
   detail: 'La pantalla de UN registro: datos, relacionados y su línea de tiempo.',
   progress: 'Barras de avance hacia una meta, en total o por sede, vendedor o ruta.',
   media: 'Una imagen, o un video de YouTube o Loom, un mapa o una presentación.',

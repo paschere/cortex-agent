@@ -10,6 +10,7 @@ import {
   emptyHintsFor,
   isHomeRoute,
   loadHome,
+  locationStatus,
   navScreens,
   readScreen,
   screenButtons,
@@ -46,11 +47,13 @@ export default async function AppScreenPage({
   const isHome = isHomeRoute(access, ref);
   const screen = isHome ? null : screenFor(access, ref);
   if (!isHome && !screen) notFound();
-  const [read, home, brand, buttons] = await Promise.all([
+  const [read, home, brand, buttons, location] = await Promise.all([
     screen ? readScreen(db, access, screen, { readOnly, fila: query.fila, detail: query.d }) : null,
     isHome ? loadHome(db, access) : null,
     memberAppBrand(db, actor.organizationName, access.app),
     screen ? screenButtons(db, access.app.id, screen.slug) : [],
+    // Compartir ubicación (0216): sólo si la app lo tiene encendido y el rol puede.
+    readOnly ? null : locationStatus(db, access),
   ]);
   const emptyHints = screen && read ? await emptyHintsFor(db, access, screen, read) : [];
   const { app, role } = access;
@@ -77,6 +80,7 @@ export default async function AppScreenPage({
         }
         title={screen?.title ?? HOME_NAV.title}
         buttons={buttons}
+        location={location?.canShare ? location : null}
       />
     </ViewBrandProvider>
   );

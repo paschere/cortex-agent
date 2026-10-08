@@ -43,7 +43,7 @@ import { useId, useState } from 'react';
 import { ActionsEditor } from './ActionsEditor';
 import { FiltersEditor } from './FiltersEditor';
 import { FormOptions } from './FormOptions';
-import { CardsFields, DetailFields } from './ScreenFields';
+import { CardsFields, DetailFields, MapFields } from './ScreenFields';
 import { ZoneDrawer } from './ZoneDrawer';
 import {
   AddButton,
@@ -536,6 +536,8 @@ function TypeFields({
       );
     case 'cards':
       return <CardsFields block={block} source={source} onChange={onChange} />;
+    case 'map':
+      return <MapFields block={block} source={source} onChange={onChange} />;
     case 'detail':
       return <DetailFields block={block} source={source} sources={sources} onChange={onChange} />;
     case 'calendar':

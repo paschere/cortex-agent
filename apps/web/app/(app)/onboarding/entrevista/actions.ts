@@ -1,6 +1,6 @@
 'use server';
 
-import type { SetupItem } from '@/lib/guided-setup-shape';
+import { APPLY_ORDER, type SetupItem } from '@/lib/guided-setup-shape';
 import { type CreateContext, createOne, defaultAgentId, undoOne } from '@/lib/guided-setup/apply';
 import {
   discardSession,
@@ -39,6 +39,8 @@ export interface ApplyReport {
   error?: string;
   created: number;
   merged: number;
+  /** Pedidos que siguen en el chat: nada se creó, el pedido va escrito. */
+  handoff: number;
   failed: number;
   items: SetupItem[];
 }
@@ -52,10 +54,7 @@ export interface ApplyReport {
  * la alternativa de "todo o nada", y "nada" después de que alguien aprobó cinco
  * cosas es la peor de las dos.
  */
-export async function applySelection(
-  sessionId: string,
-  itemIds: string[],
-): Promise<ApplyReport> {
+export async function applySelection(sessionId: string, itemIds: string[]): Promise<ApplyReport> {
   const started = performance.now();
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
@@ -74,14 +73,24 @@ export async function applySelection(
     userId: user.id,
     agentId: await defaultAgentId(db),
     canCreateGlobalSpace: user.role === 'org_admin',
+    canManageApps: user.role === 'org_admin',
+    organizationName: user.organization.name,
+    apps: new Map(),
     today: bogotaToday(),
   };
 
   let created = 0;
   let merged = 0;
+  let handoff = 0;
   let failed = 0;
 
-  for (const item of chosen) {
+  // Unas cosas se apoyan en otras (la pantalla en su tabla, la automatización en
+  // su aplicación), así que se crean en ese orden y no en el que se marcaron.
+  const ordered = [...chosen].sort(
+    (a, b) => APPLY_ORDER.indexOf(a.kind) - APPLY_ORDER.indexOf(b.kind),
+  );
+
+  for (const item of ordered) {
     const outcome = await createOne(ctx, item);
     await markItem(db, item.id, {
       status: outcome.status,
@@ -92,6 +101,7 @@ export async function applySelection(
     });
     if (outcome.status === 'created') created++;
     else if (outcome.status === 'merged') merged++;
+    else if (outcome.status === 'handoff') handoff++;
     else failed++;
   }
 
@@ -115,6 +125,7 @@ export async function applySelection(
       proposed: chosen.length + skipped,
       created,
       merged,
+      handoff,
       failed,
       skipped,
       kinds: chosen.map((i) => i.kind),
@@ -122,7 +133,7 @@ export async function applySelection(
   });
 
   revalidatePath(PATH);
-  return { ok: true, created, merged, failed, items: await listItems(db, sessionId) };
+  return { ok: true, created, merged, handoff, failed, items: await listItems(db, sessionId) };
 }
 
 export interface UndoReport {
@@ -141,7 +152,12 @@ export async function undoItem(itemId: string): Promise<UndoReport> {
 
   const result = await undoOne(db, item);
   if (!result.ok) {
-    return { ok: false, error: result.error, undone: 0, items: await listItems(db, item.sessionId) };
+    return {
+      ok: false,
+      error: result.error,
+      undone: 0,
+      items: await listItems(db, item.sessionId),
+    };
   }
   await markItem(db, item.id, {
     status: 'undone',
@@ -207,5 +223,5 @@ export async function discardPlan(sessionId: string): Promise<{ ok: boolean; err
 }
 
 function fail(error: string): ApplyReport {
-  return { ok: false, error, created: 0, merged: 0, failed: 0, items: [] };
+  return { ok: false, error, created: 0, merged: 0, handoff: 0, failed: 0, items: [] };
 }

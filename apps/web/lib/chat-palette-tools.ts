@@ -410,6 +410,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.drive_syncs': 'Muéstrame las carpetas de Drive que llenan tablas',
   'trackers.retry_sync': 'Vuelve a correr la sincronización de ',
   'accounting.status': '¿Cómo va la conexión con el programa contable?',
+  'accounting.payroll_summary': '¿Cuánto nos costó la nómina según Siigo?',
   'accounting.sync_now': 'Trae ya lo nuevo del programa contable',
   'apps.list': 'Muéstrame las aplicaciones que tenemos',
   'apps.design': 'Diséñame una aplicación completa para ',

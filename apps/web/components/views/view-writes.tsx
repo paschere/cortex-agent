@@ -1,13 +1,20 @@
 'use client';
 
+import { assignRowAction, assignablePeopleAction } from '@/lib/apps/location-actions';
 import { editAppRowAction, runAppActionAction } from '@/lib/apps/write-actions';
 import { editViewRowAction, runViewActionAction } from '@/lib/views/actions';
-import type { ComputedAction, ComputedEditMeta, TrackerField } from '@cortex/agent-tools';
+import type {
+  AssignablePerson,
+  ComputedAction,
+  ComputedEditMeta,
+  TrackerField,
+} from '@cortex/agent-tools';
 import { validateRowValues } from '@cortex/agent-tools/src/trackers/validation';
 import { clsx } from 'clsx';
 import { Check, Loader2, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { SubmitTarget } from './ViewCanvas';
+import { AssignPicker } from './blocks/AssignPicker';
 
 /**
  * ESCRIBIR DESDE UNA VISTA (migración 0160): editar una celda, mover una
@@ -25,6 +32,17 @@ type Result = { ok: true; message: string } | { ok: false; error: string };
 export interface ViewWriter {
   edit(blockId: string, rowId: string, patch: Record<string, string>): Promise<Result>;
   act(blockId: string, action: ComputedAction, rowId: string, rowLabel: string): Promise<Result>;
+  /**
+   * «Asignar a…»: sólo dentro de una aplicación. Sin esto (vistas del equipo,
+   * enlaces públicos) un botón de asignar no se pinta.
+   */
+  assign?: {
+    people(
+      blockId: string,
+      actionId: string,
+    ): Promise<{ ok: true; people: AssignablePerson[] } | { ok: false; error: string }>;
+    pick(blockId: string, actionId: string, rowId: string, personRef: string): Promise<Result>;
+  };
 }
 
 /** Rechazar pide un motivo opcional; `null` = la persona canceló. */
@@ -88,6 +106,22 @@ export function ViewWriterProvider({
     };
   } else if (target.kind === 'custom_app') {
     writer = {
+      assign: {
+        people: (blockId, actionId) =>
+          assignablePeopleAction(target.appId, target.screen, blockId, actionId),
+        async pick(blockId, actionId, rowId, personRef) {
+          const res = await assignRowAction(
+            target.appId,
+            target.screen,
+            blockId,
+            actionId,
+            rowId,
+            personRef,
+          );
+          if (res.ok) onChanged?.();
+          return res;
+        },
+      },
       async edit(blockId, rowId, patch) {
         const res = await editAppRowAction(target.appId, target.screen, blockId, rowId, patch);
         if (res.ok) onChanged?.();
@@ -350,17 +384,49 @@ export function RowActions({
   const writer = useViewWriter();
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
-  // Aprobar / Rechazar sólo salen en las filas que esperan revisión (`rowIds`).
-  const shown = actions.filter((a) => !a.rowIds || a.rowIds.includes(rowId));
+  const [picking, setPicking] = useState<ComputedAction | null>(null);
+  // Aprobar / Rechazar sólo salen en las filas que esperan revisión (`rowIds`);
+  // «Asignar a…» sólo donde hay a quién asignar (dentro de una aplicación).
+  const shown = actions.filter(
+    (a) => (!a.rowIds || a.rowIds.includes(rowId)) && (a.kind !== 'assign' || writer?.assign),
+  );
   if (!writer || !shown.length) return null;
+  const say = (res: Result) => {
+    setNote(res.ok ? { ok: true, text: res.message } : { ok: false, text: res.error });
+    setTimeout(() => setNote(null), 4000);
+  };
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
+      {writer.assign && picking && (
+        <AssignPicker
+          open
+          title={`${picking.label}: ${rowLabel}`}
+          load={() =>
+            (writer.assign as NonNullable<ViewWriter['assign']>).people(blockId, picking.id)
+          }
+          onClose={() => setPicking(null)}
+          onPick={async (ref) => {
+            const res = await (writer.assign as NonNullable<ViewWriter['assign']>).pick(
+              blockId,
+              picking.id,
+              rowId,
+              ref,
+            );
+            if (res.ok) setPicking(null);
+            say(res);
+          }}
+        />
+      )}
       {shown.map((a) => (
         <button
           key={a.id}
           type="button"
           disabled={busy !== null}
           onClick={async () => {
+            if (a.kind === 'assign') {
+              setPicking(a);
+              return;
+            }
             setBusy(a.id);
             const res = await writer.act(blockId, a, rowId, rowLabel);
             setBusy(null);

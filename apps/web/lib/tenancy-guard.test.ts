@@ -131,6 +131,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. "Which app automations have a schedule or row poll that is due" and "which runs are queued" span the install; the raw handle reads (id, organization_id, app_id, trigger, conditions, schedule_last_slot) of enabled schedule and rows_poll rules and (id, organization_id) of queued runs, and resets runs stuck in "running". Each schedule slot is then claimed and each run executed with a handle pinned to its own workspace; app users are only ever looked up by the rule\'s app_id.',
   ],
   [
+    'inngest/functions/app-location.ts',
+    'Cron. "Which apps exist and how many days of location trail each one keeps" spans the install; the raw handle selects (id, organization_id, location) and nothing else. The deletion of expired trail and the closing of forgotten shifts then run per app with a handle pinned to its own workspace.',
+  ],
+  [
     'inngest/functions/view-digest.ts',
     'Cron. "Which views have a periodic digest" spans the install; the raw handle selects (id, organization_id, spec->digest, digest_last_sent_at) and nothing else. Each view then runs on its own event with a handle pinned to its workspace, reads no personal or Feed source (no viewerId) and mails only people still in that workspace directory.',
   ],

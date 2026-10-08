@@ -276,3 +276,46 @@ describe('apps.design', () => {
     ).rejects.toThrow(/administra/);
   });
 });
+
+describe('mapa y tareas en el diseño', () => {
+  it('avisa si el mapa pide personas o asignar y ningún rol puede compartir, ver o asignar', async () => {
+    const { locationWarnings } = await import('../design');
+    const { viewSpecSchema } = await import('../../views/spec');
+    const spec = viewSpecSchema.parse({
+      version: 1,
+      editing: 'team',
+      blocks: [
+        {
+          id: 'mapa',
+          type: 'map',
+          tracker: 'tareas',
+          title: 'Equipo',
+          locationField: 'lugar',
+          people: true,
+          assign: { assigneeField: 'asignado', titleField: 'titulo' },
+        },
+      ],
+    });
+    const none = locationWarnings(
+      [{ title: 'Mapa', spec }],
+      [{ name: 'Operario', permissions: { tables: {}, export: false } }],
+    );
+    expect(none.join('\n')).toMatch(/ningún rol puede verlas/);
+    expect(none.join('\n')).toMatch(/ningún rol comparte/);
+    expect(none.join('\n')).toMatch(/ningún rol puede asignar/);
+    expect(none.join('\n')).toMatch(/Compartir ubicación del equipo/);
+    const ok = locationWarnings(
+      [{ title: 'Mapa', spec }],
+      [
+        {
+          name: 'Coordinador',
+          permissions: { tables: {}, export: false, location: { view: true, assign: true } },
+        },
+        { name: 'Terreno', permissions: { tables: {}, export: false, location: { share: true } } },
+      ],
+    );
+    // Sólo queda el recordatorio de encender la función en la app.
+    expect(ok).toHaveLength(1);
+    expect(ok[0]).toMatch(/Compartir ubicación del equipo/);
+  });
+});

@@ -234,17 +234,45 @@ export const rowActionSchema = z
   .object({
     id: z.string().regex(BLOCK_ID_RE),
     label: z.string().trim().min(1).max(32),
-    kind: z.enum(['set_field', 'notify']),
+    kind: z.enum(['set_field', 'notify', 'assign']),
     field: fieldRef.optional(),
     value: z.union([z.string().max(200), z.number()]).optional(),
     confirm: z.boolean().default(false),
     tone: z.enum(TONES).default('primary'),
+    /**
+     * `set_field`: campos que la fila ya tiene que traer llenos para que el
+     * botón funcione («Terminar» pide foto y nota de cierre). El servidor lo
+     * comprueba; el botón no cambia nada si falta alguno y dice cuál.
+     */
+    requireFields: z.array(fieldRef).max(6).optional(),
+    /**
+     * `assign` («Asignar a…», tareas): `field` guarda el id de la persona,
+     * `nameField` su nombre, `statusField` recibe `value` al asignar («Pendiente»),
+     * `roles` limita a qué roles de la app se puede asignar (vacío = todos) y
+     * `screen` es la pantalla que abre el aviso que le llega a la persona.
+     */
+    nameField: fieldRef.optional(),
+    statusField: fieldRef.optional(),
+    roles: z
+      .array(z.string().regex(/^[a-z][a-z0-9_]{1,31}$/))
+      .max(8)
+      .optional(),
+    screen: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{1,47}$/)
+      .optional(),
   })
   .superRefine((a, ctx) => {
     if (a.kind === 'set_field' && (!a.field || a.value === undefined))
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `El botón «${a.label}» cambia un campo: necesita field y value.`,
+        path: ['field'],
+      });
+    if (a.kind === 'assign' && !a.field)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `El botón «${a.label}» asigna a una persona: necesita field (el campo donde se guarda quién).`,
         path: ['field'],
       });
   });
@@ -697,6 +725,69 @@ export const linksBlockSchema = z.object({
   style: z.enum(['buttons', 'cards']).default('buttons'),
 });
 
+/**
+ * QUÉ SE PUEDE PEDIR AL ASIGNAR UNA TAREA desde el mapa. La tarea es una fila
+ * nueva de la tabla del bloque: `assigneeField` guarda el id de la persona
+ * (el que lee `$user.id` en el rol de «Mis tareas»), `nameField` su nombre; el
+ * resto de campos son los que el cuadro «Asignar tarea» pide si están.
+ * `statusField` recibe `pendingValue` (la opción «Pendiente»). `roles` limita a
+ * qué roles de la app se asigna; `screen` es la pantalla que abre el aviso.
+ */
+export const mapAssignSchema = z.object({
+  assigneeField: fieldRef,
+  nameField: fieldRef.optional(),
+  titleField: fieldRef,
+  descriptionField: fieldRef.optional(),
+  dueField: fieldRef.optional(),
+  dueTimeField: fieldRef.optional(),
+  priorityField: fieldRef.optional(),
+  statusField: fieldRef.optional(),
+  pendingValue: z.string().trim().min(1).max(80).optional(),
+  roles: z
+    .array(z.string().regex(/^[a-z][a-z0-9_]{1,31}$/))
+    .max(8)
+    .optional(),
+  screen: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{1,47}$/)
+    .optional(),
+});
+export type MapAssign = z.infer<typeof mapAssignSchema>;
+
+/**
+ * EL MAPA. Dos capas, ninguna obligatoria:
+ *   - registros: cada fila de la tabla con un punto válido en `locationField`
+ *     (un campo de tipo ubicación) es un marcador; `colorField` (un campo de
+ *     opciones) le da color por estado y `titleField`/`subtitleField` la
+ *     tarjeta que sale al tocarlo (con «Abrir» hacia el detalle de la fila);
+ *   - personas (`people: true`): dónde están AHORA las personas en turno de la
+ *     app. Sólo existe dentro de una aplicación con «Compartir ubicación del
+ *     equipo» encendido y sólo la ven los roles con permiso de ver ubicaciones
+ *     (`peopleRoles` además limita a las personas de esos roles). En una vista
+ *     normal o en un enlace público esta capa NUNCA se pinta.
+ * `assign` activa «Asignar tarea» al tocar una persona (ver `mapAssignSchema`).
+ * Mapa de OpenStreetMap; se refresca con la vista (y las personas cada 20 s).
+ */
+export const mapBlockSchema = z.object({
+  ...base,
+  ...source,
+  ...record,
+  type: z.literal('map'),
+  title,
+  locationField: fieldRef,
+  titleField: fieldRef.default('label'),
+  subtitleField: fieldRef.optional(),
+  colorField: fieldRef.optional(),
+  people: z.boolean().default(false),
+  peopleRoles: z
+    .array(z.string().regex(/^[a-z][a-z0-9_]{1,31}$/))
+    .max(8)
+    .default([]),
+  limit: z.number().int().min(1).max(500).default(200),
+  assign: mapAssignSchema.optional(),
+  actions: z.array(rowActionSchema).max(3).default([]),
+});
+
 export const blockSchema = z.discriminatedUnion('type', [
   textBlockSchema,
   metricBlockSchema,
@@ -709,6 +800,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   calendarBlockSchema,
   detailBlockSchema,
   cardsBlockSchema,
+  mapBlockSchema,
   progressBlockSchema,
   mediaBlockSchema,
   linksBlockSchema,
@@ -1123,6 +1215,25 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         else need(key, 'editable');
       }
       for (const a of actions) {
+        for (const k of a.requireFields ?? []) need(k, `requisito del botón «${a.label}»`);
+        if (a.kind === 'assign') {
+          if (a.field) need(a.field, `quién, botón «${a.label}»`);
+          if (a.nameField) need(a.nameField, `nombre, botón «${a.label}»`);
+          if (a.statusField) {
+            if (need(a.statusField, `estado, botón «${a.label}»`)) {
+              const sf = tracker.fields.find((f) => f.key === a.statusField);
+              if (
+                sf?.type === 'select' &&
+                a.value !== undefined &&
+                !sf.options?.includes(String(a.value))
+              )
+                problems.push(
+                  `${where}: el botón «${a.label}» pone «${a.value}», que no es una opción de ${sf.label} (${sf.options?.join(', ')}).`,
+                );
+            }
+          }
+          continue;
+        }
         if (a.kind !== 'set_field' || !a.field) continue;
         if (!need(a.field, `botón «${a.label}»`)) continue;
         const field = tracker.fields.find((f) => f.key === a.field);
@@ -1198,6 +1309,46 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         for (const k of block.sortOptions) need(k, 'orden elegible');
         checkWrites(recordEditable, block.actions);
         break;
+      case 'map': {
+        needType(
+          block.locationField,
+          'ubicación del registro',
+          (t) => t === 'location',
+          'un campo de tipo ubicación',
+        );
+        need(block.titleField, 'título del marcador');
+        if (block.subtitleField) need(block.subtitleField, 'subtítulo');
+        if (block.colorField)
+          needType(block.colorField, 'color por estado', isSelect, 'un campo de opciones');
+        const a = block.assign;
+        if (a) {
+          if (isReadOnlySource(block.tracker)) {
+            problems.push(
+              `${where}: asignar tareas escribe filas; «${tracker.name}» es de sólo lectura. Usa una tabla propia.`,
+            );
+            break;
+          }
+          need(a.assigneeField, 'quién tiene la tarea');
+          need(a.titleField, 'título de la tarea');
+          if (a.nameField) need(a.nameField, 'nombre de quien tiene la tarea');
+          if (a.descriptionField) need(a.descriptionField, 'descripción de la tarea');
+          if (a.dueField) needType(a.dueField, 'fecha límite', isDate, 'un campo de fecha');
+          if (a.dueTimeField)
+            needType(a.dueTimeField, 'hora límite', (t) => t === 'time', 'un campo de hora');
+          if (a.priorityField)
+            needType(a.priorityField, 'prioridad', isSelect, 'un campo de opciones');
+          if (a.statusField) {
+            needType(a.statusField, 'estado', isSelect, 'un campo de opciones');
+            const sf = tracker.fields.find((f) => f.key === a.statusField);
+            if (a.pendingValue && sf && !sf.options?.includes(a.pendingValue))
+              problems.push(
+                `${where}: «${a.pendingValue}» no es una opción de ${sf.label} (${sf.options?.join(', ')}).`,
+              );
+          }
+        }
+        checkWrites(recordEditable, block.actions);
+        break;
+      }
       case 'detail': {
         need(block.titleField, 'título del detalle');
         if (block.subtitleField) need(block.subtitleField, 'subtítulo');
@@ -1402,6 +1553,8 @@ export function specWrites(spec: Pick<ViewSpec, 'blocks'>): boolean {
     // Aprobar / Rechazar escribe en la tabla: la vista tiene que dejar escribir.
     if (b.type === 'form' && b.approval) return true;
     if ('actions' in b && b.actions.length > 0) return true;
+    // Asignar una tarea desde el mapa crea una fila.
+    if (b.type === 'map' && b.assign) return true;
     if (b.type === 'detail' && b.related.some((r) => r.actions.length > 0)) return true;
     if (b.type === 'table') return b.editable.length > 0;
     if (b.type === 'board' || b.type === 'zones') return b.draggable;
@@ -1438,6 +1591,7 @@ export const BLOCK_LABEL: Record<ViewBlockType, string> = {
   calendar: 'Calendario',
   detail: 'Detalle de un registro',
   cards: 'Tarjetas con filtros',
+  map: 'Mapa',
   progress: 'Avance',
   media: 'Imagen o video',
   links: 'Botones',

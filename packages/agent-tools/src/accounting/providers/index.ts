@@ -42,6 +42,7 @@ function infoOf(p: AccountingProvider): ProviderInfo {
     credentialFields:
       connect === 'oauth' ? [] : p.credentialFields.map((f): CredentialField => ({ ...f })),
     entities: [...p.entities],
+    options: [...(p.options ?? [])],
     paymentsLabel: p.paymentsLabel ?? 'Pagos recibidos',
     connect,
     setupMissing: p.setupMissing?.() ?? null,
@@ -60,6 +61,7 @@ export function listAccountingProviders(): ProviderInfo[] {
         available: false,
         credentialFields: [],
         entities: [],
+        options: [],
         paymentsLabel: 'Pagos recibidos',
         connect: 'credentials',
         setupMissing: null,

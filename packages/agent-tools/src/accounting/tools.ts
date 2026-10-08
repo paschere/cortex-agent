@@ -1,6 +1,10 @@
 import { ValidationError } from '@cortex/core';
 import { z } from 'zod';
+import { bogotaToday } from '../commitments/shape';
 import { registerTool } from '../index';
+import { COMP_SENSITIVITY_NOTE } from '../payroll/sensitive';
+import { PAYROLL_GROUP_LABEL } from './payroll';
+import { readPayrollView } from './payroll-store';
 import { getAccountingProvider, listAccountingProviders, providerName } from './providers';
 import {
   type AccountingConnectionRow,
@@ -56,6 +60,10 @@ function describeConnection(c: AccountingConnectionRow): string {
       `- ${ENTITY_LABEL[entity]} → tabla «${spec.name}» (\`${spec.slug}\`)${n ? `: última corrida ${n.inserted} nuevas, ${n.updated} actualizadas` : ''}`,
     );
   }
+  if (c.entities.includes('payroll'))
+    lines.push(
+      '- nómina → comprobantes contables de nómina (no hay API de nómina en Siigo), confidenciales; se consultan con accounting.payroll_summary.',
+    );
   if (c.entities.includes('invoices'))
     lines.push(
       '- Las facturas con saldo entran a la cartera y a la plata en riesgo con el saldo que dice el programa.',
@@ -142,6 +150,85 @@ export const accountingSyncNow = registerTool({
       markdown: queued
         ? `Listo: estoy trayendo lo nuevo de ${name}. Las tablas se actualizan en unos minutos${conn.notify ? ' y te aviso en la campana si entran facturas o pagos nuevos' : ''}.`
         : `Dejé ${name} marcado para sincronizar en la próxima vuelta del trabajo programado (como mucho 15 minutos).`,
+    };
+  },
+});
+
+const cop = (n: number) =>
+  new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0,
+  }).format(n);
+
+export const accountingPayrollSummary = registerTool({
+  id: 'accounting.payroll_summary',
+  description: `Payroll read from the connected accounting program (Siigo) — NOT from Cortex's own payroll screen. Siigo has no payroll API, so Cortex reads the payroll accounting entries (comprobantes contables: gastos de personal 5105/5205/7205, salarios por pagar 2505, retenciones y aportes 2370, provisiones 2510–2525) when the company turned on «Nómina» in Integrations → Programa contable → Qué traer. Returns per month: devengado, prestaciones, aportes, total cost to the company, neto a pagar, deducciones, provisiones and the amount per concept. Per-person figures (by identification number) come back ONLY when the person asking is an admin or owner; anyone else gets company totals. Use it for «¿cuánto nos costó la nómina en agosto según Siigo?», «¿cuánto se provisionó de prima?». Figures are accrual (what was booked), not cash paid. ${COMP_SENSITIVITY_NOTE}`,
+  inputSchema: z.object({
+    months: z.number().int().min(1).max(36).default(6).describe('How many recent months to show.'),
+    period: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .nullish()
+      .describe('One month, YYYY-MM. Also asks for the per-person detail (admins only).'),
+  }),
+  outputSchema: z.object({
+    markdown: z.string(),
+    periods: z.array(z.any()),
+    people: z.array(z.any()),
+    detail: z.boolean(),
+  }),
+  rateLimit: { perMinute: 20 },
+  handler: async (input, ctx) => {
+    const connections = await listAccountingConnections(ctx.db);
+    const conn = connections.find((c) => c.entities.includes('payroll'));
+    const view = await readPayrollView(ctx.db, {
+      viewerId: ctx.userId,
+      months: input.months,
+      period: input.period ?? undefined,
+      today: bogotaToday(),
+    });
+    if (!view.periods.length)
+      return {
+        periods: [],
+        people: [],
+        detail: view.detail,
+        markdown: conn
+          ? `${providerName(conn.provider)} tiene la nómina activada pero todavía no ha llegado ningún comprobante de nómina (la primera carga puede tardar unos minutos). Si Siigo no contabiliza la nómina con cuentas 5105/2505, no hay qué leer: en ese caso la nómina se liquida en la pantalla Nómina de Cortex. No inventes cifras.`
+          : 'Ningún programa contable tiene activada la nómina. Un administrador la enciende en Integraciones → Programa contable → «Qué traer» → Nómina. Siigo no tiene API de nómina: Cortex lee los comprobantes contables de nómina. No inventes cifras.',
+      };
+    const lines = view.periods.map(
+      (p) =>
+        `**${p.period}** — costo para la empresa ${cop(p.costoTotal)} (devengado ${cop(p.devengado)}, prestaciones ${cop(p.prestaciones)}, aportes ${cop(p.aportes)}${p.otrosPersonal ? `, otros ${cop(p.otrosPersonal)}` : ''}); neto a pagar ${cop(p.neto)}; deducciones ${cop(p.deducciones)}; provisiones ${cop(p.provisiones)}. ${p.comprobantes} comprobante(s).`,
+    );
+    const top = view.periods[0];
+    const conceptLines = top
+      ? top.conceptos
+          .slice(0, 12)
+          .map((c) => `- ${c.concept} (${PAYROLL_GROUP_LABEL[c.group]}): ${cop(c.amount)}`)
+      : [];
+    const peopleLines = view.people.map(
+      (p) =>
+        `- ${p.name ?? `Doc. ${p.taxId}`}: devengado ${cop(p.devengado)}, neto ${cop(p.neto)}, deducciones ${cop(p.deducciones)}`,
+    );
+    const privacy = view.detailHidden
+      ? '\n\nHay detalle por persona en estos comprobantes, pero es confidencial: sólo lo ve quien administra la empresa.'
+      : '';
+    return {
+      periods: view.periods,
+      people: view.people,
+      detail: view.detail,
+      markdown: [
+        'Nómina según los comprobantes contables (base causada, no caja):',
+        ...lines,
+        top ? `\nPor concepto en ${top.period}:\n${conceptLines.join('\n')}` : '',
+        peopleLines.length
+          ? `\nPor persona en ${top?.period} (confidencial):\n${peopleLines.join('\n')}`
+          : '',
+        privacy,
+      ]
+        .filter(Boolean)
+        .join('\n'),
     };
   },
 });

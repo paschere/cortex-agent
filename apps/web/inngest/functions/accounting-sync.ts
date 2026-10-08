@@ -17,6 +17,7 @@ import {
   planPurchaseSync,
   providerName,
   runAccountingSync,
+  runPayrollSync,
   syncLedger,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -107,9 +108,10 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
     await markAccountingRun(db, conn, result.result);
 
     const provider = getAccountingProvider(conn.provider);
-    const tables = conn.entities.map(
-      (e) => accountingTableSpec(provider ?? { id: conn.provider, name }, e).name,
-    );
+    // La nómina (0217) no llena una tabla: es confidencial y vive aparte.
+    const tables = conn.entities
+      .filter((e): e is Exclude<typeof e, 'payroll'> => e !== 'payroll')
+      .map((e) => accountingTableSpec(provider ?? { id: conn.provider, name }, e).name);
     const notice =
       result.result.status === 'error'
         ? conn.last_status === 'error'
@@ -232,6 +234,72 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
       }
     });
 
+  // 0217: la nómina que el programa deja en los comprobantes contables (Siigo
+  // no tiene API de nómina). Opcional: sólo si la conexión la activó. Es
+  // confidencial: va a su propia tabla, no a Tablas. Sólo lectura.
+  let payrollPartial = false;
+  if ('status' in outcome && outcome.status !== 'error')
+    payrollPartial = await step.run('payroll', async () => {
+      try {
+        const { data: conn, error } = await db
+          .from('accounting_connections')
+          .select('provider, entities, cursors')
+          .eq('id', connectionId)
+          .maybeSingle();
+        if (error) throw error;
+        const row = conn as {
+          provider?: string;
+          entities?: string[];
+          cursors?: Record<string, unknown>;
+        } | null;
+        if (!row?.provider || !row.entities?.includes('payroll')) return false;
+        const session = await openAccountingSession(db, connectionId);
+        if (!session.listPayroll) return false;
+        const cursors = (row.cursors ?? {}) as Record<string, unknown> & {
+          payroll?: PurchaseCursor;
+        };
+        const run = await runPayrollSync(db, session, {
+          system: row.provider,
+          cursor: cursors.payroll,
+        });
+        const { error: updateError } = await db
+          .from('accounting_connections')
+          .update({
+            cursors: { ...cursors, payroll: run.cursor },
+            ...(run.partial
+              ? { last_status: 'partial', next_run_at: new Date().toISOString() }
+              : {}),
+          })
+          .eq('id', connectionId);
+        if (updateError) throw updateError;
+        logger.info(
+          {
+            organizationId,
+            system: row.provider,
+            seen: run.seen,
+            journals: run.journals,
+            lines: run.lines,
+            partial: run.partial,
+          },
+          'accounting payroll synced',
+        );
+        return run.partial;
+      } catch (err) {
+        logger.warn({ err, organizationId }, 'accounting payroll failed');
+        await db
+          .from('accounting_connections')
+          .update({
+            last_status: 'error',
+            last_error:
+              err instanceof Error
+                ? `No pude traer la nómina: ${err.message}`.slice(0, 500)
+                : 'No pude traer la nómina.',
+          })
+          .eq('id', connectionId);
+        return false;
+      }
+    });
+
   // 0179: lo que llegó (clientes, facturas, recibos) se cuelga de cada
   // cliente en su propio trabajo, y si falta un cliente se crea desde aquí.
   if ('status' in outcome && outcome.status === 'ok')
@@ -246,7 +314,7 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
       name: 'accounting/run' as const,
       data: { organizationId, connectionId },
     });
-  else if (purchasesPartial)
+  else if (purchasesPartial || payrollPartial)
     await step.sendEvent('continue-purchases', {
       name: 'accounting/run' as const,
       data: { organizationId, connectionId },

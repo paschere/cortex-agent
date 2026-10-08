@@ -5,7 +5,7 @@
 
 import './tools';
 
-export { accountingStatus, accountingSyncNow } from './tools';
+export { accountingPayrollSummary, accountingStatus, accountingSyncNow } from './tools';
 export {
   ACCOUNTING_PROVIDERS,
   getAccountingProvider,
@@ -44,13 +44,29 @@ export type {
 } from './store';
 export { accountingTableSpec } from './tables';
 export { nextPurchaseCursor, planPurchaseSync } from './purchase-plan';
+export { planPayrollSync } from './payroll-plan';
+export {
+  readPayrollView,
+  replacePayrollJournals,
+  runPayrollSync,
+} from './payroll-store';
+export type { PayrollSyncResult, PayrollView } from './payroll-store';
+export {
+  PAYROLL_GROUP_LABEL,
+  classifyPayrollAccount,
+  normalizeSiigoPayrollJournal,
+  summarizePayrollPeople,
+  summarizePayrollPeriods,
+} from './payroll';
 export type { PurchaseCursor } from './purchase-plan';
 export { noticeFor as accountingNoticeFor, runAccountingSync } from './sync';
 export type { SyncRunOutcome as AccountingSyncOutcome } from './sync';
-export { ACCOUNTING_ENTITIES, ACCOUNTING_PROVIDER_IDS } from './types';
+export { ACCOUNTING_ENTITIES, ACCOUNTING_OPTIONS, ACCOUNTING_PROVIDER_IDS } from './types';
 export type {
   AccountingEntity,
+  AccountingOption,
   AccountingProviderId,
+  AccountingSelection,
   CredentialField as AccountingCredentialField,
   ProviderInfo as AccountingProviderInfo,
 } from './types';

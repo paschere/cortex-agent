@@ -23,7 +23,8 @@ import {
 
 /**
  * Los controles de los tipos de pantalla nuevos en el inspector: la lista de
- * tarjetas con filtros rápidos y el detalle de un registro (secciones, galería,
+ * tarjetas con filtros rápidos, el mapa (registros con lugar, personas en turno
+ * y «Asignar tarea») y el detalle de un registro (secciones, galería,
  * relacionados con sus botones y línea de tiempo). Cada propiedad del spec
  * tiene su control con nombre de persona, igual que el resto del inspector.
  */
@@ -31,6 +32,7 @@ import {
 type Change = (next: ViewBlock, coalesce?: string) => void;
 type Cards = Extract<ViewBlock, { type: 'cards' }>;
 type Detail = Extract<ViewBlock, { type: 'detail' }>;
+type MapBlockSpec = Extract<ViewBlock, { type: 'map' }>;
 
 const isDate = (f: FieldOption) => f.type === 'date';
 const text = (f: FieldOption) => !isDate(f);
@@ -467,6 +469,241 @@ export function DetailFields({
             />
           ))}
       </fieldset>
+    </>
+  );
+}
+
+const ROLE_KEY = /^[a-z][a-z0-9_]{1,31}$/;
+const SCREEN_SLUG = /^[a-z][a-z0-9_]{1,47}$/;
+
+/** «a, b» → ['a', 'b'] sólo con claves de rol válidas. */
+function roleKeysOf(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .split(',')
+        .map((k) => k.trim())
+        .filter((k) => ROLE_KEY.test(k)),
+    ),
+  ].slice(0, 8);
+}
+
+export function MapFields({
+  block,
+  source,
+  onChange,
+}: { block: MapBlockSpec; source: EditorSource | undefined; onChange: Change }) {
+  const fields = fieldOptions(source);
+  const own = fields.filter((f) => !f.builtin);
+  const places = fields.filter((f) => f.type === 'location');
+  const selects = fields.filter((f) => f.type === 'select');
+  const texts = own.filter((f) => f.type === 'text' || f.type === 'longtext');
+  const dates = own.filter((f) => f.type === 'date');
+  const times = own.filter((f) => f.type === 'time');
+  const a = block.assign;
+  const patchAssign = (patch: Partial<NonNullable<MapBlockSpec['assign']>>) =>
+    a && onChange({ ...block, assign: { ...a, ...patch } });
+  const statusOptions = selects.find((f) => f.key === a?.statusField)?.options ?? [];
+  return (
+    <>
+      <Field
+        label="Lugar de cada registro"
+        hint="Un campo de tipo ubicación. Sin lugar, la fila no sale en el mapa."
+      >
+        <FieldSelect
+          fields={places}
+          value={block.locationField}
+          onChange={(locationField) => locationField && onChange({ ...block, locationField })}
+        />
+      </Field>
+      <Field label="Título del marcador">
+        <FieldSelect
+          fields={fields.filter((f) => f.type !== 'file')}
+          value={block.titleField}
+          onChange={(titleField) => titleField && onChange({ ...block, titleField })}
+        />
+      </Field>
+      <Field label="Subtítulo">
+        <FieldSelect
+          fields={fields.filter((f) => f.type !== 'file')}
+          value={block.subtitleField}
+          emptyLabel="Sin subtítulo"
+          onChange={(subtitleField) => onChange({ ...block, subtitleField })}
+        />
+      </Field>
+      <Field label="Color según" hint="Un campo de opciones: cada estado con su color y su filtro.">
+        <FieldSelect
+          fields={selects}
+          value={block.colorField}
+          emptyLabel="Un solo color"
+          onChange={(colorField) => onChange({ ...block, colorField })}
+        />
+      </Field>
+      <Field label="Máximo de marcadores">
+        <NumberInput
+          min={1}
+          max={500}
+          value={block.limit}
+          onChange={(limit) => onChange({ ...block, limit: limit ?? 200 }, `${block.id}:limit`)}
+        />
+      </Field>
+      <Toggle
+        label="Mostrar las personas en turno"
+        hint="Sólo dentro de una aplicación con «Compartir ubicación del equipo» y sólo para los roles con permiso de verlas. Un enlace público nunca las muestra."
+        checked={block.people}
+        onChange={(people) => onChange({ ...block, people })}
+      />
+      {block.people && (
+        <Field
+          label="Sólo estos roles (opcional)"
+          hint="Claves de rol separadas por coma. Vacío: todas las personas en turno."
+        >
+          <input
+            defaultValue={block.peopleRoles.join(', ')}
+            onBlur={(e) => onChange({ ...block, peopleRoles: roleKeysOf(e.target.value) })}
+            placeholder="terreno, conductor"
+            className={INPUT}
+          />
+        </Field>
+      )}
+      <Toggle
+        label="Asignar tareas desde el mapa"
+        hint="Al tocar a una persona sale «Asignar tarea»: se crea una fila en esta tabla y a la persona le llega un aviso. Necesita edición activa y que el rol pueda asignar."
+        checked={Boolean(a)}
+        onChange={(on) =>
+          onChange({
+            ...block,
+            assign: on
+              ? {
+                  assigneeField: texts[0]?.key ?? 'label',
+                  titleField: texts[0]?.key ?? 'label',
+                  nameField: texts[1]?.key,
+                  descriptionField: own.find((f) => f.type === 'longtext')?.key,
+                  dueField: dates[0]?.key,
+                  priorityField: selects.find((f) => /prior/i.test(f.key))?.key,
+                  statusField: block.colorField,
+                  pendingValue: selects.find((f) => f.key === block.colorField)?.options[0],
+                }
+              : undefined,
+          })
+        }
+      />
+      {a && (
+        <>
+          <Field label="Dónde se guarda la persona (su id)">
+            <FieldSelect
+              fields={texts}
+              value={a.assigneeField}
+              onChange={(assigneeField) => assigneeField && patchAssign({ assigneeField })}
+            />
+          </Field>
+          <Field label="Nombre de la persona">
+            <FieldSelect
+              fields={texts}
+              value={a.nameField}
+              emptyLabel="No se guarda"
+              onChange={(nameField) => patchAssign({ nameField })}
+            />
+          </Field>
+          <Field label="Qué hay que hacer (título)">
+            <FieldSelect
+              fields={texts}
+              value={a.titleField}
+              onChange={(titleField) => titleField && patchAssign({ titleField })}
+            />
+          </Field>
+          <Field label="Detalle">
+            <FieldSelect
+              fields={texts}
+              value={a.descriptionField}
+              emptyLabel="No se pide"
+              onChange={(descriptionField) => patchAssign({ descriptionField })}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Fecha límite">
+              <FieldSelect
+                fields={dates}
+                value={a.dueField}
+                emptyLabel="No se pide"
+                onChange={(dueField) => patchAssign({ dueField })}
+              />
+            </Field>
+            <Field label="Hora límite">
+              <FieldSelect
+                fields={times}
+                value={a.dueTimeField}
+                emptyLabel="No se pide"
+                onChange={(dueTimeField) => patchAssign({ dueTimeField })}
+              />
+            </Field>
+          </div>
+          <Field label="Prioridad">
+            <FieldSelect
+              fields={selects}
+              value={a.priorityField}
+              emptyLabel="No se pide"
+              onChange={(priorityField) => patchAssign({ priorityField })}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Estado">
+              <FieldSelect
+                fields={selects}
+                value={a.statusField}
+                emptyLabel="No se toca"
+                onChange={(statusField) =>
+                  patchAssign({
+                    statusField,
+                    pendingValue: selects.find((f) => f.key === statusField)?.options[0],
+                  })
+                }
+              />
+            </Field>
+            {a.statusField && (
+              <Field label="Al asignar queda">
+                <select
+                  value={a.pendingValue ?? ''}
+                  onChange={(e) => patchAssign({ pendingValue: e.target.value || undefined })}
+                  className={INPUT}
+                >
+                  {statusOptions.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+          </div>
+          <Field
+            label="Pantalla que abre el aviso (opcional)"
+            hint="El identificador de la pantalla, p. ej. mis_tareas."
+          >
+            <input
+              defaultValue={a.screen ?? ''}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                patchAssign({ screen: SCREEN_SLUG.test(v) ? v : undefined });
+              }}
+              className={INPUT}
+            />
+          </Field>
+          <Field
+            label="Asignable sólo a estos roles (opcional)"
+            hint="Claves de rol separadas por coma."
+          >
+            <input
+              defaultValue={(a.roles ?? []).join(', ')}
+              onBlur={(e) => {
+                const roles = roleKeysOf(e.target.value);
+                patchAssign({ roles: roles.length ? roles : undefined });
+              }}
+              className={INPUT}
+            />
+          </Field>
+        </>
+      )}
     </>
   );
 }

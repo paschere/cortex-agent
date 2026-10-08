@@ -21,6 +21,7 @@ import {
   ViewWriteLimitError,
   archiveView,
   createView,
+  createViewTask,
   editViewRow,
   editViewSubmission,
   loadViewSources,
@@ -32,16 +33,24 @@ import {
 import type { ViewFilterState } from '../views/view-filters';
 import { type AppBrand, type AppHome, parseBrand, parseHome } from './appearance';
 import {
+  type AppLocationSettings,
+  type PersonKind,
+  type locationSettingsPatchSchema,
+  parseLocationSettings,
+} from './location-shape';
+import {
   type AppPermissions,
   type AppUser,
   type ResolvedRole,
   type RowScope,
   adminRole,
   appPermissionsSchema,
+  canAssignTasks,
   canCreateIn,
   canExport,
   canRunAction,
   canSeeScreen,
+  canViewLocations,
   editAccessFor,
   fieldsOutside,
   isOwnRow,
@@ -79,7 +88,7 @@ import {
  */
 
 export const APP_COLUMNS =
-  'id, organization_id, slug, name, description, icon, theme, brand, home, home_screen, status, version, created_by, updated_by, created_at, updated_at, archived_at';
+  'id, organization_id, slug, name, description, icon, theme, brand, home, location, home_screen, status, version, created_by, updated_by, created_at, updated_at, archived_at';
 const SCREEN_COLUMNS =
   'id, app_id, view_id, slug, title, icon, position, roles, created_at, updated_at';
 const ROLE_COLUMNS = 'id, app_id, key, name, description, permissions, position';
@@ -112,6 +121,8 @@ export interface CustomAppRow {
   brand: AppBrand;
   /** Pantalla «Inicio» con tarjetas (0215); null = la app no tiene. */
   home: AppHome | null;
+  /** Compartir ubicación del equipo (0216); apagado por defecto. */
+  location: AppLocationSettings;
   home_screen: string | null;
   status: AppStatus;
   version: number;
@@ -164,6 +175,7 @@ export function adaptApp(row: Record<string, unknown>): CustomAppRow {
     theme: theme.success ? theme.data : {},
     brand: parseBrand(row.brand),
     home: parseHome(row.home),
+    location: parseLocationSettings(row.location),
     home_screen: typeof row.home_screen === 'string' ? row.home_screen : null,
   };
 }
@@ -283,6 +295,8 @@ export async function updateApp(
     theme?: AppTheme;
     brand?: AppBrand;
     home?: AppHome | null;
+    /** Cambio parcial de «Compartir ubicación del equipo». */
+    location?: z.infer<typeof locationSettingsPatchSchema>;
     homeScreen?: string | null;
     status?: AppStatus;
     userId: string;
@@ -300,6 +314,8 @@ export async function updateApp(
   if (input.theme !== undefined) patch.theme = input.theme;
   if (input.brand !== undefined) patch.brand = input.brand;
   if (input.home !== undefined) patch.home = input.home ?? {};
+  if (input.location !== undefined)
+    patch.location = parseLocationSettings({ ...current.location, ...input.location });
   if (input.homeScreen !== undefined) patch.home_screen = input.homeScreen;
   if (input.status !== undefined) {
     // Publicar es abrirle la puerta a quien no es del equipo: se comprueban
@@ -314,6 +330,16 @@ export async function updateApp(
     .select(APP_COLUMNS)
     .single();
   if (error) throw error;
+  // Apagar «Compartir ubicación» borra lo que había: nadie sigue «en turno» ni
+  // queda una posición guardada de una función que ya no existe.
+  if (input.location?.enabled === false && current.location.enabled) {
+    await db.from('custom_app_locations').delete().eq('app_id', current.id);
+    await db
+      .from('custom_app_location_consents')
+      .update({ on_shift: false, shift_ended_at: new Date().toISOString() })
+      .eq('app_id', current.id)
+      .eq('on_shift', true);
+  }
   return adaptApp(data as Record<string, unknown>);
 }
 
@@ -651,7 +677,27 @@ export async function setMember(
   return adaptMember(res.data as Record<string, unknown>);
 }
 
+/**
+ * Borra TODO lo de ubicación de una persona en una app (posición, rastro y
+ * consentimiento): al quitarla de la app o desactivarla. Dónde estuvo alguien
+ * no se queda guardado cuando ya no es parte de la app.
+ */
+export async function eraseLocationOf(
+  db: SupabaseClient,
+  appId: string,
+  kind: PersonKind,
+  id: string,
+): Promise<void> {
+  for (const table of [
+    'custom_app_locations',
+    'custom_app_location_history',
+    'custom_app_location_consents',
+  ])
+    await db.from(table).delete().eq('app_id', appId).eq('subject_kind', kind).eq('subject_id', id);
+}
+
 export async function removeMember(db: SupabaseClient, appId: string, userId: string) {
+  await eraseLocationOf(db, appId, 'member', userId);
   const { error } = await db
     .from('custom_app_members')
     .delete()
@@ -828,6 +874,11 @@ export async function readScreen(
     filters: options.filters ?? {},
     viewer: { id: access.user.id, kind: access.user.external ? 'app_user' : 'member' },
     record,
+    location: {
+      enabled: access.app.location.enabled,
+      canView: canViewLocations(access.role),
+      canAssign: canAssignTasks(access.role),
+    },
   });
   return { view, sources, computed, scope };
 }
@@ -1039,9 +1090,38 @@ export async function runAppAction(
   db: SupabaseClient,
   access: AppAccess,
   view: CustomViewRow,
-  input: { blockId: string; actionId: string; rowId: string; reason?: string | null },
+  input: {
+    blockId: string;
+    actionId: string;
+    rowId: string;
+    reason?: string | null;
+    /** Sólo en «Asignar a…»: a quién ({kind, id}); se vuelve a comprobar aquí. */
+    person?: { kind: PersonKind; id: string } | null;
+  },
 ) {
   const slug = trackerOfBlock(view, input.blockId);
+  const block = findWriteBlock(view.spec, input.blockId);
+  const wanted =
+    block && 'actions' in block ? block.actions.find((a) => a.id === input.actionId) : undefined;
+  if (wanted?.kind === 'assign') {
+    // Asignar es de quien tiene el permiso de asignar Y puede cambiar la tabla.
+    if (!canAssignTasks(access.role))
+      throw new ValidationError('Tu rol en esta aplicación no asigna tareas.');
+    if (editAccessFor(access.role, slug) === 'none')
+      throw new ValidationError('Tu rol en esta aplicación no edita esta tabla.');
+    if (!input.person) throw new ValidationError('Elige a quién asignar.');
+    await assertRowVisible(db, access, slug, input.rowId);
+    await assertExternalBudget(db, access, 'write');
+    const person = await resolveAssignee(db, access, input.person, wanted.roles);
+    return runViewAction(db, view, {
+      blockId: input.blockId,
+      actionId: input.actionId,
+      rowId: input.rowId,
+      person: { id: person.id, name: person.name },
+      actor: access.user.id,
+      actorKind: actorKindOf(access),
+    });
+  }
   if (!canRunAction(access.role, slug, input.actionId)) {
     const approval = input.actionId === APPROVE_ACTION_ID || input.actionId === REJECT_ACTION_ID;
     throw new ValidationError(
@@ -1053,10 +1133,133 @@ export async function runAppAction(
   await assertRowVisible(db, access, slug, input.rowId);
   await assertExternalBudget(db, access, 'write');
   return runViewAction(db, view, {
-    ...input,
+    blockId: input.blockId,
+    actionId: input.actionId,
+    rowId: input.rowId,
+    reason: input.reason,
     actor: access.user.id,
     actorKind: actorKindOf(access),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Tareas: a quién se asigna
+// ---------------------------------------------------------------------------
+
+export interface Assignee {
+  kind: PersonKind;
+  id: string;
+  name: string;
+  email: string | null;
+  roleKey: string;
+}
+
+/**
+ * La persona a quien se asigna, comprobada contra ESTA app: un usuario externo
+ * activo de la app o un miembro de Cortex con rol en ella. Un id de otra app o
+ * de otra empresa es «no existe». `roles` (opcional) limita a qué roles.
+ */
+export async function resolveAssignee(
+  db: SupabaseClient,
+  access: AppAccess,
+  ref: { kind: PersonKind; id: string },
+  roles?: readonly string[],
+): Promise<Assignee> {
+  if (!UUID_RE.test(ref.id)) throw new NotFoundError('Esa persona no está en esta aplicación.');
+  let found: Assignee | null = null;
+  if (ref.kind === 'app_user') {
+    const { data, error } = await db
+      .from('custom_app_users')
+      .select('id, name, email, role_key, status')
+      .eq('app_id', access.app.id)
+      .eq('id', ref.id)
+      .maybeSingle();
+    if (error) throw error;
+    const u = data as {
+      id: string;
+      name: string;
+      email: string;
+      role_key: string;
+      status: string;
+    } | null;
+    if (u && u.status !== 'disabled')
+      found = { kind: 'app_user', id: u.id, name: u.name, email: u.email, roleKey: u.role_key };
+  } else {
+    const { data, error } = await db
+      .from('custom_app_members')
+      .select('user_id, role_key')
+      .eq('app_id', access.app.id)
+      .eq('user_id', ref.id)
+      .maybeSingle();
+    if (error) throw error;
+    const m = data as { user_id: string; role_key: string } | null;
+    if (m) {
+      const { data: u, error: userError } = await db
+        .from('users')
+        .select('id, name, email')
+        .eq('id', m.user_id)
+        .maybeSingle();
+      if (userError) throw userError;
+      const person = u as { id: string; name: string | null; email: string } | null;
+      if (person)
+        found = {
+          kind: 'member',
+          id: person.id,
+          name: person.name || person.email,
+          email: person.email,
+          roleKey: m.role_key,
+        };
+    }
+  }
+  if (!found) throw new NotFoundError('Esa persona no está en esta aplicación.');
+  if (roles?.length && !roles.includes(found.roleKey))
+    throw new ValidationError(`${found.name} no tiene un rol al que se le pueda asignar esto.`);
+  return found;
+}
+
+/**
+ * «Asignar tarea» desde el mapa: crea la fila en la tabla del bloque para esa
+ * persona. Exige el permiso de asignar del rol Y poder crear en la tabla (el
+ * administrador, ambos). Devuelve a quién se asignó para que la capa web avise.
+ */
+export async function assignTaskFromMap(
+  db: SupabaseClient,
+  access: AppAccess,
+  view: CustomViewRow,
+  input: {
+    blockId: string;
+    person: { kind: PersonKind; id: string };
+    title: string;
+    description?: string | null;
+    due?: string | null;
+    dueTime?: string | null;
+    priority?: string | null;
+    location?: string | null;
+  },
+) {
+  const slug = trackerOfBlock(view, input.blockId);
+  if (!canAssignTasks(access.role))
+    throw new ValidationError('Tu rol en esta aplicación no asigna tareas.');
+  if (!canCreateIn(access.role, slug))
+    throw new ValidationError('Tu rol en esta aplicación no registra en esta tabla.');
+  const block = findWriteBlock(view.spec, input.blockId);
+  const roles = block?.type === 'map' ? block.assign?.roles : undefined;
+  const person = await resolveAssignee(db, access, input.person, roles);
+  await assertExternalBudget(db, access, 'write');
+  const created = await createViewTask(db, view, {
+    blockId: input.blockId,
+    person: { id: person.id, name: person.name },
+    title: input.title,
+    description: input.description,
+    due: input.due,
+    dueTime: input.dueTime,
+    priority: input.priority,
+    location: input.location,
+    actor: access.user.id,
+    actorKind: actorKindOf(access),
+    viewer: access.user.name,
+  });
+  return { ...created, person };
 }
 
 export function appCanExport(access: AppAccess): boolean {

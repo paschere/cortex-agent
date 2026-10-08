@@ -157,6 +157,9 @@ importers:
       inngest:
         specifier: 3.54.2
         version: 3.54.2(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(hono@4.6.14)(next@15.5.21(@babel/core@7.29.7)(@opentelemetry/api@1.9.0)(@playwright/test@1.49.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(typescript@5.7.2)(zod@3.25.28)
+      leaflet:
+        specifier: 1.9.4
+        version: 1.9.4
       lucide-react:
         specifier: 0.468.0
         version: 0.468.0(react@19.0.0)
@@ -181,6 +184,9 @@ importers:
       react-dropzone:
         specifier: 14.3.5
         version: 14.3.5(react@19.0.0)
+      react-leaflet:
+        specifier: 5.0.0
+        version: 5.0.0(leaflet@1.9.4)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       react-markdown:
         specifier: ^9.0.1
         version: 9.1.0(@types/react@19.0.1)(react@19.0.0)
@@ -215,6 +221,9 @@ importers:
       '@tailwindcss/typography':
         specifier: ^0.5.19
         version: 0.5.19(tailwindcss@3.4.16)
+      '@types/leaflet':
+        specifier: 1.9.12
+        version: 1.9.12
       '@types/node':
         specifier: 20.17.10
         version: 20.17.10
@@ -3039,6 +3048,13 @@ packages:
   '@radix-ui/rect@1.1.0':
     resolution: {integrity: sha512-A9+lCBZoaMJlVKcRBz2YByCG+Cp2t6nAnMnNba+XiWxnj6r4JUFqfsgwocMBZU9LPtdxC6wB56ySYpc7LQIoJg==}
 
+  '@react-leaflet/core@3.0.0':
+    resolution: {integrity: sha512-3EWmekh4Nz+pGcr+xjf0KNyYfC3U2JjnkWsh0zcqaexYqmmB5ZhH37kz41JXGmKzpaMZCnPofBBm64i+YrEvGQ==}
+    peerDependencies:
+      leaflet: ^1.9.0
+      react: ^19.0.0
+      react-dom: ^19.0.0
+
   '@react-three/drei@10.7.8':
     resolution: {integrity: sha512-rJXyuzLm2Xq0kafHuR47ajDGbOe/pEhzIr4m8E8zwzQs0iNjloFDqBwRhrXmP/w+onLeYyN3EYPFW/cwWK/4yA==}
     peerDependencies:
@@ -3501,11 +3517,17 @@ packages:
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
+  '@types/geojson@7946.0.16':
+    resolution: {integrity: sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==}
+
   '@types/hast@3.0.4':
     resolution: {integrity: sha512-WPs+bbQw5aCj+x6laNGWLH3wviHtoCv/P3+otBhbOhJgG8qtpdAMlTCxLtsTWA7LH1Oh/bFCHsBn0TPS5m30EQ==}
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
+
+  '@types/leaflet@1.9.12':
+    resolution: {integrity: sha512-BK7XS+NyRI291HIo0HCfE18Lp8oA30H1gpi1tf0mF3TgiCEzanQjOqNZ4x126SXzzi2oNSZhZ5axJp1k0iM6jg==}
 
   '@types/mdast@4.0.4':
     resolution: {integrity: sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==}
@@ -5001,6 +5023,9 @@ packages:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
     engines: {node: '>= 0.6.3'}
 
+  leaflet@1.9.4:
+    resolution: {integrity: sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==}
+
   libsignal@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7:
     resolution: {tarball: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7}
     version: 6.0.0
@@ -5853,6 +5878,13 @@ packages:
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
+
+  react-leaflet@5.0.0:
+    resolution: {integrity: sha512-CWbTpr5vcHw5bt9i4zSlPEVQdTVcML390TjeDG0cK59z1ylexpqC6M1PJFjV8jD7CF+ACBFsLIDs6DRMoLEofw==}
+    peerDependencies:
+      leaflet: ^1.9.0
+      react: ^19.0.0
+      react-dom: ^19.0.0
 
   react-markdown@9.1.0:
     resolution: {integrity: sha512-xaijuJB0kzGiUdG7nc2MOMDUDBWPyGAjZtUrow9XxUeua8IqeP+VlIfAZ3bphpcLTnSZXz6z9jcVC/TCwbfgdw==}
@@ -9486,6 +9518,12 @@ snapshots:
 
   '@radix-ui/rect@1.1.0': {}
 
+  '@react-leaflet/core@3.0.0(leaflet@1.9.4)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)':
+    dependencies:
+      leaflet: 1.9.4
+      react: 19.0.0
+      react-dom: 19.0.0(react@19.0.0)
+
   '@react-three/drei@10.7.8(@react-three/fiber@9.7.0(@types/react@19.0.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(three@0.185.1))(@types/react@19.0.1)(@types/three@0.185.4)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(three@0.185.1)':
     dependencies:
       '@babel/runtime': 7.29.7
@@ -9984,11 +10022,17 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
+  '@types/geojson@7946.0.16': {}
+
   '@types/hast@3.0.4':
     dependencies:
       '@types/unist': 3.0.3
 
   '@types/json-schema@7.0.15': {}
+
+  '@types/leaflet@1.9.12':
+    dependencies:
+      '@types/geojson': 7946.0.16
 
   '@types/mdast@4.0.4':
     dependencies:
@@ -11597,6 +11641,8 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
+  leaflet@1.9.4: {}
+
   libsignal@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7:
     dependencies:
       curve25519-js: 0.0.4
@@ -12656,6 +12702,13 @@ snapshots:
       react: 19.0.0
 
   react-is@16.13.1: {}
+
+  react-leaflet@5.0.0(leaflet@1.9.4)(react-dom@19.0.0(react@19.0.0))(react@19.0.0):
+    dependencies:
+      '@react-leaflet/core': 3.0.0(leaflet@1.9.4)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      leaflet: 1.9.4
+      react: 19.0.0
+      react-dom: 19.0.0(react@19.0.0)
 
   react-markdown@9.1.0(@types/react@19.0.1)(react@19.0.0):
     dependencies:

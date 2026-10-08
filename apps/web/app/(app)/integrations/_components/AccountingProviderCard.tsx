@@ -8,7 +8,7 @@ import {
   ENTITY_LABELS,
   INTERVAL_OPTIONS,
 } from '@/lib/accounting/card';
-import type { AccountingEntity } from '@cortex/agent-tools';
+import type { AccountingSelection } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { Calculator } from 'lucide-react';
 import Link from 'next/link';
@@ -44,7 +44,7 @@ const TONE: Record<CardTone, { pill: string; label: string }> = {
   idle: { pill: 'bg-surface-2 text-ink-muted', label: 'Sin conectar' },
 };
 
-function entityLabel(card: AccountingCardData, entity: AccountingEntity): string {
+function entityLabel(card: AccountingCardData, entity: AccountingSelection): string {
   return entity === 'payments' ? card.provider.paymentsLabel : ENTITY_LABELS[entity];
 }
 
@@ -55,15 +55,15 @@ function EntityPicker({
   disabled,
 }: {
   card: AccountingCardData;
-  value: AccountingEntity[];
-  onChange: (next: AccountingEntity[]) => void;
+  value: AccountingSelection[];
+  onChange: (next: AccountingSelection[]) => void;
   disabled: boolean;
 }) {
   return (
     <fieldset className="mt-3">
       <legend className="text-xs font-semibold text-ink">Qué traer</legend>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {card.provider.entities.map((entity) => {
+        {[...card.provider.entities, ...card.provider.options].map((entity) => {
           const on = value.includes(entity);
           return (
             <button
@@ -84,6 +84,13 @@ function EntityPicker({
           );
         })}
       </div>
+      {card.provider.options.includes('payroll') ? (
+        <p className="mt-1.5 text-xs leading-snug text-ink-muted">
+          Nómina: {card.provider.name} no tiene API de nómina; se leen los comprobantes contables de
+          nómina (cuentas 5105, 2505, 2370…). Es confidencial: el detalle por persona lo ve sólo
+          quien administra la empresa, el resto ve totales. Está apagada hasta que la actives.
+        </p>
+      ) : null}
     </fieldset>
   );
 }
@@ -138,7 +145,7 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
     card.connected ? 'view' : 'connect',
   );
   const [credentials, setCredentials] = useState<Record<string, string>>({});
-  const [entities, setEntities] = useState<AccountingEntity[]>(card.entities);
+  const [entities, setEntities] = useState<AccountingSelection[]>(card.entities);
   const [intervalMinutes, setIntervalMinutes] = useState<number>(card.intervalMinutes);
   const [notify, setNotify] = useState<boolean>(card.notify);
   const [enabled, setEnabled] = useState<boolean>(card.enabled);

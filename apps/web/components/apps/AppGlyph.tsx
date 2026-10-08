@@ -9,6 +9,7 @@ import {
   LayoutPanelTop,
   ListChecks,
   type LucideIcon,
+  Map as MapIcon,
   Package,
   Table2,
   Truck,
@@ -33,6 +34,7 @@ export const APP_ICONS: Record<string, LucideIcon> = {
   Calendar,
   Package,
   LayoutPanelTop,
+  Map: MapIcon,
 };
 
 export function Glyph({ name, className }: { name: string; className?: string }) {

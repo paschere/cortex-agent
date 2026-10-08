@@ -1,17 +1,37 @@
 import 'server-only';
 
 import {
+  type AppPayload,
+  type AutomationPayload,
   type ClientPayload,
   type CommitmentPayload,
   type FlowPayload,
   type RoutinePayload,
   type SetupItem,
   type SpacePayload,
+  type TablePayload,
+  type ViewPayload,
+  fieldKeyOf,
+  identifierOf,
+  needsManager,
   normalizeProposal,
   slugify,
 } from '@/lib/guided-setup-shape';
+import {
+  computeNextRun,
+  createCommitment,
+  createView,
+  defineTracker,
+  getApp,
+  getTrackerBySlug,
+  isValidCron,
+  listApps,
+  registerClient,
+  trackerFieldsSchema,
+  validateSpec,
+} from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { computeNextRun, createCommitment, isValidCron, registerClient } from '@cortex/agent-tools';
+import { designAndCreateApp, designAndCreateAutomation, designView } from './designers';
 
 /**
  * DONDE LA CONVERSACIÓN SE VUELVE COSAS.
@@ -61,7 +81,7 @@ import { computeNextRun, createCommitment, isValidCron, registerClient } from '@
 export interface ApplyOutcome {
   itemId: string;
   ok: boolean;
-  /** 'created' | 'merged' | 'failed' */
+  /** 'created' | 'merged' | 'failed' | 'handoff' */
   status: SetupItem['status'];
   targetTable?: string;
   targetId?: string;
@@ -77,6 +97,18 @@ export interface CreateContext {
   canCreateGlobalSpace: boolean;
   /** Hoy en Bogotá, `YYYY-MM-DD`. Se pasa para que el test no dependa del reloj. */
   today: string;
+  /**
+   * Sólo dueños y administradores crean aplicaciones y automatizaciones. Si se
+   * omite, vale lo mismo que `canCreateGlobalSpace` (el mismo rol).
+   */
+  canManageApps?: boolean;
+  /** Para el diseñador de vistas: el nombre de la empresa. */
+  organizationName?: string;
+  /**
+   * Las aplicaciones que ESTE lote ya creó, por título en minúscula. Una
+   * automatización propuesta junto a su aplicación la encuentra aquí.
+   */
+  apps?: Map<string, { id: string; name: string }>;
 }
 
 export async function createOne(ctx: CreateContext, item: SetupItem): Promise<ApplyOutcome> {
@@ -87,6 +119,15 @@ export async function createOne(ctx: CreateContext, item: SetupItem): Promise<Ap
   );
   if (!check.ok) {
     return { itemId: item.id, ok: false, status: 'failed', error: check.reason };
+  }
+
+  if (needsManager(item.kind) && !(ctx.canManageApps ?? ctx.canCreateGlobalSpace)) {
+    return {
+      itemId: item.id,
+      ok: false,
+      status: 'failed',
+      error: 'Sólo quien administra la empresa puede crear aplicaciones y automatizaciones.',
+    };
   }
 
   try {
@@ -101,6 +142,14 @@ export async function createOne(ctx: CreateContext, item: SetupItem): Promise<Ap
         return await createClientItem(ctx, item, check.item.payload as ClientPayload);
       case 'space':
         return await createSpaceItem(ctx, item, check.item.payload as SpacePayload);
+      case 'table':
+        return await createTableItem(ctx, item, check.item.payload as TablePayload);
+      case 'view':
+        return await createViewItem(ctx, item, check.item.payload as ViewPayload);
+      case 'app':
+        return await createAppItem(ctx, item, check.item.payload as AppPayload);
+      case 'automation':
+        return await createAutomationItem(ctx, item, check.item.payload as AutomationPayload);
     }
   } catch (err) {
     return { itemId: item.id, ok: false, status: 'failed', error: message(err) };
@@ -320,6 +369,196 @@ async function createSpaceItem(
 }
 
 // ---------------------------------------------------------------------------
+// Tablas, pantallas, aplicaciones y automatizaciones: BORRADORES
+// ---------------------------------------------------------------------------
+
+/**
+ * Sin duplicar el texto del pedido en cada rama: lo que no se pudo crear aquí
+ * no es un fallo, es un pedido que sigue en pie. El ítem queda en `handoff` y
+ * la pantalla ofrece «Seguir en el chat» con el pedido ya escrito
+ * (`chatHref` en guided-setup-shape.ts).
+ */
+function handoff(item: SetupItem, why: string): ApplyOutcome {
+  return { itemId: item.id, ok: true, status: 'handoff', error: why };
+}
+
+/** Un identificador libre: el de `base` o con sufijo, sin pisar una tabla que ya existe. */
+async function freeTrackerSlug(db: SupabaseClient, base: string): Promise<string> {
+  let slug = base.slice(0, 44);
+  for (let n = 2; await getTrackerBySlug(db, slug); n++) slug = `${base.slice(0, 44)}_${n}`;
+  return slug;
+}
+
+/**
+ * Una tabla con las columnas que la persona dijo, con `defineTracker`. Nunca
+ * redefine una que ya existe: `defineTracker` sobrescribe el esquema, y pisar
+ * las columnas de una tabla con filas es perder datos por una conversación.
+ *
+ * Con una hoja de Google o una carpeta de Drive nombrada no se crea nada: la
+ * fuente primero se LEE y se propone (trackers.propose_from_source /
+ * propose_from_drive_folder), y eso pide la aprobación de la persona en el chat.
+ */
+async function createTableItem(
+  ctx: CreateContext,
+  item: SetupItem,
+  payload: TablePayload,
+): Promise<ApplyOutcome> {
+  if (payload.source) {
+    return handoff(
+      item,
+      payload.source.kind === 'sheet'
+        ? 'Primero leo tu hoja y te propongo la tabla en el chat.'
+        : 'Primero leo tu carpeta y te propongo la tabla en el chat.',
+    );
+  }
+  const taken = new Set<string>();
+  const fields = payload.fields.map((f) => {
+    const key = fieldKeyOf(f.label, taken);
+    taken.add(key);
+    return {
+      key,
+      label: f.label,
+      type: f.type,
+      required: f.required ?? false,
+      ...(f.type === 'select' ? { options: f.options } : {}),
+    };
+  });
+  const parsed = trackerFieldsSchema.safeParse(fields);
+  if (!parsed.success) {
+    return {
+      itemId: item.id,
+      ok: false,
+      status: 'failed',
+      error: `Las columnas no sirven: ${parsed.error.issues[0]?.message ?? 'revisa los tipos'}.`,
+    };
+  }
+  const slug = await freeTrackerSlug(ctx.db, identifierOf(payload.name));
+  const { tracker } = await defineTracker(ctx.db, {
+    slug,
+    name: payload.name,
+    description: payload.description,
+    fields: parsed.data,
+    userId: ctx.userId,
+  });
+  return {
+    itemId: item.id,
+    ok: true,
+    status: 'created',
+    targetTable: 'trackers',
+    targetId: tracker.slug,
+  };
+}
+
+/**
+ * Una pantalla del equipo con el diseñador de vistas de siempre. Queda interna:
+ * `createView` no la comparte ni la fija, y compartirla es un paso aparte.
+ * Las tablas nuevas que el diseñador propone se crean sólo si no existen.
+ */
+async function createViewItem(
+  ctx: CreateContext,
+  item: SetupItem,
+  payload: ViewPayload,
+): Promise<ApplyOutcome> {
+  const designed = await designView(
+    ctx.db,
+    { id: ctx.userId, organizationName: ctx.organizationName ?? '' },
+    payload,
+  );
+  if (!designed.ok) return handoff(item, designed.reason);
+
+  for (const t of designed.value.newTrackers) {
+    if (await getTrackerBySlug(ctx.db, t.slug)) continue;
+    await defineTracker(ctx.db, { ...t, userId: ctx.userId } as Parameters<
+      typeof defineTracker
+    >[1]);
+  }
+  const spec = await validateSpec(ctx.db, designed.value.spec, { viewerId: ctx.userId });
+  const view = await createView(ctx.db, {
+    name: payload.name,
+    description: designed.value.description,
+    spec,
+    userId: ctx.userId,
+    prompt: 'Preparada en la entrevista de puesta en marcha',
+  });
+  return {
+    itemId: item.id,
+    ok: true,
+    status: 'created',
+    targetTable: 'custom_views',
+    targetId: view.slug,
+  };
+}
+
+/** Una aplicación como borrador: sin publicar y sin miembros. */
+async function createAppItem(
+  ctx: CreateContext,
+  item: SetupItem,
+  payload: AppPayload,
+): Promise<ApplyOutcome> {
+  const designed = await designAndCreateApp(
+    ctx.db,
+    { id: ctx.userId, organizationName: ctx.organizationName ?? '' },
+    payload,
+  );
+  if (!designed.ok) return handoff(item, designed.reason);
+  ctx.apps?.set(item.title.trim().toLowerCase(), {
+    id: designed.value.appId,
+    name: designed.value.name,
+  });
+  return {
+    itemId: item.id,
+    ok: true,
+    status: 'created',
+    targetTable: 'custom_apps',
+    targetId: designed.value.appId,
+  };
+}
+
+/** La aplicación a la que apunta una automatización: la de este lote o una que ya existe. */
+async function appFor(
+  ctx: CreateContext,
+  ref: string,
+): Promise<{ id: string; name: string } | null> {
+  const wanted = ref.trim().toLowerCase();
+  const own = ctx.apps?.get(wanted);
+  if (own) return own;
+  const direct = await getApp(ctx.db, ref.trim()).catch(() => null);
+  if (direct) return { id: direct.id, name: direct.name };
+  const all = await listApps(ctx.db, 60);
+  const byName = all.find((a) => a.name.trim().toLowerCase() === wanted && !a.archived_at);
+  return byName ? { id: byName.id, name: byName.name } : null;
+}
+
+/** Una regla en palabras, convertida y guardada EN PAUSA. La activa la persona. */
+async function createAutomationItem(
+  ctx: CreateContext,
+  item: SetupItem,
+  payload: AutomationPayload,
+): Promise<ApplyOutcome> {
+  const app = await appFor(ctx, payload.app);
+  if (!app) {
+    return handoff(
+      item,
+      `No encontré la aplicación «${payload.app}» (si no se pudo preparar, esta regla espera).`,
+    );
+  }
+  const designed = await designAndCreateAutomation(
+    ctx.db,
+    { id: ctx.userId, organizationName: ctx.organizationName ?? '' },
+    app,
+    payload,
+  );
+  if (!designed.ok) return handoff(item, designed.reason);
+  return {
+    itemId: item.id,
+    ok: true,
+    status: 'created',
+    targetTable: 'custom_app_automations',
+    targetId: `${app.id}:${designed.value.automationId}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Deshacer
 // ---------------------------------------------------------------------------
 
@@ -357,11 +596,68 @@ export async function undoOne(db: SupabaseClient, item: SetupItem): Promise<Undo
       }
     }
 
+    const special = await undoBuilt(db, item);
+    if (special) return special;
+
     const { error } = await db.from(item.targetTable).delete().eq('id', item.targetId);
     if (error) throw error;
     return { ok: true };
   } catch (err) {
     return { ok: false, error: message(err) };
+  }
+}
+
+/**
+ * Deshacer lo que se construyó. Cada uno con su freno, porque entre crear y
+ * deshacer alguien pudo empezar a usarlo:
+ *   tabla       con filas adentro no se borra.
+ *   vista       se borra por su identificador, sólo si sigue siendo una vista suelta.
+ *   aplicación  sólo mientras siga siendo borrador; publicada ya la usa gente.
+ *   automatización  se borra por su id; el id de la app viaja delante.
+ */
+async function undoBuilt(db: SupabaseClient, item: SetupItem): Promise<UndoOutcome | null> {
+  const id = item.targetId as string;
+  switch (item.targetTable) {
+    case 'trackers': {
+      const tracker = await getTrackerBySlug(db, id);
+      if (!tracker) return { ok: true };
+      const { count } = await db
+        .from('tracker_rows')
+        .select('id', { count: 'exact', head: true })
+        .eq('tracker_id', tracker.id);
+      if ((count ?? 0) > 0) {
+        return { ok: false, error: 'Esa tabla ya tiene filas adentro. No la borro.' };
+      }
+      const { error } = await db.from('trackers').delete().eq('slug', id);
+      if (error) throw error;
+      return { ok: true };
+    }
+    case 'custom_views': {
+      const { error } = await db.from('custom_views').delete().eq('slug', id).is('app_id', null);
+      if (error) throw error;
+      return { ok: true };
+    }
+    case 'custom_apps': {
+      const { data } = await db.from('custom_apps').select('status').eq('id', id).maybeSingle();
+      if (data && (data as { status?: string }).status === 'published') {
+        return { ok: false, error: 'Esa aplicación ya está publicada. No la borro.' };
+      }
+      const { error } = await db.from('custom_apps').delete().eq('id', id);
+      if (error) throw error;
+      return { ok: true };
+    }
+    case 'custom_app_automations': {
+      const [appId, automationId] = id.split(':');
+      const { error } = await db
+        .from('custom_app_automations')
+        .delete()
+        .eq('id', automationId ?? '')
+        .eq('app_id', appId ?? '');
+      if (error) throw error;
+      return { ok: true };
+    }
+    default:
+      return null;
   }
 }
 

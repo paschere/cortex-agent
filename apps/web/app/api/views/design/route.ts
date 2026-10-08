@@ -1,33 +1,9 @@
 import { isSameOrigin } from '@/lib/activations/request';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import {
-  type DesignCatalogEntry,
-  VIEW_DESIGNER_SYSTEM,
-  checkDesign,
-  designInput,
-  modelDesignSchema,
-  salvageDesign,
-  sampleOf,
-} from '@/lib/views/design';
-import {
-  NO_THINKING,
-  type ViewSource,
-  chatModel,
-  checkMeter,
-  computeView,
-  consumeToken,
-  getView,
-  isRefused,
-  loadViewSources,
-  queryRows,
-  readPlatformSource,
-  trackersOf,
-  viewCatalog,
-  viewSpecSchema,
-} from '@cortex/agent-tools';
-import { logger } from '@cortex/core';
-import { generateObject } from 'ai';
+import { designInput } from '@/lib/views/design';
+import { runViewDesign } from '@/lib/views/design-run';
+import { checkMeter, consumeToken, isRefused } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -61,152 +37,15 @@ export async function POST(req: NextRequest) {
         { status: 429 },
       );
 
-    const current = parsed.data.viewId
-      ? await getView(db, parsed.data.viewId, { appScreens: true })
-      : null;
-    if (parsed.data.viewId && !current)
-      return NextResponse.json({ error: 'Esa vista ya no existe.' }, { status: 404 });
-
-    // Lo que la vista ya usa: el borrador que se está afinando o la versión
-    // guardada. Una tabla del Feed de esa lista que esta persona no puede leer
-    // entra como `unavailable` (se conserva sin abrirla).
-    const draftSpec = viewSpecSchema.safeParse(parsed.data.draft?.spec);
-    const keep = draftSpec.success
-      ? trackersOf(draftSpec.data)
-      : current
-        ? trackersOf(current.spec)
-        : [];
-    const full = await viewCatalog(db, { viewerId: user.id, keep });
-    // Hasta 20 tablas del espacio, todas las fuentes de la plataforma y las
-    // tablas del Feed de ESTA persona. Las muestras de una fuente de la
-    // plataforma son tres filas leídas por su propio lector (las personales,
-    // con las filas de quien diseña); si una no contesta, va sin muestra y el
-    // diseño sigue. Las del Feed ya traen su muestra del listado.
-    // Una fuente de un módulo apagado no se ofrece, salvo que la vista ya la
-    // use: entonces entra marcada `unavailable` y se conserva tal cual.
-    const entries = [
-      ...full.filter((t) => t.kind === 'tracker').slice(0, 20),
-      ...full.filter((t) => t.kind === 'platform' && (!t.moduleOff || keep.includes(t.slug))),
-      ...full.filter((t) => t.kind === 'feed'),
-    ];
-    const catalog: DesignCatalogEntry[] = await Promise.all(
-      entries.map(async (t) => {
-        const rows =
-          t.kind === 'feed'
-            ? (t.sample ?? [])
-            : t.kind === 'platform'
-              ? ((
-                  await readPlatformSource(db, t.slug, 3, undefined, { viewerId: user.id }).catch(
-                    () => null,
-                  )
-                )?.rows ?? [])
-              : t.rowCount
-                ? await queryRows(db, { trackerId: t.id, limit: 3 })
-                : [];
-        return {
-          slug: t.slug,
-          name: t.name,
-          description: t.description,
-          kind: t.kind,
-          sensitivity: t.sensitivity,
-          rowCount: t.rowCount,
-          fields: t.fields,
-          sample: sampleOf(rows.map((r) => ({ label: r.label, ...r.values }))),
-          ...(t.opaque || t.moduleOff ? { unavailable: true } : {}),
-        };
-      }),
+    const outcome = await runViewDesign(
+      db,
+      { id: user.id, organizationName: user.organization.name },
+      parsed.data,
+      req.signal,
     );
-
-    const ask = (extra?: Record<string, unknown>) =>
-      generateObject({
-        model: chatModel(),
-        experimental_providerMetadata: NO_THINKING,
-        schema: modelDesignSchema,
-        maxTokens: 12000,
-        abortSignal: AbortSignal.any([req.signal, AbortSignal.timeout(75000)]),
-        system: VIEW_DESIGNER_SYSTEM,
-        prompt: JSON.stringify({
-          company: user.organization.name,
-          today: new Date().toISOString().slice(0, 10),
-          request: parsed.data.prompt,
-          currentView: parsed.data.draft
-            ? {
-                name: parsed.data.draft.name,
-                description: parsed.data.draft.description,
-                spec: parsed.data.draft.spec,
-                proposedNewTrackers: parsed.data.draft.newTrackers,
-              }
-            : current
-              ? { name: current.name, description: current.description, spec: current.spec }
-              : null,
-          catalog,
-          ...extra,
-        }),
-      });
-
-    let { object } = await ask();
-    if (object.questions.length && !object.specJson.trim())
-      return NextResponse.json({
-        status: 'needs_input',
-        explanation: object.explanation,
-        questions: object.questions,
-      });
-    let checked = checkDesign(object, catalog);
-    if (!checked.ok) {
-      ({ object } = await ask({
-        previousAttempt: object.specJson.slice(0, 20000),
-        problems: checked.problems,
-        instruction: 'Corrige exactamente estos problemas y devuelve la vista completa otra vez.',
-      }));
-      checked = checkDesign(object, catalog);
-    }
-    if (!checked.ok) {
-      logger.warn(
-        { problems: checked.problems.slice(0, 8) },
-        'view designer: second attempt still invalid',
-      );
-      const salvaged = salvageDesign(object, catalog);
-      if (salvaged) {
-        checked = {
-          ok: true,
-          result: {
-            ...salvaged.result,
-            explanation:
-              `${salvaged.result.explanation} Dejé por fuera ${salvaged.dropped.length === 1 ? 'un bloque que no cuadraba' : `${salvaged.dropped.length} bloques que no cuadraban`} con tus tablas; pídemelo de otra forma o agrégalo en el lienzo.`.trim(),
-          },
-        };
-      }
-    }
-    if (!checked.ok)
-      return NextResponse.json({
-        status: 'needs_input',
-        explanation: 'No logré armar una vista que cuadre con tus tablas.',
-        questions: object.questions.length
-          ? object.questions
-          : ['¿Qué tabla y qué cifras quieres ver? Nombrarlas me ayuda a acertar.'],
-      });
-
-    const draft = checked.result;
-    const sources = await loadViewSources(db, draft.spec, { viewerId: user.id });
-    for (const t of draft.newTrackers)
-      if (!sources.has(t.slug))
-        sources.set(t.slug, { tracker: t, rows: [], truncated: false } satisfies ViewSource);
-
-    return NextResponse.json({
-      status: 'ready',
-      draft: {
-        name:
-          (parsed.data.draft ?? current) && !/nombre|llam|renombr|título/i.test(parsed.data.prompt)
-            ? (parsed.data.draft?.name ?? current?.name ?? draft.name)
-            : draft.name,
-        description: draft.description || current?.description || '',
-        explanation: draft.explanation,
-        spec: draft.spec,
-        newTrackers: draft.newTrackers,
-      },
-      preview: computeView(draft.spec, sources),
-      baseVersion: current?.version ?? null,
-    });
+    if (outcome.status === 'not_found')
+      return NextResponse.json({ error: 'Esa vista ya no existe.' }, { status: 404 });
+    return NextResponse.json(outcome);
   } catch (error) {
     if (error instanceof Error && error.name === 'RateLimitError')
       return NextResponse.json({ error: 'Vas muy rápido. Espera un momento.' }, { status: 429 });

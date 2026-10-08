@@ -1,4 +1,5 @@
 import type { ProviderWriter } from '../close/writeback/shape';
+import type { PayrollPage } from './payroll-provider';
 import type { PurchasePage } from './providers/purchases';
 import type { ProviderReports } from './providers/reports';
 /**
@@ -26,6 +27,15 @@ export const ACCOUNTING_ENTITIES: readonly AccountingEntity[] = [
   'invoices',
   'payments',
 ] as const;
+
+/**
+ * Cosas opcionales que se traen aparte de las tablas (0217). No llenan Tablas
+ * ni la cartera: la nómina es confidencial y vive en su propia tabla.
+ */
+export type AccountingOption = 'payroll';
+export const ACCOUNTING_OPTIONS: readonly AccountingOption[] = ['payroll'] as const;
+/** Lo que una conexión puede traer: las cosas de siempre y las opcionales. */
+export type AccountingSelection = AccountingEntity | AccountingOption;
 
 export interface NormalizedCustomer {
   externalId: string;
@@ -164,6 +174,11 @@ export interface ProviderSession {
   /** Al desconectar: avisarle al programa que la llave ya no se usa (OAuth). Nunca lanza. */
   revoke?(): Promise<void>;
   /**
+   * Comprobantes contables de nómina desde `since` (AAAA-MM-DD), página a
+   * página (0217). Sólo lectura; payroll.ts dice qué cuentas cuentan.
+   */
+  listPayroll?(since: string, page: number): Promise<PayrollPage>;
+  /**
    * Compras / facturas de proveedor desde `since` (AAAA-MM-DD), página a
    * página (0181, cuentas por pagar). Sólo lectura; providers/purchases.ts.
    */
@@ -254,6 +269,8 @@ export interface AccountingProvider {
   /** El campo de la llave que identifica la cuenta sin ser secreto. */
   accountLabelField: string;
   entities: readonly AccountingEntity[];
+  /** Cosas opcionales (apagadas por defecto) que este programa también sabe traer. */
+  options?: readonly AccountingOption[];
   /** Cómo se llaman los pagos en este programa («Recibos de caja»). */
   paymentsLabel?: string;
   /**
@@ -293,6 +310,8 @@ export interface ProviderInfo {
   credentialsHelp: string;
   credentialFields: CredentialField[];
   entities: AccountingEntity[];
+  /** Opcionales que se pueden activar (nómina). */
+  options: AccountingOption[];
   paymentsLabel: string;
   connect: 'credentials' | 'oauth';
   /** Qué falta configurar en la instalación para conectarlo; `null` si nada. */

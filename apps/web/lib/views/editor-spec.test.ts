@@ -16,6 +16,7 @@ import {
   problemsFromCheck,
   problemsFromZod,
   removeBlock,
+  sourceRefusal,
   uniqueBlockId,
   withSource,
 } from './editor-spec';
@@ -47,6 +48,14 @@ const remates: EditorSource = {
     { key: 'cierre', label: 'Cierre', type: 'date', required: false },
     { key: 'notas', label: 'Notas', type: 'text', required: false },
   ],
+};
+
+/** Una tabla con lugar: la que un mapa necesita (sin un campo de ubicación el mapa no nace). */
+const entregas: EditorSource = {
+  ...remates,
+  slug: 'entregas',
+  name: 'Entregas',
+  fields: [...remates.fields, { key: 'lugar', label: 'Lugar', type: 'location', required: false }],
 };
 
 const platform: EditorSource[] = [...PLATFORM_SOURCES.values()].map((s) => ({
@@ -106,8 +115,9 @@ describe('operaciones del lienzo', () => {
   });
 
   it('cada plantilla de la paleta pasa el contrato y el catálogo', () => {
-    const sources = [remates, ...platform];
     for (const type of KNOWN_BLOCK_TYPES) {
+      // El mapa necesita un campo de ubicación; ver el caso aparte de abajo.
+      const sources = type === 'map' ? [remates, entregas, ...platform] : [remates, ...platform];
       let spec = base();
       // El asistente de voz maneja un formulario de la vista: sin uno no nace.
       if (type === 'voice') {
@@ -122,6 +132,22 @@ describe('operaciones del lienzo', () => {
       expect(parsed.success, `${type}: ${parsed.error?.message}`).toBe(true);
       if (parsed.success)
         expect(checkSpecAgainst(parsed.data, catalogOf(sources)), type).toEqual([]);
+    }
+  });
+
+  it('el mapa nace sobre una tabla con lugar, apuntando a su campo de ubicación; sin una no se ofrece', () => {
+    const spec = base();
+    const block = newBlock('map', spec, [remates, entregas]);
+    expect(block?.type === 'map' ? block.tracker : null).toBe('entregas');
+    expect(block?.type === 'map' ? block.locationField : null).toBe('lugar');
+    expect(block?.type === 'map' ? block.colorField : null).toBe('ciudad');
+    expect(newBlock('map', spec, [remates])).toBeNull();
+    expect(sourceRefusal('map', remates)).toMatch(/campo de ubicación/);
+    expect(sourceRefusal('map', entregas)).toBeNull();
+    // Cambiar la fuente de un mapa a una tabla sin lugar no deja un campo inexistente.
+    if (block) {
+      const moved = withSource(block, entregas);
+      expect(moved.type === 'map' ? moved.locationField : null).toBe('lugar');
     }
   });
 

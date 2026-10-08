@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getTrackerBySlug, queryRows } from '../trackers/store';
-import { type AppPermissions, USER_ATTRIBUTE_RE } from './permissions';
+import { type AppPermissions, USER_ATTRIBUTE_RE, USER_ID_ATTRIBUTE } from './permissions';
 
 /**
  * PORTAL DE CLIENTES: LOS VALORES REALES DE UN ATRIBUTO (fase 4).
@@ -28,7 +28,7 @@ export async function attributeValueSuggestions(
     for (const [tracker, perm] of Object.entries(role.permissions.tables)) {
       if (typeof perm.read !== 'object') continue;
       const attr = USER_ATTRIBUTE_RE.exec(perm.read.equals)?.[1];
-      if (!attr) continue;
+      if (!attr || attr === USER_ID_ATTRIBUTE) continue;
       const key = `${tracker}\u0000${perm.read.field}`;
       const set = wanted.get(attr) ?? new Set<string>();
       set.add(key);

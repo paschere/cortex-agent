@@ -2,6 +2,7 @@ import type {
   AccountingConnectionRow,
   AccountingEntity,
   AccountingProviderInfo,
+  AccountingSelection,
 } from '@cortex/agent-tools';
 
 /**
@@ -13,11 +14,13 @@ import type {
  * aquí y no en el componente para poder probarlas sin React.
  */
 
-export const ENTITY_LABELS: Record<AccountingEntity, string> = {
+export const ENTITY_LABELS: Record<AccountingSelection, string> = {
   customers: 'Clientes',
   products: 'Productos',
   invoices: 'Facturas de venta',
   payments: 'Pagos recibidos',
+  // 0217: Siigo no tiene API de nómina; se leen los comprobantes contables.
+  payroll: 'Nómina (desde los comprobantes contables)',
 };
 
 export const INTERVAL_OPTIONS = [
@@ -35,7 +38,7 @@ export interface AccountingCardData {
   provider: AccountingProviderInfo;
   connected: boolean;
   accountLabel: string | null;
-  entities: AccountingEntity[];
+  entities: AccountingSelection[];
   intervalMinutes: number;
   notify: boolean;
   enabled: boolean;
@@ -44,7 +47,7 @@ export interface AccountingCardData {
   status: string;
   error: string | null;
   /** Qué trajo la última corrida, por cosa, en frases cortas. */
-  lines: Array<{ entity: AccountingEntity; label: string; text: string; href: string | null }>;
+  lines: Array<{ entity: AccountingSelection; label: string; text: string; href: string | null }>;
   purchaseStatus: string | null;
 }
 
@@ -105,6 +108,19 @@ export function buildAccountingCards(
       };
     const { tone, status } = statusOf(conn, now);
     const lines = conn.entities.map((entity) => {
+      if (entity === 'payroll') {
+        const c = conn.cursors?.payroll;
+        return {
+          entity,
+          label: ENTITY_LABELS.payroll,
+          text: c?.resume
+            ? `Trayendo historial (página ${c.resume.page}) · confidencial: el detalle por persona lo ve sólo quien administra`
+            : c?.since
+              ? 'Carga inicial finalizada · confidencial: el detalle por persona lo ve sólo quien administra'
+              : 'Carga inicial pendiente',
+          href: null,
+        };
+      }
       const n = conn.last_counts?.[entity];
       const label = entity === 'payments' ? provider.paymentsLabel : ENTITY_LABELS[entity];
       const activity = n

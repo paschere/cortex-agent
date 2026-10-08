@@ -373,3 +373,83 @@ html:root
 .view-print-only {
   display: none;
 }
+
+/* --- El mapa (bloque «map», Leaflet) ---------------------------------------
+   Las teselas de OpenStreetMap son claras. En modo oscuro se invierten (con el
+   tono girado para que el agua siga siendo azul) y no se tocan los marcadores
+   ni los controles. Los dos caminos de globals.css, repetidos a propósito. */
+.cx-map {
+  z-index: 0;
+  background: rgb(var(--surface-2));
+  font: inherit;
+}
+.cx-map.cx-map--picking {
+  cursor: crosshair;
+}
+.cx-map .leaflet-control-attribution {
+  font-size: 10px;
+}
+.cx-map .leaflet-popup-content-wrapper,
+.cx-map .leaflet-control-zoom a {
+  color: rgb(var(--ink));
+}
+@media screen {
+  :root[data-theme="dark"]:has(.cortex-workspace) .cx-map .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.8);
+  }
+  :root[data-theme="dark"]:has(.cortex-workspace) .cx-map .leaflet-control-attribution {
+    background: rgb(0 0 0 / 0.55);
+    color: #d4d4d8;
+  }
+  :root[data-theme="dark"]:has(.cortex-workspace) .cx-map .leaflet-control-attribution a {
+    color: #a5b4fc;
+  }
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):has(.cortex-workspace) .cx-map .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.8);
+  }
+  :root:not([data-theme="light"]):has(.cortex-workspace) .cx-map .leaflet-control-attribution {
+    background: rgb(0 0 0 / 0.55);
+    color: #d4d4d8;
+  }
+  :root:not([data-theme="light"]):has(.cortex-workspace) .cx-map .leaflet-control-attribution a {
+    color: #a5b4fc;
+  }
+}
+/* Los marcadores: un punto de color por registro y un círculo con iniciales por persona. */
+.cx-pin-wrap {
+  background: transparent;
+  border: 0;
+}
+.cx-pin {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 2px solid #fff;
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+.cx-pin--record {
+  border-radius: 9999px 9999px 9999px 2px;
+  transform: rotate(-45deg);
+}
+.cx-pin--dim {
+  opacity: 0.5;
+  filter: grayscale(0.6);
+}
+.cx-pin--selected {
+  outline: 3px solid rgb(var(--primary));
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cx-pin {
+    transition: none;
+  }
+}

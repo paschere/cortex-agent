@@ -1,7 +1,7 @@
 import {
   MAX_QUESTIONS,
-  type SetupItem,
   STOP_COPY,
+  type SetupItem,
   type StopReason,
   decideStop,
 } from '@/lib/guided-setup-shape';
@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
     companyName: user.organization.name,
     today: bogotaToday(),
     canCreateGlobalSpace: user.role === 'org_admin',
+    canManageApps: user.role === 'org_admin',
   };
 
   // ¿Hay que parar antes siquiera de gastar una llamada en preguntar?

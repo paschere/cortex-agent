@@ -2,6 +2,7 @@ import { accountingDispatch, accountingRun } from './accounting-sync';
 import { actionsSweepDispatch, actionsSweepWorkspace } from './actions-sweep';
 import { activationDispatch, activationRun } from './activation-followup';
 import { appAutomationDispatch, appAutomationRun } from './app-automations';
+import { appLocationSweep } from './app-location';
 import { autopilotDispatch, autopilotRemind, autopilotWorkspace } from './autopilot';
 import { clientsLinkDispatch, clientsLinkWorkspace } from './clients-link';
 import { commitmentsWatchDispatch, commitmentsWatchWorkspace } from './commitments-watch';
@@ -89,6 +90,7 @@ export {
   turnLatencyPurge,
   appAutomationDispatch,
   appAutomationRun,
+  appLocationSweep,
   viewDigestDispatch,
   viewDigestRun,
   weeklyReportDispatch,
@@ -160,6 +162,7 @@ export const functions = [
   turnLatencyPurge,
   appAutomationDispatch,
   appAutomationRun,
+  appLocationSweep,
   viewDigestDispatch,
   viewDigestRun,
   weeklyReportDispatch,

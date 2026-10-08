@@ -16,6 +16,7 @@ import {
 import { validateSpec } from '../views/store';
 import { SPEC_GRAMMAR } from '../views/tools';
 import {
+  type AppPermissions,
   USER_ATTRIBUTE_RE,
   describeEdit,
   describeRead,
@@ -286,6 +287,7 @@ export async function reviewAppDraft(
       }
   }
   warnings.push(...designWarnings(screens, parsed.data.roles));
+  warnings.push(...locationWarnings(screens, parsed.data.roles));
   for (const r of parsed.data.roles) {
     const attrs = requiredAttributes(r.permissions);
     if (attrs.length)
@@ -335,6 +337,45 @@ export async function reviewAppDraft(
  *     llena sin el diseño `operator`: no está pensado para el celular;
  *   - un tablero TV con formularios, botones o enlaces: en una pared no se toca.
  */
+/**
+ * El mapa y las tareas necesitan tres cosas a la vez: la función encendida en la
+ * app, un rol que comparta y un rol que vea (y uno que asigne). Si falta una, el
+ * mapa sale vacío y nadie sabe por qué: se avisa al diseñar, sin bloquear.
+ */
+export function locationWarnings(
+  screens: Array<{ title: string; spec: ViewSpec }>,
+  roles: Array<{ name: string; permissions: AppPermissions }>,
+): string[] {
+  const out: string[] = [];
+  const someRole = (key: 'share' | 'view' | 'assign') =>
+    roles.some((r) => r.permissions.location?.[key] === true);
+  let people = false;
+  for (const s of screens)
+    for (const b of s.spec.blocks) {
+      if (b.type !== 'map') continue;
+      if (b.people) {
+        people = true;
+        if (!someRole('view'))
+          out.push(
+            `«${s.title}» muestra las personas en turno pero ningún rol puede verlas: marca «ve dónde están» (location.view) en el rol de quien coordina.`,
+          );
+        if (!someRole('share'))
+          out.push(
+            `«${s.title}» muestra las personas en turno pero ningún rol comparte su ubicación: marca «comparte su ubicación» (location.share) en el rol de la gente en terreno.`,
+          );
+      }
+      if (b.assign && !someRole('assign'))
+        out.push(
+          `«${s.title}» asigna tareas desde el mapa pero ningún rol puede asignar: marca «asigna tareas» (location.assign) en el rol de quien coordina.`,
+        );
+    }
+  if (people)
+    out.push(
+      'Para ver personas en el mapa hay que encender «Compartir ubicación del equipo» en la app (apps.update, location.enabled) y cada persona acepta compartir al iniciar su turno.',
+    );
+  return out;
+}
+
 export function designWarnings(
   screens: Array<{ title: string; roles: string[]; spec: ViewSpec }>,
   roles: Array<{ key: string; name: string; permissions: AppPermissionsLike }>,

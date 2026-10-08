@@ -1,5 +1,6 @@
 import { normalizeNit } from '../../clients/shape';
 import { siigoWriter } from '../../close/writeback/siigo';
+import { siigoPayrollPage } from '../payroll-provider';
 import type {
   AccountingEntity,
   AccountingProvider,
@@ -440,6 +441,7 @@ export const siigoProvider: AccountingProvider = {
   ],
   accountLabelField: 'username',
   entities: ['customers', 'products', 'invoices', 'payments'],
+  options: ['payroll'],
   paymentsLabel: 'Recibos de caja',
   queries: siigoQueries,
   open(credentials, runtime: ProviderRuntime = {}): ProviderSession {
@@ -459,6 +461,7 @@ export const siigoProvider: AccountingProvider = {
       verify: () => client.verify(),
       invoicing: siigoInvoicing(client),
       listPurchases: (since, page) => siigoPurchasePage(client, since, page),
+      listPayroll: (since, page) => siigoPayrollPage(client, since, page),
       reports: siigoReports(client, { fetch: runtime.fetch }),
       writer: siigoWriter(client),
       async listPage(entity, query, page) {

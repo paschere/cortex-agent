@@ -36,6 +36,7 @@ const ORDER: PaletteType[] = [
   'gallery',
   'calendar',
   'cards',
+  'map',
   'detail',
   'zones',
   'form',
@@ -51,6 +52,7 @@ const WHY_NOT: Partial<Record<PaletteType, string>> = {
   zones: 'Necesitas una tabla con un campo de opciones (una zona, un muelle).',
   calendar: 'Necesitas una tabla con un campo de fecha (una cita, una entrega).',
   cards: 'Necesitas una tabla para listar.',
+  map: 'Necesitas una tabla con un campo de ubicación (el lugar de una entrega, una visita, una tarea).',
   detail: 'Necesitas una tabla con registros para abrir.',
   voice: 'Primero agrega un formulario a esta vista: la voz lo llena conversando.',
 };

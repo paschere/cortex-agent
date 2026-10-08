@@ -51,7 +51,17 @@ import { z } from 'zod';
 // Lo que se puede crear
 // ---------------------------------------------------------------------------
 
-export const SETUP_KINDS = ['commitment', 'routine', 'flow', 'client', 'space'] as const;
+export const SETUP_KINDS = [
+  'commitment',
+  'routine',
+  'flow',
+  'client',
+  'space',
+  'table',
+  'view',
+  'app',
+  'automation',
+] as const;
 export type SetupKind = (typeof SETUP_KINDS)[number];
 
 /**
@@ -99,7 +109,62 @@ export const KIND_COPY: Record<
     href: '/kb',
     blurb: 'Un sitio para guardar los papeles de este tema y poder citarlos después.',
   },
+  table: {
+    noun: 'Tabla',
+    verb: 'Crear la tabla',
+    where: 'Tablas',
+    href: '/trackers',
+    blurb:
+      'Un lugar ordenado, con sus columnas, para anotar lo que hoy llevan en cuadernos o en hojas sueltas.',
+  },
+  view: {
+    noun: 'Pantalla para el equipo',
+    verb: 'Preparar la pantalla',
+    where: 'Vistas',
+    href: '/views',
+    blurb:
+      'Un tablero, un formulario o una lista armada sobre tus tablas. Queda como borrador: sólo la ve tu equipo hasta que la compartas.',
+  },
+  app: {
+    noun: 'Aplicación',
+    verb: 'Preparar la aplicación',
+    where: 'Aplicaciones',
+    href: '/apps',
+    blurb:
+      'Una aplicación con una pantalla para cada persona (operarios, supervisores, clientes), pensada para usarse desde el celular. Queda sin publicar hasta que la revises.',
+  },
+  automation: {
+    noun: 'Aviso o tarea automática',
+    verb: 'Preparar la automatización',
+    where: 'Aplicaciones',
+    href: '/apps',
+    blurb:
+      'Una regla escrita en palabras: cuando pasa algo, si se cumple una condición, Cortex hace lo que dijiste. Queda en pausa hasta que tú la actives.',
+  },
 };
+
+/** Los tipos que construyen cosas de la empresa y sólo los dueños y administradores pueden crear. */
+export const MANAGER_KINDS: readonly SetupKind[] = ['app', 'automation'];
+
+export function needsManager(kind: SetupKind): boolean {
+  return MANAGER_KINDS.includes(kind);
+}
+
+/**
+ * El orden en que se crea, porque unas cosas se apoyan en otras: la pantalla
+ * necesita su tabla, la aplicación su tabla, y la automatización su aplicación.
+ */
+export const APPLY_ORDER: readonly SetupKind[] = [
+  'client',
+  'space',
+  'commitment',
+  'routine',
+  'flow',
+  'table',
+  'view',
+  'app',
+  'automation',
+];
 
 // ---------------------------------------------------------------------------
 // Lo que el producto hace, pero no escribiendo
@@ -212,12 +277,96 @@ const spacePayload = z.object({
   description: z.string().trim().max(300).default(''),
 });
 
+/**
+ * Duplicado de `FIELD_TYPES` en packages/agent-tools/src/trackers/schema.ts, sólo
+ * los que una entrevista sabe pedir sin configuración extra (una relación o una
+ * validación fina se afinan después en la tabla). El test compara contra el original.
+ */
+export const TABLE_FIELD_TYPES = [
+  'text',
+  'longtext',
+  'number',
+  'date',
+  'time',
+  'money',
+  'select',
+  'checkbox',
+  'file',
+  'location',
+] as const;
+
+const tableFieldPayload = z
+  .object({
+    label: z.string().trim().min(1).max(60),
+    type: z.enum(TABLE_FIELD_TYPES).default('text'),
+    required: z.boolean().optional(),
+    options: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+  })
+  .refine((f) => f.type !== 'select' || (f.options?.length ?? 0) > 0, {
+    message: 'Un campo de opciones necesita al menos una.',
+    path: ['options'],
+  });
+
+const SOURCE_URL = /^https:\/\/\S+$/i;
+
+/**
+ * Una tabla propia. Si la persona nombró una hoja de Google o una carpeta de
+ * Drive con enlace, la tabla NO se inventa: primero hay que LEER la fuente, y
+ * eso lo hace el chat con `trackers.propose_from_source` / `propose_from_drive_folder`.
+ * Por eso con `source` los campos son opcionales y el ítem se entrega al chat.
+ */
+const tablePayload = z
+  .object({
+    name: z.string().trim().min(2).max(80),
+    description: z.string().trim().max(300).default(''),
+    fields: z.array(tableFieldPayload).max(20).default([]),
+    source: z
+      .object({
+        kind: z.enum(['sheet', 'drive']),
+        url: z.string().trim().max(500).regex(SOURCE_URL),
+      })
+      .optional(),
+  })
+  .refine((t) => Boolean(t.source) || t.fields.length >= 1, {
+    message: 'Una tabla necesita al menos una columna.',
+    path: ['fields'],
+  });
+
+/**
+ * Una pantalla, un tablero o un formulario. Lo que se guarda es el PEDIDO, con
+ * las palabras de la persona; el diseño real lo hace el diseñador de vistas de
+ * siempre, contra las tablas que existan al aplicar.
+ */
+const viewPayload = z.object({
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(300).default(''),
+  request: z.string().trim().min(15).max(1500),
+});
+
+const appPayload = z.object({
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(300).default(''),
+  request: z.string().trim().min(15).max(2000),
+});
+
+const automationPayload = z.object({
+  name: z.string().trim().min(3).max(120),
+  /** El título de la aplicación propuesta en este mismo plan, o el nombre de una que ya existe. */
+  app: z.string().trim().min(2).max(80),
+  /** «Cuando X, si Y, haz Z.» En palabras. */
+  rule: z.string().trim().min(15).max(800),
+});
+
 const PAYLOAD: Record<SetupKind, z.ZodTypeAny> = {
   commitment: commitmentPayload,
   routine: routinePayload,
   flow: flowPayload,
   client: clientPayload,
   space: spacePayload,
+  table: tablePayload,
+  view: viewPayload,
+  app: appPayload,
+  automation: automationPayload,
 };
 
 export type CommitmentPayload = z.infer<typeof commitmentPayload>;
@@ -225,13 +374,21 @@ export type RoutinePayload = z.infer<typeof routinePayload>;
 export type FlowPayload = z.infer<typeof flowPayload>;
 export type ClientPayload = z.infer<typeof clientPayload>;
 export type SpacePayload = z.infer<typeof spacePayload>;
+export type TablePayload = z.infer<typeof tablePayload>;
+export type ViewPayload = z.infer<typeof viewPayload>;
+export type AppPayload = z.infer<typeof appPayload>;
+export type AutomationPayload = z.infer<typeof automationPayload>;
 
 export type SetupPayload =
   | CommitmentPayload
   | RoutinePayload
   | FlowPayload
   | ClientPayload
-  | SpacePayload;
+  | SpacePayload
+  | TablePayload
+  | ViewPayload
+  | AppPayload
+  | AutomationPayload;
 
 export interface ProposedItem {
   kind: SetupKind;
@@ -240,7 +397,19 @@ export interface ProposedItem {
   payload: SetupPayload;
 }
 
-export type ItemStatus = 'proposed' | 'created' | 'merged' | 'skipped' | 'failed' | 'undone';
+/**
+ * `handoff`: no se creó nada aquí y el pedido sigue en pie. Pasa cuando falta
+ * leer una hoja o carpeta, o cuando el diseñador no logró armarlo contra las
+ * tablas reales; la persona lo sigue en el chat con el pedido ya escrito.
+ */
+export type ItemStatus =
+  | 'proposed'
+  | 'created'
+  | 'merged'
+  | 'skipped'
+  | 'failed'
+  | 'undone'
+  | 'handoff';
 
 /** Un ítem tal como lo lee la pantalla, ya con su id de base de datos. */
 export interface SetupItem extends ProposedItem {
@@ -666,6 +835,143 @@ export function itemFields(item: ProposedItem): Field[] {
       const p = item.payload as SpacePayload;
       return p.description ? [{ label: 'Para', value: p.description }] : [];
     }
+    case 'table': {
+      const p = item.payload as TablePayload;
+      const fields: Field[] = [];
+      if (p.description) fields.push({ label: 'Para', value: p.description });
+      if (p.source) {
+        fields.push({
+          label: p.source.kind === 'sheet' ? 'Tu hoja' : 'Tu carpeta',
+          value: `${p.source.url}. Primero la leo y te propongo la tabla en el chat.`,
+        });
+      }
+      for (const f of p.fields) {
+        const extra = f.type === 'select' && f.options?.length ? `: ${f.options.join(', ')}` : '';
+        fields.push({
+          label: `Columna${f.required ? ' · obligatoria' : ''}`,
+          value: `${f.label} (${FIELD_TYPE_COPY[f.type]}${extra})`,
+        });
+      }
+      return fields;
+    }
+    case 'view': {
+      const p = item.payload as ViewPayload;
+      const fields: Field[] = [];
+      if (p.description) fields.push({ label: 'Para', value: p.description });
+      fields.push({ label: 'Qué muestra', value: p.request });
+      return fields;
+    }
+    case 'app': {
+      const p = item.payload as AppPayload;
+      const fields: Field[] = [];
+      if (p.description) fields.push({ label: 'Para', value: p.description });
+      fields.push({ label: 'Quién la usa y qué hace', value: p.request });
+      return fields;
+    }
+    case 'automation': {
+      const p = item.payload as AutomationPayload;
+      return [
+        { label: 'En', value: p.app },
+        { label: 'Regla', value: p.rule },
+      ];
+    }
+  }
+}
+
+/** Cómo se dice cada tipo de columna a quien no sabe qué es un «longtext». */
+export const FIELD_TYPE_COPY: Record<(typeof TABLE_FIELD_TYPES)[number], string> = {
+  text: 'texto corto',
+  longtext: 'texto largo',
+  number: 'número',
+  date: 'fecha',
+  time: 'hora',
+  money: 'plata',
+  select: 'una opción de una lista',
+  checkbox: 'sí o no',
+  file: 'foto o archivo',
+  location: 'ubicación',
+};
+
+/** La llave de una columna a partir de su nombre: `snake_case`, sin tildes, empieza en letra. */
+export function fieldKeyOf(label: string, taken: ReadonlySet<string> = new Set()): string {
+  const base =
+    label
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .replace(/^[0-9_]+/, '')
+      .slice(0, 28) || 'campo';
+  let key = base;
+  for (let n = 2; taken.has(key); n++) key = `${base.slice(0, 28)}_${n}`;
+  return key;
+}
+
+/** El identificador de una tabla o app a partir de un nombre: `^[a-z][a-z0-9_]{1,47}$`. */
+export function identifierOf(name: string): string {
+  const base = fieldKeyOf(name).slice(0, 40);
+  return base.length >= 2 ? base : `${base}_x`;
+}
+
+/**
+ * El pedido ya escrito para seguir en el chat. Es lo que el botón «Seguir en el
+ * chat» abre: la persona no tiene que volver a explicar nada, y el chat arranca
+ * por la herramienta correcta (leer la fuente ANTES de diseñar nada encima).
+ */
+export function chatPromptFor(item: ProposedItem): string {
+  switch (item.kind) {
+    case 'table': {
+      const p = item.payload as TablePayload;
+      if (p.source) {
+        const tool =
+          p.source.kind === 'sheet'
+            ? 'trackers.propose_from_source'
+            : 'trackers.propose_from_drive_folder';
+        return `Quiero una tabla «${p.name}» a partir de ${p.source.kind === 'sheet' ? 'esta hoja de Google' : 'esta carpeta de Drive'}: ${p.source.url}. Primero léela con ${tool}, propónme las columnas y espera mi aprobación antes de crear nada.${p.description ? ` Es para: ${p.description}` : ''}`;
+      }
+      return `Quiero una tabla «${p.name}»${p.description ? ` para ${p.description}` : ''} con estas columnas: ${p.fields.map((f) => f.label).join(', ')}. Propónmela con trackers.define y espera mi aprobación.`;
+    }
+    case 'view': {
+      const p = item.payload as ViewPayload;
+      return `Arma una vista «${p.name}» con views.create sobre mis tablas: ${p.request} Antes mira mis tablas con trackers.list. Déjala interna para el equipo, sin compartirla.`;
+    }
+    case 'app': {
+      const p = item.payload as AppPayload;
+      return `Diséñame una aplicación «${p.name}»: ${p.request} Usa apps.design para revisar el borrador contra mis tablas, enséñame el resumen y, si lo apruebo, créala con apps.create como borrador. Si mis datos viven en una hoja de Google o carpeta de Drive, léelos primero con trackers.propose_from_source / trackers.propose_from_drive_folder.`;
+    }
+    case 'automation': {
+      const p = item.payload as AutomationPayload;
+      return `En la aplicación «${p.app}» quiero esta automatización: ${p.rule} Créala con apps.automations.create y déjala en pausa para que yo la active.`;
+    }
+    default:
+      return `Ayúdame a configurar «${item.title}» en Cortex.`;
+  }
+}
+
+/** `/chat?prompt=…` con el pedido ya escrito. */
+export function chatHref(item: ProposedItem): string {
+  return `/chat?prompt=${encodeURIComponent(chatPromptFor(item))}`;
+}
+
+/**
+ * Dónde mirar lo que se creó. `target_id` de cada tipo nuevo guarda lo que su
+ * ruta necesita: el identificador de la tabla y de la vista, el id de la
+ * aplicación, y `appId:automationId` para la automatización.
+ */
+export function resultHref(item: Pick<SetupItem, 'kind' | 'targetId' | 'status'>): string | null {
+  if (item.status !== 'created' || !item.targetId) return null;
+  switch (item.kind) {
+    case 'table':
+      return `/trackers/${item.targetId}`;
+    case 'view':
+      return `/views/${item.targetId}`;
+    case 'app':
+      return `/apps/${item.targetId}/edit`;
+    case 'automation':
+      return `/apps/${item.targetId.split(':')[0]}/edit`;
+    default:
+      return null;
   }
 }
 

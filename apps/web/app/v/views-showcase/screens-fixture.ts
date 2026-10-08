@@ -22,7 +22,7 @@ import {
  * paquete no entra al bundle del navegador.
  */
 
-export const SCREEN_KINDS = ['detalle', 'tarjetas', 'agenda', 'tv'] as const;
+export const SCREEN_KINDS = ['detalle', 'tarjetas', 'agenda', 'tv', 'mapa'] as const;
 export type ScreenKind = (typeof SCREEN_KINDS)[number];
 
 export const SCREEN_TITLES: Record<ScreenKind, { title: string; subtitle: string }> = {
@@ -39,6 +39,11 @@ export const SCREEN_TITLES: Record<ScreenKind, { title: string; subtitle: string
     subtitle: 'Día, semana o mes, con la hora de cada salida.',
   },
   tv: { title: 'Planta · Despachos', subtitle: 'Pantalla de pared que rota sola.' },
+  mapa: {
+    title: 'Equipo y entregas',
+    subtitle:
+      'Dónde están las entregas y las personas en turno; toca a alguien para asignarle una tarea.',
+  },
 };
 
 const despachos: CatalogTracker = {
@@ -60,6 +65,7 @@ const despachos: CatalogTracker = {
     { key: 'peso', label: 'Peso (kg)', type: 'number', required: false },
     { key: 'evidencia', label: 'Evidencia', type: 'file', required: false },
     { key: 'notas', label: 'Notas', type: 'text', required: false },
+    { key: 'ubicacion', label: 'Ubicación', type: 'location', required: false },
   ],
 };
 const paquetes: CatalogTracker = {
@@ -105,6 +111,15 @@ const PHOTO = JSON.stringify({
 });
 
 const DESTINOS = ['Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Bucaramanga', 'Pereira'];
+/** Puntos de entrega inventados, todos dentro de Bogotá (lat,lng). */
+const PUNTOS = [
+  '4.710989,-74.072092',
+  '4.648600,-74.109700',
+  '4.609700,-74.081700',
+  '4.676000,-74.048000',
+  '4.598100,-74.147100',
+  '4.735000,-74.030000',
+];
 const CONDUCTORES = ['Luis Pardo', 'Marta Ríos', 'Andrés Gil', 'Sonia Vega'];
 
 function rows(now: Date) {
@@ -127,6 +142,7 @@ function rows(now: Date) {
         destino: DESTINOS[i % DESTINOS.length] as string,
         conductor: CONDUCTORES[i % CONDUCTORES.length] as string,
         peso: 120 + i * 35,
+        ...(i < 11 ? { ubicacion: PUNTOS[i % PUNTOS.length] as string } : {}),
         ...(estado === 'Entregado' ? { evidencia: PHOTO } : {}),
         ...(estado === 'Con novedad' ? { notas: 'Cliente ausente, reprogramar' } : {}),
       },
@@ -306,6 +322,42 @@ function specFor(kind: ScreenKind) {
         detail(),
       ],
     };
+  if (kind === 'mapa')
+    return {
+      ...common,
+      blocks: [
+        {
+          id: 'mapa',
+          type: 'map',
+          tracker: 'despachos',
+          title: 'Entregas y equipo',
+          locationField: 'ubicacion',
+          titleField: 'codigo',
+          subtitleField: 'destino',
+          colorField: 'estado',
+          people: true,
+          assign: {
+            assigneeField: 'conductor',
+            titleField: 'notas',
+            descriptionField: 'destino',
+            dueField: 'fecha',
+            dueTimeField: 'hora',
+            priorityField: 'estado',
+          },
+          actions: [
+            {
+              id: 'cerrar',
+              label: 'Marcar entregado',
+              kind: 'set_field',
+              field: 'estado',
+              value: 'Entregado',
+              tone: 'emerald',
+            },
+          ],
+        },
+        detail(),
+      ],
+    };
   if (kind === 'tv')
     return {
       ...common,
@@ -401,6 +453,8 @@ export function screensView(
   const wanted = opts.fila && base.some((r) => r.id === opts.fila) ? opts.fila : null;
   return computeView(spec, sources, now, {
     writable: true,
+    // El escaparate hace de quien ve y asigna: la capa de personas es de mentira (MapBlock, target demo).
+    location: { enabled: true, canView: true, canAssign: true },
     viewer: { id: 'demo-user', kind: 'member' },
     record: opts.fila
       ? { rowId: opts.fila, blockId: opts.d ?? null, history: wanted ? history(now) : null }

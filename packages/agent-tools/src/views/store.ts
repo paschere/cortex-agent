@@ -1561,6 +1561,7 @@ const ROW_BLOCKS: ReadonlySet<string> = new Set([
   'gallery',
   'calendar',
   'cards',
+  'map',
   'detail',
 ]);
 
@@ -1608,7 +1609,21 @@ export async function editViewRow(
 
 export type ViewActionOutcome =
   | { kind: 'set_field'; label: string; message: string }
-  | { kind: 'notify'; label: string; message: string; actionLabel: string };
+  | { kind: 'notify'; label: string; message: string; actionLabel: string }
+  | {
+      kind: 'assign';
+      label: string;
+      message: string;
+      rowId: string;
+      /** La pantalla que abre el aviso a la persona (del botón), o null = la app. */
+      screen: string | null;
+    };
+
+/** La persona a quien se asigna: ya resuelta y comprobada por la capa de apps. */
+export interface AssignedPerson {
+  id: string;
+  name: string;
+}
 
 /**
  * Un botón de fila. `set_field` escribe el valor que dice el SPEC (nunca uno
@@ -1626,6 +1641,8 @@ export async function runViewAction(
     actorKind?: ActorKind;
     /** Motivo opcional de un rechazo (Aprobar / Rechazar). */
     reason?: string | null;
+    /** Sólo en un botón «Asignar a…» (kind `assign`): a quién. */
+    person?: AssignedPerson | null;
   },
 ): Promise<ViewActionOutcome> {
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
@@ -1672,8 +1689,53 @@ export async function runViewAction(
   if (!action) throw new NotFoundError('Ese botón ya no está en la vista.');
   if (!input.actor) await assertPublicBudget(db, view.id);
 
+  if (action.kind === 'assign' && action.field) {
+    if (!input.person) throw new ValidationError('Elige a quién asignar.');
+    const tracker = await trackerForBlock(db, block.tracker);
+    const patch: Record<string, unknown> = { [action.field]: input.person.id };
+    if (action.nameField) patch[action.nameField] = input.person.name;
+    if (action.statusField && action.value !== undefined) patch[action.statusField] = action.value;
+    const { label } = await patchRow(db, view, {
+      blockId: block.id,
+      tracker,
+      rowId: input.rowId,
+      patch,
+      allowed: new Set(Object.keys(patch)),
+      kind: 'action',
+      actionId: action.id,
+      actor: input.actor,
+      actorKind: input.actorKind,
+    });
+    return {
+      kind: 'assign',
+      label,
+      rowId: input.rowId,
+      screen: action.screen ?? null,
+      message: `Listo: «${label}» quedó asignada a ${input.person.name}.`,
+    };
+  }
+
   if (action.kind === 'set_field' && action.field && action.value !== undefined) {
     const tracker = await trackerForBlock(db, block.tracker);
+    if (action.requireFields?.length) {
+      const { data: cur, error: curError } = await db
+        .from('tracker_rows')
+        .select('values')
+        .eq('id', input.rowId)
+        .eq('tracker_id', tracker.id)
+        .maybeSingle();
+      if (curError) throw curError;
+      if (!cur) throw new NotFoundError('Esa fila ya no está en la tabla.');
+      const values = (cur as { values: Record<string, unknown> }).values ?? {};
+      const missing = action.requireFields.filter((k) => {
+        const v = values[k];
+        return v === undefined || v === null || String(v).trim() === '';
+      });
+      if (missing.length) {
+        const names = missing.map((k) => tracker.fields.find((f) => f.key === k)?.label ?? k);
+        throw new ValidationError(`Antes de «${action.label}» completa: ${names.join(', ')}.`);
+      }
+    }
     const { label } = await patchRow(db, view, {
       blockId: block.id,
       tracker,
@@ -1719,6 +1781,90 @@ export async function runViewAction(
     actionLabel: action.label,
     message: 'Listo, avisamos al equipo.',
   };
+}
+
+export interface NewTaskInput {
+  blockId: string;
+  person: AssignedPerson;
+  title: string;
+  description?: string | null;
+  due?: string | null;
+  dueTime?: string | null;
+  priority?: string | null;
+  /** «lat,lng» del lugar de la tarea, si se eligió. */
+  location?: string | null;
+  actor: string;
+  actorKind?: ActorKind;
+  viewer?: string | null;
+}
+
+/**
+ * «Asignar tarea» desde el mapa: una fila NUEVA en la tabla del bloque, con los
+ * campos que el `assign` del bloque nombra (nada más) y el estado inicial. Pasa
+ * por el esquema de la tabla como cualquier fila, así que las opciones, las
+ * fechas y los obligatorios se validan igual. Quién puede asignar lo decide la
+ * capa de apps (`assignTaskFromMap`) ANTES de llegar aquí.
+ */
+export async function createViewTask(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: NewTaskInput,
+): Promise<{ rowId: string; label: string; screen: string | null }> {
+  if (!canWriteView(view, 'member'))
+    throw new ValidationError('Las tareas de esta vista no están activas (editing en "off").');
+  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (!block || block.type !== 'map' || !block.assign)
+    throw new NotFoundError('Ese mapa no asigna tareas.');
+  const a = block.assign;
+  const title = input.title.trim();
+  if (!title) throw new ValidationError('Escribe qué hay que hacer.');
+  const tracker = await trackerForBlock(db, block.tracker);
+  const raw: Record<string, unknown> = {
+    [a.titleField]: title.slice(0, 400),
+    [a.assigneeField]: input.person.id,
+  };
+  if (a.nameField) raw[a.nameField] = input.person.name;
+  if (a.descriptionField && input.description?.trim())
+    raw[a.descriptionField] = input.description.trim().slice(0, 4000);
+  if (a.dueField && input.due) raw[a.dueField] = input.due;
+  if (a.dueTimeField && input.dueTime) raw[a.dueTimeField] = input.dueTime;
+  if (a.priorityField && input.priority) raw[a.priorityField] = input.priority;
+  if (input.location) raw[block.locationField] = input.location;
+  if (a.statusField && a.pendingValue) raw[a.statusField] = a.pendingValue;
+  const values = await prepareValues(db, tracker, raw, {
+    applyDefaults: true,
+    viewer: input.viewer,
+    allowedRelationTrackers: new Set(trackersOf(view.spec)),
+  });
+  const byApp = input.actorKind === 'app_user';
+  const { data: row, error } = await db
+    .from('tracker_rows')
+    .insert({
+      tracker_id: tracker.id,
+      label: rowLabel(tracker.fields, values),
+      values,
+      created_by: byApp ? null : input.actor,
+      ...(byApp ? { created_by_app_user: input.actor } : {}),
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  const rowId = String((row as { id: string }).id);
+  const label = rowLabel(tracker.fields, values);
+  if (await watchesTracker(db, tracker.id))
+    await emitAutomationEvent(db, {
+      kind: 'row_created',
+      trackerId: tracker.id,
+      trackerSlug: tracker.slug,
+      rowId,
+      after: values as Record<string, string | number>,
+      label,
+      version: new Date().toISOString(),
+      actor: { kind: byApp ? 'app_user' : 'member', id: input.actor },
+      viewId: view.id,
+      blockId: block.id,
+    });
+  return { rowId, label, screen: a.screen ?? null };
 }
 
 /** Si un envío por el formulario de este bloque debe sonar en la campana. */

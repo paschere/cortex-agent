@@ -27,6 +27,9 @@ export const ADMIN_ROLE_KEY = 'administrador';
 export const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,31}$/;
 export const USER_ATTRIBUTE_RE = /^\$user\.([a-z][a-z0-9_]{0,39})$/;
 
+/** `$user.id`: el id de quien mira. Reservado: un atributo con ese nombre no lo reemplaza. */
+export const USER_ID_ATTRIBUTE = 'id';
+
 export const rowReadSchema = z.union([
   z.literal('all'),
   z.literal('own'),
@@ -56,6 +59,21 @@ export const appPermissionsSchema = z.object({
    * modo kiosco» (típico del supervisor de planta). Omitido = no puede.
    */
   kiosk: z.boolean().optional(),
+  /**
+   * Ubicación del equipo (0216). Todo apagado por omisión, y sólo vale si la app
+   * tiene «Compartir ubicación del equipo» encendido:
+   *   - `share`: las personas de este rol PUEDEN compartir su ubicación (si
+   *     aceptan el texto y abren turno);
+   *   - `view`: este rol ve en el mapa dónde están las personas en turno;
+   *   - `assign`: este rol puede asignar tareas a una persona.
+   */
+  location: z
+    .object({
+      share: z.boolean().optional(),
+      view: z.boolean().optional(),
+      assign: z.boolean().optional(),
+    })
+    .optional(),
 });
 export type AppPermissions = z.infer<typeof appPermissionsSchema>;
 
@@ -144,7 +162,9 @@ export function rowAccessFor(role: ResolvedRole, user: AppUser, tracker: string)
       ? { kind: 'own', userId: user.id, external: true }
       : { kind: 'own', userId: user.id };
   const attr = USER_ATTRIBUTE_RE.exec(perm.read.equals)?.[1] ?? '';
-  const value = user.attributes[attr];
+  // `$user.id` es el id de la persona (tareas «mías»: asignado = $user.id);
+  // sale de la sesión, nunca de los atributos que escribe quien invita.
+  const value = attr === USER_ID_ATTRIBUTE ? user.id : user.attributes[attr];
   return {
     kind: 'equals',
     field: perm.read.field,
@@ -264,6 +284,7 @@ export function describeRead(read: RowRead, fieldLabel?: string): string {
   if (read === 'all') return 'Ve todas las filas';
   if (read === 'own') return 'Ve sólo lo que registró';
   const attr = USER_ATTRIBUTE_RE.exec(read.equals)?.[1] ?? read.equals;
+  if (attr === USER_ID_ATTRIBUTE) return `Ve las filas donde «${fieldLabel ?? read.field}» es ella`;
   return `Ve las filas donde «${fieldLabel ?? read.field}» es su ${attr}`;
 }
 
@@ -290,8 +311,28 @@ export function requiredAttributes(permissions: AppPermissions): string[] {
   for (const perm of Object.values(permissions.tables)) {
     if (typeof perm.read === 'object') {
       const attr = USER_ATTRIBUTE_RE.exec(perm.read.equals)?.[1];
-      if (attr) out.add(attr);
+      // `$user.id` lo pone el servidor: no se le pide a quien invita.
+      if (attr && attr !== USER_ID_ATTRIBUTE) out.add(attr);
     }
   }
   return [...out];
+}
+
+// ---------------------------------------------------------------------------
+// Ubicación del equipo (0216)
+// ---------------------------------------------------------------------------
+
+/** ¿Este rol puede compartir su ubicación? El administrador sí (también es persona en terreno). */
+export function canShareLocation(role: ResolvedRole): boolean {
+  return role.admin || role.permissions.location?.share === true;
+}
+
+/** ¿Este rol ve dónde están las personas en turno? Nadie lo hereda: se da por rol. */
+export function canViewLocations(role: ResolvedRole): boolean {
+  return role.admin || role.permissions.location?.view === true;
+}
+
+/** ¿Este rol asigna tareas a personas? */
+export function canAssignTasks(role: ResolvedRole): boolean {
+  return role.admin || role.permissions.location?.assign === true;
 }
