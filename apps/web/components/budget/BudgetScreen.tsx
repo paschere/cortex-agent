@@ -21,7 +21,7 @@ import {
   shortMonthKey,
 } from '@/lib/statements/format';
 import type { BudgetVsRow } from '@cortex/agent-tools';
-import { missingExpensesNote as budgetMissingExpensesNote } from '@cortex/agent-tools/src/budget/shape';
+import { missingExpensesNote as budgetMissingExpensesNote } from '@cortex/agent-tools/src/budget/notes';
 import { clsx } from 'clsx';
 import { ArrowRight, CheckCircle2, Loader2, PencilLine, Target, TrendingUp } from 'lucide-react';
 import Link from 'next/link';

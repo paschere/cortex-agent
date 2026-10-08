@@ -8,7 +8,13 @@ import {
 } from '@/lib/branding/colors';
 import type { ViewBrand } from '@/lib/branding/shape';
 import type { EmailBrand } from '@/lib/email-templates/layout';
-import { APP_FONT_STACK, type AppBrand, type AppFont } from '@cortex/agent-tools';
+// Import profundo, no el barril: este archivo llega al navegador (pestaña
+// Apariencia) y el barril arrastra código de servidor (fs, crypto, async_hooks).
+import {
+  APP_FONT_STACK,
+  type AppBrand,
+  type AppFont,
+} from '@cortex/agent-tools/src/apps/appearance-shape';
 
 /**
  * LA MARCA DE UNA APP, RESUELTA (migración 0215). Puro y probado.
