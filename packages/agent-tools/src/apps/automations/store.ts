@@ -51,7 +51,14 @@ export const AUTOMATION_COLUMNS =
 
 export const MAX_AUTOMATIONS_PER_APP = 30;
 
-export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped';
+export type RunStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'skipped'
+  | 'waiting_person'
+  | 'unresolved';
 
 export interface AutomationRunRow {
   id: string;

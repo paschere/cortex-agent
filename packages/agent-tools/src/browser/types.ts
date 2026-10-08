@@ -158,6 +158,12 @@ export const stepSchema = z.object({
   landmarks: z.array(z.string().max(200)).max(8).default([]),
   optional: nullish(z.boolean()),
   extractAs: nullish(z.string().max(80)),
+  /**
+   * `extract` only: lo que vale el resultado si el elemento no aparece (o sale
+   * vacío) en una corrida, p. ej. «no encontrado». Sin esto, un portal que no
+   * pinta nada cuando no hay dato haría fallar el trámite.
+   */
+  extractDefault: nullish(z.string().max(200)),
 });
 export type Step = z.infer<typeof stepSchema>;
 

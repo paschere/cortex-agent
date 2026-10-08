@@ -2,6 +2,7 @@ import { isUnlocked, openPublicView, unlockCookieName } from '@/lib/views/public
 import {
   canWriteView,
   computeView,
+  loadRecordContext,
   loadViewSources,
   parseViewFilterParam,
 } from '@cortex/agent-tools';
@@ -32,16 +33,24 @@ export async function GET(req: NextRequest) {
     !(await isUnlocked(db, view.id, req.cookies.get(unlockCookieName(view.id))?.value))
   )
     return NextResponse.json({ error: 'Vuelve a escribir la contraseña.' }, { status: 401 });
-  const computed = computeView(
+  const fila = req.nextUrl.searchParams.get('fila');
+  const sources = await loadViewSources(db, view.spec, {
+    audience: 'public',
+    ensureRowId: fila ?? undefined,
+  });
+  const record = await loadRecordContext(
+    db,
     view.spec,
-    await loadViewSources(db, view.spec, { audience: 'public' }),
-    new Date(),
-    {
-      writable: canWriteView(view, 'public'),
-      audience: 'public',
-      filters: parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f')),
-    },
+    sources,
+    { rowId: fila, blockId: req.nextUrl.searchParams.get('d') },
+    { viewer: { kind: 'public' } },
   );
+  const computed = computeView(view.spec, sources, new Date(), {
+    writable: canWriteView(view, 'public'),
+    audience: 'public',
+    filters: parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f')),
+    record,
+  });
   return NextResponse.json(
     { version: view.version, view: computed },
     { headers: { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } },

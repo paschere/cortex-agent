@@ -3,10 +3,14 @@ import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
+  automationConditionSchema,
   automationTriggerSchema,
   executeRun,
+  orgsWithOpenWaits,
+  queuePollRound,
   queueScheduled,
   scheduleDue,
+  sweepWaits,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
@@ -19,6 +23,8 @@ import { logger } from '@cortex/core';
  *     1. Horarios: qué reglas `schedule` tocan ahora (franja diaria o semanal en
  *        hora de Bogotá; la franja se reclama con un UPDATE condicionado, así que
  *        dos vueltas del reloj dejan UNA corrida) y las deja en cola.
+ *     1b. Filas: las reglas «cada X minutos, para cada fila que cumpla» (rows_poll)
+ *        reclaman su franja y dejan una corrida en cola por fila elegida.
  *     2. Libera las corridas que quedaron «running» (el proceso murió).
  *     3. Reparte lo que está en cola y ya venció su espera: lo recién emitido
  *        que no pudo despertar al trabajo y los REINTENTOS con espera.
@@ -82,6 +88,73 @@ export const appAutomationDispatchJob: JobHandler = async ({ step }) => {
     return queued;
   });
 
+  // «Cada X minutos, para cada fila que cumpla…» (0212): reutiliza este mismo
+  // reloj. Cada regla reclama su franja y deja una corrida por fila elegida.
+  const polled = await step.run('row-polls', async () => {
+    const raw = getSupabaseServiceClient();
+    const { data, error } = await raw
+      .from('custom_app_automations')
+      .select('id, organization_id, app_id, trigger, conditions, schedule_last_slot')
+      .eq('enabled', true)
+      .eq('trigger_kind', 'rows_poll')
+      .limit(1000);
+    if (error) throw error;
+    const now = new Date();
+    let queued = 0;
+    for (const a of (data ?? []) as Array<{
+      id: string;
+      organization_id: string;
+      app_id: string;
+      trigger: unknown;
+      conditions: unknown;
+      schedule_last_slot: string | null;
+    }>) {
+      const conditions = Array.isArray(a.conditions)
+        ? a.conditions.flatMap((c) => {
+            const p = automationConditionSchema.safeParse(c);
+            return p.success ? [p.data] : [];
+          })
+        : [];
+      try {
+        const r = await queuePollRound(
+          getOrgScopedClient(a.organization_id),
+          {
+            id: a.id,
+            app_id: a.app_id,
+            trigger: a.trigger,
+            conditions,
+            schedule_last_slot: a.schedule_last_slot,
+          },
+          now,
+        );
+        queued += r.queued;
+      } catch (err) {
+        logger.warn({ err, automationId: a.id }, 'app automation row poll failed');
+      }
+    }
+    return queued;
+  });
+
+  // Automatizaciones que esperan a una persona (0214): las que ya atendió
+  // vuelven a la cola ANTES de repartir; las que se acabó el tiempo quedan sin
+  // resolver y se avisa.
+  const waits = await step.run('person-waits', async () => {
+    const raw = getSupabaseServiceClient();
+    const deps = buildAutomationDeps();
+    let resolved = 0;
+    let expired = 0;
+    for (const organizationId of await orgsWithOpenWaits(raw)) {
+      try {
+        const r = await sweepWaits(getOrgScopedClient(organizationId), deps, new Date());
+        resolved += r.resolved;
+        expired += r.expired;
+      } catch (err) {
+        logger.warn({ err, organizationId }, 'app automation wait sweep failed');
+      }
+    }
+    return { resolved, expired };
+  });
+
   const due = await step.run('find-due', async () => {
     const raw = getSupabaseServiceClient();
     const now = new Date();
@@ -109,7 +182,7 @@ export const appAutomationDispatchJob: JobHandler = async ({ step }) => {
       'run-each',
       due.map((d) => ({ name: 'apps/automation.run' as const, data: d })),
     );
-  return { scheduled, dispatched: due.length };
+  return { scheduled, polled, waits, dispatched: due.length };
 };
 
 export const appAutomationDispatch = inngest.createFunction(

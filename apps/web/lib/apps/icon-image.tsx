@@ -1,4 +1,5 @@
 import 'server-only';
+import { readAppImage } from '@/lib/apps/app-assets';
 import { appColor } from '@/lib/apps/manifest';
 import { readBranding } from '@/lib/branding/store';
 import type { PublishedApp } from '@cortex/agent-tools';
@@ -31,6 +32,43 @@ export async function appIconResponse(
   const color = appColor(app, brand?.primary_color);
   const glyph = glyphOf(app);
   const inner = options.maskable ? size * 0.5 : size * 0.62;
+  // Si la app subió su ícono (o, a falta de él, su logo), ése es el ícono:
+  // sobre su color, con el margen de seguridad si es maskable.
+  const own =
+    (await readAppImage(db, app, 'icon').catch(() => null)) ??
+    (await readAppImage(db, app, 'logo').catch(() => null));
+  if (own) {
+    const src = `data:${own.contentType};base64,${Buffer.from(own.content).toString('base64')}`;
+    const pad = options.maskable ? size * 0.2 : size * 0.12;
+    const image = new ImageResponse(
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#ffffff',
+          borderRadius: options.maskable ? 0 : size * 0.22,
+        }}
+      >
+        <img
+          src={src}
+          width={size - pad * 2}
+          height={size - pad * 2}
+          style={{ objectFit: 'contain' }}
+          alt=""
+        />
+      </div>,
+      { width: size, height: size },
+    );
+    try {
+      await image.clone().arrayBuffer();
+      return withCache(image);
+    } catch {
+      // cae al dibujo de siempre
+    }
+  }
   const draw = (text: string) =>
     new ImageResponse(
       <div

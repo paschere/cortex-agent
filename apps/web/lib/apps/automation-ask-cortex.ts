@@ -6,13 +6,23 @@ import { buildCompanyFactsBlock } from '@/lib/system-prompt';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
 import {
   type AskCortexArgs,
+  type WaitInfo,
+  WaitingForPersonError,
+  askRules,
+  buildAskUserPrompt,
   chatModel,
   classify,
   enabledModules,
   filterTools,
+  getTrackerBySlug,
+  latestResolvedWait,
+  resumedPromptBlock,
   runTool,
   toolAllowedByModules,
   toolErrorMessage,
+  upsertRow,
+  waitFromRunFlow,
+  writableFields,
 } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -42,7 +52,7 @@ import { type CoreTool, generateText, tool } from 'ai';
  */
 
 const APPROVAL_TTL_MS = 24 * 60 * 60_000;
-const MAX_STEPS = 8;
+const MAX_STEPS = 10;
 
 /** Herramientas que una regla no usa jamás: tocar reglas, apps y accesos. */
 const FORBIDDEN = /^(apps\.|security\.|mandates\.|billing\.|org\.)/;
@@ -61,12 +71,46 @@ export function looksLikeWrite(toolId: string): boolean {
   return WRITE_ACTION.test(action);
 }
 
+/**
+ * El permiso de escritura de la instrucción (`ask_cortex.writes`): la fila de
+ * contexto y los campos que puede cambiar SIN aprobación. `null` = el permiso de
+ * siempre (la tabla de la regla).
+ */
+export interface RowWriteScope {
+  rowId: string;
+  fields: ReadonlySet<string>;
+}
+
 export function decideAutomationCall(
   toolDef: { id: string; requiresConfirmation?: boolean },
   input: unknown,
   ownTracker: string | null,
-): 'run' | 'stage' | 'forbidden' {
+  scope: RowWriteScope | null = null,
+  /** Herramientas externas que la regla declaró (`ask_cortex.allow`): corren sin aprobación. */
+  declared: ReadonlySet<string> = new Set(),
+): 'run' | 'declared' | 'row_write' | 'stage' | 'forbidden' {
   if (FORBIDDEN.test(toolDef.id)) return 'forbidden';
+  // Consultar un portal con un trámite aprendido: browser.run_flow sólo corre
+  // trámites de lectura (los que escriben los rechaza) y sólo los que un
+  // administrador habilitó para trabajos desatendidos (`errandAllowed`). Si el
+  // portal pide una persona, la corrida espera (waits.ts) en vez de pedir aprobación.
+  if (toolDef.id === 'browser.run_flow') return 'run';
+  if (declared.has(toolDef.id)) return 'declared';
+  if (scope && toolDef.id === 'trackers.upsert') {
+    const i = input as {
+      tracker?: string;
+      rowId?: string;
+      values?: Record<string, unknown>;
+    } | null;
+    const keys = Object.keys(i?.values ?? {});
+    // Sólo ESA fila y sólo los campos declarados; todo lo demás pide aprobación.
+    return i?.tracker === ownTracker &&
+      i?.rowId === scope.rowId &&
+      keys.length > 0 &&
+      keys.every((k) => scope.fields.has(k))
+      ? 'row_write'
+      : 'stage';
+  }
   if (
     toolDef.id === 'trackers.upsert' &&
     ownTracker &&
@@ -108,6 +152,16 @@ export async function askCortexForAutomation(
   );
 
   let staged = 0;
+  const waited: { info: WaitInfo | null } = { info: null };
+  const stop = new AbortController();
+  const applied: string[] = [];
+  const trackerRow = args.tracker ? await getTrackerBySlug(orgDb, args.tracker.slug) : null;
+  const writable = writableFields(args.writes, args.fields ?? []);
+  const scope: RowWriteScope | null =
+    args.rowId && args.tracker && writable !== 'legacy'
+      ? { rowId: args.rowId, fields: writable }
+      : null;
+  const declared = new Set(args.allow ?? []);
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
     allowed.map((t) => [
       t.id.replaceAll('.', '_'),
@@ -115,7 +169,13 @@ export async function askCortexForAutomation(
         description: t.description,
         parameters: t.inputSchema,
         execute: async (input, { abortSignal }) => {
-          const verdict = decideAutomationCall(t, input, args.tracker?.slug ?? null);
+          const verdict = decideAutomationCall(
+            t,
+            input,
+            args.tracker?.slug ?? null,
+            scope,
+            declared,
+          );
           if (verdict === 'forbidden')
             return {
               __error: true,
@@ -160,6 +220,36 @@ export async function askCortexForAutomation(
             } as unknown as never;
           };
           try {
+            if (verdict === 'row_write' && scope && trackerRow) {
+              const wanted = (input as { values: Record<string, string | number | boolean> })
+                .values;
+              const { data: current, error: readError } = await ctx.db
+                .from('tracker_rows')
+                .select('id, values')
+                .eq('id', scope.rowId)
+                .eq('tracker_id', trackerRow.id)
+                .maybeSingle();
+              if (readError || !current)
+                return {
+                  __error: true,
+                  tool: t.id,
+                  message: 'La fila ya no existe.',
+                } as unknown as never;
+              const before = (current as { values: Record<string, string | number> }).values;
+              const saved = await upsertRow(ctx.db, {
+                tracker: trackerRow,
+                rowId: scope.rowId,
+                values: { ...before, ...wanted },
+                userId: args.requesterId,
+                only: new Set(Object.keys(wanted)),
+              });
+              for (const k of Object.keys(wanted))
+                if (String(before[k] ?? '') !== String(saved.values[k] ?? ''))
+                  applied.push(
+                    `${k}: «${String(before[k] ?? '')}» → «${String(saved.values[k] ?? '')}»`,
+                  );
+              return { ok: true, row: { id: saved.id, values: saved.values } } as unknown as never;
+            }
             if (verdict === 'stage') {
               const parsed = t.inputSchema.safeParse(input);
               if (!parsed.success)
@@ -170,7 +260,30 @@ export async function askCortexForAutomation(
                 } as unknown as never;
               return await stage(parsed.data);
             }
-            return await runTool(t, input, { ...ctx, signal: abortSignal }, { confirmed: false });
+            // Una herramienta declarada en la regla (`allow`) corre sin aprobación: quien
+            // escribió la regla la soltó a conciencia. La política de seguridad, los
+            // topes y las reglas de la empresa se aplican igual dentro de `runTool`.
+            const out = await runTool(
+              t,
+              input,
+              { ...ctx, signal: abortSignal },
+              { confirmed: verdict === 'declared' },
+            );
+            // El portal pidió una persona (código, captcha, sesión vencida): se
+            // corta aquí, la corrida queda esperando y se retoma al resolverse.
+            if (t.id === 'browser.run_flow') {
+              const info = await waitFromRunFlow(ctx.db, out);
+              if (info) {
+                waited.info = info;
+                stop.abort();
+                return {
+                  __waiting: true,
+                  tool: t.id,
+                  message: 'El trámite quedó esperando a una persona. Termina.',
+                } as unknown as never;
+              }
+            }
+            return out;
           } catch (err) {
             if (err instanceof ConfirmationRequiredError)
               return await stage((err as { input?: unknown }).input ?? input);
@@ -190,25 +303,52 @@ export async function askCortexForAutomation(
   const system = `${agent.system_prompt as string}${companyBlock ? `\n\n${companyBlock}` : ''}
 
 ---
-UNA AUTOMATIZACIÓN de la aplicación «${args.app.name}» te pide algo, sin nadie delante:
-- No hagas preguntas ni esperes respuesta: nadie contestará.
-- Puedes leer y escribir en la tabla «${args.tracker?.slug ?? 'ninguna'}». Cualquier otra escritura (correo, otras tablas, cambios) NO se ejecuta: queda pendiente de aprobación y una persona la aprueba después; si una herramienta devuelve __staged, dilo en tu informe y sigue.
-- Termina con un informe breve de lo que hiciste y lo que quedó pendiente.`;
+${askRules(args.app.name, args.tracker?.slug ?? null)}`;
+  const today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10);
 
-  const result = await generateText({
-    model: chatModel(agent.default_model as string),
-    system,
-    messages: [
-      {
-        role: 'user',
-        content: `${args.instruction}${args.rowId ? `\n\n(Fila de contexto: ${args.rowId} de la tabla ${args.tracker?.slug}.)` : ''}`,
-      },
-    ],
-    tools: aiTools,
-    toolChoice: 'auto',
-    maxSteps: MAX_STEPS,
-    experimental_repairToolCall: createToolCallRepair({ surface: 'routine' }),
+  // Si la acción ya esperó a una persona y se resolvió, el modelo recibe lo que
+  // devolvió el trámite y NO lo vuelve a correr (idempotente con la corrida).
+  const resumed =
+    args.actionIndex !== undefined
+      ? resumedPromptBlock(await latestResolvedWait(orgDb, args.run.id, args.actionIndex))
+      : null;
+  const userPrompt = buildAskUserPrompt({
+    instruction: args.instruction,
+    ctx: args.templateContext ?? { after: args.rowValues ?? {} },
+    trackerSlug: args.tracker?.slug ?? null,
+    rowId: args.rowId,
+    fields: args.fields ?? [],
+    writes: args.writes,
+    allow: args.allow,
+    today,
   });
+
+  let result: Awaited<ReturnType<typeof generateText>>;
+  try {
+    result = await generateText({
+      abortSignal: stop.signal,
+      model: chatModel(agent.default_model as string),
+      system,
+      messages: [
+        {
+          role: 'user',
+          content: resumed ? `${userPrompt}\n\n${resumed}` : userPrompt,
+        },
+      ],
+      tools: aiTools,
+      toolChoice: 'auto',
+      maxSteps: MAX_STEPS,
+      experimental_repairToolCall: createToolCallRepair({ surface: 'routine' }),
+    });
+  } catch (err) {
+    // El trámite pidió una persona: la corrida queda esperando (engine: run.ts).
+    if (waited.info) throw new WaitingForPersonError(waited.info);
+    throw err;
+  }
+  if (waited.info) throw new WaitingForPersonError(waited.info);
   const text = result.text.trim();
-  return { summary: (text || 'Cortex no dejó informe.').slice(0, 400), staged };
+  // Lo que de verdad cambió va primero y lo cuenta el código, no el modelo: el
+  // historial de la corrida no depende de que el informe sea fiel.
+  const changes = applied.length ? `Cambios: ${applied.join('; ')}. ` : '';
+  return { summary: `${changes}${text || 'Cortex no dejó informe.'}`.slice(0, 1500), staged };
 }

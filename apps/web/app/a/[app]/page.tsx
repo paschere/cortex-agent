@@ -1,11 +1,11 @@
 import { PublicShell } from '@/app/v/[token]/PublicShell';
 import { KioskScreen } from '@/components/apps/KioskScreen';
 import { openApp } from '@/lib/apps/access';
+import { fontStack } from '@/lib/apps/app-brand';
 import { externalBrand } from '@/lib/apps/external-brand';
 import { openExternalApp } from '@/lib/apps/external-session';
 import { getKioskDevice } from '@/lib/apps/kiosk-session';
-import { listKioskPeople } from '@cortex/agent-tools';
-import { screenFor } from '@cortex/agent-tools';
+import { HOME_SLUG, homeEnabled, listKioskPeople, screenFor } from '@cortex/agent-tools';
 import { notFound, redirect } from 'next/navigation';
 import { EntryForm } from './EntryForm';
 
@@ -26,6 +26,8 @@ export default async function AppEntryPage({ params }: { params: Promise<{ app: 
   const session = await openApp(opened.app.id);
   if (session) {
     const screen = screenFor(session.access, null);
+    // Con «Inicio» encendido, la app abre ahí (0215).
+    if (homeEnabled(session.access.app.home)) redirect(`/a/${opened.app.id}/${HOME_SLUG}`);
     if (screen) redirect(`/a/${opened.app.id}/${screen.slug}`);
     return (
       <PublicShell brand={await externalBrand(opened.db, opened.app)}>
@@ -49,9 +51,12 @@ export default async function AppEntryPage({ params }: { params: Promise<{ app: 
         />
       </PublicShell>
     );
+  const brand = await externalBrand(opened.db, opened.app);
   return (
-    <PublicShell brand={await externalBrand(opened.db, opened.app)}>
-      <EntryForm appId={opened.app.id} appName={opened.app.name} />
-    </PublicShell>
+    <div style={{ fontFamily: fontStack(brand.font) }}>
+      <PublicShell brand={brand}>
+        <EntryForm appId={opened.app.id} appName={opened.app.name} welcome={brand.welcome} />
+      </PublicShell>
+    </div>
   );
 }

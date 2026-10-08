@@ -15,6 +15,7 @@ import { ago, plural } from './format';
 
 interface DriveStatus {
   connected: boolean;
+  canWrite: boolean;
   folder: { id: string; name: string | null } | null;
   lastSyncedAt: string | null;
   lastError: string | null;
@@ -29,6 +30,7 @@ async function fetchStatus(spaceId: string): Promise<DriveStatus> {
   const j = (await r.json()) as Partial<DriveStatus>;
   return {
     connected: j.connected ?? false,
+    canWrite: j.canWrite ?? false,
     folder: j.folder ?? null,
     lastSyncedAt: j.lastSyncedAt ?? null,
     lastError: j.lastError ?? null,
@@ -140,6 +142,26 @@ export function DriveSyncPanel({ spaceId }: { spaceId: string }) {
       )}
 
       <DriveBrowserModal spaceId={spaceId} open={open} onOpenChange={setOpen} />
+      {connected ? (
+        <div className="mt-3 border-t border-border pt-3 text-xs text-ink-muted">
+          {data?.canWrite ? (
+            <span>Cortex puede guardar archivos en las carpetas de tu Drive que ya existen.</span>
+          ) : (
+            <span>
+              Cortex solo lee tu Drive.{' '}
+              <a
+                href="/api/integrations/google?preset=drive_write"
+                className="font-semibold text-primary hover:underline"
+              >
+                Permitir que Cortex guarde archivos en tu Drive
+              </a>{' '}
+              (por ejemplo, copiar a la carpeta de cada guía los documentos que suben tus
+              formularios). Google lo trata como permiso restringido: si tu empresa aún no está
+              entre los usuarios de prueba verás un aviso de «app no verificada».
+            </span>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

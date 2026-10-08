@@ -26,5 +26,7 @@ export * from './external';
 export * from './automations';
 export * from './kiosk';
 export * from './portal';
+export * from './appearance';
+export * from './screen-extras';
 export { appsDesign, reviewAppDraft, appDraftSchema } from './design';
 export type { AppDraft, DraftReview, AutomationIdea } from './design';

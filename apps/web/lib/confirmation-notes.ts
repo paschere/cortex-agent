@@ -18,6 +18,10 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
   'slack.post_message': 'Publica un mensaje en Slack que todos en el canal ven apenas cae.',
   'whatsapp.reply':
     'Le escribe al cliente por WhatsApp, desde el número de la empresa, dentro de la conversación que él abrió. Sale tal cual está escrito y no se puede borrar de su teléfono. Desde ese momento la conversación la atiende una persona, no el bot.',
+  'whatsapp.group_send':
+    'Escribe en un grupo de WhatsApp desde el número de la empresa, solo en un grupo que un administrador habilitó. Lo ve todo el grupo (también quien no trabaja aquí) y no se puede borrar de sus teléfonos. El número no usa la API oficial: demasiados mensajes automáticos pueden hacer que WhatsApp lo bloquee.',
+  'gdrive.upload_file':
+    'Copia el archivo a una carpeta de tu Google Drive que ya existe (no crea carpetas). Usa tu permiso de escritura en Drive; si lo repites no se duplica.',
   // Trámites web (migration 0087). The note has to say the two things that
   // make this different from every other write on the list: it happens on a
   // system nobody here administers, and with the company's own login.

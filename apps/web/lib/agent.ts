@@ -70,6 +70,12 @@ export function buildToolContext(opts: {
       const { sendAppInvitations } = await import('./apps/invitations');
       return sendAppInvitations(db, input.appId, input.userIds);
     },
+    // Los bytes de un archivo de un campo `file` (gdrive.upload_file). Import
+    // dinámico: arrastra pg, que casi ninguna ruta de herramientas necesita.
+    readStoredFile: async (url) => {
+      const { readStoredFileByUrl } = await import('./stored-file');
+      return readStoredFileByUrl(opts.organizationId, url);
+    },
     signal: opts.signal,
   };
 }

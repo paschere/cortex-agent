@@ -1,7 +1,7 @@
 import { DRIVE_READONLY } from '@/app/api/kb/drive/_lib';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { createIntegrationsClient, getVisibleSpace } from '@cortex/agent-tools';
+import { DRIVE_FULL, createIntegrationsClient, getVisibleSpace } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -34,6 +34,8 @@ export async function GET(req: NextRequest) {
 
   const integrations = createIntegrationsClient(sb, session.id, logger);
   const connected = await integrations.hasScopes('google', [DRIVE_READONLY]);
+  // Permiso OPCIONAL de escritura (gdrive.upload_file); ver api/integrations/google.
+  const canWrite = await integrations.hasScopes('google', [DRIVE_FULL]);
 
   const folderId = collection.gdrive_folder_id as string | null;
   const folder = folderId ? { id: folderId, name: null } : null;
@@ -69,6 +71,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     connected,
+    canWrite,
     folder,
     lastSyncedAt,
     lastError,

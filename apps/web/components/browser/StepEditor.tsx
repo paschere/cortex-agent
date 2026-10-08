@@ -10,6 +10,7 @@ import {
 } from '@/lib/browser-shape';
 import {
   type ProposedVariable,
+  addExtractStep,
   canBeOptional,
   canMoveDown,
   canMoveUp,
@@ -24,6 +25,8 @@ import {
   pruneVariables,
   removeStep,
   renameStep,
+  setExtractDefault,
+  setExtractName,
   setStepLiteral,
   setStepOptional,
   setStepTemplate,
@@ -94,6 +97,8 @@ export function StepEditor({
   const { steps, variables, sample } = value;
   const [creatingAt, setCreatingAt] = useState<number | null>(null);
   const [draftLabel, setDraftLabel] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [newResult, setNewResult] = useState({ name: '', label: '', fallback: '' });
 
   // Where the keyboard should land after the list reorders itself. Set by the
   // handler, spent by the effect that runs on the render it caused.
@@ -197,6 +202,44 @@ export function StepEditor({
                         }
                       />
                     </label>
+                  )}
+                  {step.action === 'extract' && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <label className="text-xs text-ink-muted" htmlFor={`paso-${index}-resultado`}>
+                        Vuelve en result.«nombre»
+                        <Input
+                          id={`paso-${index}-resultado`}
+                          className="mt-1 font-mono text-xs"
+                          value={step.extractAs ?? ''}
+                          maxLength={40}
+                          onChange={(e) =>
+                            onChange({
+                              ...value,
+                              steps: setExtractName(steps, index, e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label
+                        className="text-xs text-ink-muted"
+                        htmlFor={`paso-${index}-porDefecto`}
+                      >
+                        Si no aparece, el resultado es
+                        <Input
+                          id={`paso-${index}-porDefecto`}
+                          className="mt-1"
+                          value={step.extractDefault ?? ''}
+                          maxLength={200}
+                          placeholder="(falla si no aparece)"
+                          onChange={(e) =>
+                            onChange({
+                              ...value,
+                              steps: setExtractDefault(steps, index, e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
                   )}
                   <ValueField
                     step={step}
@@ -349,6 +392,76 @@ export function StepEditor({
           );
         })}
       </ol>
+
+      <div className="mt-3">
+        {adding ? (
+          <div className="rounded-sm border border-primary/20 bg-primary-soft px-3 py-2.5">
+            <p className="text-xs text-ink-muted">
+              Lee el texto que aparece junto a un rótulo de la página (p. ej. «Estado» y, al lado,
+              su valor). Al probar el trámite verás qué leyó.
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <Input
+                aria-label="Nombre del resultado"
+                placeholder="Nombre (estado_guia)"
+                value={newResult.name}
+                maxLength={40}
+                onChange={(e) => setNewResult({ ...newResult, name: e.target.value })}
+              />
+              <Input
+                aria-label="Rótulo junto al valor"
+                placeholder="Rótulo (Estado)"
+                value={newResult.label}
+                maxLength={60}
+                onChange={(e) => setNewResult({ ...newResult, label: e.target.value })}
+              />
+              <Input
+                aria-label="Resultado si no aparece"
+                placeholder="Si no aparece: no encontrado"
+                value={newResult.fallback}
+                maxLength={200}
+                onChange={(e) => setNewResult({ ...newResult, fallback: e.target.value })}
+              />
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                disabled={!newResult.name.trim() || !newResult.label.trim()}
+                onClick={() => {
+                  onChange({
+                    ...value,
+                    steps: addExtractStep(steps, {
+                      name: newResult.name,
+                      nextToLabel: newResult.label,
+                      fallback: newResult.fallback,
+                    }),
+                  });
+                  setNewResult({ name: '', label: '', fallback: '' });
+                  setAdding(false);
+                }}
+                className="rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                Agregar resultado
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdding(false)}
+                className="rounded-pill px-3 py-1.5 text-xs font-semibold text-ink-muted hover:bg-surface-2 hover:text-ink"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="rounded-pill border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink-muted hover:text-ink"
+          >
+            Agregar un resultado
+          </button>
+        )}
+      </div>
 
       {general.length > 0 && (
         <ul className="mt-3 space-y-1">

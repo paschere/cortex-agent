@@ -282,6 +282,16 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // 0185: contestarle a un cliente por WhatsApp sale de la empresa, con datos
   // de ese cliente. Siempre con confirmación y nunca sin nadie delante.
   'whatsapp.reply': { sensitivity: 'client', blastRadius: 'external_send', deliversContent: true },
+  // 0213: un mensaje de Cortex a un grupo de WhatsApp. Sale de la empresa, pero SÓLO
+  // a un grupo que un administrador habilitó uno por uno, con topes por grupo y por
+  // día y apagado general. Clasificarlo `external_send` lo volvería `critical` y
+  // bloqueado sin nadie delante, que es justo lo que `ask_cortex.allow` permite a
+  // propósito (la regla lo declara). En el chat sigue pidiendo confirmación
+  // (`requiresConfirmation`).
+  'whatsapp.group_send': { blastRadius: 'internal_write' },
+  // Guardar en Drive un archivo de Cortex en una carpeta que ya existe (con el
+  // permiso de escritura que la persona dio): es una escritura, no un envío.
+  'gdrive.upload_file': { blastRadius: 'internal_write' },
   // Trámites web (migration 0087). A learned errand that only consults a portal
   // is an ordinary internal write: the verb heuristic would call it a read,
   // which understates it, because it acts as the company on somebody else's

@@ -1,6 +1,6 @@
 'use client';
 
-import type { AppPermissions } from '@cortex/agent-tools';
+import type { AppBrand, AppHome, AppPermissions } from '@cortex/agent-tools';
 import {
   BadgeCheck,
   BarChart3,
@@ -118,6 +118,20 @@ export interface AppEditorData {
   trackers: EditorTracker[];
   /** Tablas que una pantalla lee pero que no son tablas propias (sin campos que listar). */
   unknownTrackers: string[];
+  /** Apariencia propia de la app (0215) y la de la empresa, que es el valor por defecto. */
+  brand: AppBrand;
+  companyBrand: {
+    name: string;
+    primary: string | null;
+    secondary: string | null;
+    logoUrl: string | null;
+  };
+  /** Inicio con tarjetas (0215). */
+  home: AppHome | null;
+  /** Todas las tablas del espacio, para contar en las tarjetas del Inicio. */
+  homeTrackers: EditorTracker[];
+  /** Por pantalla (slug), los filtros de su barra: una tarjeta puede abrirla ya filtrada. */
+  screenFilters: Record<string, Array<{ id: string; label: string }>>;
 }
 
 /** Los atributos que un rol necesita (`$user.x` en sus filtros de fila), en el mismo orden en que aparecen. */

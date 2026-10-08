@@ -1,5 +1,8 @@
 import { type TrackerField, displayTrackerValue } from '../trackers/schema';
+import { computeCards } from './cards';
 import { type EmbedProvider, embedSrc, httpsUrl, safeHref } from './embeds';
+import { buildDetail, findDetailTarget } from './record';
+import type { RecordHistoryRaw } from './record';
 import {
   APPROVE_ACTION_ID,
   type Aggregate,
@@ -228,7 +231,9 @@ export type ComputedBlock =
   | (BlockBase & {
       type: 'calendar';
       title: string;
-      mode: 'month' | 'agenda';
+      mode: 'month' | 'agenda' | 'week' | 'day';
+      /** Los modos entre los que la persona elige (día / semana / mes); vacío = fijo. */
+      modes?: Array<'day' | 'week' | 'month'>;
       /** Hoy en Bogotá, AAAA-MM-DD. */
       today: string;
       /** Lo que el cálculo cubre: el navegador no navega fuera de aquí. */
@@ -239,6 +244,8 @@ export type ComputedBlock =
         id: string;
         day: string;
         label: string;
+        /** HH:MM si el spec nombra un campo de hora y la fila lo trae. */
+        time?: string | null;
         tag: string | null;
         tone: Tone | null;
       }>;
@@ -249,6 +256,8 @@ export type ComputedBlock =
       actions: ComputedAction[];
       record: ComputedRecords | null;
     })
+  | (BlockBase & ComputedCards)
+  | (BlockBase & ComputedRecordDetail)
   | (BlockBase & {
       type: 'progress';
       title: string;
@@ -297,6 +306,96 @@ export type ComputedBlock =
       autoStart: boolean;
     })
   | (BlockBase & { type: 'problem'; title: string; message: string });
+
+/** La lista de tarjetas con filtros rápidos (ver `cardsBlockSchema`). */
+export interface ComputedCards {
+  type: 'cards';
+  title: string;
+  source: string;
+  /** Hoy y la semana (lunes a domingo) en Bogotá: contra ellos corren «hoy» y «semana». */
+  today: string;
+  week: { from: string; to: string };
+  total: number;
+  cards: Array<{
+    id: string;
+    title: string;
+    subtitle: string | null;
+    /** `url`: una dirección https; `file`: el valor crudo de un campo de archivos. */
+    image: { kind: 'url'; url: string } | { kind: 'file'; raw: string } | null;
+    status: { label: string; tone: Tone } | null;
+    data: ComputedDetail[];
+    day: string | null;
+    mine: boolean;
+    group: string | null;
+    sort: Array<string | number | null>;
+    alert?: boolean;
+  }>;
+  /** Los chips que se pintan (los que el spec pidió y se pueden resolver). */
+  chips: Array<'status' | 'today' | 'week' | 'mine'>;
+  statusOptions: Array<{ label: string; tone: Tone }>;
+  searchable: boolean;
+  groupLabel: string | null;
+  sortOptions: Array<{ label: string; dir: 'asc' | 'desc' }>;
+  defaultSort: { index: number; dir: 'asc' | 'desc' } | null;
+  pageSize: number;
+  paging: 'more' | 'infinite';
+  actions: ComputedAction[];
+  record: ComputedRecords | null;
+}
+
+/** Un renglón de la línea de tiempo de un registro. */
+export interface ComputedTimelineEntry {
+  id: string;
+  at: string;
+  kind: 'created' | 'changed' | 'approval' | 'action' | 'automation' | 'file';
+  /** Quién (nombre, «Tú», «El equipo»); null si no se sabe. */
+  actor: string | null;
+  title: string;
+  changes?: Array<{ label: string; from: string; to: string }>;
+  files?: Array<{ label: string; names: string[] }>;
+  ok?: boolean;
+}
+
+export interface ComputedDetailItem extends ComputedDetail {
+  key: string;
+  /** Presente sólo si el campo se edita desde el detalle Y quien mira puede escribir. */
+  edit?: ComputedEditMeta;
+  editRaw?: string | number | null;
+}
+
+/** El detalle de un registro (ver `detailBlockSchema`). */
+export interface ComputedRecordDetail {
+  type: 'detail';
+  title: string;
+  source: string;
+  /** `idle`: no hay fila elegida; `missing`: la fila no existe o no se ve; `ready`. */
+  state: 'idle' | 'missing' | 'ready';
+  rowId: string | null;
+  header: {
+    title: string;
+    subtitle: string | null;
+    status: { label: string; tone: Tone } | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  sections: Array<{ title: string; items: ComputedDetailItem[] }>;
+  gallery: Array<{ key: string; label: string; raw: string }>;
+  related: Array<{
+    /** `<detalle>:<lista>`: el id con el que se escribe sobre sus filas. */
+    blockKey: string;
+    title: string;
+    source: string;
+    columns: Array<{ key: string; label: string }>;
+    rows: Array<{ id: string; cells: string[]; alert?: boolean }>;
+    total: number;
+    actions: ComputedAction[];
+    /** El bloque detalle al que abre una fila de esta lista, si hay uno para su tabla. */
+    opens: string | null;
+    problem: string | null;
+  }>;
+  actions: ComputedAction[];
+  timeline: ComputedTimelineEntry[] | null;
+}
 
 export type GoalStatus = 'good' | 'warn' | 'bad';
 
@@ -380,6 +479,11 @@ export interface ComputedCompare {
  * `fields` una vez por bloque; por fila, los valores en ese mismo orden.
  */
 export interface ComputedRecords {
+  /**
+   * El bloque `detail` que abre estas filas (su tabla tiene uno en la vista):
+   * tocar una fila va a `?fila=<id>` en vez de abrir la ficha lateral.
+   */
+  detail?: string;
   fields: Array<{
     key: string;
     label: string;
@@ -414,9 +518,11 @@ export interface ComputedTheme {
   accent: Tone;
   density: 'comfortable' | 'compact';
   header: 'plain' | 'hero';
-  layout: 'dashboard' | 'operator';
+  layout: 'dashboard' | 'operator' | 'tv';
   style: 'clean' | 'bold' | 'dark-panel';
   cover: string | null;
+  /** Presente con `layout: 'tv'`: la rotación y el reloj. */
+  tv?: { rotateSeconds: number; clock: boolean };
 }
 
 /** Valores que la pantalla pinta distinto a un texto: fotos/archivos y ubicaciones. */
@@ -507,6 +613,8 @@ export interface ComputedView {
   /** Pestañas; cada bloque está en exactamente una. Vacío = una sola página. */
   pages?: Array<{ id: string; title: string; blockIds: string[] }>;
   theme?: ComputedTheme;
+  /** El registro abierto (`?fila=`): qué detalle y qué fila. Ausente = ninguno. */
+  record?: { blockId: string; rowId: string; found: boolean } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -812,7 +920,7 @@ function actionsFor(
   return out;
 }
 
-interface ComputeOptions {
+export interface ComputeOptions {
   /** Aprobación por tabla (slug → formulario con `approval`); la arma `computeView`. */
   approval?: Map<string, FormApproval>;
   /** Quien mira puede editar y usar botones (lo decide el servidor, no el spec). */
@@ -824,6 +932,20 @@ interface ComputeOptions {
   audience: 'team' | 'public';
   /** Lo elegido en la barra de filtros, ya validado (`parseViewFilterParam`). */
   filters: ViewFilterState;
+  /**
+   * Quién mira, para «mis tarjetas»: el id de un miembro o de un usuario
+   * externo de la app. Sin él (enlace público), el chip «mío» no se ofrece.
+   */
+  viewer?: { id: string; kind: 'member' | 'app_user' } | null;
+  /**
+   * El registro abierto (`?fila=`): lo resuelve `loadRecordContext` (con su
+   * línea de tiempo leída de la base). Sin esto, los detalles quedan en reposo.
+   */
+  record?: { rowId: string; blockId?: string | null; history?: RecordHistoryRaw | null } | null;
+  /** tabla → bloque `detail` que abre sus filas; lo arma `computeView`. */
+  details?: Map<string, string>;
+  /** id de botón → su rótulo, para nombrar «usó el botón X» en la línea de tiempo. */
+  actionLabels?: Map<string, string>;
 }
 
 /** Si el campo se pinta con algo más que texto (foto, mapa). */
@@ -893,7 +1015,7 @@ const READONLY_DEFAULT_FIELDS = 8;
 
 type RecordBlock = Extract<
   ViewBlock,
-  { type: 'table' | 'board' | 'zones' | 'gallery' | 'calendar' }
+  { type: 'table' | 'board' | 'zones' | 'gallery' | 'calendar' | 'cards' }
 >;
 
 /**
@@ -946,7 +1068,8 @@ function buildRecords(
       updatedAt: r.updated_at,
     };
   }
-  return { fields, rows: out };
+  const detail = opts.details?.get(tracker.slug);
+  return { ...(detail ? { detail } : {}), fields, rows: out };
 }
 
 /** Lo que un bloque deja escribir: la misma lista que `editViewRow` acepta. */
@@ -955,7 +1078,13 @@ export function blockWriteFields(block: ViewBlock): string[] {
   if (block.type === 'table') return [...new Set([...block.editable, ...record])];
   if (block.type === 'board' || block.type === 'zones')
     return [...new Set([...(block.draggable ? [block.groupBy] : []), ...record])];
-  if (block.type === 'gallery' || block.type === 'calendar') return [...record];
+  if (
+    block.type === 'gallery' ||
+    block.type === 'calendar' ||
+    block.type === 'cards' ||
+    block.type === 'detail'
+  )
+    return [...record];
   return [];
 }
 
@@ -1010,6 +1139,14 @@ function compareMetric(
       }),
     },
   };
+}
+
+/** La hora HH:MM de un evento, si el spec nombra un campo de hora y la fila lo trae. */
+function eventTime(row: ViewRow, key: string | undefined): string | null {
+  if (!key) return null;
+  const v = rawValue(row, key);
+  const m = typeof v === 'string' ? /^(\d{1,2}):(\d{2})/.exec(v.trim()) : null;
+  return m ? `${String(m[1]).padStart(2, '0')}:${m[2]}` : null;
 }
 
 /** Cuántos eventos entrega el calendario como mucho (tres meses de agenda apretada). */
@@ -1125,7 +1262,29 @@ function computeBlock(
         ]
       : []),
     ...(block.type === 'calendar'
-      ? [block.dateField, block.labelField, ...opt(block.colorField)]
+      ? [block.dateField, block.labelField, ...opt(block.colorField), ...opt(block.timeField)]
+      : []),
+    ...(block.type === 'cards'
+      ? [
+          block.titleField,
+          ...opt(block.subtitleField),
+          ...opt(block.imageField),
+          ...opt(block.statusField),
+          ...opt(block.dateField),
+          ...opt(block.groupBy),
+          ...block.dataFields,
+          ...block.sortOptions,
+          ...(block.sort ? [block.sort.field] : []),
+        ]
+      : []),
+    ...(block.type === 'detail'
+      ? [
+          block.titleField,
+          ...opt(block.subtitleField),
+          ...opt(block.statusField),
+          ...block.sections.flatMap((sec) => sec.fields),
+          ...block.gallery,
+        ]
       : []),
   ].filter((key) => !fieldType(tracker, key));
   if (missing.length) {
@@ -1454,7 +1613,13 @@ function computeBlock(
 
     case 'calendar': {
       const month = today.slice(0, 7);
-      const agenda = block.mode === 'agenda';
+      const modes = block.modes ?? [];
+      // Con selector, abre en el modo pedido o, si no está entre los elegibles, en el primero.
+      const mode =
+        block.mode !== 'agenda' && modes.length && !modes.includes(block.mode as 'day')
+          ? (modes[0] as 'day' | 'week' | 'month')
+          : block.mode;
+      const agenda = mode === 'agenda';
       const months = agenda ? [] : [addMonths(month, -1), month, addMonths(month, 1)];
       const from = agenda ? today : `${months[0]}-01`;
       const to = agenda ? addDays(today, block.days - 1) : lastDayOfMonth(months[2] ?? month);
@@ -1476,7 +1641,8 @@ function computeBlock(
         id: block.id,
         width: block.width,
         title: block.title,
-        mode: block.mode,
+        mode,
+        modes,
         today,
         range: { from, to },
         months,
@@ -1490,6 +1656,7 @@ function computeBlock(
               block.labelField === 'label'
                 ? row.label
                 : displayValue(tracker, row, block.labelField),
+            time: eventTime(row, block.timeField),
             tag: tag === undefined ? null : String(tag),
             tone: at >= 0 ? toneAt(at) : null,
           };
@@ -1513,6 +1680,12 @@ function computeBlock(
         ),
       };
     }
+
+    case 'cards':
+      return computeCards(block, { src, rows, today, opts });
+
+    case 'detail':
+      return buildDetail(block, { src, rows, sources, today, opts });
 
     case 'progress': {
       const format = formatOf(tracker, block.field, block.format);
@@ -1750,13 +1923,24 @@ export function computePages(
 }
 
 export function computeTheme(spec: Pick<ViewSpec, 'theme' | 'accent'>): ComputedTheme {
+  const layout = spec.theme?.layout ?? 'dashboard';
+  const tv = layout === 'tv';
   return {
     accent: spec.theme?.accent ?? spec.accent,
     density: spec.theme?.density ?? 'comfortable',
     header: spec.theme?.header ?? 'plain',
-    layout: spec.theme?.layout ?? 'dashboard',
-    style: spec.theme?.style ?? 'clean',
+    layout,
+    // El tablero TV es siempre un panel oscuro de alto contraste.
+    style: tv ? 'dark-panel' : (spec.theme?.style ?? 'clean'),
     cover: httpsUrl(spec.theme?.cover),
+    ...(tv
+      ? {
+          tv: {
+            rotateSeconds: spec.theme?.tv?.rotateSeconds ?? 15,
+            clock: spec.theme?.tv?.clock ?? true,
+          },
+        }
+      : {}),
   };
 }
 
@@ -1774,6 +1958,15 @@ export function computeView(
     writable: Boolean(opts.writable),
     audience: opts.audience ?? 'team',
     filters: opts.filters ?? {},
+    viewer: opts.viewer ?? null,
+    record: opts.record ?? null,
+    // El detalle que abre las filas de cada tabla: el primero de la vista que la lee.
+    details: new Map(
+      spec.blocks
+        .flatMap((b) => (b.type === 'detail' ? ([[b.tracker, b.id]] as const) : []))
+        .reverse(),
+    ),
+    actionLabels: actionLabelsOf(spec),
     approval: new Map(
       spec.blocks.flatMap((b) =>
         b.type === 'form' && b.approval ? ([[b.tracker, b.approval]] as const) : [],
@@ -1781,6 +1974,15 @@ export function computeView(
     ),
   };
   const sources = applyFilterBar(spec, unfiltered, options.filters);
+  // El registro abierto: qué detalle lo muestra. Sólo ese bloque sale «listo».
+  const target = options.record
+    ? findDetailTarget(spec, sources, options.record.rowId, options.record.blockId, today)
+    : null;
+  if (options.record)
+    options.record = {
+      ...options.record,
+      blockId: target?.block.id ?? spec.blocks.find((b) => b.type === 'detail')?.id ?? null,
+    };
   const alerts: ComputedAlertFeed[] = [];
   for (const alert of spec.alerts) {
     const src = sources.get(alert.source);
@@ -1819,11 +2021,55 @@ export function computeView(
     ),
     computedAt: now.toISOString(),
     partial: [...unfiltered.values()].filter((s) => s.truncated).map((s) => s.tracker.name),
-    refreshSeconds: spec.refreshSeconds,
+    refreshSeconds:
+      spec.theme?.layout === 'tv' && (spec.refreshSeconds === 0 || spec.refreshSeconds > 30)
+        ? 30
+        : spec.refreshSeconds,
     writable: options.writable,
     alerts,
     filtersBar: computeFilterBar(spec, unfiltered, options.filters),
     pages: computePages(spec),
     theme: computeTheme(spec),
+    record: options.record
+      ? {
+          blockId: options.record.blockId ?? '',
+          rowId: options.record.rowId,
+          found: Boolean(target),
+        }
+      : null,
   };
 }
+
+/** id de botón → rótulo, de todos los bloques de la vista (incluidas las listas relacionadas). */
+function actionLabelsOf(spec: Pick<ViewSpec, 'blocks'>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const b of spec.blocks) {
+    if ('actions' in b) for (const a of b.actions) out.set(a.id, a.label);
+    if (b.type === 'detail')
+      for (const r of b.related) for (const a of r.actions) out.set(a.id, a.label);
+  }
+  return out;
+}
+
+/**
+ * Las piezas de fila que comparten compute.ts y los bloques que viven en su
+ * propio archivo (record.ts, cards.ts). Un solo objeto, y no una docena de
+ * exports sueltos: así el barril del paquete no los publica como API.
+ */
+export const rowKit = {
+  rawValue,
+  displayValue,
+  detailOf,
+  fieldLabel,
+  columnKind,
+  editMeta,
+  sortRows,
+  actionsFor,
+  toneAt,
+  isAlertRow,
+  dayOf,
+  addDays,
+  matches,
+  problem,
+  buildRecords,
+};

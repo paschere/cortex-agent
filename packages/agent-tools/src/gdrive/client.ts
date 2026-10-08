@@ -53,3 +53,63 @@ export async function driveGetBytes(
   if (!r.ok) throw new IntegrationError(`Drive ${r.status} ${path}: ${await r.text()}`, 'google');
   return Buffer.from(await r.arrayBuffer());
 }
+
+/**
+ * ESCRIBIR EN DRIVE: subida reanudable de un archivo a una carpeta que YA existe.
+ *
+ * Dos pasos (iniciar la sesión con los metadatos y mandar los bytes) en vez de
+ * la subida «multipart»: la reanudable sirve igual para un PDF de 200 KB que
+ * para uno de 20 MB, y así no hay dos caminos. `appProperties` lleva la llave
+ * de idempotencia (ver `upload-file.ts`): Drive mismo es el registro de qué se
+ * subió, con el id del archivo.
+ */
+export async function driveUploadFile(
+  ctx: ToolContext,
+  input: {
+    folderId: string;
+    name: string;
+    mime: string;
+    bytes: Buffer;
+    appProperties?: Record<string, string>;
+  },
+): Promise<{ id: string; name: string; webViewLink: string | null }> {
+  const { token } = await ctx.integrations.getAccessToken('google');
+  const start = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,webViewLink',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': input.mime,
+        'X-Upload-Content-Length': String(input.bytes.byteLength),
+      },
+      body: JSON.stringify({
+        name: input.name,
+        parents: [input.folderId],
+        ...(input.appProperties ? { appProperties: input.appProperties } : {}),
+      }),
+      signal: ctx.signal,
+    },
+  );
+  if (!start.ok)
+    throw new IntegrationError(
+      `Drive ${start.status} al iniciar la subida: ${await start.text()}`,
+      'google',
+    );
+  const location = start.headers.get('location');
+  if (!location) throw new IntegrationError('Drive no devolvió dónde subir el archivo.', 'google');
+  const put = await fetch(location, {
+    method: 'PUT',
+    headers: { 'Content-Type': input.mime, 'Content-Length': String(input.bytes.byteLength) },
+    body: new Uint8Array(input.bytes),
+    signal: ctx.signal,
+  });
+  if (!put.ok)
+    throw new IntegrationError(
+      `Drive ${put.status} al subir el archivo: ${await put.text()}`,
+      'google',
+    );
+  const out = (await put.json()) as { id: string; name: string; webViewLink?: string };
+  return { id: out.id, name: out.name, webViewLink: out.webViewLink ?? null };
+}

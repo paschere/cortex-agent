@@ -256,6 +256,12 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
     toolId: 'whatsapp.reply',
     input: { conversationId: '00000000-0000-4000-8000-000000000001', text: 'Ya te reviso.' },
   },
+  {
+    toolId: 'whatsapp.group_send',
+    input: { group: 'Despachos', text: 'Buenos días, ¿nos confirman el vuelo de la guía 045-123?' },
+  },
+  { toolId: 'gdrive.upload_file', input: { folderId: '1AbCdEfGhIjK', fileName: 'AWB.pdf' } },
+  { toolId: 'gdrive.upload_file', input: { folderId: '1AbCdEfGhIjK' } },
   // Proyectos y flota (0196).
   {
     toolId: 'projects.create',

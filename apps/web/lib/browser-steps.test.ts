@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ProposedStep } from './browser-shape';
 import {
   type ProposedVariable,
+  addExtractStep,
   canBeOptional,
   canMoveDown,
   canMoveUp,
@@ -17,6 +18,9 @@ import {
   pruneVariables,
   removeStep,
   renameStep,
+  resultNames,
+  setExtractDefault,
+  setExtractName,
   setStepOptional,
   variableNameFrom,
   whyPinned,
@@ -290,5 +294,52 @@ describe('null no es «no viene»', () => {
     const cleaned = proposalSchema.safeParse(withoutNulls(edited));
     expect(cleaned.success).toBe(true);
     expect(cleaned.success && cleaned.data.steps[0]).not.toHaveProperty('value');
+  });
+});
+
+describe('resultados (pasos extract)', () => {
+  const base: ProposedStep[] = [
+    { action: 'goto', label: 'Abrir', url: 'https://portal.test', targets: [], landmarks: [] },
+  ];
+
+  it('agrega un resultado junto a un rótulo, con valor por defecto, y se puede renombrar y quitar', () => {
+    const added = addExtractStep(base, {
+      name: 'Estado de la guía',
+      nextToLabel: 'Estado:',
+      fallback: ' no encontrado ',
+    });
+    expect(added).toHaveLength(2);
+    expect(added[1]).toMatchObject({
+      action: 'extract',
+      extractAs: 'estado_de_la_guia',
+      extractDefault: 'no encontrado',
+    });
+    expect(added[1]?.targets[0]?.value).toContain('Estado');
+    expect(added[1]?.targets[0]?.value).toContain('following-sibling');
+    expect(resultNames(added)).toEqual(['estado_de_la_guia']);
+
+    const renamed = setExtractName(added, 1, 'Resultado');
+    expect(renamed[1]?.extractAs).toBe('resultado');
+    const noDefault = setExtractDefault(renamed, 1, '  ');
+    expect(noDefault[1]).not.toHaveProperty('extractDefault');
+    expect(removeStep(noDefault, 1)).toHaveLength(1);
+    // No cambia pasos que no son resultados.
+    expect(setExtractName(base, 0, 'x')).toEqual(base);
+  });
+
+  it('sin nombre o sin rótulo no agrega nada', () => {
+    expect(addExtractStep(base, { name: '', nextToLabel: 'Estado' })).toBe(base);
+    expect(addExtractStep(base, { name: 'x', nextToLabel: '  ' })).toBe(base);
+  });
+
+  it('checkSteps exige nombre válido, único y con dónde leer', () => {
+    const one = addExtractStep(base, { name: 'estado', nextToLabel: 'Estado' });
+    expect(checkSteps(one, [])).toEqual([]);
+    const dup = [...one, ...addExtractStep(base, { name: 'estado', nextToLabel: 'Otro' }).slice(1)];
+    expect(checkSteps(dup, []).some((p) => p.message.includes('dos resultados'))).toBe(true);
+    const reserved = [...base, { ...(one[1] as ProposedStep), extractAs: 'download' }];
+    expect(checkSteps(reserved, []).some((p) => p.message.includes('nombre válido'))).toBe(true);
+    const noTarget = [...base, { ...(one[1] as ProposedStep), targets: [] }];
+    expect(checkSteps(noTarget, []).some((p) => p.message.includes('dónde leer'))).toBe(true);
   });
 });

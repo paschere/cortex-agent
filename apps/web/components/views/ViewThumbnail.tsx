@@ -162,6 +162,28 @@ export function BlockGlyph({
           ))}
         </div>
       );
+    case 'cards':
+    case 'detail':
+      return (
+        <div
+          className={clsx(
+            'grid gap-0.5 p-1',
+            large ? 'h-14' : 'h-12',
+            type === 'cards' ? 'grid-cols-2' : 'grid-cols-3',
+          )}
+        >
+          {Array.from({ length: type === 'cards' ? 4 : 3 }, (_, i) => (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: casillas fijas de un dibujo.
+              key={i}
+              className={clsx(
+                'rounded-sm ring-1 ring-inset',
+                i === 2 && type === 'detail' ? 'row-span-1 bg-ink-faint/20' : t.soft,
+              )}
+            />
+          ))}
+        </div>
+      );
     case 'calendar':
       return (
         <div className={clsx('grid grid-cols-7 gap-px p-1', large ? 'h-14' : 'h-12')}>

@@ -145,6 +145,8 @@ export const KNOWN_BLOCK_TYPES = [
   'board',
   'gallery',
   'calendar',
+  'cards',
+  'detail',
   'progress',
   'form',
   'media',
@@ -164,6 +166,8 @@ export const BLOCK_LABEL: Record<string, string> = {
   zones: 'Plano',
   gallery: 'Galería',
   calendar: 'Calendario',
+  cards: 'Tarjetas con filtros',
+  detail: 'Detalle de un registro',
   progress: 'Avance',
   media: 'Imagen o video',
   links: 'Botones',
@@ -171,7 +175,14 @@ export const BLOCK_LABEL: Record<string, string> = {
 };
 
 /** Bloques cuyas filas abren su ficha al tocarlas. */
-export const RECORD_BLOCK_TYPES = ['table', 'board', 'zones', 'gallery', 'calendar'] as const;
+export const RECORD_BLOCK_TYPES = [
+  'table',
+  'board',
+  'zones',
+  'gallery',
+  'calendar',
+  'cards',
+] as const;
 
 export const PERIODS = ['day', 'week', 'month'] as const;
 export const PERIOD_LABEL: Record<(typeof PERIODS)[number], string> = {
@@ -180,10 +191,29 @@ export const PERIOD_LABEL: Record<(typeof PERIODS)[number], string> = {
   month: 'Mes',
 };
 
-export const CALENDAR_MODES = ['month', 'agenda'] as const;
+export const CALENDAR_MODES = ['month', 'agenda', 'week', 'day'] as const;
 export const CALENDAR_MODE_LABEL: Record<(typeof CALENDAR_MODES)[number], string> = {
   month: 'Mes',
-  agenda: 'Agenda',
+  agenda: 'Próximos días',
+  week: 'Semana',
+  day: 'Día',
+};
+export const CALENDAR_SWITCH_MODES = ['day', 'week', 'month'] as const;
+
+export const CARD_CHIPS = ['status', 'today', 'week', 'mine'] as const;
+export const CARD_CHIP_LABEL: Record<(typeof CARD_CHIPS)[number], string> = {
+  status: 'Por estado',
+  today: 'Hoy',
+  week: 'Esta semana',
+  mine: 'Mías',
+};
+export const TIMELINE_PARTS = ['created', 'changes', 'approvals', 'automations', 'files'] as const;
+export const TIMELINE_PART_LABEL: Record<(typeof TIMELINE_PARTS)[number], string> = {
+  created: 'Quién lo creó',
+  changes: 'Qué cambió',
+  approvals: 'Aprobaciones',
+  automations: 'Automatizaciones',
+  files: 'Archivos subidos',
 };
 
 export const GALLERY_COLUMNS = [2, 3, 4] as const;
@@ -222,10 +252,11 @@ export const HEADER_LABEL: Record<(typeof HEADER_STYLES)[number], string> = {
   hero: 'Portada grande',
 };
 
-export const LAYOUTS = ['dashboard', 'operator'] as const;
+export const LAYOUTS = ['dashboard', 'operator', 'tv'] as const;
 export const LAYOUT_LABEL: Record<(typeof LAYOUTS)[number], string> = {
   dashboard: 'Panel',
   operator: 'Operario (celular)',
+  tv: 'Tablero TV (pared)',
 };
 export const VIEW_STYLES = ['clean', 'bold', 'dark-panel'] as const;
 export const VIEW_STYLE_LABEL: Record<(typeof VIEW_STYLES)[number], string> = {

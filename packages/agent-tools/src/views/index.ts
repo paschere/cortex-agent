@@ -51,6 +51,12 @@ export {
 
 export * from './spec';
 export * from './compute';
+export * from './record';
+export * from './record-history';
+export * from './cards';
+export * from './cards-filter';
+export * from './agenda';
+export * from './tv';
 export * from './export';
 export * from './digest';
 export * from './store';

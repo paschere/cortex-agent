@@ -97,6 +97,7 @@ export function matchesTrigger(
         (trigger.decision === 'rejected' && event.decision === 'rejected')
       );
     case 'schedule':
+    case 'rows_poll':
       return true;
     case 'button':
       return trigger.screen === event.screen && trigger.id === event.buttonId;

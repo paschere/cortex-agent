@@ -2,7 +2,12 @@ import { getOrgScopedClient } from '@/lib/supabase/service';
 import { authorizeBridgeSession } from '@/lib/whatsapp/bridge';
 import { pairingReply } from '@/lib/whatsapp/pairing';
 import { PHONE_TAKEN_ERROR } from '@/lib/whatsapp/wipe';
-import { type OutboxItem, claimOutbox } from '@cortex/agent-tools';
+import {
+  type GroupOutboxItem,
+  type OutboxItem,
+  claimGroupOutbox,
+  claimOutbox,
+} from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -164,6 +169,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .select('jid, archive_from, archive_enabled, reply_enabled')
     .or('archive_enabled.eq.true,reply_enabled.eq.true');
 
+  // MENSAJES DE CORTEX A GRUPOS (0213). Los grupos habilitados (el puente reenvía
+  // lo que ahí se diga, para que Cortex lea las respuestas) y la cola de lo que
+  // Cortex pidió mandar. Leído a mano y sin tumbar el latido: una migración
+  // atrasada deja esto vacío, que es lo seguro. Con el apagado general no sale
+  // nada, ni la lista.
+  let sendGroups: string[] = [];
+  let groupOutbox: GroupOutboxItem[] = [];
+  const sendRead = await db.from('whatsapp_groups').select('jid').eq('send_enabled', true);
+  if (sendRead.error) {
+    logger.warn(`whatsapp-bridge: no pude leer los grupos de Cortex — ${sendRead.error.message}`);
+  } else {
+    const paused = await db.from('whatsapp_sessions').select('group_send_paused').maybeSingle();
+    const isPaused =
+      (paused.data as { group_send_paused?: boolean } | null)?.group_send_paused === true;
+    if (!isPaused) {
+      sendGroups = ((sendRead.data ?? []) as Array<{ jid: string }>).map((g) => g.jid);
+      if (status === 'connected' && sendGroups.length > 0) {
+        groupOutbox = await claimGroupOutbox(db, { now }).catch((err: Error) => {
+          logger.warn(`whatsapp-bridge: no pude armar la cola de grupos — ${err.message}`);
+          return [];
+        });
+      }
+    }
+  }
+
   const rows = (groups ?? []) as Array<{
     jid: string;
     archive_from: string | null;
@@ -212,6 +242,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     replyGroups: rows.filter((g) => g.reply_enabled).map((g) => g.jid),
     dmEnabled: session?.dm_enabled !== false || customerEnabled,
     outbox,
+    sendGroups,
+    groupOutbox,
     ...pairingReply(session, now),
     // «Desvincular» (0189): the bridge logs the device out and wipes the session.
     unlink: session?.unlink_requested_at ? 'requested' : null,
@@ -251,6 +283,8 @@ async function refusePhone(
     replyGroups: [],
     dmEnabled: false,
     outbox: [],
+    sendGroups: [],
+    groupOutbox: [],
     pairingRequested: false,
     pairingPhone: null,
     unlink: 'phone_taken',

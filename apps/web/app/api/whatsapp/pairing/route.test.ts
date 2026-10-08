@@ -58,6 +58,27 @@ vi.mock('@/lib/supabase/service', () => {
     neq() {
       return this;
     }
+    // Lo que el latido lee además desde la 0213 (grupos que aceptan mensajes
+    // de Cortex y su bandeja de salida); aquí no hay filas de eso.
+    eq(column: string, value: unknown) {
+      this.filters.push((row) => row[column] === value);
+      return this;
+    }
+    in() {
+      return this;
+    }
+    lt() {
+      return this;
+    }
+    lte() {
+      return this;
+    }
+    order() {
+      return this;
+    }
+    limit() {
+      return this;
+    }
     gt(column: string, value: string) {
       this.filters.push(
         (row) => typeof row[column] === 'string' && (row[column] as string) > value,

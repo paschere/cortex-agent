@@ -103,6 +103,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   browser_close_page: { label: 'Cerrar la pestaña', icon: 'X' },
   gdrive_search_files: { label: 'Buscar archivos en Drive', icon: 'FolderSearch' },
   gdrive_read_doc: { label: 'Leer documento de Drive', icon: 'FileSearch' },
+  gdrive_find_folder: { label: 'Buscar una carpeta de Drive', icon: 'FolderSearch' },
+  gdrive_upload_file: { label: 'Guardar un archivo en una carpeta de Drive', icon: 'FolderUp' },
   schedule_create: { label: 'Programar rutina', icon: 'AlarmClockPlus' },
   schedule_list: { label: 'Ver rutinas programadas', icon: 'AlarmClock' },
   schedule_update: { label: 'Actualizar rutina', icon: 'AlarmClockCheck' },
@@ -240,6 +242,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     icon: 'MessagesSquare',
   },
   whatsapp_reply: { label: 'Responder a un cliente por WhatsApp', icon: 'MessageCircle' },
+  whatsapp_group_send: { label: 'Escribir en un grupo de WhatsApp', icon: 'MessageCircle' },
+  whatsapp_group_messages: { label: 'Leer un grupo de WhatsApp', icon: 'MessagesSquare' },
   chat_send_message: { label: 'Publicar en Google Chat', icon: 'MessageSquare' },
   chat_send_dm: { label: 'Mandar un privado por Google Chat', icon: 'MessageCircle' },
 
@@ -702,6 +706,10 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       return `Invitar a ${input.email} a la empresa como ${input.role === 'admin' ? 'administrador' : 'miembro'}${input.position ? ` (${String(input.position).slice(0, 80)})` : ''}${input.team ? ` en el equipo ${String(input.team).slice(0, 80)}` : ''} — le llega un correo con el enlace`;
     case 'whatsapp_reply':
       return `Responder por WhatsApp, como persona, en la conversación abierta: «${String(input.text ?? '').slice(0, 120)}»`;
+    case 'whatsapp_group_send':
+      return `Escribir en el grupo de WhatsApp «${String(input.group ?? '').slice(0, 80)}»: «${String(input.text ?? '').slice(0, 120)}» — lo ve todo el grupo`;
+    case 'gdrive_upload_file':
+      return `Guardar ${input.fileName ? `«${String(input.fileName).slice(0, 80)}»` : 'el archivo'} en la carpeta de Drive ${String(input.folderId ?? '').slice(0, 40)} — no crea carpetas`;
     case 'projects_create':
       return input.fromDocument
         ? `Abrir un proyecto desde ${input.fromDocument}${input.tasksFromLines ? ', con una tarea por línea' : ''}`

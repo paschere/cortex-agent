@@ -93,6 +93,8 @@ interface Group {
   replySpaceName: string | null;
   replyingSince: string | null;
   replyLimitPerHour: number;
+  /** Cortex puede ESCRIBIR por su cuenta en este grupo (0213). */
+  sending: boolean;
 }
 
 interface Space {
@@ -123,6 +125,8 @@ interface UnlinkedNumber {
 
 interface Status {
   isAdmin: boolean;
+  /** Apagado general de los mensajes de Cortex a grupos (0213). */
+  groupSendPaused: boolean;
   connection: Connection;
   groups: Group[];
   spaces: Space[];
@@ -851,6 +855,7 @@ function GroupRow({
   citableSpaces,
   onArchive,
   onReply,
+  onSend,
   busy,
 }: {
   group: Group;
@@ -863,6 +868,7 @@ function GroupRow({
     replyScope?: string;
     replySpaceId?: string | null;
   }) => void;
+  onSend: (input: { jid: string; sending: boolean }) => void;
   busy: boolean;
 }) {
   const [spaceId, setSpaceId] = useState(group.spaceId ?? spaces[0]?.id ?? '');
@@ -1029,6 +1035,25 @@ function GroupRow({
           {group.replying ? 'Dejar de responder' : 'Dejar que responda'}
         </Button>
       </div>
+
+      {/* ---- mensajes de Cortex (escribir primero) ---- */}
+      <label className="mt-2 flex cursor-pointer items-start gap-2.5 rounded-card bg-surface-2 px-3 py-2.5">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={group.sending}
+          disabled={busy}
+          onChange={(e) => onSend({ jid: group.jid, sending: e.target.checked })}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="field-label">Permitir mensajes de Cortex</span>
+          <span className="block text-xs leading-relaxed text-ink-faint">
+            {group.sending
+              ? 'Cortex puede escribir aquí por su cuenta (por ejemplo, preguntar por una guía) y leer lo que respondan, durante 7 días. Máximo 10 mensajes por hora en este grupo.'
+              : 'Cortex no escribe primero en este grupo. Si lo permites, solo lo hace cuando una instrucción suya o una automatización se lo piden.'}
+          </span>
+        </span>
+      </label>
     </div>
   );
 }
@@ -1182,6 +1207,26 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
     onError: (err: Error) => setMessage({ tone: 'bad', text: err.message }),
   });
 
+  const setSending = useMutation({
+    mutationFn: async (
+      input: { jid: string } & ({ sending: boolean } | { pauseSending: boolean }),
+    ) => {
+      const r = await fetch('/api/whatsapp/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      const j = (await r.json()) as { note?: string; error?: string };
+      if (!r.ok) throw new Error(j.error ?? 'No se pudo guardar el cambio.');
+      return j.note ?? 'Listo.';
+    },
+    onSuccess: async (note) => {
+      setMessage({ tone: 'ok', text: note });
+      await invalidate();
+    },
+    onError: (err: Error) => setMessage({ tone: 'bad', text: err.message }),
+  });
+
   const saveGroup = useMutation({
     mutationFn: async (input: { jid: string; archiving: boolean; spaceId?: string }) => {
       const r = await fetch('/api/whatsapp/groups', {
@@ -1289,11 +1334,12 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
   // Sorted by "does Cortex do anything here", not by archiving alone — the two
   // permissions are independent and a reply-only group is just as configured as
   // an archive-only one.
-  const active = data.groups.filter((g) => g.archiving || g.replying);
-  const rest = data.groups.filter((g) => !g.archiving && !g.replying);
+  const active = data.groups.filter((g) => g.archiving || g.replying || g.sending);
+  const rest = data.groups.filter((g) => !g.archiving && !g.replying && !g.sending);
   const busy =
     saveGroup.isPending ||
     setReplying.isPending ||
+    setSending.isPending ||
     linkNumber.isPending ||
     unlinkNumber.isPending ||
     pair.isPending;
@@ -1364,6 +1410,25 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
             y solo cuando lo mencionen con @. Sin mención sigue callado. Ahí lo lee todo el mundo
             del grupo, así que elige con cuidado qué puede consultar para responder.
           </p>
+          <p className="mt-1.5">
+            <b className="font-semibold text-ink">Permitir mensajes de Cortex</b> (solo
+            administradores) deja que Cortex escriba primero en ese grupo cuando una instrucción
+            suya o una automatización lo pide, y lea las respuestas. Nunca escribe a contactos
+            individuales. Ojo: este número no usa la API oficial de WhatsApp y WhatsApp puede
+            bloquear números que escriben de forma automática; por eso hay topes (10 por hora en
+            cada grupo, 50 al día en la empresa) y conviene usarlo con poco volumen.
+          </p>
+          {isAdmin && data.isAdmin && (
+            <label className="mt-2 flex items-center gap-2 text-ink">
+              <input
+                type="checkbox"
+                checked={data.groupSendPaused}
+                disabled={busy}
+                onChange={(e) => setSending.mutate({ jid: '', pauseSending: e.target.checked })}
+              />
+              <span>Apagar todos los mensajes de Cortex a grupos</span>
+            </label>
+          )}
         </div>
 
         {data.spaces.length === 0 && (
@@ -1388,6 +1453,7 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
               busy={busy}
               onArchive={(input) => saveGroup.mutate(input)}
               onReply={(input) => setReplying.mutate(input)}
+              onSend={(input) => setSending.mutate(input)}
             />
           ))
         )}

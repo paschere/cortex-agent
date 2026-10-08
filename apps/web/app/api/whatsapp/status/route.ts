@@ -50,6 +50,12 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ error: 'No se pudo leer el estado de WhatsApp.' }, { status: 500 });
   }
   const connection = connectionRead.data;
+  // Apagado general de los mensajes de Cortex a grupos (0213). Leído aparte y sin
+  // tumbar la pantalla: una migración atrasada no puede dejarla sin estado.
+  const pausedRead = await db.from('whatsapp_sessions').select('group_send_paused').maybeSingle();
+  const groupSendPaused =
+    !pausedRead.error &&
+    (pausedRead.data as { group_send_paused?: boolean } | null)?.group_send_paused === true;
 
   // QUÉ PUENTE HAY (0189). Un proceso multiempresa vivo sirve a cada empresa
   // que vincule su número sin tocar Railway: entonces no tener fila, o no tener
@@ -109,7 +115,7 @@ export async function GET(): Promise<NextResponse> {
   const { data: groupRows } = await db
     .from('whatsapp_groups')
     .select(
-      'id, jid, subject, participant_count, archive_enabled, space_id, enabled_at, archive_from, last_message_at, last_ingested_at, reply_enabled, reply_scope, reply_space_id, reply_enabled_at, reply_limit_per_hour',
+      'id, jid, subject, participant_count, archive_enabled, space_id, enabled_at, archive_from, last_message_at, last_ingested_at, reply_enabled, reply_scope, reply_space_id, reply_enabled_at, reply_limit_per_hour, send_enabled',
     )
     .order('archive_enabled', { ascending: false })
     .order('last_message_at', { ascending: false })
@@ -190,6 +196,7 @@ export async function GET(): Promise<NextResponse> {
 
   return NextResponse.json({
     isAdmin,
+    groupSendPaused,
     connection: {
       // Sin fila: nadie ha vinculado todavía. Eso es «esperando», no «caído».
       status: (connection?.status as string | null) ?? 'waiting',
@@ -234,6 +241,7 @@ export async function GET(): Promise<NextResponse> {
         reply_space_id: string | null;
         reply_enabled_at: string | null;
         reply_limit_per_hour: number;
+        send_enabled: boolean;
       }>
     ).map((g) => ({
       id: g.id,
@@ -255,6 +263,8 @@ export async function GET(): Promise<NextResponse> {
       replySpaceName: g.reply_space_id ? (spaceNames.get(g.reply_space_id) ?? null) : null,
       replyingSince: g.reply_enabled_at,
       replyLimitPerHour: g.reply_limit_per_hour,
+      // 0213: Cortex puede ESCRIBIR por su cuenta aquí (whatsapp.group_send).
+      sending: g.send_enabled === true,
     })),
     // Only the spaces this person may actually write to: offering a destination
     // that will be refused a second later is a worse experience than not

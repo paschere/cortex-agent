@@ -1,5 +1,3 @@
-import { SessionClipboard, readPageContent } from './page-content';
-import { TeachingRecorder } from './teaching';
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
 import type { WebSocket } from 'ws';
 import type { Config } from './config';
@@ -23,11 +21,13 @@ import {
   resolveTarget,
 } from './locators';
 import { logger } from './logger';
+import { SessionClipboard, readPageContent } from './page-content';
 import { ProfileManager } from './profiles';
 import { replay } from './replay';
 import { Screencast } from './screencast';
 import { LOCATOR_INSTALL_SCRIPT, snapshotPage } from './snapshot';
 import { assertNavigable } from './target';
+import { TeachingRecorder } from './teaching';
 import type { PageSnapshot, ReplayRequest, ReplayResponse, Target } from './types';
 
 /**
@@ -186,10 +186,7 @@ export class BrowserWorker {
     if (this.config.userAgent) return this.config.userAgent;
     const version = browser.version();
     if (!version) return undefined;
-    return (
-      `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ` +
-      `Chrome/${version} Safari/537.36`
-    );
+    return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version} Safari/537.36`;
   }
 
   private async newContext(): Promise<BrowserContext> {
@@ -266,6 +263,7 @@ export class BrowserWorker {
             context,
             page,
             touchedAt: Date.now(),
+            holdMs: this.holdMs(),
             request,
             owner: request.owner,
             ...(request.profile ? { profileOwner: request.profile.key } : {}),
@@ -282,7 +280,7 @@ export class BrowserWorker {
               reason: 'input-needed',
               // The step AFTER the pause: reaching it was the whole job.
               fromIndex: result.pause.index + 1,
-              expiresAt: new Date(Date.now() + this.config.sessionIdleMs).toISOString(),
+              expiresAt: new Date(Date.now() + this.holdMs()).toISOString(),
               ask: result.pause.ask,
               fills: result.pause.fills,
             },
@@ -306,6 +304,7 @@ export class BrowserWorker {
             context,
             page,
             touchedAt: Date.now(),
+            holdMs: this.holdMs(),
             request,
             owner: request.owner,
             ...(request.profile ? { profileOwner: request.profile.key } : {}),
@@ -321,7 +320,7 @@ export class BrowserWorker {
               sessionId,
               reason: 'bot-check',
               fromIndex: result.failure.index,
-              expiresAt: new Date(Date.now() + this.config.sessionIdleMs).toISOString(),
+              expiresAt: new Date(Date.now() + this.holdMs()).toISOString(),
             },
           };
         }
@@ -542,6 +541,7 @@ export class BrowserWorker {
             owner: session.owner,
             profileOwner: session.profileOwner,
             touchedAt: Date.now(),
+            holdMs: this.holdMs(),
             // The ORIGINAL request with the answer already folded in, so a
             // third pause resumes with both answers rather than re-asking the
             // first.
@@ -554,7 +554,7 @@ export class BrowserWorker {
               sessionId: nextId,
               reason: 'input-needed',
               fromIndex: rebased.pause.index + 1,
-              expiresAt: new Date(Date.now() + this.config.sessionIdleMs).toISOString(),
+              expiresAt: new Date(Date.now() + this.holdMs()).toISOString(),
               ask: rebased.pause.ask,
               fills: rebased.pause.fills,
             },
@@ -972,8 +972,8 @@ export class BrowserWorker {
   async teaching(
     sessionId: string,
     owner?: string,
-    op?: 'start' | 'stop' | 'navigate' | 'explain',
-    input?: { url?: string; index?: number; text?: string },
+    op?: 'start' | 'stop' | 'navigate' | 'explain' | 'mark_start' | 'mark_cancel' | 'mark_commit',
+    input?: { url?: string; index?: number; text?: string; name?: string; fallback?: string },
   ) {
     const session = op ? this.sessionOf(sessionId, owner) : this.peekSession(sessionId, owner);
     if (!session.teacher) session.teacher = new TeachingRecorder(session.page);
@@ -982,6 +982,9 @@ export class BrowserWorker {
       return session.teacher.start();
     }
     if (op === 'stop') return session.teacher.stop();
+    if (op === 'mark_start') return session.teacher.markStart();
+    if (op === 'mark_cancel') return session.teacher.markCancel();
+    if (op === 'mark_commit') return session.teacher.markCommit(input?.name ?? '', input?.fallback);
     if (op === 'explain') return session.teacher.explain(input?.index ?? -1, input?.text ?? '');
     if (op === 'navigate') {
       if (!humanMayDrive(this.controlFor(session))) throw new HumanHasControl();
@@ -991,9 +994,14 @@ export class BrowserWorker {
     return session.teacher.state();
   }
 
+  /** Cuánto se sostiene una pestaña que espera a una persona. */
+  private holdMs(): number {
+    return Math.max(this.config.sessionIdleMs, this.config.handoffHoldMs ?? 0);
+  }
+
   private async sweepSessions(): Promise<void> {
-    const cutoff = Date.now() - this.config.sessionIdleMs;
     for (const [id, session] of this.sessions) {
+      const cutoff = Date.now() - (session.holdMs ?? this.config.sessionIdleMs);
       if (session.touchedAt < cutoff) {
         logger.warn({ sessionId: id }, 'sweeping an idle session');
         await this.closeSession(id);
@@ -1009,6 +1017,8 @@ interface InteractiveSession {
   context: BrowserContext;
   page: Page;
   touchedAt: number;
+  /** Vida máxima sin uso, si es distinta de `sessionIdleMs` (pestañas que esperan a una persona). */
+  holdMs?: number;
   /**
    * The errand this tab was in the middle of, kept only for a handoff so it can
    * be resumed. Absent for the reasoning and refinement sessions, which are

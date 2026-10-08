@@ -46,15 +46,17 @@ export function describeAutomation(
       ? `${t.cadence === 'daily' ? 'Todos los días' : `Cada semana (día ${t.weekday ?? 1})`} a las ${String(t.hour).padStart(2, '0')}:00`
       : t.type === 'button'
         ? `Cuando toquen «${t.label}» en ${t.screen}`
-        : `${TRIGGER_LABEL[t.type]} en ${'tracker' in t ? t.tracker : ''}`;
+        : t.type === 'rows_poll'
+          ? `Cada ${t.everyMinutes} min, para cada fila de ${t.tracker} que cumpla (hasta ${t.maxRows} por vuelta)`
+          : `${TRIGGER_LABEL[t.type]} en ${'tracker' in t ? t.tracker : ''}`;
   const ifs = a.conditions.length ? ` si se cumplen ${a.conditions.length} condición(es)` : '';
   return `${when}${ifs} → ${a.actions.map((x) => ACTION_LABEL[x.type].toLowerCase()).join(', ')}`;
 }
 
 const GRAMMAR = `Automation = {name, enabled?, trigger, conditions[], actions[]}.
-trigger (Cuando): {type:"row_created",tracker} | {type:"row_updated",tracker,field?,to?} | {type:"row_flagged_duplicate",tracker} | {type:"form_submitted",tracker,screen?,block?} | {type:"approval_decided",tracker,decision:"approved"|"rejected"|"any"} | {type:"schedule",cadence:"daily"|"weekly",hour:0-23 (Bogota),weekday?:1-7} | {type:"button",screen,id,label}.
+trigger (Cuando): {type:"row_created",tracker} | {type:"row_updated",tracker,field?,to?} | {type:"row_flagged_duplicate",tracker} | {type:"form_submitted",tracker,screen?,block?} | {type:"approval_decided",tracker,decision:"approved"|"rejected"|"any"} | {type:"schedule",cadence:"daily"|"weekly",hour:0-23 (Bogota),weekday?:1-7} | {type:"button",screen,id,label} | {type:"rows_poll",tracker,everyMinutes:>=10,perRowMinutes?,maxRows?:1-25 (default 10),window?:{field,timeField?,beforeHours?,afterHours?}} (every N minutes, one run per row that meets the conditions and is inside the window of its date field; e.g. follow a flight from 6h before to 24h after).
 conditions (Si): view filters {field,op,value?} plus {type:"changed",field,from?,to?}. Only for triggers with a row.
-actions (Entonces, max 8): {type:"set_field",field,value} | {type:"create_row",tracker,values:{field:value}} | {type:"notify_member",members?:[userId],roles?:[roleKey],admins?,title,body?} | {type:"notify_app_user",to:"creator"|{role},title,body?,screen?} (push, or email if the person has no active push) | {type:"email",to?:[addresses],roles?:[roleKey],subject,body} | {type:"webhook",url:https} (HMAC-signed POST) | {type:"ask_cortex",instruction} (anything it writes outside the row's table goes to approval).
+actions (Entonces, max 8): {type:"set_field",field,value} | {type:"create_row",tracker,values:{field:value}} | {type:"notify_member",members?:[userId],roles?:[roleKey],admins?,title,body?} | {type:"notify_app_user",to:"creator"|{role},title,body?,screen?} (push, or email if the person has no active push) | {type:"email",to?:[addresses],roles?:[roleKey],subject,body} | {type:"webhook",url:https} (HMAC-signed POST) | {type:"ask_cortex",instruction,writes?:"row"|[fieldKey],allow?:["gdrive.upload_file"|"whatsapp.group_send"]} (allow = outside-Cortex tools the instruction may use WITHOUT approval: save a file into an existing Drive folder, write to an enabled WhatsApp group; Cortex then finds folders with gdrive.find_folder and reads group replies with whatsapp.group_messages) (free-text instruction with {{fields}}; Cortex reads the web, the company brain and tables, and with writes it may change the row's own fields without approval — it does not write when unsure and cites its source in the run history; anything else it writes goes to approval). Example: "Busca en la web el estado del vuelo {{vuelo}} del {{fecha}} y actualiza estado, ETA y llegada; cita la fuente" or "Calcula el precio de esta atención con el documento «Reglas de precios» del cerebro; si falta un dato, no escribas el precio y di qué falta".
 Templates in text use {{field_key}}, {{antes.field_key}}, {{nombre}}, {{app}}, {{enlace}}, {{motivo}}. An automation never re-triggers itself (max depth 3). No WhatsApp: notices go by push and email only.`;
 
 const summarySchema = z.object({

@@ -61,6 +61,18 @@ export function blockFingerprints(blocks: ReadonlyArray<ComputedBlock>): Map<str
             c.alert ? 1 : 0,
           ].join('\u0002'),
         );
+    } else if (b.type === 'cards') {
+      for (const c of b.cards)
+        out.set(
+          `${b.id}:${c.id}`,
+          [
+            c.title,
+            c.subtitle,
+            c.status?.label,
+            c.data.map((d) => d.value).join('\u0001'),
+            c.alert ? 1 : 0,
+          ].join('\u0002'),
+        );
     } else if (b.type === 'board' || b.type === 'zones') {
       for (const col of b.columns)
         for (const c of col.cards)

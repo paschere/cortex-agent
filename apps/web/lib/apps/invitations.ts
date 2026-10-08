@@ -1,7 +1,10 @@
 import 'server-only';
+import { emailBrand } from '@/lib/apps/app-brand';
+import { externalBrand } from '@/lib/apps/external-brand';
 import { readBranding } from '@/lib/branding/store';
 import { sendEmail } from '@/lib/email';
 import { renderAppInvitationEmail } from '@/lib/email-templates/app-access';
+import { appBaseUrl } from '@/lib/email-templates/layout';
 import {
   type CustomAppRow,
   type ExternalUserRow,
@@ -42,6 +45,11 @@ export async function sendAppInvitations(
     readBranding(db).catch(() => null),
   ]);
   const organizationName = brand?.display_name?.trim() || 'Tu equipo';
+  // La invitación lleva la marca de la app si la tiene (la ruta pública sirve su ícono).
+  const appBrand = emailBrand(
+    await externalBrand(db, { ...app, organization_id: app.organization_id ?? '' }),
+    appBaseUrl(),
+  );
   const out: { sent: number; failed: Array<{ email: string; reason: string }> } = {
     sent: 0,
     failed: [],
@@ -57,6 +65,7 @@ export async function sendAppInvitations(
       organizationName,
       name: user.name,
       roleName: roles.find((r) => r.key === user.role_key)?.name ?? user.role_key,
+      brand: appBrand,
     });
     const res = await sendEmail({ to: user.email, ...mail });
     if (res.sent) {

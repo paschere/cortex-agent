@@ -401,6 +401,8 @@ export interface ProposedStep {
   landmarks: string[];
   optional?: boolean;
   extractAs?: string;
+  /** `extract`: lo que vale el resultado si el elemento no aparece. */
+  extractDefault?: string;
 }
 
 export interface Proposal {

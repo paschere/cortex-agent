@@ -26,6 +26,7 @@ export const TRIGGER_KINDS = [
   'approval_decided',
   'schedule',
   'button',
+  'rows_poll',
 ] as const;
 export type TriggerKind = (typeof TRIGGER_KINDS)[number];
 
@@ -36,6 +37,7 @@ export const ROW_TRIGGER_KINDS: ReadonlySet<TriggerKind> = new Set([
   'row_flagged_duplicate',
   'form_submitted',
   'approval_decided',
+  'rows_poll',
 ]);
 
 const slug = z
@@ -44,6 +46,26 @@ const slug = z
   .regex(/^[a-z][a-z0-9_]{1,47}$/, 'Un identificador en minúsculas, sin espacios.');
 const fieldKey = z.string().trim().min(1).max(32);
 const plain = z.union([z.string().max(300), z.number()]);
+
+/** Mínimos de «cada X minutos»: el despachador pasa cada minuto, pero nadie necesita menos de 10. */
+export const POLL_MIN_MINUTES = 10;
+export const POLL_MAX_ROWS = 25;
+export const POLL_DEFAULT_ROWS = 10;
+
+/**
+ * La ventana de fechas de «cada X minutos»: sólo filas cuya fecha (y hora, si
+ * hay campo de hora) está entre `beforeHours` antes y `afterHours` después.
+ * Ej.: un vuelo se sigue desde 6 h antes de su hora hasta 24 h después.
+ */
+export const pollWindowSchema = z.object({
+  /** Campo de fecha (o fecha y hora en texto) de la fila. */
+  field: fieldKey,
+  /** Campo con la hora «HH:MM»; vacío = el comienzo del día. */
+  timeField: fieldKey.optional(),
+  beforeHours: z.number().min(0).max(720).default(0),
+  afterHours: z.number().min(0).max(720).default(24),
+});
+export type PollWindow = z.infer<typeof pollWindowSchema>;
 
 export const automationTriggerSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('row_created'), tracker: slug }),
@@ -82,6 +104,17 @@ export const automationTriggerSchema = z.discriminatedUnion('type', [
     weekday: z.number().int().min(1).max(7).optional(),
   }),
   z.object({
+    type: z.literal('rows_poll'),
+    tracker: slug,
+    /** Cada cuántos minutos se mira la tabla (mínimo 10). */
+    everyMinutes: z.number().int().min(POLL_MIN_MINUTES).max(1440),
+    /** Frecuencia mínima por fila; vacío = la misma de `everyMinutes`. */
+    perRowMinutes: z.number().int().min(POLL_MIN_MINUTES).max(10080).optional(),
+    /** Tope de filas por vuelta (las que más tiempo llevan sin atenderse van primero). */
+    maxRows: z.number().int().min(1).max(POLL_MAX_ROWS).default(POLL_DEFAULT_ROWS),
+    window: pollWindowSchema.optional(),
+  }),
+  z.object({
     type: z.literal('button'),
     /** Pantalla (slug) donde sale el botón. */
     screen: slug,
@@ -109,6 +142,13 @@ export type AutomationCondition = z.infer<typeof automationConditionSchema>;
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const emailSchema = z.string().trim().toLowerCase().email().max(200);
+
+/** Las únicas herramientas que `ask_cortex.allow` puede soltar sin aprobación. */
+export const ASK_ALLOWABLE_TOOLS = ['gdrive.upload_file', 'whatsapp.group_send'] as const;
+export const ASK_ALLOW_LABEL: Record<(typeof ASK_ALLOWABLE_TOOLS)[number], string> = {
+  'gdrive.upload_file': 'Guardar archivos en una carpeta de Drive que ya existe',
+  'whatsapp.group_send': 'Escribir en un grupo de WhatsApp habilitado',
+};
 
 export const MAX_ACTIONS = 8;
 export const MAX_CONDITIONS = 8;
@@ -162,7 +202,22 @@ export const automationActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('ask_cortex'),
     /** Lo que Cortex debe hacer, en texto; puede usar `{{campo}}`. */
-    instruction: text(1500),
+    instruction: text(3000),
+    /**
+     * Qué puede escribir SIN aprobación en la fila que disparó la regla:
+     * `'row'` = cualquier campo de ESA fila; una lista = sólo esos campos.
+     * Vacío = como antes (la tabla de la regla; lo demás pasa por aprobación).
+     * Escribir en otra fila u otra tabla siempre pide aprobación.
+     */
+    writes: z.union([z.literal('row'), z.array(fieldKey).min(1).max(30)]).optional(),
+    /**
+     * Herramientas con efecto FUERA de Cortex que esta instrucción puede usar SIN
+     * aprobación (quien la escribió lo declara a conciencia): guardar un archivo
+     * en una carpeta de Drive que ya existe, o mandar un mensaje a un grupo de
+     * WhatsApp que la empresa habilitó (con sus topes). Lo que no se declara aquí
+     * sigue pidiendo aprobación, como siempre.
+     */
+    allow: z.array(z.enum(ASK_ALLOWABLE_TOOLS)).max(2).optional(),
   }),
 ]);
 export type AutomationAction = z.infer<typeof automationActionSchema>;
@@ -186,6 +241,7 @@ export const TRIGGER_LABEL: Record<TriggerKind, string> = {
   approval_decided: 'Se aprueba o se rechaza',
   schedule: 'A una hora',
   button: 'Alguien toca un botón',
+  rows_poll: 'Cada cierto tiempo, para cada fila que cumpla',
 };
 
 export const automationInputSchema = z.object({
@@ -223,6 +279,11 @@ export function structuralProblems(input: AutomationInput): string[] {
     !input.trigger.weekday
   )
     out.push('Un horario semanal necesita el día de la semana.');
+  if (input.trigger.type === 'rows_poll') {
+    const t = input.trigger;
+    if (t.perRowMinutes !== undefined && t.perRowMinutes < t.everyMinutes)
+      out.push('La frecuencia por fila no puede ser menor que «cada cuántos minutos» se mira.');
+  }
   for (const c of input.conditions) {
     if (
       'type' in c &&
@@ -237,6 +298,8 @@ export function structuralProblems(input: AutomationInput): string[] {
       out.push('El correo necesita al menos una dirección o un rol.');
     if (a.type === 'notify_member' && !a.members.length && !a.roles.length && !a.admins)
       out.push('El aviso al equipo necesita a quién: miembros, roles o administradores.');
+    if (a.type === 'ask_cortex' && a.writes && rowless)
+      out.push('«Escribir en la fila» necesita una fila; con un horario o un botón no hay fila.');
     if (a.type === 'webhook' && !a.url.toLowerCase().startsWith('https://'))
       out.push('El webhook sólo acepta direcciones https.');
   }

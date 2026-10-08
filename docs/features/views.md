@@ -232,6 +232,60 @@ Para que cualquier equipo en terreno (planta, bodega, recepción, inspección, c
 - **Formulario**: cola sin internet (IndexedDB, `clientId` idempotente), corregir después de enviar (`editWindowMinutes`), aprobación (`approval`), por pasos (`steps`).
 - **Vista**: exportar a Excel/PDF, resumen por correo (`digest`, 0203), embudo, mapa de calor, metas con semáforo, avisos en vivo (`alerts.on`).
 
+## Pantallas de registro: detalle, tarjetas, agenda y tablero TV
+
+Cuatro tipos de pantalla generales (ningún cliente en particular): se arman con
+bloques del spec, se validan en `checkSpecAgainst`, se calculan en
+`computeView` y se editan en el estudio (paleta + inspector). El diseñador
+(`VIEW_DESIGNER_SYSTEM`) y la gramática de las herramientas (`SPEC_GRAMMAR`) los
+conocen.
+
+- **Detalle de un registro** (`type: "detail"`, `views/record.ts`). Una
+  pantalla para UNA fila; no se pinta mientras no haya fila elegida. Se abre
+  desde una tabla, tarjetas, tablero, plano, galería o agenda que lean la misma
+  tabla (`record.detail` en lo calculado) o por su enlace: `?fila=<id>` (y
+  `&d=<bloque>` con varios detalles). El lienzo (`LiveViewCanvas`) escribe la
+  dirección con un paso de historial, así «atrás» vuelve a la lista. Secciones
+  de campos, galería de fotos, listas **relacionadas** (`match: "relation"`:
+  un campo relación de la otra tabla; `match: "value"`: un valor común con
+  `parentField`) con sus propios botones, botones del registro y campos
+  editables. Los botones de una lista relacionada escriben con el id
+  `<detalle>:<lista>` (`findWriteBlock`), con la lista blanca y las reglas de
+  cualquier tabla propia.
+- **Línea de tiempo** (`detail.timeline`: `false` o `{show, limit}`). Se arma
+  DESPUÉS de leer las fuentes con el scope del rol: `findDetailTarget` busca la
+  fila entre las que el rol ya ve; si no está, el detalle dice «no la
+  encontramos» y no se hace ni una consulta de historia. Fuentes: la creación
+  (`created_by`), `custom_view_events` por `tracker_row_id` (ediciones,
+  movimientos, botones, aprobaciones, con antes → después), las corridas de
+  `custom_app_automation_runs` (`trigger_ref` `<suceso>:<fila>`, sólo dentro de
+  una app y sólo para un miembro de Cortex) y los archivos subidos. Cada cambio
+  se filtra por los campos que el detalle muestra: la historia de un campo que
+  la pantalla no enseña no se cuenta. Nombres: un miembro ve nombres; un usuario
+  externo o el enlace público ven «Tú» y «El equipo», nunca nombres internos.
+- **Lista de tarjetas** (`type: "cards"`, `views/cards.ts`,
+  `cards-filter.ts`). Tarjetas grandes con imagen, estado y 2–4 datos; chips
+  (`status`, `today`, `week`, `mine`), búsqueda, orden elegible, agrupación y
+  «Ver más» o carga al final. Los filtros corren en el navegador sobre lo
+  entregado (instantáneos). «Mío» = lo que creó quien mira; sin «quién mira»
+  (enlace público) el chip no se ofrece.
+- **Agenda** (`calendar` con `mode: "week" | "day"`, `timeField`, `modes`).
+  Eventos por hora con el color del estado; `modes` deja alternar día / semana /
+  mes; las flechas se detienen en el rango (tres meses) que el cálculo cubre.
+  Tocar un evento abre el detalle. Aritmética de fechas en `views/agenda.ts`.
+- **Tablero TV** (`theme.layout: "tv"`, `theme.tv: {rotateSeconds, clock}`,
+  `views/tv.ts`). Pantalla completa para la planta: texto grande, siempre
+  oscuro, reloj de Bogotá, rota sola entre sus páginas (sin páginas: las cifras
+  juntas y cada bloque) y se refresca en vivo (como mucho cada 30 s). Pausa,
+  flechas y «pantalla completa». La sección que toca sale de aritmética sobre
+  el reloj (`tvSlideAt`): dos pantallas muestran la misma sección. No muestra
+  formularios, voz ni enlaces.
+
+Todo es opcional y sin valores por defecto nuevos: los specs guardados no
+cambian. Escaparate: `/v/views-showcase?pantalla=detalle|tarjetas|agenda|tv`
+(`screens-fixture.ts` calcula con el `computeView` real; `&fila=<id>` abre un
+registro).
+
 ## Límites
 
 - Cada vista lee hasta 2.000 filas por tabla; si hay más, las cifras se marcan como parciales.

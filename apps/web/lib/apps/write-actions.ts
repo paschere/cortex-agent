@@ -126,6 +126,8 @@ export async function runAppActionAction(
       await notifyViewActivity(db, view, {
         title: `${res.actionLabel}: ${res.label}`,
         body: `${access.user.name} lo pidió desde «${access.app.name}».`,
+        // «Abrir» lleva directo al registro de la pantalla donde se pidió.
+        href: `/apps/${appRef}/${screenRef}?fila=${encodeURIComponent(rowId)}`,
       });
     return { ok: true, message: res.message };
   } catch (err) {

@@ -4,6 +4,7 @@ import {
   canWriteView,
   computeView,
   getView,
+  loadRecordContext,
   loadViewSources,
   parseViewFilterParam,
 } from '@cortex/agent-tools';
@@ -28,10 +29,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const db = getOrgScopedClient(user.organization.id);
   const view = await getView(db, id);
   if (!view) return NextResponse.json({ error: 'Esa vista ya no existe.' }, { status: 404 });
-  const sources = await loadViewSources(db, view.spec, { viewerId: user.id });
+  const fila = req.nextUrl.searchParams.get('fila');
+  const sources = await loadViewSources(db, view.spec, {
+    viewerId: user.id,
+    ensureRowId: fila ?? undefined,
+  });
+  const record = await loadRecordContext(
+    db,
+    view.spec,
+    sources,
+    { rowId: fila, blockId: req.nextUrl.searchParams.get('d') },
+    { viewer: { kind: 'member', id: user.id } },
+  );
   const computed = computeView(view.spec, sources, new Date(), {
     writable: canWriteView(view, 'member'),
     filters: parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f')),
+    viewer: { id: user.id, kind: 'member' },
+    record,
   });
   return NextResponse.json(
     { version: view.version, view: computed },

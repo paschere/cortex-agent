@@ -5,15 +5,19 @@ import { pushEnabled } from '@/lib/apps/push';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  type AutomationLimits,
   type AutomationTemplateParams,
+  MAX_AUTOMATION_LIMITS,
   createAutomation,
   deleteAutomation,
   describeAutomation,
+  getAppLimits,
   lastRuns,
   listAutomationRuns,
   listAutomations,
   mustGetApp,
   mustGetAutomation,
+  setAppLimits,
   setAutomationEnabled,
   simulateAutomation,
   templateById,
@@ -92,16 +96,22 @@ export async function loadAutomationsAction(appRef: string): Promise<
   AutomationActionResult<{
     automations: AutomationView[];
     pushOn: boolean;
-    caps: { runsPerDay: number; askCortexPerDay: number };
+    caps: AutomationLimits;
+    capsMax: AutomationLimits;
   }>
 > {
   try {
     const { db, app } = await admin(appRef);
-    const [rows, runs] = await Promise.all([listAutomations(db, app.id), lastRuns(db, app.id)]);
+    const [rows, runs, caps] = await Promise.all([
+      listAutomations(db, app.id),
+      lastRuns(db, app.id),
+      getAppLimits(db, app.id),
+    ]);
     return {
       ok: true,
       pushOn: pushEnabled(),
-      caps: { runsPerDay: 500, askCortexPerDay: 20 },
+      caps,
+      capsMax: MAX_AUTOMATION_LIMITS,
       automations: rows.map((a) => ({
         id: a.id,
         name: a.name,
@@ -256,5 +266,46 @@ export async function testAutomationAction(
     };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo probar la automatización.') };
+  }
+}
+
+/** Cambia los topes diarios de la app (corridas y pedidos a Cortex). */
+export async function saveLimitsAction(
+  appRef: string,
+  limits: { runsPerDay: number; askCortexPerDay: number },
+): Promise<AutomationActionResult<{ caps: AutomationLimits }>> {
+  try {
+    const { db, app } = await admin(appRef);
+    const caps = await setAppLimits(db, app.id, {
+      runsPerDay: Math.floor(Number(limits.runsPerDay)),
+      askCortexPerDay: Math.floor(Number(limits.askCortexPerDay)),
+    });
+    touched(app.id);
+    return { ok: true, caps };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudieron guardar los topes.') };
+  }
+}
+
+/** Las filas más recientes de una tabla, para elegir con cuál probar una regla. */
+export async function sampleRowsAction(
+  appRef: string,
+  trackerSlug: string,
+): Promise<AutomationActionResult<{ rows: Array<{ id: string; label: string }> }>> {
+  try {
+    const { db } = await admin(appRef);
+    const { getTrackerBySlug } = await import('@cortex/agent-tools');
+    const tracker = await getTrackerBySlug(db, z.string().trim().min(1).max(60).parse(trackerSlug));
+    if (!tracker) return { ok: true, rows: [] };
+    const { data, error } = await db
+      .from('tracker_rows')
+      .select('id, label')
+      .eq('tracker_id', tracker.id)
+      .order('updated_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    return { ok: true, rows: (data ?? []) as Array<{ id: string; label: string }> };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudieron leer las filas.') };
   }
 }

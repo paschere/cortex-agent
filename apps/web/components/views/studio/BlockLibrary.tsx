@@ -43,6 +43,8 @@ const SHELF: Record<string, string> = {
   zones: 'Listas y tableros',
   gallery: 'Listas y tableros',
   calendar: 'Listas y tableros',
+  cards: 'Listas y tableros',
+  detail: 'Listas y tableros',
   form: 'Para recibir datos',
   text: 'Contenido',
   media: 'Contenido',

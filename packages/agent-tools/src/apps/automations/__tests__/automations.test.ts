@@ -546,6 +546,9 @@ describe('la corrida', () => {
 
   it('el tope diario de la app corta las corridas', async () => {
     const { a, tables } = setup();
+    // El tope es de cada app (0212): esta lo baja a 500.
+    const appRow = (tables.custom_apps ?? []).find((r) => r.id === 'app-a');
+    if (appRow) appRow.automation_limits = { runsPerDay: 500 };
     for (let i = 0; i < 501; i++)
       (tables.custom_app_automation_runs ?? []).push(
         queuedRun('auto-a', 'app-a', A, { status: 'succeeded', next_attempt_at: null }),
@@ -560,6 +563,8 @@ describe('la corrida', () => {
 
   it('ask_cortex: el tope diario por app', async () => {
     const { a, tables } = setup();
+    const appRow = (tables.custom_apps ?? []).find((r) => r.id === 'app-a');
+    if (appRow) appRow.automation_limits = { askCortexPerDay: 20 };
     const auto = (tables.custom_app_automations ?? []).find((r) => r.id === 'auto-a');
     if (!auto) throw new Error('sin regla');
     auto.actions = [{ type: 'ask_cortex', instruction: 'resume {{nombre}}' }];

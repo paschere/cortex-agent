@@ -1,12 +1,12 @@
-import { ClipboardError } from './page-content';
+import { spawn } from 'node:child_process';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
-import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import { type BrowserWorker, BusyError, UnknownSession } from './browser';
 import type { Config } from './config';
 import { HumanHasControl } from './control';
 import { logger } from './logger';
+import { ClipboardError } from './page-content';
 import { signStreamToken, verifyStreamToken } from './stream-token';
 import { ForbiddenTarget } from './target';
 import type { ReplayRequest, Target } from './types';
@@ -308,8 +308,8 @@ async function handle(
     const contentMatch = /^\/session\/([A-Za-z0-9_]+)\/content$/.exec(path);
     if (contentMatch?.[1] && req.method === 'GET') {
       const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
-      const offset = Number(query.get('offset') ?? 0),
-        limit = Number(query.get('limit') ?? 20000);
+      const offset = Number(query.get('offset') ?? 0);
+      const limit = Number(query.get('limit') ?? 20000);
       if (
         !Number.isSafeInteger(offset) ||
         offset < 0 ||
@@ -328,11 +328,26 @@ async function handle(
     if (teachingMatch?.[1] && (req.method === 'GET' || req.method === 'POST')) {
       const body =
         req.method === 'POST'
-          ? ((await readBody(req)) as { op?: string; url?: string; index?: number; text?: string })
+          ? ((await readBody(req)) as {
+              op?: string;
+              url?: string;
+              index?: number;
+              text?: string;
+              name?: string;
+              fallback?: string;
+            })
           : {};
       if (
         req.method === 'POST' &&
-        !['start', 'stop', 'navigate', 'explain'].includes(body.op ?? '')
+        ![
+          'start',
+          'stop',
+          'navigate',
+          'explain',
+          'mark_start',
+          'mark_cancel',
+          'mark_commit',
+        ].includes(body.op ?? '')
       ) {
         json(res, 400, { error: 'Invalid teaching action' });
         return;
@@ -343,7 +358,15 @@ async function handle(
         await worker.teaching(
           teachingMatch[1],
           owner,
-          body.op as 'start' | 'stop' | 'navigate' | 'explain' | undefined,
+          body.op as
+            | 'start'
+            | 'stop'
+            | 'navigate'
+            | 'explain'
+            | 'mark_start'
+            | 'mark_cancel'
+            | 'mark_commit'
+            | undefined,
           body,
         ),
       );

@@ -11,6 +11,7 @@ import {
   internalShareRefusal,
   internalSourcesOf,
   listViewVersions,
+  loadRecordContext,
   loadViewSources,
   publicViewUrl,
   shareIsOpen,
@@ -45,7 +46,7 @@ export default async function ViewPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ editar?: string }>;
+  searchParams: Promise<{ editar?: string; fila?: string; d?: string }>;
 }) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const editing = query.editar === '1';
@@ -55,12 +56,22 @@ export default async function ViewPage({
   if (!view) notFound();
 
   const [sources, versions, brand] = await Promise.all([
-    loadViewSources(db, view.spec, { viewerId: user.id }),
+    loadViewSources(db, view.spec, { viewerId: user.id, ensureRowId: query.fila }),
     listViewVersions(db, view.id, 20),
     loadSessionBrand(db, user.organization.name),
   ]);
+  // `?fila=<id>`: el enlace profundo de un registro (su detalle y su historia).
+  const record = await loadRecordContext(
+    db,
+    view.spec,
+    sources,
+    { rowId: query.fila, blockId: query.d },
+    { viewer: { kind: 'member', id: user.id } },
+  );
   const computed = computeView(view.spec, sources, new Date(), {
     writable: canWriteView(view, 'member'),
+    viewer: { id: user.id, kind: 'member' },
+    record,
   });
   const open = view.share_token && shareIsOpen(view) ? publicViewUrl(view.share_token) : null;
   const internal = internalSourcesOf(view.spec);

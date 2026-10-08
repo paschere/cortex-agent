@@ -19,10 +19,38 @@ import {
 
 export const TIMEZONE = 'America/Bogota';
 
-/** Topes de uso: por app y por día. */
-export const APP_DAILY_RUN_CAP = 500;
-export const APP_DAILY_ASK_CORTEX_CAP = 20;
+/**
+ * Topes de uso por app y por día. Son valores POR DEFECTO: cada app puede subir
+ * o bajar los suyos (`custom_apps.automation_limits`, 0212) hasta los máximos
+ * de `MAX_AUTOMATION_LIMITS`. Una corrida cuenta como una unidad del plan y cada
+ * pedido a Cortex (que gasta modelo) cuenta además en el suyo.
+ */
+export interface AutomationLimits {
+  runsPerDay: number;
+  askCortexPerDay: number;
+}
+export const DEFAULT_AUTOMATION_LIMITS: AutomationLimits = {
+  runsPerDay: 1000,
+  askCortexPerDay: 100,
+};
+export const MAX_AUTOMATION_LIMITS: AutomationLimits = {
+  runsPerDay: 5000,
+  askCortexPerDay: 1000,
+};
+export const APP_DAILY_RUN_CAP = DEFAULT_AUTOMATION_LIMITS.runsPerDay;
+export const APP_DAILY_ASK_CORTEX_CAP = DEFAULT_AUTOMATION_LIMITS.askCortexPerDay;
 export const APP_DAILY_EMAIL_CAP = 300;
+
+/** Lo guardado en la app, completado con los valores por defecto y acotado a los máximos. */
+export function resolveLimits(raw: unknown): AutomationLimits {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const pick = (key: keyof AutomationLimits): number => {
+    const n = Number(r[key]);
+    if (!Number.isFinite(n) || n < 1) return DEFAULT_AUTOMATION_LIMITS[key];
+    return Math.min(Math.floor(n), MAX_AUTOMATION_LIMITS[key]);
+  };
+  return { runsPerDay: pick('runsPerDay'), askCortexPerDay: pick('askCortexPerDay') };
+}
 
 export const MAX_ATTEMPTS = 4;
 
@@ -277,7 +305,13 @@ export function previewActions(actions: AutomationAction[], ctx: TemplateContext
       case 'ask_cortex':
         return {
           type: a.type,
-          summary: `Le pediría a Cortex: «${renderTemplate(a.instruction, ctx).slice(0, 200)}». Lo que escriba fuera de esta tabla pasa por aprobación.`,
+          summary: `Le pediría a Cortex: «${renderTemplate(a.instruction, ctx).slice(0, 300)}». ${
+            a.writes === undefined
+              ? 'Lo que escriba fuera de esta tabla pasa por aprobación.'
+              : a.writes === 'row'
+                ? 'Podría cambiar cualquier campo de esta fila sin aprobación; lo demás pasa por aprobación.'
+                : `Podría cambiar sólo ${a.writes.join(', ')} de esta fila sin aprobación; lo demás pasa por aprobación.`
+          }`,
         };
     }
   });

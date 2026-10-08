@@ -1,6 +1,7 @@
 'use client';
 
 import type { ComputedBlock, Tone } from '@cortex/agent-tools';
+import { eventsByDay, step, weekDays } from '@cortex/agent-tools/src/views/agenda';
 import { clsx } from 'clsx';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -15,6 +16,11 @@ import { Card, EmptyState, TONE_BAR, TONE_SOFT, shortDay, upperFirst } from './t
  * entre ellos sin pedir nada al servidor (fuera de ese rango no hay datos, así
  * que las flechas se apagan en los bordes). `agenda`: los próximos días, cada
  * uno con sus eventos.
+ *
+ * Y la agenda de planta: `week` (siete días, lado a lado en escritorio y en
+ * lista en el teléfono) y `day` (un día, ordenado por hora). Con `modes` la
+ * persona alterna entre día / semana / mes; las flechas se detienen en los
+ * bordes del rango que el cálculo cubre.
  *
  * En la cuadrícula, cada día es un botón que lo elige; lo elegido se lista
  * debajo, y ahí cada evento abre su ficha. En escritorio los eventos también
@@ -48,6 +54,8 @@ function monthCells(month: string): Array<string | null> {
   return cells;
 }
 
+const MODE_LABEL = { day: 'Día', week: 'Semana', month: 'Mes' } as const;
+
 export function CalendarBlock({ block }: { block: Calendar }) {
   const open = useRecordOpener(block.id, block.record);
   const byDay = useMemo(() => {
@@ -55,14 +63,196 @@ export function CalendarBlock({ block }: { block: Calendar }) {
     for (const e of block.events) map.set(e.day, [...(map.get(e.day) ?? []), e]);
     return map;
   }, [block.events]);
+  const modes = block.modes ?? [];
+  const switchable = modes.length > 1;
+  const [chosen, setChosen] = useState<'day' | 'week' | 'month'>(
+    block.mode === 'day' || block.mode === 'week' || block.mode === 'month' ? block.mode : 'week',
+  );
+  const mode = switchable ? chosen : block.mode;
+  const [anchor, setAnchor] = useState(block.today);
 
-  return block.mode === 'agenda' ? (
-    <Card title={block.title} source={block.source}>
-      <Agenda block={block} byDay={byDay} open={open} />
+  if (mode === 'agenda')
+    return (
+      <Card title={block.title} source={block.source}>
+        <Agenda block={block} byDay={byDay} open={open} />
+        <Legend legend={block.legend} />
+      </Card>
+    );
+  const switcher = switchable ? (
+    // biome-ignore lint/a11y/useSemanticElements: un fieldset no se deja estilar como píldora.
+    <div
+      role="group"
+      aria-label="Vista de la agenda"
+      className="view-no-print inline-flex rounded-pill border border-border bg-surface-2/70 p-0.5"
+    >
+      {modes.map((m) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={m === mode}
+          onClick={() => setChosen(m)}
+          className={clsx(
+            'rounded-pill px-3 py-1 text-micro font-semibold transition-colors',
+            m === mode ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink',
+          )}
+        >
+          {MODE_LABEL[m]}
+        </button>
+      ))}
+    </div>
+  ) : null;
+  if (mode === 'month')
+    return <MonthView block={block} byDay={byDay} open={open} switcher={switcher} />;
+  return (
+    <TimeView
+      block={block}
+      mode={mode === 'day' ? 'day' : 'week'}
+      anchor={anchor}
+      setAnchor={setAnchor}
+      open={open}
+      switcher={switcher}
+    />
+  );
+}
+
+/** «5 – 11 oct 2026» / «Miércoles 7 de octubre»: el título del rango que se ve. */
+function rangeTitle(mode: 'day' | 'week', anchor: string): string {
+  const fmt = (day: string, opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat('es-CO', { timeZone: 'UTC', ...opts }).format(
+      new Date(`${day}T12:00:00Z`),
+    );
+  if (mode === 'day')
+    return upperFirst(fmt(anchor, { weekday: 'long', day: 'numeric', month: 'long' }));
+  const days = weekDays(anchor);
+  const first = days[0] ?? anchor;
+  const last = days[6] ?? anchor;
+  return `${fmt(first, { day: 'numeric', month: 'short' })} – ${fmt(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
+function TimeView({
+  block,
+  mode,
+  anchor,
+  setAnchor,
+  open,
+  switcher,
+}: {
+  block: Calendar;
+  mode: 'day' | 'week';
+  anchor: string;
+  setAnchor: (day: string) => void;
+  open: ((id: string) => void) | null;
+  switcher: React.ReactNode;
+}) {
+  const days = mode === 'day' ? [anchor] : weekDays(anchor);
+  const columns = useMemo(() => eventsByDay(block.events, days), [block.events, days]);
+  const total = columns.reduce((n, c) => n + c.events.length, 0);
+  const move = (delta: -1 | 1) => setAnchor(step(mode, anchor, delta, block.range));
+  const atStart = step(mode, anchor, -1, block.range) === anchor;
+  const atEnd = step(mode, anchor, 1, block.range) === anchor;
+  const title = rangeTitle(mode, anchor);
+  return (
+    <Card
+      title={block.title}
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          {switcher}
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => move(-1)}
+              disabled={atStart}
+              aria-label={mode === 'day' ? 'Día anterior' : 'Semana anterior'}
+              className="grid h-7 w-7 place-items-center rounded-pill text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span
+              aria-live="polite"
+              className="min-w-[8.5rem] text-center text-xs font-semibold text-ink"
+            >
+              {title}
+            </span>
+            <button
+              type="button"
+              onClick={() => move(1)}
+              disabled={atEnd}
+              aria-label={mode === 'day' ? 'Día siguiente' : 'Semana siguiente'}
+              className="grid h-7 w-7 place-items-center rounded-pill text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            {anchor !== block.today && (
+              <button
+                type="button"
+                onClick={() => setAnchor(block.today)}
+                className="ml-1 rounded-pill border border-border px-2.5 py-1 text-micro font-semibold text-ink-muted transition-colors hover:text-ink"
+              >
+                Hoy
+              </button>
+            )}
+          </div>
+        </div>
+      }
+    >
+      <ol
+        aria-label={`${block.title}, ${title}`}
+        className={clsx('grid grid-cols-1 gap-2', mode === 'week' && 'md:grid-cols-7 md:gap-1.5')}
+      >
+        {columns.map(({ day, events }) => {
+          const isToday = day === block.today;
+          // En el teléfono, un día sin nada de la semana sólo ocupa una línea.
+          const quiet = mode === 'week' && events.length === 0;
+          return (
+            <li
+              key={day}
+              className={clsx(
+                'min-w-0 rounded-sm border p-2.5',
+                isToday ? 'border-primary/50 bg-primary-soft/40' : 'border-border/70 bg-surface',
+                quiet && 'py-1.5 md:py-2.5',
+                mode === 'week' && 'md:min-h-40',
+              )}
+            >
+              <p
+                className={clsx(
+                  'flex items-baseline gap-1.5 text-micro font-semibold',
+                  isToday ? 'text-primary-ink' : 'text-ink-muted',
+                  mode === 'week' && 'md:flex-col md:items-start md:gap-0',
+                )}
+              >
+                <span className="uppercase tracking-field">
+                  {isToday
+                    ? 'Hoy'
+                    : (WEEKDAYS[(new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7] ?? '')}
+                </span>
+                <span className="tabular font-mono text-base text-ink">{Number(day.slice(8))}</span>
+                {quiet && <span className="font-normal text-ink-faint md:hidden">sin nada</span>}
+              </p>
+              {events.length > 0 && (
+                <ul className="mt-2 space-y-1.5">
+                  {events.map((e) => (
+                    <li key={e.id}>
+                      <EventButton event={e} open={open} narrow={mode === 'week'} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {total === 0 && (
+        <p className="mt-3 text-micro text-ink-faint">
+          Nada {mode === 'day' ? 'este día' : 'esta semana'}.
+        </p>
+      )}
       <Legend legend={block.legend} />
+      {block.hidden > 0 && (
+        <p className="mt-2 text-micro text-ink-faint">
+          {block.hidden} eventos más no caben en la agenda.
+        </p>
+      )}
     </Card>
-  ) : (
-    <MonthView block={block} byDay={byDay} open={open} />
   );
 }
 
@@ -70,10 +260,13 @@ function EventButton({
   event,
   open,
   compact,
+  narrow,
 }: {
   event: CalEvent;
   open: ((id: string) => void) | null;
   compact?: boolean;
+  /** Columna angosta de la semana (escritorio): el estado lo dice el color, no el rótulo. */
+  narrow?: boolean;
 }) {
   const className = clsx(
     'flex w-full min-w-0 items-center gap-1.5 text-left transition-colors duration-150',
@@ -97,11 +290,18 @@ function EventButton({
           )}
         />
       )}
+      {!compact && event.time && (
+        <span className="tabular shrink-0 font-mono text-micro font-semibold text-ink-muted">
+          {event.time}
+        </span>
+      )}
       <span className={clsx('truncate', compact ? 'font-medium' : 'font-semibold text-ink')}>
         {event.label}
       </span>
       {!compact && event.tag && (
-        <span className="ml-auto shrink-0 text-micro text-ink-faint">{event.tag}</span>
+        <span className={clsx('ml-auto shrink-0 text-micro text-ink-faint', narrow && 'md:hidden')}>
+          {event.tag}
+        </span>
       )}
     </>
   );
@@ -120,10 +320,12 @@ function MonthView({
   block,
   byDay,
   open,
+  switcher,
 }: {
   block: Calendar;
   byDay: Map<string, CalEvent[]>;
   open: ((id: string) => void) | null;
+  switcher?: React.ReactNode;
 }) {
   const current = block.today.slice(0, 7);
   const [month, setMonth] = useState(() =>
@@ -146,31 +348,34 @@ function MonthView({
     <Card
       title={block.title}
       action={
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => go(-1)}
-            disabled={at <= 0}
-            aria-label="Mes anterior"
-            className="grid h-7 w-7 place-items-center rounded-pill text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span
-            aria-live="polite"
-            className="min-w-[7.5rem] text-center text-xs font-semibold text-ink"
-          >
-            {monthTitle(month)}
-          </span>
-          <button
-            type="button"
-            onClick={() => go(1)}
-            disabled={at < 0 || at >= block.months.length - 1}
-            aria-label="Mes siguiente"
-            className="grid h-7 w-7 place-items-center rounded-pill text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {switcher}
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => go(-1)}
+              disabled={at <= 0}
+              aria-label="Mes anterior"
+              className="grid h-7 w-7 place-items-center rounded-pill text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span
+              aria-live="polite"
+              className="min-w-[7.5rem] text-center text-xs font-semibold text-ink"
+            >
+              {monthTitle(month)}
+            </span>
+            <button
+              type="button"
+              onClick={() => go(1)}
+              disabled={at < 0 || at >= block.months.length - 1}
+              aria-label="Mes siguiente"
+              className="grid h-7 w-7 place-items-center rounded-pill text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       }
     >

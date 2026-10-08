@@ -61,6 +61,83 @@ const HOLE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
 const VARIABLE_NAME = /^[a-z][a-z0-9_]*$/;
 
 /* ---------------------------------------------------------------------------
+ * Resultados: los pasos `extract`
+ * -------------------------------------------------------------------------*/
+
+/** Nombres que el resultado de un trámite ya usa por su cuenta. */
+const RESERVED_RESULT_NAMES = new Set(['download', 'ok', 'result']);
+
+/** Un nombre de resultado: minúsculas, números y guion bajo. */
+export function resultNameFrom(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replaceAll(/\p{M}/gu, '')
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '_')
+    .replaceAll(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
+/** Cambia el nombre con que el resultado vuelve en `result.<nombre>`. */
+export function setExtractName(steps: ProposedStep[], index: number, raw: string): ProposedStep[] {
+  return patchStep(steps, index, (step) =>
+    step.action === 'extract' ? { ...step, extractAs: resultNameFrom(raw) } : step,
+  );
+}
+
+/** Lo que vale el resultado cuando no aparece. Vacío lo quita. */
+export function setExtractDefault(
+  steps: ProposedStep[],
+  index: number,
+  text: string,
+): ProposedStep[] {
+  return patchStep(steps, index, (step) => {
+    if (step.action !== 'extract') return step;
+    const { extractDefault: _drop, ...rest } = step;
+    return text.trim() ? { ...rest, extractDefault: text.slice(0, 200) } : rest;
+  });
+}
+
+/**
+ * El elemento que sigue a un rótulo visible (copia de `nearLabelSelector` de
+ * services/browser/src/teaching.ts: el servicio no comparte código con la app).
+ */
+export function nearLabelSelector(label: string): string {
+  const escaped = label.replaceAll(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  return `text=/^\\s*${escaped}\\s*:?\\s*$/i >> xpath=following-sibling::*[1]`;
+}
+
+/**
+ * Agrega un resultado a un trámite ya enseñado, apuntando al elemento que
+ * sigue a un rótulo visible («Estado» → el valor que está al lado). La forma
+ * de enseñarlo con un clic es «Señalar resultado»; esta existe para agregar
+ * uno a mano, y la prueba del trámite muestra qué leyó.
+ */
+export function addExtractStep(
+  steps: ProposedStep[],
+  input: { name: string; nextToLabel: string; fallback?: string },
+): ProposedStep[] {
+  if (steps.length >= MAX_STEPS) return steps;
+  const name = resultNameFrom(input.name);
+  const label = input.nextToLabel.trim().replace(/[:：]\s*$/, '');
+  if (!name || !label) return steps;
+  const step: ProposedStep = {
+    action: 'extract',
+    label: `Leer «${name}»`,
+    targets: [{ kind: 'css', value: nearLabelSelector(label) }],
+    landmarks: [],
+    extractAs: name,
+    ...(input.fallback?.trim() ? { extractDefault: input.fallback.trim().slice(0, 200) } : {}),
+  };
+  return [...steps, step];
+}
+
+/** Los resultados que declara el trámite, en orden. */
+export function resultNames(steps: ProposedStep[]): string[] {
+  return steps.flatMap((s) => (s.action === 'extract' && s.extractAs ? [s.extractAs] : []));
+}
+
+/* ---------------------------------------------------------------------------
  * Qué se puede hacer con cada paso
  * -------------------------------------------------------------------------*/
 
@@ -417,6 +494,31 @@ export function checkSteps(steps: ProposedStep[], variables: ProposedVariable[])
         index,
         message: `El paso ${n} abre el sitio, así que no puede ser opcional: sin él el trámite corre sobre una página en blanco.`,
       });
+    }
+
+    if (step.action === 'extract') {
+      const name = step.extractAs ?? '';
+      if (!name || !VARIABLE_NAME.test(name) || RESERVED_RESULT_NAMES.has(name)) {
+        problems.push({
+          index,
+          message: `El resultado del paso ${n} necesita un nombre válido (minúsculas, números y guiones bajos; no «download», «ok» ni «result»).`,
+        });
+      } else if (
+        steps.some(
+          (other, j) => j < index && other.action === 'extract' && other.extractAs === name,
+        )
+      ) {
+        problems.push({
+          index,
+          message: `Hay dos resultados que se llaman «${name}». Ponle otro nombre a uno.`,
+        });
+      }
+      if (step.targets.length === 0) {
+        problems.push({
+          index,
+          message: `El resultado del paso ${n} no sabe dónde leer. Quítalo y vuelve a señalarlo.`,
+        });
+      }
     }
 
     for (const name of holesIn(step)) {

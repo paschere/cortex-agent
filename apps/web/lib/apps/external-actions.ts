@@ -1,9 +1,12 @@
 'use server';
 
+import { emailBrand } from '@/lib/apps/app-brand';
+import { externalBrand } from '@/lib/apps/external-brand';
 import { appCookieName, cookieOptions, openExternalApp } from '@/lib/apps/external-session';
 import { codeAttemptsByIp, codeRequestsByEmail, codeRequestsByIp } from '@/lib/apps/rate-limit';
 import { sendEmail } from '@/lib/email';
 import { renderAppLoginCodeEmail } from '@/lib/email-templates/app-access';
+import { appBaseUrl } from '@/lib/email-templates/layout';
 import {
   CODE_TTL_MINUTES,
   deviceLabel,
@@ -69,6 +72,7 @@ export async function requestAppCodeAction(
           appName: opened.app.name,
           code: issued.code,
           minutes: CODE_TTL_MINUTES,
+          brand: emailBrand(await externalBrand(opened.db, opened.app), appBaseUrl()),
         });
         const sent = await sendEmail({ to: email, ...mail });
         if (!sent.sent) logger.warn({ reason: sent.reason }, 'apps: login code email not sent');

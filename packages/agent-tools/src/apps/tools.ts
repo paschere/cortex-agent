@@ -7,6 +7,7 @@ import { internalSourcesOf } from '../views/sources';
 import { viewSpecSchema } from '../views/spec';
 import { updateView, validateSpec } from '../views/store';
 import { SPEC_GRAMMAR } from '../views/tools';
+import { appBrandPatchSchema, appHomeSchema, mergeBrand } from './appearance';
 import { inviteAppUser, listAppUsers } from './external';
 import { installAppTemplate } from './install';
 import { appPermissionsSchema, roleKeySchema } from './permissions';
@@ -304,14 +305,20 @@ const screenPatch = z.object({
     .describe('Replaces the whole spec of this screen (same grammar as views.update).'),
 });
 
+const APPEARANCE_GRAMMAR = `APPEARANCE (field "brand", optional): the app's OWN look on top of the company's brand (which stays the default). Partial: only the keys you send change, null clears one. { primary?: "#RRGGBB", accent?: "#RRGGBB", shortName?: <=12 chars (name under the installed icon), font?: "system"|"serif"|"rounded", welcome?: { title?, text? } (shown on the entry screen) }. Colors are adjusted automatically to pass WCAG AA in light and dark. Logo and welcome image are uploaded from the editor's "Apariencia" tab, not from chat.
+HOME (field "home", optional): replaces the whole "Inicio" screen: { enabled, greeting (name + date), cards: [<=8] }. Each card has id, roles (role keys that see it; [] = all) and one of: { kind:"counter", source:<table slug>, filters:[...same filter grammar as view blocks; value "{hoy}", "{ayer}" or "{manana}" = that date], text:"Hoy llegan {n} vuelos", zeroText?:"Aún no hay vuelos hoy", screen?:<screen slug it opens>, tone? } | { kind:"pending", same fields as counter, shows the first 3 rows; openFilterId/openFilterValue open the target screen already filtered by one of its filter-bar items } | { kind:"shortcut", label:"Registrar atención", hint?, screen:<screen slug>, icon? }. Counts respect each role's row scope; a card over a table the role cannot read is hidden. "inicio" is a reserved screen slug. enabled:true makes Inicio the first screen.`;
+
 export const appsUpdate = registerTool({
   id: 'apps.update',
-  description: `Change an existing application (get its slugs first with apps.get): rename it, change its description/icon/home screen, add, edit, remove or reorder screens, and replace its set of roles with their permissions. Every piece is validated exactly like the visual editor: screen specs against the real tables (same grammar as views.create / views.update), roles against the permission contract. Removing a role also removes the Cortex members and keeps NO external users on it (change their role first). Removing a screen archives its view (data in the tables is untouched). Does NOT publish (apps.publish) nor assign people (apps.assign_members / apps.invite_users). If the app is published, a screen cannot read internal sources (Feed, personal, platform-internal). Requires confirmation; company owners/admins only.
+  description: `Change an existing application (get its slugs first with apps.get): rename it, change its description/icon/home screen, its own appearance (colors, short name, font, welcome text) and its "Inicio" cards screen, add, edit, remove or reorder screens, and replace its set of roles with their permissions. Every piece is validated exactly like the visual editor: screen specs against the real tables (same grammar as views.create / views.update), roles against the permission contract. Removing a role also removes the Cortex members and keeps NO external users on it (change their role first). Removing a screen archives its view (data in the tables is untouched). Does NOT publish (apps.publish) nor assign people (apps.assign_members / apps.invite_users). If the app is published, a screen cannot read internal sources (Feed, personal, platform-internal). Requires confirmation; company owners/admins only.
 ${PERMISSIONS_GRAMMAR}
+${APPEARANCE_GRAMMAR}
 ${SPEC_GRAMMAR}`,
   inputSchema: z
     .object({
       app: z.string().trim().min(1).max(80).describe('App id or slug.'),
+      brand: appBrandPatchSchema.optional(),
+      home: appHomeSchema.optional(),
       name: z.string().trim().min(1).max(80).optional(),
       description: z.string().trim().max(500).optional(),
       icon: z.string().trim().max(400).optional(),
@@ -336,6 +343,8 @@ ${SPEC_GRAMMAR}`,
         v.description !== undefined ||
         v.icon !== undefined ||
         v.homeScreen !== undefined ||
+        v.brand !== undefined ||
+        v.home !== undefined ||
         v.addScreens?.length ||
         v.updateScreens?.length ||
         v.removeScreens?.length ||
@@ -436,11 +445,25 @@ ${SPEC_GRAMMAR}`,
       await reorderScreens(ctx.db, app.id, ids);
       changes.push('orden de pantallas');
     }
+    const home = input.home ? appHomeSchema.parse(input.home) : undefined;
+    if (home) {
+      // Las tarjetas se comprueban contra lo que existe: una pantalla o una tabla
+      // inventada se rechaza aquí y no se descubre al abrir la app.
+      const slugs = new Set((await listScreens(ctx.db, app.id)).map((s) => s.slug));
+      for (const card of home.cards) {
+        if ('screen' in card && card.screen && !slugs.has(card.screen))
+          throw new NotFoundError(
+            `La tarjeta «${card.id}» apunta a la pantalla «${card.screen}», que no existe en esta app.`,
+          );
+      }
+    }
     if (
       input.name !== undefined ||
       input.description !== undefined ||
       input.icon !== undefined ||
-      input.homeScreen !== undefined
+      input.homeScreen !== undefined ||
+      input.brand !== undefined ||
+      input.home !== undefined
     ) {
       if (input.homeScreen) {
         const exists = (await listScreens(ctx.db, app.id)).some((s) => s.slug === input.homeScreen);
@@ -452,9 +475,13 @@ ${SPEC_GRAMMAR}`,
         description: input.description,
         icon: input.icon,
         homeScreen: input.homeScreen,
+        brand: input.brand ? mergeBrand(app.brand, input.brand) : undefined,
+        home,
         userId: ctx.userId,
       });
-      changes.push('datos de la app');
+      changes.push(
+        input.brand || input.home ? 'datos, apariencia o inicio de la app' : 'datos de la app',
+      );
     }
     const summary = appSummary(app, await listScreens(ctx.db, app.id));
     return {

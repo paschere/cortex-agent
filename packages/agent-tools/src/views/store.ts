@@ -44,6 +44,7 @@ import {
   approvalFor,
   checkSpecAgainst,
   editWindowOf,
+  findWriteBlock,
   isFeedSourceId,
   isPlatformSourceId,
   isReadOnlySource,
@@ -385,6 +386,12 @@ export interface LoadViewSourcesOptions {
    * (`created_by`), para no traer lo que no se va a mostrar.
    */
   scope?: RowScope[];
+  /**
+   * Una fila que tiene que estar en el mapa aunque no sea de las 2.000 más
+   * recientes (el enlace profundo `?fila=` de un registro viejo). Se lee con
+   * el mismo scope que el resto; si el rol no la ve, simplemente no entra.
+   */
+  ensureRowId?: string;
 }
 
 /** Lee las tablas y fuentes que el spec nombra y sus filas, hasta el tope. */
@@ -543,13 +550,27 @@ export async function loadViewSources(
       // El scope se aplica otra vez en memoria: es la misma regla que
       // `rowVisible` usa antes de escribir, y así la lectura no depende de que
       // la consulta lo haya hecho.
-      const list = applyRowScope(
-        (rows ?? []).map((r) => adaptEntry(r as Record<string, unknown>)),
-        access,
-      );
+      const read = (rows ?? []).map((r) => adaptEntry(r as Record<string, unknown>));
+      if (options.ensureRowId && !read.some((r) => r.id === options.ensureRowId)) {
+        let one = db
+          .from('tracker_rows')
+          .select('id, label, values, created_by, created_by_app_user, created_at, updated_at')
+          .eq('tracker_id', t.id)
+          .eq('id', options.ensureRowId);
+        if (access.kind === 'own')
+          one = one.eq(access.external ? 'created_by_app_user' : 'created_by', access.userId);
+        const { data: extra } = await one.maybeSingle();
+        if (extra) read.push(adaptEntry(extra as Record<string, unknown>));
+      }
+      const list = applyRowScope(read, access);
+      const kept = list.slice(0, VIEW_ROW_CAP);
+      const ensured = options.ensureRowId
+        ? list.find((r) => r.id === options.ensureRowId)
+        : undefined;
+      if (ensured && !kept.includes(ensured)) kept.push(ensured);
       sources.set(t.slug, {
         tracker,
-        rows: list.slice(0, VIEW_ROW_CAP),
+        rows: kept,
         truncated: list.length > VIEW_ROW_CAP,
       });
     }),
@@ -1533,7 +1554,15 @@ async function patchRow(
 }
 
 /** Los bloques cuyas filas se tocan: celdas, tarjetas, fichas, eventos. */
-const ROW_BLOCKS: ReadonlySet<string> = new Set(['table', 'board', 'zones', 'gallery', 'calendar']);
+const ROW_BLOCKS: ReadonlySet<string> = new Set([
+  'table',
+  'board',
+  'zones',
+  'gallery',
+  'calendar',
+  'cards',
+  'detail',
+]);
 
 /** Editar una celda de una tabla, mover una tarjeta o cambiar un campo desde la ficha. */
 export async function editViewRow(
@@ -1549,7 +1578,7 @@ export async function editViewRow(
 ): Promise<{ label: string; duplicate: string | null }> {
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Esta vista no se puede editar.');
-  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  const block = findWriteBlock(view.spec, input.blockId);
   if (!block || !ROW_BLOCKS.has(block.type) || !('tracker' in block))
     throw new NotFoundError('Ese bloque no está en esta vista.');
   // La lista blanca es la del bloque: celdas editables, el campo que se
@@ -1601,7 +1630,7 @@ export async function runViewAction(
 ): Promise<ViewActionOutcome> {
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
     throw new ValidationError('Los botones de esta vista no están activos.');
-  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  const block = findWriteBlock(view.spec, input.blockId);
   if (!block || !ROW_BLOCKS.has(block.type) || !('actions' in block) || !('tracker' in block))
     throw new NotFoundError('Ese bloque no está en esta vista.');
   if (input.actionId === APPROVE_ACTION_ID || input.actionId === REJECT_ACTION_ID) {

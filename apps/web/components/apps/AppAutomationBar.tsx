@@ -4,6 +4,7 @@ import { pressAppButtonAction } from '@/lib/apps/button-actions';
 import { clsx } from 'clsx';
 import { Bell, BellOff, Loader2, Play } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
+import { useAppToast } from './AppToast';
 
 /**
  * LO QUE LAS AUTOMATIZACIONES PONEN EN UNA PANTALLA (0210): los botones de
@@ -33,7 +34,7 @@ export function AppButtons({
   buttons: AppButton[];
 }) {
   const [pending, start] = useTransition();
-  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const toast = useAppToast();
   if (!buttons.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -44,12 +45,13 @@ export function AppButtons({
           disabled={pending}
           onClick={() =>
             start(async () => {
-              setNote(null);
               const res = await pressAppButtonAction(appId, screen, b.automationId);
-              setNote(res.ok ? { ok: true, text: res.message } : { ok: false, text: res.error });
+              toast(
+                res.ok ? { tone: 'ok', text: res.message } : { tone: 'error', text: res.error },
+              );
             })
           }
-          className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-border bg-surface px-3.5 text-xs font-semibold text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-border bg-surface px-4 text-xs font-semibold text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"
         >
           {pending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -59,14 +61,6 @@ export function AppButtons({
           {b.label}
         </button>
       ))}
-      {note && (
-        <output
-          className={clsx('text-xs font-medium', note.ok ? 'text-emerald' : 'text-rose')}
-          aria-live="polite"
-        >
-          {note.text}
-        </output>
-      )}
     </div>
   );
 }

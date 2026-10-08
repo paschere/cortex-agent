@@ -1,8 +1,8 @@
-import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { requireSession } from '@/lib/session';
 import { getEnv } from '@cortex/core';
 import { cookies } from 'next/headers';
+import { type NextRequest, NextResponse } from 'next/server';
 
 const ALL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -22,6 +22,21 @@ const SCOPE_PRESETS: Record<string, string[]> = {
     'https://www.googleapis.com/auth/gmail.compose',
   ],
   drive: ['https://www.googleapis.com/auth/drive.readonly'],
+  // OPCIONAL: «Permitir que Cortex guarde archivos en tu Drive» (gdrive.upload_file).
+  // Se pide `drive` completo y no `drive.file` porque `drive.file` sólo alcanza
+  // archivos y carpetas que la app creó o que la persona abrió con el selector de
+  // Google; las carpetas donde se guardan los documentos las crea la empresa a
+  // mano y para Google son «ajenas» a la app (404). `drive` es un alcance
+  // RESTRINGIDO: mientras la app de Google no esté verificada, sólo lo conceden
+  // los usuarios de prueba (máx. 100) y se ve la advertencia de «app no
+  // verificada». Por eso NO está en ALL_SCOPES ni se pide en el inicio de sesión:
+  // quien no pulsa esto no tiene que reconectar nada. Se pide junto a
+  // drive.readonly para que las herramientas de lectura sigan encontrando su
+  // permiso por nombre.
+  drive_write: [
+    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/drive',
+  ],
   calendar: [
     'https://www.googleapis.com/auth/calendar.events',
     'https://www.googleapis.com/auth/calendar.readonly',

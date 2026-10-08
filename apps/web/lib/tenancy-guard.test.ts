@@ -128,7 +128,7 @@ const ALLOWED = new Map<string, string>([
   ],
   [
     'inngest/functions/app-automations.ts',
-    'Cron. "Which app automations have a schedule that is due" and "which runs are queued" span the install; the raw handle reads (id, organization_id, app_id, trigger, schedule_last_slot) of enabled schedule rules and (id, organization_id) of queued runs, and resets runs stuck in "running". Each schedule slot is then claimed and each run executed with a handle pinned to its own workspace; app users are only ever looked up by the rule\'s app_id.',
+    'Cron. "Which app automations have a schedule or row poll that is due" and "which runs are queued" span the install; the raw handle reads (id, organization_id, app_id, trigger, conditions, schedule_last_slot) of enabled schedule and rows_poll rules and (id, organization_id) of queued runs, and resets runs stuck in "running". Each schedule slot is then claimed and each run executed with a handle pinned to its own workspace; app users are only ever looked up by the rule\'s app_id.',
   ],
   [
     'inngest/functions/view-digest.ts',

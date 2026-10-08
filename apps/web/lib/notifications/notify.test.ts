@@ -340,6 +340,11 @@ describe('el vocabulario y la migración', () => {
       ]) {
         const at = sql.indexOf(marker);
         if (at < 0) continue;
+        // La forma en línea sólo cuenta en la migración que crea la tabla de
+        // avisos: otras tablas también tienen una columna `kind` con CHECK
+        // (p.ej. las esperas de la 0214) y no dicen nada de las notificaciones.
+        if (marker.startsWith('kind') && !sql.includes('create table public.notifications'))
+          continue;
         const block = sql.slice(at);
         effective = [...block.slice(0, block.indexOf('))')).matchAll(/'([a-z_]+)'/g)]
           .map((m) => m[1] as string)

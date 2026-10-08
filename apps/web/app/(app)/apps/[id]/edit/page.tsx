@@ -86,6 +86,7 @@ export default async function EditAppPage({
       listPinStates(db, app.id),
     ]);
   const attributeValues = await attributeValueSuggestions(db, roles);
+  const companyBrand = await loadSessionBrand(db, user.organization.name);
   const pinOf = new Map(pins.map((p) => [p.userId, p]));
 
   // Las tablas que alguna pantalla lee y los botones de fila que declara cada una:
@@ -176,6 +177,31 @@ export default async function EditAppPage({
     // Una tabla usada que no es propia (plataforma/Feed) no sale en la matriz con campos,
     // pero sí con su nombre: el permiso se da por clave.
     unknownTrackers: [...used].filter((slug) => !trackers.some((t) => t.slug === slug)),
+    brand: app.brand,
+    companyBrand: {
+      name: companyBrand.name,
+      primary: companyBrand.primary,
+      secondary: companyBrand.secondary,
+      logoUrl: companyBrand.logoUrl,
+    },
+    home: app.home,
+    homeTrackers: trackers.map((t) => ({
+      slug: t.slug,
+      name: t.name,
+      fields: t.fields.map((f) => ({
+        key: f.key,
+        label: f.label,
+        type: f.type,
+        ...(f.options ? { options: f.options } : {}),
+      })),
+      actions: [],
+    })),
+    screenFilters: Object.fromEntries(
+      screens.flatMap((s) => {
+        const bar = views.get(s.view_id)?.spec.filtersBar ?? [];
+        return bar.length ? [[s.slug, bar.map((b) => ({ id: b.id, label: b.label }))]] : [];
+      }),
+    ),
   };
 
   return <AppEditor data={data} />;

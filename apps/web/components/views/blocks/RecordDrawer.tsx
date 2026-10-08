@@ -53,7 +53,7 @@ export function useRecordOpener(
 
 type RecordBlock = Extract<
   ComputedBlock,
-  { type: 'table' | 'board' | 'zones' | 'gallery' | 'calendar' }
+  { type: 'table' | 'board' | 'zones' | 'gallery' | 'calendar' | 'cards' }
 >;
 
 export function recordBlockOf(block: ComputedBlock | undefined): RecordBlock | null {
@@ -62,6 +62,7 @@ export function recordBlockOf(block: ComputedBlock | undefined): RecordBlock | n
       block.type === 'board' ||
       block.type === 'zones' ||
       block.type === 'gallery' ||
+      block.type === 'cards' ||
       block.type === 'calendar')
     ? block
     : null;

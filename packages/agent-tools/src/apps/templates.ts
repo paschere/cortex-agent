@@ -151,6 +151,21 @@ const misRegistros: ViewSpec = viewSpecSchema.parse({
       sort: { field: 'created_at', dir: 'desc' },
       limit: 100,
     },
+    {
+      id: 'detalle',
+      type: 'detail',
+      width: 'full',
+      tracker: GUIAS,
+      titleField: 'numero_guia',
+      subtitleField: 'ubicacion',
+      statusField: 'estado',
+      sections: [
+        { title: 'Guía', fields: ['fecha', 'ubicacion', 'registrado_por'] },
+        { title: 'Observaciones', fields: ['observaciones', 'motivo_rechazo'] },
+      ],
+      gallery: ['foto'],
+      timeline: { show: ['created', 'changes', 'approvals', 'files'], limit: 30 },
+    },
   ],
 });
 
@@ -228,6 +243,21 @@ const porAprobar: ViewSpec = viewSpecSchema.parse({
       editable: ['numero_guia', 'fecha', 'estado'],
       sort: { field: 'numero_guia', dir: 'asc' },
       limit: 100,
+    },
+    {
+      id: 'detalle',
+      type: 'detail',
+      width: 'full',
+      tracker: GUIAS,
+      titleField: 'numero_guia',
+      subtitleField: 'ubicacion',
+      statusField: 'estado',
+      sections: [
+        { title: 'Guía', fields: ['fecha', 'ubicacion', 'registrado_por'] },
+        { title: 'Observaciones', fields: ['observaciones', 'motivo_rechazo'] },
+      ],
+      gallery: ['foto'],
+      timeline: { limit: 30 },
     },
     // El formulario con aprobación es lo que enciende Aprobar / Rechazar en
     // las tablas de arriba (`approvalFor` busca en ESTA pantalla). Al final,

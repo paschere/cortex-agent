@@ -469,6 +469,8 @@ export const galleryBlockSchema = z.object({
  * es la lista de los próximos `days` días. `colorField` (un campo de
  * opciones) colorea cada evento por su opción.
  */
+export const CALENDAR_MODES = ['month', 'agenda', 'week', 'day'] as const;
+export const CALENDAR_SWITCH_MODES = ['day', 'week', 'month'] as const;
 export const calendarBlockSchema = z.object({
   ...base,
   ...source,
@@ -478,9 +480,146 @@ export const calendarBlockSchema = z.object({
   dateField: fieldRef,
   labelField: fieldRef.default('label'),
   colorField: fieldRef.optional(),
-  mode: z.enum(['month', 'agenda']).default('month'),
+  /**
+   * `week` y `day` son la agenda de planta: los eventos de una semana (siete
+   * días) o de un día, ordenados por hora (`timeField`). Se navega entre los
+   * tres meses que el cálculo entrega, igual que `month`.
+   */
+  mode: z.enum(CALENDAR_MODES).default('month'),
+  /** Un campo de hora (HH:MM): ordena el día y se pinta al lado del nombre. */
+  timeField: fieldRef.optional(),
+  /**
+   * Con más de una, la persona cambia entre día / semana / mes con un
+   * selector; `mode` es con la que abre. Sin `modes`, la vista es fija.
+   */
+  modes: z.array(z.enum(CALENDAR_SWITCH_MODES)).max(3).optional(),
   /** Agenda: cuántos días hacia adelante, contando hoy. */
   days: z.number().int().min(1).max(60).default(14),
+  actions: z.array(rowActionSchema).max(3).default([]),
+});
+
+/**
+ * EL DETALLE DE UN REGISTRO. Una pantalla entera para UNA fila: se abre desde
+ * una tabla, unas tarjetas, un tablero o una agenda que lean la misma tabla (o
+ * por su enlace, `?fila=<id>`), y no se pinta mientras no haya fila elegida.
+ *
+ *   - Cabecera: el título (`titleField`), un subtítulo y el estado
+ *     (`statusField`, un campo de opciones: chip con el color de su posición).
+ *   - `sections`: los campos agrupados («Vuelo», «Carga», «Contacto»). Sin
+ *     secciones, todos los de la tabla en una sola. Lo que no está aquí no sale.
+ *   - `gallery`: campos de archivos/fotos del registro, en galería.
+ *   - `related`: listas de otras tablas ligadas a este registro, con sus
+ *     propios botones. Ver `relatedSchema`.
+ *   - `actions` / `recordEditable`: botones y campos editables del registro.
+ *   - `timeline`: la línea de tiempo del registro (quién lo creó, qué cambió
+ *     de qué a qué, aprobaciones, automatizaciones, archivos subidos).
+ *
+ * Todo lo que lee pasa por `loadViewSources`, así que el scope por rol de una
+ * aplicación aplica igual a la fila, a los relacionados y a la línea de tiempo.
+ */
+export const detailSectionSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  fields: z.array(fieldRef).min(1).max(12),
+});
+export type DetailSection = z.infer<typeof detailSectionSchema>;
+
+/**
+ * UNA LISTA DE REGISTROS RELACIONADOS dentro del detalle: «las guías de este
+ * vuelo», «las atenciones de este cliente».
+ *   - `match: 'relation'` (por defecto): `field` es un campo relación de la
+ *     tabla relacionada que apunta a la tabla del detalle.
+ *   - `match: 'value'`: un valor común. `field` (de la tabla relacionada) vale
+ *     lo mismo que `parentField` (del registro): el número de vuelo escrito en
+ *     las dos tablas, sin relación formal.
+ */
+export const RELATED_MATCHES = ['relation', 'value'] as const;
+export const relatedSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,15}$/),
+    title: z.string().trim().min(1).max(60),
+    tracker: sourceRef,
+    field: fieldRef,
+    match: z.enum(RELATED_MATCHES).default('relation'),
+    parentField: fieldRef.optional(),
+    columns: z.array(fieldRef).max(4).default([]),
+    sort: z.object({ field: fieldRef, dir: z.enum(['asc', 'desc']).default('desc') }).optional(),
+    limit: z.number().int().min(1).max(30).default(10),
+    actions: z.array(rowActionSchema).max(3).default([]),
+  })
+  .superRefine((r, ctx) => {
+    if (r.match === 'value' && !r.parentField)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Relacionar por un valor común necesita parentField (el campo del registro).',
+        path: ['parentField'],
+      });
+  });
+export type RelatedList = z.infer<typeof relatedSchema>;
+
+export const TIMELINE_PARTS = ['created', 'changes', 'approvals', 'automations', 'files'] as const;
+export type TimelinePart = (typeof TIMELINE_PARTS)[number];
+export const timelineSchema = z.union([
+  z.literal(false),
+  z.object({
+    show: z
+      .array(z.enum(TIMELINE_PARTS))
+      .min(1)
+      .max(5)
+      .default([...TIMELINE_PARTS]),
+    limit: z.number().int().min(5).max(100).default(30),
+  }),
+]);
+
+export const detailBlockSchema = z.object({
+  ...base,
+  ...source,
+  recordEditable: record.recordEditable,
+  type: z.literal('detail'),
+  title: z.string().trim().max(120).optional(),
+  titleField: fieldRef.default('label'),
+  subtitleField: fieldRef.optional(),
+  statusField: fieldRef.optional(),
+  sections: z.array(detailSectionSchema).max(6).default([]),
+  gallery: z.array(fieldRef).max(4).default([]),
+  related: z.array(relatedSchema).max(4).default([]),
+  actions: z.array(rowActionSchema).max(4).default([]),
+  timeline: timelineSchema.optional(),
+});
+export type DetailBlock = z.infer<typeof detailBlockSchema>;
+
+/**
+ * LA LISTA DE TARJETAS CON FILTROS RÁPIDOS. Tarjetas grandes con imagen,
+ * estado y dos a cuatro datos; arriba, el buscador, los chips de filtro y el
+ * orden. Los filtros corren en el navegador sobre lo que el cálculo entregó
+ * (hasta `limit` tarjetas): tocar un chip es instantáneo.
+ *   - `chips`: `status` (una por opción de `statusField`), `today` y `week`
+ *     (sobre `dateField`) y `mine` (los que creó quien mira).
+ *   - `groupBy`: títulos de grupo por un campo (estado, sede, día…).
+ *   - `sortOptions`: campos entre los que la persona elige el orden.
+ *   - `paging`: `more` («Ver más») o `infinite` (carga al llegar al final).
+ */
+export const CARD_CHIPS = ['status', 'today', 'week', 'mine'] as const;
+export type CardChip = (typeof CARD_CHIPS)[number];
+export const cardsBlockSchema = z.object({
+  ...base,
+  ...source,
+  ...record,
+  type: z.literal('cards'),
+  title,
+  titleField: fieldRef.default('label'),
+  subtitleField: fieldRef.optional(),
+  imageField: fieldRef.optional(),
+  statusField: fieldRef.optional(),
+  dataFields: z.array(fieldRef).max(4).default([]),
+  dateField: fieldRef.optional(),
+  chips: z.array(z.enum(CARD_CHIPS)).max(4).default([]),
+  searchable: z.boolean().default(true),
+  groupBy: fieldRef.optional(),
+  sort: z.object({ field: fieldRef, dir: z.enum(['asc', 'desc']).default('desc') }).optional(),
+  sortOptions: z.array(fieldRef).max(4).default([]),
+  pageSize: z.number().int().min(4).max(48).default(12),
+  paging: z.enum(['more', 'infinite']).default('more'),
+  limit: z.number().int().min(1).max(200).default(100),
   actions: z.array(rowActionSchema).max(3).default([]),
 });
 
@@ -568,6 +707,8 @@ export const blockSchema = z.discriminatedUnion('type', [
   formBlockSchema,
   galleryBlockSchema,
   calendarBlockSchema,
+  detailBlockSchema,
+  cardsBlockSchema,
   progressBlockSchema,
   mediaBlockSchema,
   linksBlockSchema,
@@ -660,9 +801,23 @@ export const HEADER_STYLES = ['plain', 'hero'] as const;
  * tarjetas con borde del acento; `dark-panel` es un panel oscuro tipo pantalla
  * de planta o TV (siempre oscuro, también en el enlace público claro).
  */
-export const LAYOUTS = ['dashboard', 'operator'] as const;
+export const LAYOUTS = ['dashboard', 'operator', 'tv'] as const;
 export const VIEW_STYLES = ['clean', 'bold', 'dark-panel'] as const;
+/**
+ * EL TABLERO TV (`layout: 'tv'`): pantalla completa para la planta. Texto
+ * grande, alto contraste (siempre oscuro), reloj, y rota sola entre sus
+ * secciones —las páginas de la vista; sin páginas, un bloque por vez— cada
+ * `rotateSeconds`. Se refresca en vivo (como mucho cada 30 s). Pantalla
+ * completa con un botón; no hay nada que escribir ahí.
+ */
+export const TV_ROTATE = { min: 5, max: 120, default: 15 } as const;
+export const tvSchema = z.object({
+  rotateSeconds: z.number().int().min(TV_ROTATE.min).max(TV_ROTATE.max).default(TV_ROTATE.default),
+  clock: z.boolean().default(true),
+});
+export type ViewTv = z.infer<typeof tvSchema>;
 export const viewThemeSchema = z.object({
+  tv: tvSchema.optional(),
   accent: z.enum(TONES).optional(),
   density: z.enum(DENSITIES).optional(),
   header: z.enum(HEADER_STYLES).optional(),
@@ -733,6 +888,34 @@ export const viewSpecSchema = z
           i,
           'target',
         ]);
+      if (block.type === 'cards') {
+        if ((block.chips.includes('today') || block.chips.includes('week')) && !block.dateField)
+          issue('Los chips «hoy» y «semana» necesitan un campo de fecha (dateField).', [
+            'blocks',
+            i,
+            'dateField',
+          ]);
+        if (block.chips.includes('status') && !block.statusField)
+          issue('El chip «status» necesita un campo de opciones (statusField).', [
+            'blocks',
+            i,
+            'statusField',
+          ]);
+      }
+      if (block.type === 'detail') {
+        const ids = new Set<string>();
+        for (const [j, r] of block.related.entries()) {
+          if (ids.has(r.id))
+            issue(`La lista relacionada «${r.id}» está repetida.`, [
+              'blocks',
+              i,
+              'related',
+              j,
+              'id',
+            ]);
+          ids.add(r.id);
+        }
+      }
       if (block.type === 'metric' && block.goalDirection && !block.goal)
         issue('goalDirection necesita una meta (goal).', ['blocks', i, 'goal']);
       if (block.type === 'metric' && block.compare && !block.dateField)
@@ -991,8 +1174,86 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         needType(block.dateField, 'fecha del evento', isDate, 'un campo de fecha');
         need(block.labelField, 'nombre del evento');
         if (block.colorField) needType(block.colorField, 'color', isSelect, 'un campo de opciones');
+        if (block.timeField)
+          needType(block.timeField, 'hora del evento', (t) => t === 'time', 'un campo de hora');
         checkWrites(recordEditable, block.actions);
         break;
+      case 'cards':
+        need(block.titleField, 'título de la tarjeta');
+        if (block.subtitleField) need(block.subtitleField, 'subtítulo');
+        for (const k of block.dataFields) need(k, 'dato de la tarjeta');
+        if (block.statusField)
+          needType(block.statusField, 'estado', isSelect, 'un campo de opciones');
+        if (block.imageField)
+          needType(
+            block.imageField,
+            'imagen',
+            (t) => t === 'text' || t === 'file',
+            'un campo de texto con la dirección de la imagen o de fotos',
+          );
+        if (block.dateField)
+          needType(block.dateField, 'fecha para hoy / semana', isDate, 'un campo de fecha');
+        if (block.groupBy) need(block.groupBy, 'agrupar');
+        if (block.sort) need(block.sort.field, 'orden');
+        for (const k of block.sortOptions) need(k, 'orden elegible');
+        checkWrites(recordEditable, block.actions);
+        break;
+      case 'detail': {
+        need(block.titleField, 'título del detalle');
+        if (block.subtitleField) need(block.subtitleField, 'subtítulo');
+        if (block.statusField)
+          needType(block.statusField, 'estado', isSelect, 'un campo de opciones');
+        for (const sec of block.sections)
+          for (const k of sec.fields) need(k, `sección «${sec.title}»`);
+        for (const k of block.gallery)
+          needType(k, 'galería', (t) => t === 'file', 'un campo de archivos o fotos');
+        checkWrites(recordEditable, block.actions);
+        for (const rel of block.related) {
+          const rw = `${where}, relacionados «${rel.title}»`;
+          const other = bySlug.get(rel.tracker);
+          if (!other) {
+            problems.push(`${rw}: la tabla «${rel.tracker}» no existe.`);
+            continue;
+          }
+          if (other.opaque) continue;
+          const check = (key: string, what: string, t = other) => {
+            if (!fieldType(t, key)) {
+              problems.push(
+                `${rw}: «${key}» no es un campo de ${t.name} (${what}). Campos: label, ${t.fields.map((f) => f.key).join(', ')}.`,
+              );
+              return false;
+            }
+            return true;
+          };
+          if (check(rel.field, 'cómo se relaciona') && rel.match === 'relation') {
+            const f = other.fields.find((x) => x.key === rel.field);
+            if (f?.type !== 'relation' || f.tracker !== block.tracker)
+              problems.push(
+                `${rw}: «${rel.field}» tiene que ser un campo relación hacia ${tracker.name} (o usa match «value» con parentField para ligar por un valor común).`,
+              );
+          }
+          if (rel.match === 'value' && rel.parentField) need(rel.parentField, 'valor común');
+          for (const c of rel.columns) check(c, 'columna');
+          if (rel.sort) check(rel.sort.field, 'orden');
+          if (rel.actions.length) {
+            if (isReadOnlySource(rel.tracker))
+              problems.push(
+                `${rw}: «${other.name}» es de sólo lectura; los botones sólo van en tablas propias.`,
+              );
+            else
+              for (const a of rel.actions) {
+                if (a.kind !== 'set_field' || !a.field) continue;
+                if (!check(a.field, `botón «${a.label}»`)) continue;
+                const field = other.fields.find((f) => f.key === a.field);
+                if (field?.type === 'select' && !field.options?.includes(String(a.value)))
+                  problems.push(
+                    `${rw}: el botón «${a.label}» pone «${a.value}», que no es una opción de ${field.label} (${field.options?.join(', ')}).`,
+                  );
+              }
+          }
+        }
+        break;
+      }
       case 'metric':
       case 'chart': {
         if (block.aggregate !== 'count') {
@@ -1141,6 +1402,7 @@ export function specWrites(spec: Pick<ViewSpec, 'blocks'>): boolean {
     // Aprobar / Rechazar escribe en la tabla: la vista tiene que dejar escribir.
     if (b.type === 'form' && b.approval) return true;
     if ('actions' in b && b.actions.length > 0) return true;
+    if (b.type === 'detail' && b.related.some((r) => r.actions.length > 0)) return true;
     if (b.type === 'table') return b.editable.length > 0;
     if (b.type === 'board' || b.type === 'zones') return b.draggable;
     return false;
@@ -1157,6 +1419,8 @@ export function trackersOf(spec: ViewSpec): string[] {
   return [
     ...new Set([
       ...spec.blocks.flatMap((b) => ('tracker' in b ? [b.tracker] : [])),
+      // Las listas relacionadas de un detalle también se leen (y llevan scope).
+      ...spec.blocks.flatMap((b) => (b.type === 'detail' ? b.related.map((r) => r.tracker) : [])),
       ...spec.alerts.map((a) => a.source),
     ]),
   ];
@@ -1172,8 +1436,42 @@ export const BLOCK_LABEL: Record<ViewBlockType, string> = {
   form: 'Formulario',
   gallery: 'Galería',
   calendar: 'Calendario',
+  detail: 'Detalle de un registro',
+  cards: 'Tarjetas con filtros',
   progress: 'Avance',
   media: 'Imagen o video',
   links: 'Botones',
   voice: 'Asistente de voz',
 };
+
+/**
+ * El bloque sobre el que se escribe, dado el id que manda el navegador. Casi
+ * siempre es un bloque de la vista. Una lista relacionada de un detalle se
+ * nombra `<detalle>:<lista>` y se escribe como una tabla propia con sus botones
+ * (la misma lista blanca y las mismas reglas que cualquier otra), pero los
+ * eventos quedan a nombre del detalle.
+ */
+export function findWriteBlock(
+  spec: Pick<ViewSpec, 'blocks'>,
+  blockId: string,
+): ViewBlock | undefined {
+  const [head, tail] = blockId.split(':');
+  const block = spec.blocks.find((b) => b.id === head);
+  if (!tail) return block;
+  if (!block || block.type !== 'detail') return undefined;
+  const rel = block.related.find((r) => r.id === tail);
+  if (!rel) return undefined;
+  return {
+    id: block.id,
+    type: 'table',
+    width: 'full',
+    tracker: rel.tracker,
+    filters: [],
+    title: rel.title,
+    columns: rel.columns,
+    limit: rel.limit,
+    searchable: false,
+    editable: [],
+    actions: rel.actions,
+  };
+}

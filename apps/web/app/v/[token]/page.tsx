@@ -5,6 +5,7 @@ import {
   canWriteView,
   computeView,
   countPublicOpen,
+  loadRecordContext,
   loadViewSources,
   parseViewFilterParam,
 } from '@cortex/agent-tools';
@@ -41,7 +42,7 @@ export default async function PublicViewPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ f?: string | string[] }>;
+  searchParams: Promise<{ f?: string | string[]; fila?: string; d?: string }>;
 }) {
   const [{ token }, query] = await Promise.all([params, searchParams]);
   const opened = await openPublicView(token);
@@ -65,16 +66,24 @@ export default async function PublicViewPage({
   // el cálculo: la ficha de una fila sólo trae lo que el bloque ya muestra,
   // salvo que el spec diga `detailFields`. Un enlace con `?f=` abre ya
   // filtrado (validado contra el spec guardado).
-  const computed = computeView(
+  const sources = await loadViewSources(db, view.spec, {
+    audience: 'public',
+    ensureRowId: typeof query.fila === 'string' ? query.fila : undefined,
+  });
+  // `?fila=`: el detalle de un registro por el enlace, con una historia sin nombres internos.
+  const record = await loadRecordContext(
+    db,
     view.spec,
-    await loadViewSources(db, view.spec, { audience: 'public' }),
-    new Date(),
-    {
-      writable: canWriteView(view, 'public'),
-      audience: 'public',
-      filters: parseViewFilterParam(view.spec, typeof query.f === 'string' ? query.f : null),
-    },
+    sources,
+    { rowId: typeof query.fila === 'string' ? query.fila : null, blockId: query.d },
+    { viewer: { kind: 'public' } },
   );
+  const computed = computeView(view.spec, sources, new Date(), {
+    writable: canWriteView(view, 'public'),
+    audience: 'public',
+    filters: parseViewFilterParam(view.spec, typeof query.f === 'string' ? query.f : null),
+    record,
+  });
   const subtitle = view.spec.subtitle ?? view.description ?? null;
   void countPublicOpen(db, view).catch(() => undefined);
 

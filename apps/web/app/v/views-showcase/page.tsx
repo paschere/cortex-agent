@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { Showcase } from './Showcase';
+import { SCREEN_KINDS, SCREEN_TITLES, type ScreenKind, screensView } from './screens-fixture';
 
 /**
  * EL ESCAPARATE DE LAS VISTAS. SÓLO EN DESARROLLO.
@@ -11,7 +12,8 @@ import { Showcase } from './Showcase';
  * ya es público en middleware.ts y un segmento estático gana a `/v/[token]`.
  *
  * Parámetros: `?modo=oscuro`, `?marca=amarilla|ninguna`, `?paginas=1`,
- * `?vacia=1`, `?portada=1`, `?lugar=app` (como se ve adentro, sin la barra pública), `?panel=marca` (la pantalla
+ * `?vacia=1`, `?pantalla=detalle|tarjetas|agenda|tv` (los tipos de pantalla
+ * nuevos, calculados de verdad; `&fila=<id>` abre un registro), `?portada=1`, `?lugar=app` (como se ve adentro, sin la barra pública), `?panel=marca` (la pantalla
  * de la marca de /company) y `?panel=cargando` (el esqueleto).
  *
  * En producción responde 404: no es una página del producto.
@@ -26,8 +28,19 @@ export default async function ViewsShowcasePage({
   if (process.env.NODE_ENV === 'production') notFound();
   const q = await searchParams;
   const one = (k: string) => (typeof q[k] === 'string' ? (q[k] as string) : null);
+  const kind = one('pantalla');
+  const screen = SCREEN_KINDS.includes(kind as ScreenKind) ? (kind as ScreenKind) : null;
   return (
     <Showcase
+      screen={
+        screen
+          ? {
+              kind: screen,
+              ...SCREEN_TITLES[screen],
+              view: screensView(screen, { fila: one('fila'), d: one('d') }),
+            }
+          : null
+      }
       dark={one('modo') === 'oscuro'}
       brand={one('marca') ?? 'andina'}
       pages={one('paginas') === '1'}

@@ -27,9 +27,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DictateRecord, type Dictated } from './DictateRecord';
 import { ViewChart } from './ViewChart';
+import { TvBoard } from './ViewTv';
 import { ViewZones } from './ViewZones';
 import { VoiceFormAssistant } from './VoiceFormAssistant';
 import { CalendarBlock } from './blocks/Calendar';
+import { CardsBlock } from './blocks/Cards';
+import { DetailBlock } from './blocks/Detail';
 import { FormBlock } from './blocks/FormBlock';
 import { GalleryBlock } from './blocks/Gallery';
 import { LinksBlock, MediaBlock } from './blocks/Media';
@@ -46,6 +49,7 @@ import { FilterBar, PageTabs } from './blocks/ViewChrome';
 import { useBrandScope } from './blocks/brand';
 import { type SubmitFn, submitterFor } from './blocks/form-transport';
 import { FormVoiceProvider } from './blocks/form-voice-bridge';
+import { type RecordNav, RecordNavProvider } from './blocks/record-nav';
 import {
   Card,
   EmptyState,
@@ -120,6 +124,7 @@ export function ViewCanvas({
   onChanged,
   filters,
   page,
+  nav,
 }: {
   view: ComputedView;
   target: SubmitTarget;
@@ -129,6 +134,11 @@ export function ViewCanvas({
   filters?: CanvasFilters;
   /** La página elegida, si quien monta el lienzo la lleva (en la URL). */
   page?: { current: string | null; onSelect: (id: string) => void };
+  /**
+   * Ir al detalle de un registro (`?fila=`) y volver. Sin esto (la vista
+   * previa del editor), una fila abre la ficha lateral de siempre.
+   */
+  nav?: RecordNav;
 }) {
   const submit = submitterFor(target);
   const idBase = useId().replace(/:/g, '');
@@ -140,7 +150,16 @@ export function ViewCanvas({
   const theme = view.theme;
   const compact = theme?.density === 'compact';
   const operator = theme?.layout === 'operator';
-  const inPage = visible ? view.blocks.filter((b) => visible.has(b.id)) : view.blocks;
+  // Un registro elegido (`?fila=`): la pantalla es SU detalle y nada más. Sin
+  // registro, los detalles no se pintan en la página (se abren desde una fila).
+  const openDetail =
+    view.record && nav
+      ? view.blocks.find((b) => b.id === view.record?.blockId && b.type === 'detail')
+      : undefined;
+  const tv = theme?.layout === 'tv' && !openDetail;
+  const inPage = (visible ? view.blocks.filter((b) => visible.has(b.id)) : view.blocks).filter(
+    (b) => b.type !== 'detail' || !nav,
+  );
   // Planta: el formulario manda. Sube arriba (orden estable) para que quien
   // llega con el celular en la mano registre sin bajar por nada.
   const shown = operator
@@ -152,8 +171,13 @@ export function ViewCanvas({
   // refresco muestra lo nuevo (o dice que la fila ya no está).
   const [opened, setOpened] = useState<{ blockId: string; rowId: string } | null>(null);
   const openRecord = useCallback(
-    (blockId: string, rowId: string) => setOpened({ blockId, rowId }),
-    [],
+    (blockId: string, rowId: string) => {
+      // Si la vista tiene un detalle para esa tabla, la fila va a su propia dirección.
+      const detail = recordBlockOf(view.blocks.find((b) => b.id === blockId))?.record?.detail;
+      if (detail && nav) nav.open(detail, rowId);
+      else setOpened({ blockId, rowId });
+    },
+    [view.blocks, nav],
   );
   const openedBlock = opened
     ? recordBlockOf(view.blocks.find((b) => b.id === opened.blockId))
@@ -167,75 +191,99 @@ export function ViewCanvas({
           onChanged={onChanged}
         >
           <RecordOpenerProvider value={openRecord}>
-            <div
-              className={clsx(scope.className, operator && 'view-operator')}
-              style={scope.style}
-              data-view-layout={theme?.layout ?? 'dashboard'}
-              data-view-style={theme?.style ?? 'clean'}
-            >
-              {(view.filtersBar?.length ?? 0) > 0 && (
-                <FilterBar
-                  items={view.filtersBar ?? []}
-                  state={filters?.state ?? {}}
-                  onChange={filters?.onChange}
-                  pending={filters?.pending}
-                />
-              )}
-              {pages.length > 1 && current && (
-                <PageTabs
-                  pages={pages}
-                  current={current.id}
-                  accent={theme?.accent ?? 'primary'}
-                  idBase={idBase}
-                  onSelect={(id) => (page ? page.onSelect(id) : setLocalPage(id))}
-                />
-              )}
-              <div
-                id={pages.length > 1 ? `${idBase}-panel` : undefined}
-                role={pages.length > 1 ? 'tabpanel' : undefined}
-                aria-labelledby={
-                  pages.length > 1 && current ? `${idBase}-tab-${current.id}` : undefined
-                }
-                aria-busy={filters?.pending || undefined}
-                className={clsx(
-                  'grid transition-opacity duration-200',
-                  operator ? 'mx-auto max-w-2xl grid-cols-6 gap-3' : 'grid-cols-1 md:grid-cols-6',
-                  !operator && (compact ? 'gap-3' : 'gap-4 md:gap-5'),
-                  filters?.pending && 'opacity-60',
-                )}
-              >
-                {shown.map((block) => (
-                  <section
-                    key={block.id}
+            <RecordNavProvider value={nav ?? null}>
+              {openDetail ? (
+                <div className={clsx(scope.className)} style={scope.style}>
+                  <section className="view-block min-w-0">
+                    <Block block={openDetail} target={target} submit={submit} />
+                  </section>
+                </div>
+              ) : tv ? (
+                <div
+                  className={clsx(scope.className)}
+                  style={scope.style}
+                  data-view-layout="tv"
+                  data-view-style="dark-panel"
+                >
+                  <TvBoard
+                    view={view}
+                    renderBlock={(b) => <Block block={b} target={target} submit={submit} />}
+                  />
+                </div>
+              ) : (
+                <div
+                  className={clsx(scope.className, operator && 'view-operator')}
+                  style={scope.style}
+                  data-view-layout={theme?.layout ?? 'dashboard'}
+                  data-view-style={theme?.style ?? 'clean'}
+                >
+                  {(view.filtersBar?.length ?? 0) > 0 && (
+                    <FilterBar
+                      items={view.filtersBar ?? []}
+                      state={filters?.state ?? {}}
+                      onChange={filters?.onChange}
+                      pending={filters?.pending}
+                    />
+                  )}
+                  {pages.length > 1 && current && (
+                    <PageTabs
+                      pages={pages}
+                      current={current.id}
+                      accent={theme?.accent ?? 'primary'}
+                      idBase={idBase}
+                      onSelect={(id) => (page ? page.onSelect(id) : setLocalPage(id))}
+                    />
+                  )}
+                  <div
+                    id={pages.length > 1 ? `${idBase}-panel` : undefined}
+                    role={pages.length > 1 ? 'tabpanel' : undefined}
+                    aria-labelledby={
+                      pages.length > 1 && current ? `${idBase}-tab-${current.id}` : undefined
+                    }
+                    aria-busy={filters?.pending || undefined}
                     className={clsx(
-                      'view-block min-w-0',
-                      // Planta: una columna; las métricas de a dos en el celular, de a tres arriba.
+                      'grid transition-opacity duration-200',
                       operator
-                        ? block.type === 'metric'
-                          ? 'view-metric-cell col-span-3 min-w-0 overflow-hidden sm:col-span-2'
-                          : 'col-span-6'
-                        : SPAN[block.width],
+                        ? 'mx-auto max-w-2xl grid-cols-6 gap-3'
+                        : 'grid-cols-1 md:grid-cols-6',
+                      !operator && (compact ? 'gap-3' : 'gap-4 md:gap-5'),
+                      filters?.pending && 'opacity-60',
                     )}
                   >
-                    <Block block={block} target={target} submit={submit} />
-                  </section>
-                ))}
-                {shown.length === 0 && (
-                  <EmptyState
-                    className="col-span-full"
-                    icon={<Inbox className="h-5 w-5" aria-hidden />}
-                    title="Esta página todavía no tiene bloques"
-                    hint="Pídele a Cortex que agregue uno, o ábrela en el lienzo para armarla con las manos."
-                  />
-                )}
-                {view.partial.length > 0 && (
-                  <p className="col-span-full text-micro text-ink-faint">
-                    Cifras calculadas sobre las 2.000 filas más recientes de{' '}
-                    {view.partial.join(', ')}.
-                  </p>
-                )}
-              </div>
-            </div>
+                    {shown.map((block) => (
+                      <section
+                        key={block.id}
+                        className={clsx(
+                          'view-block min-w-0',
+                          // Planta: una columna; las métricas de a dos en el celular, de a tres arriba.
+                          operator
+                            ? block.type === 'metric'
+                              ? 'view-metric-cell col-span-3 min-w-0 overflow-hidden sm:col-span-2'
+                              : 'col-span-6'
+                            : SPAN[block.width],
+                        )}
+                      >
+                        <Block block={block} target={target} submit={submit} />
+                      </section>
+                    ))}
+                    {shown.length === 0 && (
+                      <EmptyState
+                        className="col-span-full"
+                        icon={<Inbox className="h-5 w-5" aria-hidden />}
+                        title="Esta página todavía no tiene bloques"
+                        hint="Pídele a Cortex que agregue uno, o ábrela en el lienzo para armarla con las manos."
+                      />
+                    )}
+                    {view.partial.length > 0 && (
+                      <p className="col-span-full text-micro text-ink-faint">
+                        Cifras calculadas sobre las 2.000 filas más recientes de{' '}
+                        {view.partial.join(', ')}.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </RecordNavProvider>
             <RecordDrawer
               block={openedBlock}
               rowId={opened?.rowId ?? null}
@@ -314,6 +362,10 @@ function Block({
       return <GalleryBlock block={block} />;
     case 'calendar':
       return <CalendarBlock block={block} />;
+    case 'cards':
+      return <CardsBlock block={block} />;
+    case 'detail':
+      return <DetailBlock block={block} />;
     case 'progress':
       return <ProgressBlock block={block} />;
     case 'media':

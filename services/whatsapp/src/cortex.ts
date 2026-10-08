@@ -53,6 +53,14 @@ export interface HeartbeatReply {
    * older Cortex does not send it. Filtered again by `sanitizeOutbox`.
    */
   outbox?: unknown;
+  /**
+   * Groups where Cortex may WRITE on its own and whose messages it reads (0213,
+   * «Permitir mensajes de Cortex»). Empty/absent: none. Optional because an
+   * older Cortex does not send it.
+   */
+  sendGroups?: string[];
+  /** Messages Cortex asked to send to those groups. Filtered again by `sanitizeGroupOutbox`. */
+  groupOutbox?: unknown;
 }
 
 /** One line of the recent conversation, for context on a mention. */
@@ -61,6 +69,18 @@ export interface GroupContextLine {
   senderJid: string | null;
   sentAt: string;
   text: string;
+}
+
+/** A text message from a group enabled for Cortex messages (0213). */
+export interface GroupInboxMessage {
+  groupJid: string;
+  messageId: string;
+  senderJid: string | null;
+  senderName: string | null;
+  sentAt: string;
+  body: string;
+  quotedMessageId: string | null;
+  quotedBody: string | null;
 }
 
 export interface OutboundMessage {
@@ -251,6 +271,21 @@ export class CortexClient {
   /** Tell Cortex whether a person's reply from the outbox went out. */
   ackOutbox(body: { id: string; ok: boolean }): Promise<unknown> {
     return this.call('/api/whatsapp/bridge/customer/sent', { method: 'POST', body });
+  }
+
+  /** Tell Cortex whether a message to a group went out, and the id WhatsApp gave it. */
+  ackGroupSend(body: {
+    id: string;
+    ok: boolean;
+    messageId?: string | null;
+    error?: string | null;
+  }): Promise<unknown> {
+    return this.call('/api/whatsapp/bridge/group-send/sent', { method: 'POST', body });
+  }
+
+  /** What was said in a group enabled for Cortex messages, so Cortex can read the replies. */
+  sendGroupMessages(messages: GroupInboxMessage[]): Promise<{ stored: number } | null> {
+    return this.call('/api/whatsapp/bridge/group-messages', { method: 'POST', body: { messages } });
   }
 
   /**

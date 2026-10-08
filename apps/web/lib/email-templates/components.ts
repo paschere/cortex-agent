@@ -99,13 +99,20 @@ export function calloutBox(opts: {
  * the padding on the `<a>`, so the whole rectangle is clickable in Gmail and
  * still paints in Outlook (which drops `background` on anchors).
  */
-export function button(opts: { href: string; label: string; tone?: 'primary' | 'quiet' }): string {
+export function button(opts: {
+  href: string;
+  label: string;
+  tone?: 'primary' | 'quiet';
+  /** La marca de una app: fondo del botón y el texto que se lee encima. */
+  color?: { bg: string; ink: string };
+}): string {
   const href = safeHref(opts.href);
   if (!href) return '';
   const quiet = opts.tone === 'quiet';
-  const bg = quiet ? palette.card : palette.primary;
-  const fg = quiet ? palette.primary : '#ffffff';
-  const border = quiet ? palette.border : palette.primary;
+  const branded = !quiet && opts.color;
+  const bg = quiet ? palette.card : branded ? branded.bg : palette.primary;
+  const fg = quiet ? palette.primary : branded ? branded.ink : '#ffffff';
+  const border = quiet ? palette.border : branded ? branded.bg : palette.primary;
   return [
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 22px;">',
     `<tr><td align="center" style="background-color:${bg};border:1px solid ${border};border-radius:10px;">`,

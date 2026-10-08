@@ -113,6 +113,16 @@ Una app que avisa y mueve cosas sola: «duplicado → aviso al supervisor», «s
 
 **Editor.** Pestaña «Automatizaciones»: lista con estado y última corrida, creación en Cuando / Si / Entonces, plantillas («Avisar al supervisor cuando haya un duplicado», «Avisar al operario si le rechazan», «Resumen diario a gerencia», «Pasar a Despachada cuando se apruebe»), «Probar con una fila de ejemplo» (simulación: usa el mismo motor y dice qué haría, no hace nada), historial con errores por acción, pausar/reanudar y borrar. Un disparador `button` es la forma de configurar los botones de acción manual de una pantalla.
 
+**Cada X minutos, para cada fila que cumpla (`rows_poll`, migración `0212_custom_app_row_polling.sql`).** Disparador genérico: `{type:"rows_poll", tracker, everyMinutes (>=10), perRowMinutes?, maxRows (1-25, por defecto 10), window?:{field, timeField?, beforeHours, afterHours}}`. Reutiliza el despachador de cada minuto (`apps/automation.dispatch`): la regla reclama su franja con `schedule_last_slot`, lee la tabla, aplica las condiciones («Si») y la ventana de fechas y deja UNA corrida en cola por fila elegida. La frecuencia mínima por fila no guarda estado: sale de la clave de idempotencia (regla + fila + franja por fila). Con más filas que tope, el comienzo rota por vuelta para que todas tengan turno. Cada fila atendida es una corrida normal (mismos topes, historial y reintentos). Lógica pura en `automations/poll.ts`; la vuelta con base en `poll-run.ts`.
+
+**Pedirle algo a Cortex, a fondo.** `ask_cortex` es la acción principal para todo lo que no sea un aviso fijo: `{type:"ask_cortex", instruction, writes?: "row" | [campo…]}`. La instrucción es texto con `{{campos}}`; Cortex recibe además la fila completa, la fecha de hoy y sus herramientas de lectura (web.search / web.scrape, cerebro con los permisos de espacios de quien creó la regla, tablas). `writes` le da permiso de cambiar SIN aprobación esa fila: sólo los campos listados, o cualquiera con `"row"`; escribir en otra fila u otra tabla, o mandar un correo, sigue pasando por aprobación. Si no está seguro, no escribe y lo dice (`sin dato`); cada valor lleva fuente y cita. El historial de la corrida empieza con los cambios aplicados (campo: antes -> después, lo cuenta el código) y sigue con el informe de Cortex. Armado del prompt en `automations/ask.ts`; las decisiones de qué corre y qué espera aprobación en `lib/apps/automation-ask-cortex.ts`.
+
+**Topes por app.** Valores por defecto: 1000 corridas y 100 pedidos a Cortex por día (máximos 5000 y 1000), guardados por app en `custom_apps.automation_limits`; se editan en la parte de arriba de la pestaña «Automatizaciones» (visibles ahí). Cada corrida cuenta una unidad del plan y cada pedido a Cortex cuenta además en su tope; al llegar, la corrida se salta y el historial lo dice.
+
+**Vuelos y precios (ejemplos de instrucción, no código).** Todo se hace con las piezas generales de arriba; el texto sugerido aparece en la UI («Ejemplos de instrucciones»).
+- Seguir un vuelo: disparador `rows_poll` cada 20 min sobre «Vuelos», condiciones «vuelo tiene valor» y «estado distinto de Aterrizó», ventana: campo fecha de 6 h antes a 24 h después; acción `ask_cortex` con `writes:["estado","eta","llegada_real","observaciones"]` y la instrucción «Busca en la web el estado del vuelo {{vuelo}} del {{fecha}} (flight status). Actualiza estado (Programado, En vuelo, Demorado, Aterrizó o Cancelado), hora estimada y llegada real si ya aterrizó. Cita la fuente y la frase que lo respalda. Si no hay dato claro, no cambies nada y escribe «sin dato»». Otra regla («estado pasó a Aterrizó» -> `notify_app_user` al operario) se dispara sola porque la escritura de Cortex emite el cambio de fila.
+- Calcular un precio: disparador «estado pasó a Atención terminada» (o al cambiar campos clave), `ask_cortex` con `writes:["precio","desglose"]` y «Calcula el precio de esta atención según el documento «Reglas de precios» del cerebro: busca la sección del cliente {{cliente}}, aplica unidades y recargos con los datos de la fila y escribe precio y desglose línea por línea. Si falta un dato o la regla es ambigua, no escribas el precio: di qué falta en el desglose». Guarda las reglas como un documento «Reglas de precios» en el cerebro, con una sección por cliente, sus unidades y recargos.
+
 **Chat.** `apps.automations.list` (lectura), `.create` (plantilla o Cuando/Si/Entonces), `.update` y `.pause` (con confirmación, sólo owner/admin). Se validan contra la app real (tablas, campos, pantallas y roles de ESA app).
 
 **Pruebas.** `apps/automations/__tests__/engine.test.ts` (puro: variables, disparadores, condiciones, bucles, idempotencia, horarios, reintentos, plantillas, simulación), `automations.test.ts` (dos empresas: emisión, aislamiento, `notify_app_user` sólo a usuarios de esa app, reintentos, webhook que rechaza http e IP privadas, tope diario, botones, validación) y `tools.test.ts` (chat); en web `lib/apps/push.test.ts` (sin llaves → nada de push, 410 borra, push sólo de esa app, qué corre y qué espera aprobación en `ask_cortex`), más `jobs-registry.test.ts` y `tenancy-guard.test.ts`.
@@ -165,6 +175,108 @@ Herramienta de chat de sólo lectura (sólo owner/admin) que arma el BORRADOR co
 
 Al instalar, el worker guarda además la pantalla de inicio del rol y sus datos (`precacheUrlsOf`; `who` trae `precache` y se repite en `appinstalled`), en la caché de LA persona que está dentro y sólo si aún no estaban.
 
+## Apariencia e inicio (0215)
+
+Migración `0215_custom_app_appearance.sql`: dos columnas JSON en `custom_apps`, `brand` y `home`.
+Hay que aplicarla antes de desplegar (el código las lee en cada consulta de apps).
+
+### Marca propia de la app (`brand`)
+
+Encima de la marca de la empresa (`company_branding`, 0170), que sigue siendo el valor por
+defecto. Cada campo se resuelve por separado (`lib/apps/app-brand.ts`, `resolveAppBrand`): app →
+empresa → índigo de Cortex.
+
+- Qué se configura: logo propio, ícono cuadrado (logo entero o recortado al centro), color
+  principal y de acento, nombre corto (12 letras, el que va bajo el ícono instalado), tipografía
+  (moderna, editorial con serifa, redondeada: pilas del sistema, sin descargar fuentes) y pantalla
+  de bienvenida (título, texto, imagen opcional).
+- Dónde: editor de la app, pestaña «Apariencia», con vista previa en un celular. Por chat,
+  `apps.update` acepta `brand` (parcial: `null` borra un campo) con todo menos las imágenes.
+- Imágenes: el navegador las reduce en un canvas y siempre sube PNG/JPEG (un SVG se dibuja y se
+  convierte: nunca se guarda un SVG). Se guardan en el bucket `branding`
+  (`<org>/apps/<app>/<tipo>-<huella>.<ext>`) y `brand.files` guarda sólo la huella. Se sirven por
+  `/api/apps/public/<app>/asset/<tipo>` (entrada, sin sesión) y `/api/apps/<app>/asset/<tipo>`
+  (con sesión, también en borrador).
+- Contraste: `colorReport` mide el color contra la superficie clara y la oscura y contra el
+  texto del botón; `brandTokens` lo ajusta solo hasta pasar AA (4,5:1) y el editor muestra los
+  tres números y a qué color se ajustó. Se ofrecen los colores de la empresa y los del logo.
+- Dónde se aplica: entrada `/a/<app>` (bienvenida, logo, color), AppRunner (colores vía
+  `BrandScope`, letra, ícono en la cabecera), manifiesto (`short_name`, `theme_color`), íconos
+  PNG (usan el ícono o el logo propio), `generateViewport` (color de la barra del navegador),
+  correos de invitación y de código (encabezado, logo y botón con la marca, sólo si la app tiene
+  identidad propia) y los avisos push (el service worker ya pide `icon-192.png` de la app).
+
+### Inicio con tarjetas (`home`)
+
+Pantalla sintética `inicio` (slug reservado), la primera del menú cuando `home.enabled`; la app
+abre ahí. No es una vista guardada: `computeHome` arma un spec con una cifra por tarjeta (y 3
+filas de ejemplo por pendiente) y lo calcula con el mismo motor de las vistas y el mismo scope
+de filas del rol (`loadViewSources` con `rowScopeFor`). Una tarjeta sobre una tabla que el rol
+no puede leer no aparece (ni el nombre ni la cifra), y un acceso directo a una pantalla que el
+rol no ve tampoco.
+
+- Tarjetas (máx. 8, cada una con `roles`; vacío = todos): `counter` («Hoy llegan {n} vuelos»,
+  con filtros y texto para cero), `pending` («{n} guías duplicadas por corregir», con las primeras
+  filas y enlace a la lista, ya filtrada si la pantalla tiene barra de filtros: `openFilterId` y
+  `openFilterValue`) y `shortcut` («Registrar atención»). Saludo con nombre y fecha de Bogotá.
+- En los valores de filtro, `{hoy}`, `{ayer}` y `{manana}` son fechas de Bogotá.
+- Dónde: pestaña «Inicio» del editor, o `apps.update` con `home` (reemplaza el inicio entero;
+  se valida que las pantallas existan). La descripción de `apps.update` cambió: ahora documenta
+  `brand` y `home`.
+
+### Sensación nativa (AppRunner)
+
+Barra inferior de 56 px con íconos y la etiqueta de la pantalla activa (hasta 5; con más, cuatro
+y «Más», que abre una hoja con el resto, la cuenta, instalar, cerrar sesión y el tema);
+cabecera compacta que se esconde al bajar (sólo en `/a/<app>`); tirar para actualizar con el dedo
+(`PullToRefresh`: escucha en la ventana, no usa `preventDefault`, así el gesto de «atrás» queda
+intacto; el lienzo se vuelve a pedir por el evento `cortex:refresh-view`); transición suave entre
+pantallas; márgenes del iPhone con `env(safe-area-inset-*)`; áreas táctiles de al menos 44 px.
+Todo el movimiento se apaga con `prefers-reduced-motion` (`components/apps/app-runner.css`).
+
+### Detalles
+
+- Estados vacíos: una tabla sin filas muestra «Aún no hay registros en X · Registrar», con
+  enlace a la pantalla del rol que tiene el formulario de esa tabla (`emptyHintsFor`).
+- Esqueletos de carga (`loading.tsx` de las dos rutas de pantalla) y errores con «Reintentar»
+  (`error.tsx`).
+- Modo oscuro: las apps siguen al sistema; cada persona puede elegir Sistema, Claro u Oscuro en
+  «Más» (se guarda en `localStorage` con try/catch, clave `cortex-app-theme`). `/a/<app>` lleva
+  `cortex-workspace`, que es lo que enciende la paleta oscura.
+- Avisos: `AppToastProvider` es el único lugar de los avisos de una app (los botones de
+  automatización ya lo usan).
+- Fixture de desarrollo sin sesión: `/v/apps-showcase?marca=amarillo|verde&pantallas=3|8&vacio=1`.
+
+
+## Pantallas de registro dentro de una app
+
+Los tipos `detail`, `cards`, la agenda `week`/`day` y el layout `tv` (ver
+`docs/features/views.md`) funcionan en las pantallas de una app con el scope por
+rol: el detalle, sus listas relacionadas y su línea de tiempo se calculan sobre
+las fuentes que `readScreen` ya filtró (`trackersOf` incluye las tablas
+relacionadas, así que cada una lleva el scope del rol; una tabla que el rol no
+ve sale con aviso, no vacía). `readScreen` acepta `fila` y `detail`.
+
+- **Enlace profundo**: `/a/<app>/<pantalla>?fila=<id>` (externos) y
+  `/apps/<app>/<pantalla>?fila=<id>` (miembros); también por las rutas de datos
+  (`.../screens/<pantalla>/data?fila=`). La fila se pide con `ensureRowId`
+  aunque no esté entre las 2.000 más recientes, con el mismo scope.
+- **Permisos de la historia**: un miembro ve nombres y las corridas de
+  automatizaciones; un usuario externo ve «Tú» / «El equipo» y nunca las
+  automatizaciones.
+- **«Abrir» de una notificación** de un botón «avisar» lleva a
+  `?fila=<id>` de la pantalla donde se pidió. (Las notificaciones que crean las
+  automatizaciones siguen apuntando a la app: pendiente.)
+- **Diseño por rol** (`apps.design`): la descripción de la herramienta y
+  `VIEW_DESIGNER_SYSTEM` indican qué diseño lleva cada rol (operario: formulario
+  con voz + «mi lista» en tarjetas con chips hoy/mío + detalle; supervisor:
+  tablero, tarjetas por estado, aprobaciones y detalle con línea de tiempo;
+  gerencia: indicadores, gráficos y exportar; cliente: portal con tarjetas y
+  detalle corto; pared: `tv`). `designWarnings` (`apps/design.ts`) avisa —sin
+  bloquear— de listas sin detalle, formularios de planta sin diseño operario y
+  tableros TV con formularios o botones. La plantilla `control_planta` ahora
+  trae un detalle en «Mis registros» y «Por aprobar».
+
 ## Pruebas
 
 - `src/apps/__tests__/permissions.test.ts`: reglas puras.
@@ -178,3 +290,92 @@ Al instalar, el worker guarda además la pantalla de inicio del rol y sus datos 
 - `ask_cortex` (automatizaciones, fase 3).
 - Kiosco: la lista de nombres es la de todos los usuarios activos con PIN (sin teclado de «sólo PIN»); un PIN por app, no por empresa.
 - Medir de nuevo `src/evaluation` (`EVAL_MEASURE=1`): se agregaron descripciones de herramientas.
+
+## Drive y WhatsApp (herramientas generales, sin acciones a la medida)
+
+Cortex no tiene una acción «guardar en Drive» ni «preguntar por WhatsApp» en el motor de
+automatizaciones. Tiene **herramientas generales** que usa en el chat o desde la acción
+`ask_cortex` con una instrucción en texto. La instrucción se escribe como se le diría a una
+persona; los datos de la fila entran con `{{campo}}`.
+
+### Herramientas
+
+| Herramienta | Qué hace | Pide aprobación |
+|---|---|---|
+| `gdrive.find_folder` | Busca una carpeta que **ya existe**, por nombre o ruta (`root`: «Vuelos», `path`: [«AV204», «045-12345678»]). Tolerante: mayúsculas, tildes, guiones y espacios no importan. No crea nada; si no hay o hay varias igual de buenas, lo dice y lista candidatas. | No (lectura) |
+| `gdrive.upload_file` | Copia un archivo de Cortex (el valor de un campo `file`) a una carpeta de Drive existente. Idempotente por archivo: la llave va en `appProperties` del archivo en Drive, así que repetir no duplica y devuelve el mismo id/enlace. | Sí en el chat; en `ask_cortex` sólo si la regla lo declara |
+| `whatsapp.group_send` | Manda UN mensaje corto a un grupo que la empresa habilitó con «Permitir mensajes de Cortex». Nunca a contactos. | Sí en el chat; en `ask_cortex` sólo si la regla lo declara |
+| `whatsapp.group_messages` | Lee lo reciente de un grupo habilitado (quién, cuándo, a qué mensaje responde, filtro por texto). Sin `group` lista los habilitados. | No (lectura) |
+
+`ask_cortex.allow` (casillas en «¿Puede actuar fuera de Cortex sin pedirte permiso?»):
+`["gdrive.upload_file"]`, `["whatsapp.group_send"]` o ambas. Lo que no se declara sigue
+quedando pendiente de aprobación de quien creó la regla.
+
+### Drive: permiso de escritura (opcional)
+
+`gdrive.upload_file` necesita el alcance `https://www.googleapis.com/auth/drive`. Se eligió
+sobre `drive.file` porque `drive.file` sólo alcanza archivos y carpetas que la app creó o que
+la persona abrió con el selector de Google; las carpetas por guía las crea la empresa a mano
+y para Google son ajenas a la app (404). Costo: `drive` es un alcance **restringido**. Mientras
+la app de Google no pase la verificación, sólo lo conceden los **usuarios de prueba** (máximo
+100, se agregan en la consola de Google) y se ve el aviso de «app no verificada».
+
+Es opcional y nadie tiene que reconectar si no lo usa: en Conocimiento → Google Drive aparece
+«Permitir que Cortex guarde archivos en tu Drive» (`/api/integrations/google?preset=drive_write`).
+Si falta el permiso, la herramienta lo dice con esas palabras. Usa las credenciales de quien
+configuró la regla (como el resto de `gdrive.*`).
+
+### WhatsApp: escribir en un grupo y leer la respuesta (migración 0213)
+
+- **Permiso por grupo**: casilla «Permitir mensajes de Cortex» en Integraciones → WhatsApp
+  (sólo administradores), aparte de archivar y de responder a menciones. Hay además un apagado
+  general («Apagar todos los mensajes de Cortex a grupos»).
+- **Topes**: 10 mensajes por grupo por hora y 50 por empresa por día; el mismo texto no se
+  repite al mismo grupo en 10 minutos; máximo 1000 caracteres y 2 enlaces. Los aplica la
+  herramienta al encolar, otra vez la entrega (latido) y, por último, el puente en memoria.
+- **Registro**: cada mensaje queda en `wa_group_outbox` (quién lo pidió, por chat o
+  automatización, estado, id de WhatsApp, error). Lo que se dice en los grupos habilitados se
+  guarda en `wa_group_inbox` sólo para que Cortex lea las respuestas; se borra a los 7 días y no
+  se convierte en documento de Brain Knowledge.
+- **Riesgo**: el número está vinculado como dispositivo, no usa la API oficial de WhatsApp
+  Business. WhatsApp puede bloquear números que escriben de forma automática. Poco volumen y
+  texto de persona (saludo y una pregunta clara).
+- **Camino técnico**: sin puertos nuevos. El mensaje viaja en la respuesta del latido
+  (`groupOutbox`) como las respuestas a clientes; el puente lo manda con «escribiendo…» y acusa
+  recibo a `/api/whatsapp/bridge/group-send/sent` con el id que WhatsApp le dio; los mensajes
+  del grupo (con la cita) suben a `/api/whatsapp/bridge/group-messages`. Misma autenticación
+  servicio↔app (`WHATSAPP_BRIDGE_TOKEN`).
+
+### Ejemplos de instrucciones
+
+Preguntar (disparador: se crea una fila; marcar «Escribir en un grupo de WhatsApp habilitado»):
+
+> Pregunta en el grupo «Despachos» de WhatsApp, con un mensaje corto y amable, cuál es el número
+> de vuelo de la guía {{guia}}.
+
+Capturar la respuesta (disparador: «Cada cierto tiempo, para cada fila que cumpla» sobre las
+filas sin vuelo, con campo `vuelo` en «Cortex puede escribir»):
+
+> Lee los mensajes de las últimas 24 horas del grupo «Despachos» que respondan a la pregunta por
+> la guía {{guia}} o la mencionen. Si alguien da claramente el número de vuelo (dos letras o
+> dígitos y de 1 a 4 números, como AV204), escríbelo en el campo de vuelo con la cita como
+> fuente. Si hay dudas o dos respuestas distintas, no escribas nada y dilo. Si pasaron más de 4
+> horas sin respuesta, pregunta una sola vez más.
+
+Al escribir el vuelo en la fila se disparan las demás automatizaciones (por ejemplo, seguir el
+vuelo).
+
+Guardar documentos en Drive (disparador: se actualiza el campo de documentos; marcar «Guardar
+archivos en una carpeta de Drive que ya existe»):
+
+> Busca en mi Drive la carpeta «Vuelos» > la subcarpeta que contenga {{vuelo}} > la que contenga
+> {{guia}} (la empresa la crea a mano; no la crees). Si la encuentras, sube allí los archivos
+> del campo de documentos y escribe en la fila el enlace de Drive. Si no existe, escribe «Sin
+> carpeta en Drive» y el motivo en observaciones.
+
+### Despliegue
+
+Migración `0213_whatsapp_group_send.sql` (columnas `whatsapp_groups.send_enabled`,
+`whatsapp_sessions.group_send_paused`, tablas `wa_group_outbox` y `wa_group_inbox`) y
+redespliegue del puente `services/whatsapp` (Dockerfile + `railway.json`; build desde la raíz
+del repositorio). Sin el puente nuevo los mensajes quedan en cola y caducan a los 30 minutos.

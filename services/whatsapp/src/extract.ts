@@ -229,3 +229,32 @@ export function extractMentionSignals(raw: proto.IWebMessageInfo): {
     quotedAuthorJid: context?.quotedMessage ? (context.participant ?? null) : null,
   };
 }
+
+/**
+ * A qué mensaje responde éste, si lo cita: el id del citado y su texto
+ * (recortado). Es lo que permite a Cortex ver «esto responde a mi pregunta».
+ */
+export function extractQuote(raw: proto.IWebMessageInfo): {
+  quotedMessageId: string | null;
+  quotedBody: string | null;
+} {
+  const message = unwrap(raw.message);
+  const context =
+    message?.extendedTextMessage?.contextInfo ??
+    message?.imageMessage?.contextInfo ??
+    message?.videoMessage?.contextInfo ??
+    message?.documentMessage?.contextInfo ??
+    message?.audioMessage?.contextInfo ??
+    null;
+  const quoted = unwrap(context?.quotedMessage);
+  const body =
+    quoted?.conversation ??
+    quoted?.extendedTextMessage?.text ??
+    quoted?.imageMessage?.caption ??
+    quoted?.documentMessage?.caption ??
+    null;
+  return {
+    quotedMessageId: context?.stanzaId ?? null,
+    quotedBody: body ? body.trim().slice(0, 500) : null,
+  };
+}

@@ -6,11 +6,22 @@ import type { ViewBrand } from '@/lib/branding/shape';
  * de la empresa, y «Hecho con Cortex» en pequeño. Todo dentro del envoltorio
  * de la marca, para que la contraseña y la vista lleven sus colores.
  */
-export function PublicShell({ brand, children }: { brand: ViewBrand; children: React.ReactNode }) {
+export function PublicShell({
+  brand,
+  children,
+  mobileBar = true,
+}: {
+  brand: ViewBrand;
+  children: React.ReactNode;
+  /** Falso: en el celular no se pinta la franja (una app lleva su propia cabecera compacta). */
+  mobileBar?: boolean;
+}) {
   return (
     <ViewBrandProvider brand={brand}>
       <BrandScope className="min-h-screen bg-canvas">
-        <div className="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur print:static">
+        <div
+          className={`sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur print:static${mobileBar ? '' : ' hidden md:block'}`}
+        >
           <span aria-hidden className="view-brand-stripe block h-1" />
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
             <span className="flex min-w-0 items-center gap-3">

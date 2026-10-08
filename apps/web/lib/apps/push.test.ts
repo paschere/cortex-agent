@@ -159,4 +159,31 @@ describe('Cortex en una automatización: qué corre y qué espera aprobación', 
     expect(decideAutomationCall({ id: 'apps.automations.create' }, {}, 'guias')).toBe('forbidden');
     expect(decideAutomationCall({ id: 'apps.update' }, {}, 'guias')).toBe('forbidden');
   });
+
+  it('lo que la regla declara en `allow` corre sin aprobación; lo demás no', () => {
+    const declared = new Set(['whatsapp.group_send']);
+    expect(
+      decideAutomationCall(
+        { id: 'whatsapp.group_send', requiresConfirmation: true },
+        {},
+        'guias',
+        null,
+        declared,
+      ),
+    ).toBe('declared');
+    // declarar una herramienta no suelta las demás
+    expect(
+      decideAutomationCall(
+        { id: 'gdrive.upload_file', requiresConfirmation: true },
+        {},
+        'guias',
+        null,
+        declared,
+      ),
+    ).toBe('stage');
+    // sin declarar, pide aprobación
+    expect(
+      decideAutomationCall({ id: 'whatsapp.group_send', requiresConfirmation: true }, {}, 'guias'),
+    ).toBe('stage');
+  });
 });

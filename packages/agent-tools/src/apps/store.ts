@@ -4,8 +4,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { TRACKER_COLUMNS, type TrackerRow } from '../trackers/store';
 import { type ComputedView, type ViewSource, computeView } from '../views/compute';
+import { loadRecordContext } from '../views/record-history';
 import { internalShareRefusal, internalSourcesOf } from '../views/sources';
-import { APPROVE_ACTION_ID, REJECT_ACTION_ID, type ViewSpec, slugify } from '../views/spec';
+import {
+  APPROVE_ACTION_ID,
+  REJECT_ACTION_ID,
+  type ViewSpec,
+  findWriteBlock,
+  slugify,
+} from '../views/spec';
 import {
   type ActorKind,
   type CustomViewRow,
@@ -23,6 +30,7 @@ import {
   validateSpec,
 } from '../views/store';
 import type { ViewFilterState } from '../views/view-filters';
+import { type AppBrand, type AppHome, parseBrand, parseHome } from './appearance';
 import {
   type AppPermissions,
   type AppUser,
@@ -71,7 +79,7 @@ import {
  */
 
 export const APP_COLUMNS =
-  'id, organization_id, slug, name, description, icon, theme, home_screen, status, version, created_by, updated_by, created_at, updated_at, archived_at';
+  'id, organization_id, slug, name, description, icon, theme, brand, home, home_screen, status, version, created_by, updated_by, created_at, updated_at, archived_at';
 const SCREEN_COLUMNS =
   'id, app_id, view_id, slug, title, icon, position, roles, created_at, updated_at';
 const ROLE_COLUMNS = 'id, app_id, key, name, description, permissions, position';
@@ -100,6 +108,10 @@ export interface CustomAppRow {
   description: string;
   icon: string;
   theme: AppTheme;
+  /** Marca propia de la app (0215), encima de la de la empresa. */
+  brand: AppBrand;
+  /** Pantalla «Inicio» con tarjetas (0215); null = la app no tiene. */
+  home: AppHome | null;
   home_screen: string | null;
   status: AppStatus;
   version: number;
@@ -150,6 +162,8 @@ export function adaptApp(row: Record<string, unknown>): CustomAppRow {
     ...(row as unknown as CustomAppRow),
     description: typeof row.description === 'string' ? row.description : '',
     theme: theme.success ? theme.data : {},
+    brand: parseBrand(row.brand),
+    home: parseHome(row.home),
     home_screen: typeof row.home_screen === 'string' ? row.home_screen : null,
   };
 }
@@ -267,6 +281,8 @@ export async function updateApp(
     description?: string;
     icon?: string;
     theme?: AppTheme;
+    brand?: AppBrand;
+    home?: AppHome | null;
     homeScreen?: string | null;
     status?: AppStatus;
     userId: string;
@@ -282,6 +298,8 @@ export async function updateApp(
   if (input.description !== undefined) patch.description = input.description.trim().slice(0, 500);
   if (input.icon !== undefined) patch.icon = input.icon.trim().slice(0, 400) || '📱';
   if (input.theme !== undefined) patch.theme = input.theme;
+  if (input.brand !== undefined) patch.brand = input.brand;
+  if (input.home !== undefined) patch.home = input.home ?? {};
   if (input.homeScreen !== undefined) patch.home_screen = input.homeScreen;
   if (input.status !== undefined) {
     // Publicar es abrirle la puerta a quien no es del equipo: se comprueban
@@ -384,7 +402,7 @@ function adaptView(row: Record<string, unknown>): CustomViewRow {
  * rutas fijas (manifest, íconos, sw.js) llevan punto o guion y el patrón de
  * slug ya las excluye.
  */
-export const RESERVED_SCREEN_SLUGS = new Set(['kiosco']);
+export const RESERVED_SCREEN_SLUGS = new Set(['kiosco', 'inicio']);
 
 const screenSlugSchema = z
   .string()
@@ -767,12 +785,22 @@ export async function readScreen(
   db: SupabaseClient,
   access: AppAccess,
   screen: AppScreenRow,
-  options: { spec?: ViewSpec; filters?: ViewFilterState; readOnly?: boolean; now?: Date } = {},
+  options: {
+    spec?: ViewSpec;
+    filters?: ViewFilterState;
+    readOnly?: boolean;
+    now?: Date;
+    /** `?fila=<id>`: el registro que abre el detalle de la pantalla. */
+    fila?: string | null;
+    /** `?d=<bloque>`: cuál detalle, si la pantalla tiene varios. */
+    detail?: string | null;
+  } = {},
 ): Promise<ScreenRead> {
   const view = await screenView(db, screen);
   const spec = options.spec ?? view.spec;
   const scope = rowScopeFor(access.role, access.user, spec);
   const sources = await loadViewSources(db, spec, {
+    ensureRowId: options.fila ?? undefined,
     // Quien no administra la empresa ve la app con la barrera del enlace
     // público: nada interno, personal ni del Feed. El administrador la ve
     // como una vista del equipo (y con sus fuentes personales).
@@ -780,10 +808,26 @@ export async function readScreen(
     viewerId: access.role.admin ? access.user.id : null,
     scope,
   });
+  // El registro abierto: su historia se lee DESPUÉS del scope, sólo si el rol ve la fila.
+  const record = await loadRecordContext(
+    db,
+    spec,
+    sources,
+    { rowId: options.fila, blockId: options.detail },
+    {
+      viewer: access.user.external
+        ? { kind: 'app_user', id: access.user.id }
+        : { kind: 'member', id: access.user.id },
+      appId: access.app.id,
+      now: options.now,
+    },
+  );
   const computed = computeView(spec, sources, options.now ?? new Date(), {
     writable: !options.readOnly && roleWrites(access.role, spec),
     audience: access.role.admin ? 'team' : 'public',
     filters: options.filters ?? {},
+    viewer: { id: access.user.id, kind: access.user.external ? 'app_user' : 'member' },
+    record,
   });
   return { view, sources, computed, scope };
 }
@@ -802,7 +846,7 @@ export function roleWrites(role: ResolvedRole, spec: ViewSpec): boolean {
 // ---------------------------------------------------------------------------
 
 function trackerOfBlock(view: CustomViewRow, blockId: string): string {
-  const block = view.spec.blocks.find((b) => b.id === blockId);
+  const block = findWriteBlock(view.spec, blockId);
   if (!block || !('tracker' in block))
     throw new NotFoundError('Ese bloque no está en esta pantalla.');
   return block.tracker;

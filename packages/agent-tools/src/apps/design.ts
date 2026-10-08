@@ -285,6 +285,7 @@ export async function reviewAppDraft(
           );
       }
   }
+  warnings.push(...designWarnings(screens, parsed.data.roles));
   for (const r of parsed.data.roles) {
     const attrs = requiredAttributes(r.permissions);
     if (attrs.length)
@@ -322,6 +323,75 @@ export async function reviewAppDraft(
     markdown: ok ? summarize(draft, [...new Set(warnings)], automations) : '',
   };
 }
+
+/**
+ * EL DISEÑO DE CADA PANTALLA SEGÚN QUIÉN LA USA. Avisos (nunca errores: la
+ * persona manda) cuando una pantalla no encaja con su rol o deja a medias el
+ * camino «lista → detalle»:
+ *   - una lista (tarjetas, tabla, tablero, galería, calendario) sin un detalle
+ *     de su tabla: tocar una fila sólo abre la ficha lateral, sin relacionados
+ *     ni historia;
+ *   - un formulario que alguien de planta (un rol que ve sólo lo suyo y registra)
+ *     llena sin el diseño `operator`: no está pensado para el celular;
+ *   - un tablero TV con formularios, botones o enlaces: en una pared no se toca.
+ */
+export function designWarnings(
+  screens: Array<{ title: string; roles: string[]; spec: ViewSpec }>,
+  roles: Array<{ key: string; name: string; permissions: AppPermissionsLike }>,
+): string[] {
+  const out: string[] = [];
+  const LISTS = new Set(['cards', 'table', 'board', 'gallery', 'calendar', 'zones']);
+  const fieldRole = (r: { permissions: AppPermissionsLike }) => {
+    const perms = Object.values(r.permissions.tables);
+    return (
+      perms.length > 0 &&
+      perms.some((p) => p.create) &&
+      perms.every((p) => p.read === 'own' || typeof p.read === 'object' || p.edit !== 'all')
+    );
+  };
+  for (const s of screens) {
+    const detailed = new Set(
+      s.spec.blocks.flatMap((b) => (b.type === 'detail' ? [b.tracker] : [])),
+    );
+    const listed = [
+      ...new Set(
+        s.spec.blocks.flatMap((b) =>
+          LISTS.has(b.type) &&
+          'tracker' in b &&
+          !b.tracker.includes('.') &&
+          !('openRecord' in b && b.openRecord === false)
+            ? [b.tracker]
+            : [],
+        ),
+      ),
+    ].filter((t) => !detailed.has(t));
+    for (const t of listed)
+      out.push(
+        `La pantalla «${s.title}» lista «${t}» pero no tiene un detalle: tocar una fila sólo abre la ficha lateral. Agrega un bloque detail de «${t}» (datos por secciones, relacionados y línea de tiempo).`,
+      );
+    if (s.spec.theme?.layout === 'tv') {
+      if (s.spec.blocks.some((b) => b.type === 'form' || b.type === 'voice' || b.type === 'links'))
+        out.push(
+          `La pantalla «${s.title}» es un tablero TV: sus formularios, botones y enlaces no se muestran en una pared.`,
+        );
+      continue;
+    }
+    const seeing = s.roles.length ? roles.filter((r) => s.roles.includes(r.key)) : roles;
+    const form = s.spec.blocks.some((b) => b.type === 'form');
+    if (form && s.spec.theme?.layout !== 'operator') {
+      const field = seeing.filter(fieldRole);
+      if (field.length)
+        out.push(
+          `La pantalla «${s.title}» la llena ${field.map((r) => `«${r.name}»`).join(' y ')} y no usa el diseño operario (theme.layout "operator"): en el celular de planta es más lenta de usar.`,
+        );
+    }
+  }
+  return out;
+}
+
+type AppPermissionsLike = {
+  tables: Record<string, { read: unknown; create: boolean; edit: string }>;
+};
 
 /** El resumen que se le muestra a la persona para aprobar: en español simple, sin JSON. */
 function summarize(draft: AppDraft, warnings: string[], automations: AutomationIdea[]): string {
@@ -366,12 +436,15 @@ function summarize(draft: AppDraft, warnings: string[], automations: AutomationI
 // La herramienta
 // ---------------------------------------------------------------------------
 
+const ROLE_DESIGN_HINT = `Design each role's screens for how that person works. Operator/field: theme.layout "operator" — voice-capable form first, "my list" as a cards block (chips today + mine) and a detail block to open each record. Supervisor: a board by status, cards with status chips, approvals (form with approval) and a detail with timeline. Management: metrics with goals and compare, charts, no forms, export on. Client portal: theme.header "hero", their rows as cards and a detail with short sections (automations never show to external users). Plant wall: layout "tv" with 2-4 pages. A cards/table/board/calendar block should come with a detail block of the same table when rows have more to tell. The tool warns when a role's screens miss this.`;
+
 const PERMISSIONS_HINT = `Role permissions: {tables: {"<table slug>": {read: "all" | "own" | {field, equals: "$user.<attribute>"}, create: boolean, edit: "none"|"own"|"all", fields?: [field keys the role may write], actions?: ["__approve","__reject" or row action ids]}}, export: boolean, kiosk?: boolean}. A table NOT listed is invisible to that role. For a CLIENT PORTAL give the client role read {field: "<column holding the client name>", equals: "$user.cliente"}: it sees only its own rows (also in totals and exports).`;
 
 export const appsDesign = registerTool({
   id: 'apps.design',
   description: `Draft a COMPLETE application from a description WITHOUT saving anything, so the person can approve it before it exists: roles with plain-language permissions, screens with valid specs (checked against the real tables), and suggested automations as text. You compose the draft (name, roles, screens, homeScreen — the same shape apps.create takes, or start from template "${APP_TEMPLATES.map((t) => t.id).join('" / "')}" and the tool returns it ready) and this tool validates every screen against the workspace's real tables, cross-checks roles with screens and returns {ok, problems, warnings, draft, automations, markdown}. If ok is false, fix exactly the problems and call it again. If ok, show the markdown summary to the person; when they approve, call apps.create passing the draft's fields unchanged (name, description, icon, roles, screens, homeScreen). ALWAYS call this before apps.create for anything that is not the plain template. If the data lives in a Google Sheet or Drive folder, FIRST call trackers.propose_from_source / trackers.propose_from_drive_folder and wait for approval; a screen on a table that does not exist comes back as a problem. Read-only (no confirmation); company owners/admins only.
 ${PERMISSIONS_HINT}
+${ROLE_DESIGN_HINT}
 ${SPEC_GRAMMAR}`,
   inputSchema: z
     .object({

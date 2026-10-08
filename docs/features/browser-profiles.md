@@ -153,3 +153,84 @@ No se confunde texto cargado con el contenido completo de una aplicación: filas
 virtualizadas, páginas de PDF renderizadas como imagen, canvas, shadow DOM cerrado
 y contenido todavía no cargado requieren navegación, accesibilidad u otra fuente.
 La lectura es en vivo: si la página cambia entre partes, puede cambiar su contenido.
+
+
+## Resultados
+
+Un trámite de consulta tiene que devolver *algo*: el estado de una guía, «no se
+encontró», un valor. Eso se llama un **resultado** y se señala, no se programa.
+
+- **Al enseñar.** En el panel de la enseñanza, **Señalar resultado** enciende un
+  modo en que el siguiente clic no actúa sobre el portal: elige el texto que es la
+  respuesta (el elemento se resalta al pasar el cursor). Cortex muestra lo que
+  señalaste, propone un nombre a partir del rótulo vecino («Estado» → `estado`) y
+  pregunta, opcional, **«Si no aparece, el resultado es»** (p. ej. `no encontrado`).
+  Se graba como un paso `extract` (`extractAs` = el nombre, `extractDefault` = el
+  valor por defecto).
+- **Cómo se vuelve a encontrar.** Con un localizador que no depende del valor: el
+  `data-testid` si existe, **el rótulo vecino** («el elemento que sigue a “Estado”»,
+  con o sin «:»), el `name` y, al final, una ruta CSS. El servicio solo conserva
+  las formas que, contra la página viva, dan UN elemento con ESE mismo texto. El
+  valor señalado **no se guarda** en el paso: solo se le muestra a la persona para
+  confirmar. Un campo para escribir, o un lugar sin texto, no se puede señalar.
+- **En el editor** (revisión tras enseñar): cada resultado muestra su nombre
+  (`result.<nombre>`) y su valor por defecto, ambos editables, y se puede quitar
+  como cualquier paso. **Agregar un resultado** crea uno a mano indicando el rótulo
+  que está junto al valor. Nombres: minúsculas, números y `_`; únicos; no
+  `download`, `ok` ni `result`.
+- **Probar.** En **Trámites**, al correr un trámite, cada resultado señalado se
+  lista como `result.<nombre>` con lo que devolvió («no devolvió nada» si salió
+  vacío), para comprobar que lee lo que debe.
+- **Contrato de `result`.** `browser.run_flow` (y `resume_flow`) devuelven los
+  resultados señalados en `result.<nombre>` como texto; `browser.list_flows` los
+  anuncia en `results`. Si el elemento no aparece y hay valor por defecto, el
+  resultado es ese valor y el trámite sigue (la espera de ese paso es de 10 s en
+  vez de 20); sin valor por defecto, que no aparezca falla como siempre.
+  Una descarga sigue en `result.download`.
+
+## Desde automatizaciones
+
+Una regla de una app con «Pedirle algo a Cortex» puede consultar un portal con
+un trámite aprendido, sin ninguna lógica específica de ese portal:
+
+> Consulta la guía {{guia}} con el trámite "Validar guía" y escribe result.estado
+> en el campo Validación.
+
+Cortex llama a `browser.run_flow` (corre sin aprobación: solo corre trámites de
+consulta y solo los que un administrador habilitó para trabajos desatendidos) y,
+con `result.estado`, escribe en la fila según el permiso de la instrucción.
+
+**Si el portal pide una persona** (el código que llegó al celular, un captcha, o
+la sesión del perfil venció) la corrida no falla: pasa a **`waiting_person`**
+(«Esperando a una persona»), se guarda una espera (`custom_app_automation_waits`,
+migración 0214) y se avisa por campana, push y correo con un enlace a
+`/browser/espera/<id>`:
+
+- *Código o captcha*: esa pantalla abre la pestaña viva del trámite. El código se
+  teclea ahí; **el captcha lo resuelve la persona con un clic, nunca se automatiza**.
+  El aviso va a quien creó la regla, porque la pestaña es de quien corrió el trámite.
+- *Sesión vencida*: el aviso va al dueño del perfil (o a quien creó la regla); entra al
+  portal desde el navegador de Cortex y pulsa «Ya inicié sesión, continuar».
+
+Cada minuto el reloj de automatizaciones (`apps/automation.dispatch`) revisa las
+esperas: cuando el trámite ya se retomó y terminó, la corrida vuelve a la cola y la
+acción **continúa** con el modelo recibiendo el `result` (sin volver a correr el
+trámite). Es idempotente con la corrida: una sola espera abierta por corrida y
+acción, y resolver o vencer es un UPDATE condicionado, así que dos barridos no
+reencolan dos veces. Una acción admite hasta 3 pausas seguidas.
+
+**Expiración.** Si nadie lo atiende en 2 horas (o si la pestaña del navegador se
+pierde antes), la corrida queda **`unresolved`** («Sin resolver»), se avisa y no se
+reintenta; la siguiente corrida de la regla vuelve a intentar.
+
+**Para que la espera sea real** hay que subir `BROWSER_HANDOFF_HOLD_MS` en el
+servicio de navegador (p. ej. `7200000`): es cuánto sostiene la pestaña que espera
+a una persona. Por defecto vale lo mismo que `BROWSER_SESSION_IDLE_MS` (5 min) y
+entonces la espera vence a los 5 min con «la sesión del navegador venció». Cada
+pestaña sostenida ocupa un cupo de `BROWSER_MAX_CONCURRENT` y el perfil (un uso
+simultáneo): conviene que sean pocas.
+
+Pruebas: `services/browser/tests/results.test.ts` (señalar, grabar, repetir con otro
+valor y con valor por defecto; necesita Chromium: `CHROME_PATH=<ruta de Chrome>` si
+no está el de Playwright), `packages/agent-tools/src/apps/automations/__tests__/waits.test.ts`
+(pausa → aviso → reanudar → continuar, expiración, tope), y los de `browser-steps`.

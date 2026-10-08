@@ -68,6 +68,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'work.query': '¿Qué tengo pendiente?',
   'whatsapp.customer_conversations': '¿Qué clientes escribieron por WhatsApp?',
   'whatsapp.reply': 'Contéstale por WhatsApp al cliente: ',
+  'whatsapp.group_send': 'Escríbele al grupo de WhatsApp ',
+  'whatsapp.group_messages': '¿Qué han respondido en el grupo de WhatsApp ',
   'management.propose_decision': 'Prepara una propuesta de decisión para revisar: ',
 
   'actions.list': 'Muéstrame las acciones que esperan mi aprobación',
@@ -153,6 +155,8 @@ export const TOOL_PHRASE: Record<string, string> = {
 
   'gdrive.read_doc': 'Léeme el documento de Drive ',
   'gdrive.search_files': 'Busca en Drive ',
+  'gdrive.find_folder': 'Busca en mi Drive la carpeta ',
+  'gdrive.upload_file': 'Guarda en Drive, en la carpeta correcta, el archivo ',
 
   'github.create_issue': 'Crea un issue en GitHub: ',
   'github.create_issue_comment': 'Comenta en el issue de GitHub ',

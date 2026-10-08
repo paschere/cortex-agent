@@ -1,5 +1,6 @@
 import { previewAttributesOf, requireScreen } from '@/lib/apps/access';
 import { previewQuery } from '@/lib/apps/preview-query';
+import { HOME_SLUG, homeEnabled } from '@cortex/agent-tools';
 import { redirect } from 'next/navigation';
 
 /**
@@ -23,5 +24,7 @@ export default async function AppIndexPage({
     attributes: previewAttributesOf(query.atr),
   });
   const como = query.como ? previewQuery(query.como, access.user.attributes) : '';
-  redirect(`/apps/${access.app.slug}/${screen.slug}${como}`);
+  // Con «Inicio» encendido (0215), la app abre ahí.
+  const first = homeEnabled(access.app.home) ? HOME_SLUG : screen.slug;
+  redirect(`/apps/${access.app.slug}/${first}${como}`);
 }

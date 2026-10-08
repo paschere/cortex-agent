@@ -1,5 +1,5 @@
 import { button, codeBlock, fineprint, lede, statusPill } from './components';
-import { type RenderedEmail, appBaseUrl, renderEmail } from './layout';
+import { type EmailBrand, type RenderedEmail, appBaseUrl, renderEmail } from './layout';
 
 /**
  * Los dos correos de la entrada a una aplicación (0209): el CÓDIGO de 6
@@ -16,6 +16,8 @@ export interface AppLoginCodeEmailInput {
   appName: string;
   code: string;
   minutes: number;
+  /** La marca de la app (0215); sin ella, el encabezado de Cortex. */
+  brand?: EmailBrand;
 }
 
 export function renderAppLoginCodeEmail(input: AppLoginCodeEmailInput): RenderedEmail {
@@ -35,6 +37,7 @@ export function renderAppLoginCodeEmail(input: AppLoginCodeEmailInput): Rendered
     ].join(''),
     footerNote: 'Este código sirve una sola vez.',
     locale: 'es',
+    brand: input.brand,
   });
   const text = [
     title,
@@ -54,6 +57,7 @@ export interface AppInvitationEmailInput {
   organizationName: string;
   name: string;
   roleName: string;
+  brand?: EmailBrand;
 }
 
 export function renderAppInvitationEmail(input: AppInvitationEmailInput): RenderedEmail {
@@ -67,7 +71,13 @@ export function renderAppInvitationEmail(input: AppInvitationEmailInput): Render
     pillHtml: statusPill({ label: input.roleName, tone: 'info' }),
     bodyHtml: [
       lede(opening),
-      url ? button({ href: url, label: `Abrir ${input.appName}` }) : '',
+      url
+        ? button({
+            href: url,
+            label: `Abrir ${input.appName}`,
+            color: input.brand && { bg: input.brand.buttonColor, ink: input.brand.buttonInk },
+          })
+        : '',
       fineprint(
         'Desde el celular puedes instalarla como una app (botón «Instalar en este teléfono» dentro de la pantalla).',
       ),
@@ -76,6 +86,7 @@ export function renderAppInvitationEmail(input: AppInvitationEmailInput): Render
       .join(''),
     footerNote: 'Si no esperabas esta invitación, ignora este correo.',
     locale: 'es',
+    brand: input.brand,
   });
   const text = [title, '', opening, url ? `\nAbrir la app: ${url}` : ''].join('\n');
   return { subject: title, html, text };

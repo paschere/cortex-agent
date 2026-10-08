@@ -1,0 +1,66 @@
+/* El marco de una aplicación (0215): transiciones entre pantallas, esqueletos y
+   el tirón para refrescar. Todo el movimiento queda apagado con
+   prefers-reduced-motion. */
+
+@keyframes app-screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes app-sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes app-skeleton {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.app-screen {
+  animation: app-screen-in 200ms ease-out both;
+}
+.app-sheet {
+  animation: app-sheet-up 180ms ease-out both;
+}
+.app-skeleton {
+  background: rgb(var(--surface-2));
+  border-radius: 0.75rem;
+  animation: app-skeleton 1.4s ease-in-out infinite;
+}
+.app-header-bar {
+  transition: transform 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-screen,
+  .app-sheet,
+  .app-skeleton {
+    animation: none;
+  }
+  .app-header-bar {
+    transition: none;
+  }
+}
+
+/* La cabecera compacta sólo existe en el celular. */
+@media (min-width: 768px) {
+  .app-header-bar {
+    display: none;
+  }
+}

@@ -114,6 +114,9 @@ class PauseRequested extends Error {
   }
 }
 
+/** Cuánto espera un `extract` con valor por defecto a que aparezca su elemento. */
+const EXTRACT_DEFAULT_WAIT_MS = 10_000;
+
 async function performStep(
   page: Page,
   step: Step,
@@ -163,8 +166,21 @@ async function performStep(
     throw new PauseRequested(index, step.label, step.extractAs ?? null);
   }
 
-  const found = await resolveTarget(page, step.targets, stepDeadline);
+  // Un resultado con valor por defecto no espera los 20 s completos: si el
+  // portal no pinta el elemento es porque la respuesta es «no hay», y esperar
+  // más sólo alarga la consulta.
+  const hasDefault = step.action === 'extract' && step.extractDefault !== undefined;
+  const found = await resolveTarget(
+    page,
+    step.targets,
+    hasDefault ? Math.min(stepDeadline, Date.now() + EXTRACT_DEFAULT_WAIT_MS) : stepDeadline,
+  );
   if (!isResolved(found)) {
+    if (hasDefault) {
+      output[step.extractAs ?? `step_${index}`] = step.extractDefault;
+      await settle(page, step, stepDeadline);
+      return { matchedTarget: 'valor por defecto', matchedRank: null, preview: null };
+    }
     // A KEYSTROKE DOES NOT NEED AN ELEMENT.
     //
     // Every other action here acts ON something and is meaningless without it;
@@ -221,7 +237,9 @@ async function performStep(
       break;
     case 'extract': {
       const captured = (await locator.innerText({ timeout: remaining() })).trim();
-      output[step.extractAs ?? `step_${index}`] = captured;
+      // Vacío cuenta como «no apareció» cuando hay valor por defecto.
+      output[step.extractAs ?? `step_${index}`] =
+        !captured && step.extractDefault !== undefined ? step.extractDefault : captured;
       break;
     }
     case 'download': {
@@ -336,7 +354,9 @@ function fileFor(
   if (from === 'download') {
     const downloaded = output.download as Record<string, unknown> | undefined;
     if (!downloaded) {
-      throw new Error('this step attaches the file the trámite downloads, and nothing was downloaded yet');
+      throw new Error(
+        'this step attaches the file the trámite downloads, and nothing was downloaded yet',
+      );
     }
     if (typeof downloaded.refused === 'string') {
       throw new Error(`the file this step attaches was not brought back: ${downloaded.refused}`);
@@ -531,7 +551,17 @@ export async function replay(
       // the answer it just received.
       if (err instanceof PauseRequested) {
         steps.push(
-          outcome(step, index, page.url(), null, null, null, true, Date.now() - stepStart, 'paused'),
+          outcome(
+            step,
+            index,
+            page.url(),
+            null,
+            null,
+            null,
+            true,
+            Date.now() - stepStart,
+            'paused',
+          ),
         );
         return {
           ok: false,

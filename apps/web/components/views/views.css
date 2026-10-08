@@ -104,6 +104,52 @@ html:root
 }
 
 /* =============================================================================
+   TABLERO TV (spec.theme.layout = 'tv'): una pantalla de pared. Todo crece:
+   la escala de texto sube un escalón o dos, las cifras se vuelven enormes y el
+   contraste es el del panel oscuro. Se lee a cinco metros; nadie la toca.
+   ========================================================================== */
+.view-tv {
+  --ink-muted: var(--ink);
+  --border: var(--border-strong);
+}
+.view-tv .text-micro {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+}
+.view-tv .text-xs {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+.view-tv .text-sm {
+  font-size: 1.5rem;
+  line-height: 2rem;
+}
+.view-tv .text-base {
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+}
+.view-tv .text-lg {
+  font-size: 2.25rem;
+  line-height: 2.75rem;
+}
+.view-tv .text-xl {
+  font-size: 3rem;
+  line-height: 3.5rem;
+}
+.view-tv .view-card {
+  border-width: 2px;
+  padding: 1.5rem;
+}
+.view-tv .view-card .font-mono.leading-none {
+  font-size: clamp(3.5rem, 7vw, 7rem) !important;
+  font-weight: 800;
+}
+.view-tv th,
+.view-tv td {
+  padding-block: 0.875rem;
+}
+
+/* =============================================================================
    ESTILOS (spec.theme.style). `clean` es la piel de siempre y no escribe nada.
    ========================================================================== */
 

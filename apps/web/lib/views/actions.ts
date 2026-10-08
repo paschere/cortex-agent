@@ -349,6 +349,8 @@ export async function runViewActionAction(
       await notifyViewActivity(db, view, {
         title: `${res.actionLabel}: ${res.label}`,
         body: `${user.name || user.email} lo pidió desde «${view.name}».`,
+        // «Abrir» lleva directo al registro (su detalle, si la vista tiene uno).
+        href: `/views/${view.slug}?fila=${encodeURIComponent(rowId)}`,
       });
     return { ok: true, message: res.message };
   } catch (err) {

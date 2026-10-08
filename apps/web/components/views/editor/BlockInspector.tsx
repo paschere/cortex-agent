@@ -43,6 +43,7 @@ import { useId, useState } from 'react';
 import { ActionsEditor } from './ActionsEditor';
 import { FiltersEditor } from './FiltersEditor';
 import { FormOptions } from './FormOptions';
+import { CardsFields, DetailFields } from './ScreenFields';
 import { ZoneDrawer } from './ZoneDrawer';
 import {
   AddButton,
@@ -134,7 +135,10 @@ export function BlockInspector({
       )}
 
       <Section title="Contenido">
-        {(block.type === 'media' || block.type === 'links' || block.type === 'voice') && (
+        {(block.type === 'media' ||
+          block.type === 'links' ||
+          block.type === 'voice' ||
+          block.type === 'detail') && (
           <Field label="Título (opcional)">
             <input
               value={block.title ?? ''}
@@ -150,7 +154,8 @@ export function BlockInspector({
           typeof block.title === 'string' &&
           block.type !== 'media' &&
           block.type !== 'links' &&
-          block.type !== 'voice' && (
+          block.type !== 'voice' &&
+          block.type !== 'detail' && (
             <Field label="Título">
               <input
                 value={block.title}
@@ -232,7 +237,7 @@ export function BlockInspector({
               onChange={(next) => onChange(withSource(block, next))}
             />
           </Field>
-          <TypeFields block={block} source={source} onChange={onChange} />
+          <TypeFields block={block} source={source} sources={sources} onChange={onChange} />
           {/* Los campos y las reglas de la tabla se editan aquí mismo, sin pasar por el chat. */}
           {source && !source.readOnly && !source.opaque && !source.name.endsWith('(nueva)') && (
             <>
@@ -339,10 +344,12 @@ export function BlockInspector({
 function TypeFields({
   block,
   source,
+  sources,
   onChange,
 }: {
   block: ViewBlock;
   source: EditorSource | undefined;
+  sources: EditorSource[];
   onChange: Change;
 }) {
   const fields = fieldOptions(source);
@@ -527,6 +534,10 @@ function TypeFields({
           </Field>
         </>
       );
+    case 'cards':
+      return <CardsFields block={block} source={source} onChange={onChange} />;
+    case 'detail':
+      return <DetailFields block={block} source={source} sources={sources} onChange={onChange} />;
     case 'calendar':
       return (
         <>
@@ -558,6 +569,35 @@ function TypeFields({
               onChange={(colorField) => onChange({ ...block, colorField })}
             />
           </Field>
+          <Field
+            label="Hora de cada evento"
+            hint="Un campo de hora: ordena el día y se ve al lado del nombre."
+          >
+            <FieldSelect
+              fields={fields.filter((f) => f.type === 'time')}
+              value={block.timeField}
+              emptyLabel="Sin hora"
+              onChange={(timeField) => onChange({ ...block, timeField })}
+            />
+          </Field>
+          {block.mode !== 'agenda' && (
+            <fieldset className="space-y-2">
+              <legend className="field-label mb-1">La persona puede cambiar entre</legend>
+              {(['day', 'week', 'month'] as const).map((m) => (
+                <Toggle
+                  key={m}
+                  label={CALENDAR_MODE_LABEL[m]}
+                  checked={(block.modes ?? []).includes(m)}
+                  onChange={(on) => {
+                    const next = on
+                      ? [...new Set([...(block.modes ?? []), m])]
+                      : (block.modes ?? []).filter((x) => x !== m);
+                    onChange({ ...block, modes: next.length > 1 ? next : undefined });
+                  }}
+                />
+              ))}
+            </fieldset>
+          )}
           {block.mode === 'agenda' && (
             <Field label="Días hacia adelante" hint="Contando hoy, hasta 60.">
               <NumberInput
@@ -1192,7 +1232,8 @@ function Interaction({
     openRecord?: boolean;
   };
   const isBoard = loose.type === 'board' || loose.type === 'zones';
-  if (!(RECORD_BLOCK_TYPES as readonly string[]).includes(loose.type)) return null;
+  if (!(RECORD_BLOCK_TYPES as readonly string[]).includes(loose.type) && loose.type !== 'detail')
+    return null;
   const readOnly = !source || source.readOnly;
   const fields = fieldOptions(source).filter((f) => !f.builtin);
   const board = block as unknown as BoardLike;

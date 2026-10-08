@@ -7,8 +7,6 @@ import type { CatalogTracker } from '../../views/spec';
 import type { CustomAppRow } from '../store';
 import { type EmitInput, queueRuns, withAutomationOrigin } from './emit';
 import {
-  APP_DAILY_ASK_CORTEX_CAP,
-  APP_DAILY_RUN_CAP,
   MAX_ATTEMPTS,
   type TemplateContext,
   TransientActionError,
@@ -18,6 +16,7 @@ import {
   renderTemplate,
   renderValues,
 } from './engine';
+import { getAppLimits } from './limits';
 import type { AutomationEvent, Values } from './match';
 import type { AutomationAction } from './spec';
 import {
@@ -29,6 +28,7 @@ import {
   adaptAutomationRun,
   runsToday,
 } from './store';
+import { WaitingForPersonError, notifyWaitOpened, openWait } from './waits';
 
 /**
  * LA CORRIDA DE UNA AUTOMATIZACIÓN (migración 0210).
@@ -56,11 +56,23 @@ export interface AskCortexArgs {
   app: CustomAppRow;
   automation: AutomationRow;
   run: AutomationRunRow;
+  /** Qué acción de la regla es (para reanudar una espera de persona). */
+  actionIndex?: number;
   instruction: string;
   tracker: { id: string; slug: string } | null;
   rowId: string | null;
   /** A quién se le piden las aprobaciones: quien creó la regla. */
   requesterId: string | null;
+  /** La fila como estaba al correr (contexto completo para Cortex). */
+  rowValues?: Values;
+  /** Campos de la tabla (llave, etiqueta, tipo) para describir la fila y acotar lo que puede escribir. */
+  fields?: Array<{ key: string; label: string; type?: string }>;
+  /** Qué puede escribir sin aprobación en esa fila (ver spec: `ask_cortex.writes`). */
+  writes?: Extract<AutomationAction, { type: 'ask_cortex' }>['writes'];
+  /** Herramientas con efecto externo que la regla declaró y pueden correr sin aprobación (ver spec). */
+  allow?: string[];
+  /** La instrucción sin variables pintadas ya viene en `instruction`; esto es el contexto de variables. */
+  templateContext?: TemplateContext;
 }
 
 export interface AutomationDeps {
@@ -99,6 +111,7 @@ export type RunOutcome =
   | { status: 'not_claimable' }
   | { status: 'skipped'; reason: string }
   | { status: 'retry'; at: string }
+  | { status: 'waiting_person'; waitId: string }
   | { status: 'succeeded' | 'failed'; results: ActionResult[] };
 
 /** La firma de un webhook: HMAC-SHA256 de «marca de tiempo.cuerpo» con una llave por regla. */
@@ -225,8 +238,9 @@ export async function executeRun(
 
   // 3. Topes por app y por día (contados en el plan: una corrida = una fila).
   const used = await runsToday(db, app.id, now);
-  if (used.runs > APP_DAILY_RUN_CAP) {
-    const reason = `La app llegó al tope de ${APP_DAILY_RUN_CAP} corridas por día.`;
+  const limits = await getAppLimits(db, app.id);
+  if (used.runs > limits.runsPerDay) {
+    const reason = `La app llegó al tope de ${limits.runsPerDay} corridas por día (se cambia en Automatizaciones).`;
     await finish(db, run, automation.id, { status: 'skipped', error: reason }, now);
     return { status: 'skipped', reason };
   }
@@ -249,7 +263,10 @@ export async function executeRun(
     ('screen' in automation.trigger
       ? (automation.trigger.screen as string | undefined)
       : undefined);
-  const link = `${deps.baseUrl}/a/${app.id}${screenForLink ? `/${screenForLink}` : ''}`;
+  // Con pantalla y fila, el aviso abre el DETALLE de esa fila (?fila=), no la
+  // portada de la app: quien recibe «aterrizó el AV204» quiere ver ese vuelo.
+  const rowQuery = screenForLink && event.rowId ? `?fila=${encodeURIComponent(event.rowId)}` : '';
+  const link = `${deps.baseUrl}/a/${app.id}${screenForLink ? `/${screenForLink}` : ''}${rowQuery}`;
   const ctx: TemplateContext = {
     after: (event.after ?? {}) as Values,
     before: event.before ?? null,
@@ -264,6 +281,7 @@ export async function executeRun(
   const results: ActionResult[] = Array.isArray(run.result) ? [...run.result] : [];
   let askCalls = run.ask_cortex_calls;
   let transientFailure: string | null = null;
+  let waiting: { index: number; type: string; error: WaitingForPersonError } | null = null;
   const origin = { chain: [...(event.chain ?? []), automation.id], depth: (event.depth ?? 0) + 1 };
 
   for (let index = 0; index < automation.actions.length; index++) {
@@ -284,7 +302,8 @@ export async function executeRun(
           action,
           index,
           trackerRow,
-          askAllowed: used.askCortex + askCalls < APP_DAILY_ASK_CORTEX_CAP,
+          askAllowed: used.askCortex + askCalls < limits.askCortexPerDay,
+          askCap: limits.askCortexPerDay,
           onAsk: () => {
             askCalls += 1;
           },
@@ -292,6 +311,13 @@ export async function executeRun(
       );
       upsertResult(results, { index, type: action.type, ok: true, detail });
     } catch (err) {
+      // Un trámite del navegador se detuvo a esperar a una persona: la corrida
+      // no falla, queda esperando (ver waits.ts).
+      if (err instanceof WaitingForPersonError) {
+        waiting = { index, type: action.type, error: err };
+        upsertResult(results, { index, type: action.type, ok: false, detail: err.message });
+        break;
+      }
       const message = err instanceof Error ? err.message : String(err);
       if (isTransient(err) && attempt < MAX_ATTEMPTS) {
         transientFailure = message;
@@ -304,6 +330,44 @@ export async function executeRun(
         break;
       }
       upsertResult(results, { index, type: action.type, ok: false, detail: message });
+    }
+  }
+
+  if (waiting) {
+    try {
+      const recipient =
+        waiting.error.info.kind === 'login'
+          ? (waiting.error.info.profileOwnerId ?? automation.created_by)
+          : automation.created_by;
+      const { wait, created } = await openWait(db, {
+        organizationId,
+        appId: app.id,
+        automationId: automation.id,
+        runId: run.id,
+        actionIndex: waiting.index,
+        info: waiting.error.info,
+        recipientId: recipient ?? null,
+        now,
+      });
+      await db
+        .from('custom_app_automation_runs')
+        .update({
+          status: 'waiting_person',
+          next_attempt_at: null,
+          error: null,
+          result: results,
+          ask_cortex_calls: askCalls,
+        })
+        .eq('id', run.id);
+      if (created) await notifyWaitOpened(db, deps, wait, app.name);
+      return { status: 'waiting_person', waitId: wait.id };
+    } catch (err) {
+      upsertResult(results, {
+        index: waiting.index,
+        type: waiting.type,
+        ok: false,
+        detail: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -364,6 +428,7 @@ interface ActionRun {
   index: number;
   trackerRow: Awaited<ReturnType<typeof getTrackerBySlug>>;
   askAllowed: boolean;
+  askCap: number;
   onAsk: () => void;
 }
 
@@ -415,7 +480,18 @@ async function currentRow(
 
 async function runAction(a: ActionRun): Promise<string> {
   const { db, deps, app, automation, ctx, action, event } = a;
-  const base = `${deps.baseUrl}/apps/${app.slug}`;
+  // La campana de los miembros abre la misma pantalla y fila que el aviso de
+  // la app (ver `link` en runAutomation), pero dentro de Cortex (/apps/<slug>).
+  const screenForLink =
+    event.screen ??
+    ('screen' in automation.trigger
+      ? (automation.trigger.screen as string | undefined)
+      : undefined);
+  const base = `${deps.baseUrl}/apps/${app.slug}${
+    screenForLink
+      ? `/${screenForLink}${event.rowId ? `?fila=${encodeURIComponent(event.rowId)}` : ''}`
+      : ''
+  }`;
   switch (action.type) {
     case 'set_field': {
       if (!a.trackerRow || !event.rowId) throw new Error('Sin fila donde cambiar el campo.');
@@ -600,7 +676,7 @@ async function runAction(a: ActionRun): Promise<string> {
     case 'ask_cortex': {
       if (!a.askAllowed)
         throw new Error(
-          `La app llegó al tope de ${APP_DAILY_ASK_CORTEX_CAP} pedidos a Cortex por día.`,
+          `La app llegó al tope de ${a.askCap} pedidos a Cortex por día (se cambia en Automatizaciones).`,
         );
       a.onAsk();
       const out = await deps.askCortex(db, {
@@ -608,10 +684,16 @@ async function runAction(a: ActionRun): Promise<string> {
         app,
         automation,
         run: a.run,
+        actionIndex: a.index,
         instruction: renderTemplate(action.instruction, ctx),
         tracker: a.trackerRow ? { id: a.trackerRow.id, slug: a.trackerRow.slug } : null,
         rowId: event.rowId ?? null,
         requesterId: automation.created_by,
+        rowValues: ctx.after,
+        fields: a.trackerRow?.fields.map((f) => ({ key: f.key, label: f.label, type: f.type })),
+        writes: action.writes,
+        allow: action.allow,
+        templateContext: ctx,
       });
       return `${out.summary}${out.staged ? ` (${out.staged} pendiente${out.staged === 1 ? '' : 's'} de aprobación)` : ''}`;
     }

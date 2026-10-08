@@ -53,6 +53,23 @@ export interface RenderEmailOptions {
    * (la invitación, por ejemplo) piden `'es'`.
    */
   locale?: 'en' | 'es';
+  /**
+   * La marca de quien manda (una aplicación con identidad propia): su nombre,
+   * su logo (URL absoluta) y su color, ya con contraste AA sobre blanco. Sin
+   * esto el encabezado es el de Cortex, como siempre.
+   */
+  brand?: EmailBrand;
+}
+
+export interface EmailBrand {
+  name: string;
+  /** `#rrggbb` legible sobre blanco. */
+  color: string;
+  /** URL absoluta de un logo cuadrado, o vacío. */
+  logoUrl?: string;
+  /** Color de fondo del botón y el texto que se lee encima. */
+  buttonColor: string;
+  buttonInk: string;
 }
 
 /** Keeps the body copy out of the inbox preview after the preheader. */
@@ -63,15 +80,24 @@ export function renderEmail(opts: RenderEmailOptions): string {
   // No base URL configured means no absolute link and no logo — both the
   // header and the footer below already render fine without them.
   const home = safeHref(base);
-  const icon = base ? safeHref(`${base}${CORTEX_ICON_PATH}`) : '';
+  const brand = opts.brand;
+  const icon = brand
+    ? brand.logoUrl
+      ? safeHref(brand.logoUrl)
+      : ''
+    : base
+      ? safeHref(`${base}${CORTEX_ICON_PATH}`)
+      : '';
+  const headerName = brand?.name ?? 'Cortex';
+  const headerColor = brand?.color ?? palette.primary;
 
   const header = [
     `<tr><td style="padding:0 4px 14px;">`,
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>',
     icon
-      ? `<td width="32" style="width:32px;padding-right:9px;vertical-align:middle;"><img src="${icon}" width="32" height="32" alt="Cortex" style="display:block;width:32px;height:32px;border:0;border-radius:8px;" /></td>`
+      ? `<td width="32" style="width:32px;padding-right:9px;vertical-align:middle;"><img src="${icon}" width="32" height="32" alt="${escapeHtml(headerName)}" style="display:block;width:32px;height:32px;border:0;border-radius:8px;" /></td>`
       : '',
-    `<td style="vertical-align:middle;font-family:${FONT_STACK};font-size:16px;font-weight:700;letter-spacing:-.01em;color:${palette.primary};">Cortex</td>`,
+    `<td style="vertical-align:middle;font-family:${FONT_STACK};font-size:16px;font-weight:700;letter-spacing:-.01em;color:${headerColor};">${escapeHtml(headerName)}</td>`,
     '</tr></table>',
     '</td></tr>',
   ].join('');

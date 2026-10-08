@@ -128,6 +128,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   browser_close_page: 'Cerrar la pestaña',
   gdrive_search_files: 'Buscar archivos en Drive',
   gdrive_read_doc: 'Leer documento de Drive',
+  gdrive_find_folder: 'Buscar una carpeta de Drive',
+  gdrive_upload_file: 'Guardar un archivo en una carpeta de Drive',
   schedule_create: 'Programar rutina',
   schedule_list: 'Ver rutinas programadas',
   schedule_update: 'Actualizar rutina',
@@ -205,6 +207,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   slack_post_message: 'Publicar en un canal de Slack',
   whatsapp_customer_conversations: 'Ver las conversaciones de atención por WhatsApp',
   whatsapp_reply: 'Responder a un cliente por WhatsApp',
+  whatsapp_group_send: 'Escribir en un grupo de WhatsApp',
+  whatsapp_group_messages: 'Leer un grupo de WhatsApp',
   chat_send_message: 'Publicar en Google Chat',
   chat_send_dm: 'Mandar un privado por Google Chat',
   people_search: 'Buscar el correo de una persona',
@@ -517,6 +521,10 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       return `Invitar a ${input.email} a la empresa como ${input.role === 'admin' ? 'administrador' : 'miembro'}${input.position ? ` (${String(input.position).slice(0, 80)})` : ''}${input.team ? ` en el equipo ${String(input.team).slice(0, 80)}` : ''} — le llega un correo con el enlace`;
     case 'whatsapp_reply':
       return `Responder por WhatsApp, como persona, en la conversación abierta: «${String(input.text ?? '').slice(0, 120)}»`;
+    case 'whatsapp_group_send':
+      return `Escribir en el grupo de WhatsApp «${String(input.group ?? '').slice(0, 80)}»: «${String(input.text ?? '').slice(0, 120)}» — lo ve todo el grupo`;
+    case 'gdrive_upload_file':
+      return `Guardar ${input.fileName ? `«${String(input.fileName).slice(0, 80)}»` : 'el archivo'} en la carpeta de Drive ${String(input.folderId ?? '').slice(0, 40)} — no crea carpetas`;
     case 'projects_create':
       return input.fromDocument
         ? `Abrir un proyecto desde ${input.fromDocument}${input.tasksFromLines ? ', con una tarea por línea' : ''}`

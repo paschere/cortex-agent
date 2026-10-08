@@ -315,11 +315,45 @@ export function withSource(block: ViewBlock, source: EditorSource): ViewBlock {
         detailFields: undefined,
         recordEditable: undefined,
       };
+    case 'cards':
+      return {
+        ...block,
+        tracker: source.slug,
+        filters: [],
+        titleField: 'label',
+        subtitleField: undefined,
+        imageField: undefined,
+        statusField: select?.key,
+        dataFields: [],
+        dateField: date?.key,
+        groupBy: undefined,
+        sort: undefined,
+        sortOptions: [],
+        actions: [],
+        detailFields: undefined,
+        recordEditable: undefined,
+      };
+    case 'detail':
+      return {
+        ...block,
+        tracker: source.slug,
+        filters: [],
+        titleField: 'label',
+        subtitleField: undefined,
+        statusField: select?.key,
+        sections: [],
+        gallery: [],
+        related: [],
+        actions: [],
+        recordEditable: undefined,
+      };
     case 'calendar':
       return {
         ...block,
         tracker: source.slug,
         filters: [],
+        timeField: undefined,
+        modes: undefined,
         dateField: date?.key ?? 'created_at',
         labelField: 'label',
         colorField: select?.key,
@@ -370,6 +404,7 @@ export function sourceRefusal(type: string, source: EditorSource): string | null
       : 'Un tablero necesita un campo de opciones para sus columnas.';
   // `created_at` siempre existe, pero un calendario de «cuándo se creó cada
   // fila» casi nunca es lo que alguien quiere: pide una fecha de verdad.
+  if (type === 'detail' && source.opaque) return 'No puedes ver esta tabla del Feed.';
   if (type === 'calendar' && !source.fields.some((f) => f.type === 'date'))
     return 'Un calendario necesita un campo de fecha (una cita, una entrega, un vencimiento).';
   return null;
@@ -422,6 +457,8 @@ export function newBlock(
     text: 'texto',
     gallery: 'galeria',
     calendar: 'calendario',
+    cards: 'tarjetas',
+    detail: 'detalle',
     progress: 'avance',
     media: 'imagen',
     links: 'botones',
@@ -581,6 +618,51 @@ export function newBlock(
         badgeField: select?.key,
         columns: 3,
         limit: 12,
+        actions: [],
+      };
+    }
+    case 'cards': {
+      const text = fields.filter((f) => !f.builtin && f.type === 'text');
+      return {
+        id,
+        type: 'cards',
+        width: 'full',
+        tracker: source.slug,
+        filters: [],
+        title: clip(name),
+        titleField: 'label',
+        subtitleField: text[0]?.key,
+        statusField: select?.key,
+        dateField: date?.key,
+        dataFields: fields
+          .filter((f) => !f.builtin && f.key !== select?.key && f.key !== text[0]?.key)
+          .slice(0, 3)
+          .map((f) => f.key),
+        chips: [...(select ? ['status' as const] : []), ...(date ? ['today' as const] : [])],
+        searchable: true,
+        sortOptions: [],
+        pageSize: 12,
+        paging: 'more',
+        limit: 100,
+        actions: [],
+      };
+    }
+    case 'detail': {
+      const own = fields.filter((f) => !f.builtin && f.type !== 'file' && f.key !== select?.key);
+      return {
+        id,
+        type: 'detail',
+        width: 'full',
+        tracker: source.slug,
+        filters: [],
+        titleField: 'label',
+        statusField: select?.key,
+        sections: own.length ? [{ title: 'Datos', fields: own.slice(0, 8).map((f) => f.key) }] : [],
+        gallery: fields
+          .filter((f) => f.type === 'file')
+          .slice(0, 2)
+          .map((f) => f.key),
+        related: [],
         actions: [],
       };
     }

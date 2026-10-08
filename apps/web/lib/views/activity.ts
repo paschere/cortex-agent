@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export async function notifyViewActivity(
   db: SupabaseClient,
   view: Pick<CustomViewRow, 'id' | 'slug' | 'name' | 'created_by'>,
-  input: { title: string; body?: string; dedupeKey?: string },
+  input: { title: string; body?: string; dedupeKey?: string; href?: string },
 ): Promise<void> {
   try {
     const admins = await orgAdmins(db).catch(() => [] as string[]);
@@ -27,7 +27,7 @@ export async function notifyViewActivity(
           kind: 'view_activity',
           title: input.title,
           body: input.body,
-          href: `/views/${view.slug}`,
+          href: input.href ?? `/views/${view.slug}`,
           groupKey: `view:${view.id}`,
           ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}),
         }),

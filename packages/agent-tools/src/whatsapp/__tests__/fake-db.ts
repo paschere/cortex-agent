@@ -74,6 +74,10 @@ export class FakeQuery
     this.filters.push((r) => String(r[col] ?? '') >= value);
     return this;
   }
+  lt(col: string, value: string): this {
+    this.filters.push((r) => String(r[col] ?? '') < value);
+    return this;
+  }
   lte(col: string, value: string): this {
     this.filters.push((r) => String(r[col] ?? '') <= value);
     return this;

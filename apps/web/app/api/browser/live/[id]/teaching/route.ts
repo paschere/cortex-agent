@@ -21,6 +21,13 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ id: string }> }
                 .max(2000)
                 .refine((s) => /^https?:\/\//.test(s)),
             }),
+            z.object({ op: z.literal('mark_start') }),
+            z.object({ op: z.literal('mark_cancel') }),
+            z.object({
+              op: z.literal('mark_commit'),
+              name: z.string().min(1).max(60),
+              fallback: z.string().max(200).optional(),
+            }),
             z.object({
               op: z.literal('explain'),
               index: z.number().int().min(0).max(59),

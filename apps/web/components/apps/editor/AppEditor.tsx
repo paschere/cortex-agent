@@ -6,7 +6,9 @@ import { ChevronLeft, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { AppearanceTab } from './AppearanceTab';
 import { AutomationsTab } from './AutomationsTab';
+import { HomeTab } from './HomeTab';
 import { MembersTab } from './MembersTab';
 import { PreviewTab } from './PreviewTab';
 import { RolesTab } from './RolesTab';
@@ -39,9 +41,11 @@ export type { AppEditorData } from './shared';
  * pantalla lee una fuente interna—; el texto del rechazo se muestra tal cual.
  */
 
-type Tab = 'screens' | 'roles' | 'members' | 'users' | 'automations' | 'preview';
+type Tab = 'screens' | 'look' | 'home' | 'roles' | 'members' | 'users' | 'automations' | 'preview';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'screens', label: 'Pantallas' },
+  { id: 'home', label: 'Inicio' },
+  { id: 'look', label: 'Apariencia' },
   { id: 'roles', label: 'Roles y permisos' },
   { id: 'members', label: 'Miembros' },
   { id: 'users', label: 'Usuarios' },
@@ -192,6 +196,8 @@ export function AppEditor({ data }: { data: AppEditorData }) {
       </div>
 
       {tab === 'screens' && <ScreensTab data={data} />}
+      {tab === 'home' && <HomeTab data={data} />}
+      {tab === 'look' && <AppearanceTab data={data} />}
       {tab === 'roles' && <RolesTab data={data} />}
       {tab === 'members' && <MembersTab data={data} />}
       {tab === 'users' && <UsersTab data={data} />}

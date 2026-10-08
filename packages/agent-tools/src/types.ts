@@ -102,6 +102,14 @@ export interface ToolContext {
    */
   enqueueJob?: (name: string, data: Record<string, unknown>) => Promise<boolean>;
   /**
+   * Leer los bytes de un archivo guardado en Cortex (el valor de un campo
+   * `file`: `{url,name,mime,size}`), sin saber dónde ni cómo se guarda. La url
+   * lleva una firma; la aplicación la verifica y exige que sea de ESTA empresa.
+   * Opcional: un contexto sin almacenamiento (MCP, tests) no la trae y la
+   * herramienta que la necesita lo dice. Devuelve null si ya no existe.
+   */
+  readStoredFile?: (url: string) => Promise<{ bytes: Buffer; mime: string | null } | null>;
+  /**
    * Invitar a una persona a ESTA empresa, sin saber cómo se invita.
    *
    * Invitar es de better-auth y del tope de asientos del plan, y ambos viven en

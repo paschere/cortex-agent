@@ -30,6 +30,8 @@ export async function GET(
     spec: view.spec,
     filters: parseViewFilterParam(view.spec, sp.get('f')),
     readOnly,
+    fila: sp.get('fila'),
+    detail: sp.get('d'),
   });
   return NextResponse.json(
     { version: view.version, view: computed },

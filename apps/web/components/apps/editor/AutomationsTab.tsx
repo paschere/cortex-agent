@@ -7,13 +7,16 @@ import {
   deleteAutomationAction,
   loadAutomationsAction,
   loadRunsAction,
+  sampleRowsAction,
   saveAutomationAction,
+  saveLimitsAction,
   testAutomationAction,
   toggleAutomationAction,
 } from '@/lib/apps/automation-actions';
 import { clsx } from 'clsx';
 import { BellOff, History, Pause, Play, Plus, Trash2, Zap } from 'lucide-react';
 import { useCallback, useEffect, useState, useTransition } from 'react';
+import { AskCortexEditor, type WritesMode } from './AskCortexEditor';
 import {
   type AppEditorData,
   BTN_DANGER,
@@ -66,6 +69,9 @@ interface Act {
   subject: string;
   url: string;
   instruction: string;
+  writesMode: WritesMode;
+  writesFields: string[];
+  allow: string[];
 }
 
 interface Draft {
@@ -83,6 +89,13 @@ interface Draft {
     weekday: number;
     id: string;
     label: string;
+    everyMinutes: number;
+    perRowMinutes: string;
+    maxRows: number;
+    winField: string;
+    winTimeField: string;
+    winBefore: number;
+    winAfter: number;
   };
   conditions: Cond[];
   actions: Act[];
@@ -96,6 +109,7 @@ const TRIGGERS: Array<{ type: string; label: string }> = [
   { type: 'approval_decided', label: 'Se aprueba o se rechaza' },
   { type: 'schedule', label: 'A una hora (diaria o semanal)' },
   { type: 'button', label: 'Alguien toca un botón en una pantalla' },
+  { type: 'rows_poll', label: 'Cada cierto tiempo, para cada fila que cumpla' },
 ];
 const HOURS = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
@@ -157,6 +171,9 @@ const emptyAct = (type: string): Act => ({
   subject: '',
   url: '',
   instruction: '',
+  writesMode: 'legacy',
+  writesFields: [],
+  allow: [],
 });
 
 const emptyDraft = (): Draft => ({
@@ -174,6 +191,13 @@ const emptyDraft = (): Draft => ({
     weekday: 1,
     id: '',
     label: '',
+    everyMinutes: 20,
+    perRowMinutes: '',
+    maxRows: 10,
+    winField: '',
+    winTimeField: '',
+    winBefore: 6,
+    winAfter: 24,
   },
   conditions: [],
   actions: [emptyAct('notify_app_user')],
@@ -219,7 +243,27 @@ function toInput(d: Draft): unknown {
               }
             : t.type === 'button'
               ? { type: t.type, screen: t.screen, id: t.id || slugOf(t.label), label: t.label }
-              : { type: t.type, tracker: t.tracker };
+              : t.type === 'rows_poll'
+                ? {
+                    type: t.type,
+                    tracker: t.tracker,
+                    everyMinutes: Number(t.everyMinutes),
+                    ...(Number(t.perRowMinutes) > 0
+                      ? { perRowMinutes: Number(t.perRowMinutes) }
+                      : {}),
+                    maxRows: Number(t.maxRows),
+                    ...(t.winField
+                      ? {
+                          window: {
+                            field: t.winField,
+                            ...(t.winTimeField ? { timeField: t.winTimeField } : {}),
+                            beforeHours: Number(t.winBefore),
+                            afterHours: Number(t.winAfter),
+                          },
+                        }
+                      : {}),
+                  }
+                : { type: t.type, tracker: t.tracker };
   const conditions = d.conditions.map((c) =>
     c.kind === 'changed'
       ? {
@@ -281,7 +325,16 @@ function toInput(d: Draft): unknown {
       case 'webhook':
         return { type: a.type, url: a.url };
       default:
-        return { type: a.type, instruction: a.instruction };
+        return {
+          type: a.type,
+          instruction: a.instruction,
+          ...(a.writesMode === 'row'
+            ? { writes: 'row' }
+            : a.writesMode === 'fields' && a.writesFields.length
+              ? { writes: a.writesFields }
+              : {}),
+          ...(a.allow.length ? { allow: a.allow } : {}),
+        };
     }
   });
   return { name: d.name, enabled: true, trigger, conditions, actions };
@@ -312,6 +365,13 @@ function toDraft(v: AutomationView): Draft {
     weekday: Number(t.weekday ?? 1),
     id: String(t.id ?? ''),
     label: String(t.label ?? ''),
+    everyMinutes: Number(t.everyMinutes ?? 20),
+    perRowMinutes: t.perRowMinutes === undefined ? '' : String(t.perRowMinutes),
+    maxRows: Number(t.maxRows ?? 10),
+    winField: String((t.window as { field?: string } | undefined)?.field ?? ''),
+    winTimeField: String((t.window as { timeField?: string } | undefined)?.timeField ?? ''),
+    winBefore: Number((t.window as { beforeHours?: number } | undefined)?.beforeHours ?? 6),
+    winAfter: Number((t.window as { afterHours?: number } | undefined)?.afterHours ?? 24),
   };
   d.conditions = inp.conditions.map((c) =>
     c.type === 'changed'
@@ -355,6 +415,12 @@ function toDraft(v: AutomationView): Draft {
     x.subject = String(a.subject ?? '');
     x.url = String(a.url ?? '');
     x.instruction = String(a.instruction ?? '');
+    if (a.writes === 'row') x.writesMode = 'row';
+    else if (Array.isArray(a.writes)) {
+      x.writesMode = 'fields';
+      x.writesFields = a.writes as string[];
+    }
+    x.allow = Array.isArray(a.allow) ? (a.allow as string[]) : [];
     return x;
   });
   return d;
@@ -375,6 +441,8 @@ const STATUS_LABEL: Record<string, { text: string; tone: string }> = {
   skipped: { text: 'No aplicó', tone: 'bg-surface-2 text-ink-muted' },
   queued: { text: 'En cola', tone: 'bg-amber-soft text-amber' },
   running: { text: 'Corriendo', tone: 'bg-amber-soft text-amber' },
+  waiting_person: { text: 'Esperando a una persona', tone: 'bg-amber-soft text-amber' },
+  unresolved: { text: 'Sin resolver', tone: 'bg-rose-soft text-rose' },
 };
 
 function Pill({ status }: { status: string | null }) {
@@ -391,7 +459,9 @@ export function AutomationsTab({ data }: { data: AppEditorData }) {
   const appId = data.app.id;
   const [items, setItems] = useState<AutomationView[] | null>(null);
   const [pushOn, setPushOn] = useState(true);
-  const [caps, setCaps] = useState({ runsPerDay: 500, askCortexPerDay: 20 });
+  const [caps, setCaps] = useState({ runsPerDay: 1000, askCortexPerDay: 100 });
+  const [capsMax, setCapsMax] = useState({ runsPerDay: 5000, askCortexPerDay: 1000 });
+  const [capsDraft, setCapsDraft] = useState({ runsPerDay: 1000, askCortexPerDay: 100 });
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null);
@@ -404,6 +474,8 @@ export function AutomationsTab({ data }: { data: AppEditorData }) {
     setItems(res.automations);
     setPushOn(res.pushOn);
     setCaps(res.caps);
+    setCapsDraft(res.caps);
+    setCapsMax(res.capsMax);
   }, [appId]);
   useEffect(() => {
     void load();
@@ -427,8 +499,7 @@ export function AutomationsTab({ data }: { data: AppEditorData }) {
             <h2 className="text-sm font-semibold text-ink">Automatizaciones</h2>
             <p className="text-xs text-ink-muted">
               Cuando pase algo en la app, que avise o mueva cosas solo. Los avisos van por
-              notificación push y correo. Tope por app: {caps.runsPerDay} corridas y{' '}
-              {caps.askCortexPerDay} pedidos a Cortex por día.
+              notificación push y correo.
             </p>
           </div>
           <div className="flex gap-2">
@@ -443,6 +514,53 @@ export function AutomationsTab({ data }: { data: AppEditorData }) {
               <Plus className="h-3.5 w-3.5" aria-hidden /> Nueva
             </button>
           </div>
+        </div>
+        <div className="flex flex-wrap items-end gap-3 rounded-card bg-surface-2 p-2.5 text-xs text-ink">
+          <label className="block">
+            <span className="block text-micro font-semibold text-ink-muted">
+              Corridas por día (máx. {capsMax.runsPerDay})
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={capsMax.runsPerDay}
+              value={capsDraft.runsPerDay}
+              onChange={(e) => setCapsDraft({ ...capsDraft, runsPerDay: Number(e.target.value) })}
+              className={clsx(INPUT, 'w-28')}
+            />
+          </label>
+          <label className="block">
+            <span className="block text-micro font-semibold text-ink-muted">
+              Pedidos a Cortex por día (máx. {capsMax.askCortexPerDay})
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={capsMax.askCortexPerDay}
+              value={capsDraft.askCortexPerDay}
+              onChange={(e) =>
+                setCapsDraft({ ...capsDraft, askCortexPerDay: Number(e.target.value) })
+              }
+              className={clsx(INPUT, 'w-28')}
+            />
+          </label>
+          <button
+            type="button"
+            className={BTN_SECONDARY}
+            disabled={
+              pending ||
+              (capsDraft.runsPerDay === caps.runsPerDay &&
+                capsDraft.askCortexPerDay === caps.askCortexPerDay)
+            }
+            onClick={() => run(() => saveLimitsAction(appId, capsDraft))}
+          >
+            Guardar topes
+          </button>
+          <p className="basis-full text-micro text-ink-muted">
+            Tope diario de esta app (hora de Bogotá). Cada corrida cuenta una unidad del plan y cada
+            pedido a Cortex gasta además de su propio tope. Al llegar al tope la regla se salta y
+            queda anotado en el historial.
+          </p>
         </div>
         {!pushOn && (
           <p className="flex items-start gap-2 rounded-card bg-amber-soft px-3 py-2 text-xs text-ink">
@@ -729,6 +847,8 @@ function RuleEditor({
   const [d, setD] = useState<Draft>(initial);
   const [sim, setSim] = useState<Awaited<ReturnType<typeof testAutomationAction>> | null>(null);
   const [testing, startTest] = useTransition();
+  const [sampleRows, setSampleRows] = useState<Array<{ id: string; label: string }>>([]);
+  const [sampleId, setSampleId] = useState('');
   const t = d.trigger;
   const tracker: Row | undefined = data.trackers.find((x) => x.slug === t.tracker);
   const fields = tracker?.fields ?? [];
@@ -784,7 +904,11 @@ function RuleEditor({
         {!rowless && (
           <select
             value={t.tracker}
-            onChange={(e) => setT({ tracker: e.target.value, field: '' })}
+            onChange={(e) => {
+              setT({ tracker: e.target.value, field: '', winField: '', winTimeField: '' });
+              setSampleRows([]);
+              setSampleId('');
+            }}
             className={clsx(INPUT, 'w-full')}
           >
             <option value="">¿En qué tabla?</option>
@@ -869,6 +993,72 @@ function RuleEditor({
               ))}
             </select>
             (hora de Bogotá)
+          </div>
+        )}
+        {t.type === 'rows_poll' && (
+          <div className="space-y-2 text-xs text-ink">
+            <div className="flex flex-wrap items-center gap-2">
+              Cada
+              <input
+                type="number"
+                min={10}
+                max={1440}
+                value={t.everyMinutes}
+                onChange={(e) => setT({ everyMinutes: Number(e.target.value) })}
+                className={clsx(INPUT, 'w-20')}
+              />
+              minutos, hasta
+              <input
+                type="number"
+                min={1}
+                max={25}
+                value={t.maxRows}
+                onChange={(e) => setT({ maxRows: Number(e.target.value) })}
+                className={clsx(INPUT, 'w-16')}
+              />
+              filas por vuelta, y cada fila como mucho cada
+              <input
+                type="number"
+                min={10}
+                value={t.perRowMinutes}
+                placeholder={String(t.everyMinutes)}
+                onChange={(e) => setT({ perRowMinutes: e.target.value })}
+                className={clsx(INPUT, 'w-20')}
+              />
+              minutos.
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              Sólo filas cuya fecha
+              <FieldSelect value={t.winField} onChange={(v) => setT({ winField: v })} />
+              {t.winField && (
+                <>
+                  (y hora
+                  <FieldSelect value={t.winTimeField} onChange={(v) => setT({ winTimeField: v })} />
+                  ) esté entre
+                  <input
+                    type="number"
+                    min={0}
+                    value={t.winBefore}
+                    onChange={(e) => setT({ winBefore: Number(e.target.value) })}
+                    className={clsx(INPUT, 'w-16')}
+                  />
+                  h antes y
+                  <input
+                    type="number"
+                    min={0}
+                    value={t.winAfter}
+                    onChange={(e) => setT({ winAfter: Number(e.target.value) })}
+                    className={clsx(INPUT, 'w-16')}
+                  />
+                  h después de ahora.
+                </>
+              )}
+            </div>
+            <p className="text-micro text-ink-muted">
+              Las condiciones de abajo (p. ej. «vuelo tiene valor» y «estado distinto de Aterrizó»)
+              deciden qué filas se atienden. Cada fila atendida es una corrida y cuenta en el tope
+              diario.
+            </p>
           </div>
         )}
         {t.type === 'button' && (
@@ -1091,11 +1281,32 @@ function RuleEditor({
           className={BTN_SECONDARY}
           disabled={testing}
           onClick={() =>
-            startTest(async () => setSim(await testAutomationAction(appId, toInput(d))))
+            startTest(async () =>
+              setSim(await testAutomationAction(appId, toInput(d), sampleId || undefined)),
+            )
           }
         >
-          Probar con una fila de ejemplo
+          {sampleId ? 'Probar con esta fila' : 'Probar con una fila de ejemplo'}
         </button>
+        {!rowless && t.tracker && (
+          <select
+            value={sampleId}
+            onFocus={() => {
+              if (!sampleRows.length)
+                void sampleRowsAction(appId, t.tracker).then((r) => r.ok && setSampleRows(r.rows));
+            }}
+            onChange={(e) => setSampleId(e.target.value)}
+            className={INPUT}
+            aria-label="Fila para probar"
+          >
+            <option value="">La fila más reciente</option>
+            {sampleRows.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        )}
         <button type="button" className={BTN_SECONDARY} onClick={onCancel}>
           Cancelar
         </button>
@@ -1346,13 +1557,15 @@ function ActionFields({
       );
     default:
       return (
-        <div className="space-y-1">
-          {text(a.instruction, (v) => set({ instruction: v }), 'Qué debe hacer Cortex', 4)}
-          <p className="text-micro text-ink-muted">
-            Cortex puede leer y escribir en la tabla de la regla. Todo lo demás (correos, otras
-            tablas) queda pendiente de tu aprobación.
-          </p>
-        </div>
+        <AskCortexEditor
+          instruction={a.instruction}
+          writesMode={a.writesMode}
+          writesFields={a.writesFields}
+          allow={a.allow}
+          fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+          hasRow={!rowless}
+          onChange={(p) => set(p)}
+        />
       );
   }
 }

@@ -20,12 +20,20 @@ const ACCENTS: Record<string, string> = {
 
 export const MANIFEST_BACKGROUND = '#f7f7fb';
 
-/** El color de la app: el de la marca de la empresa si lo puso, si no el acento del tema. */
+/**
+ * El color de la app: el que puso en «Apariencia» (0215); si no, el de la marca
+ * de la empresa; si no, el acento del tema.
+ */
 export function appColor(
-  app: { theme?: { accent?: string } },
+  app: { theme?: { accent?: string }; brand?: { primary?: string } },
   brandPrimary: string | null | undefined,
 ): string {
-  return normalizeHex(brandPrimary) ?? ACCENTS[app.theme?.accent ?? 'primary'] ?? CORTEX_PRIMARY;
+  return (
+    normalizeHex(app.brand?.primary) ??
+    normalizeHex(brandPrimary) ??
+    ACCENTS[app.theme?.accent ?? 'primary'] ??
+    CORTEX_PRIMARY
+  );
 }
 
 export function appPath(appId: string): string {
@@ -37,6 +45,7 @@ export interface AppManifestInput {
   name: string;
   description: string;
   theme?: { accent?: string };
+  brand?: { primary?: string; shortName?: string };
 }
 
 export function buildAppManifest(app: AppManifestInput, brandPrimary?: string | null) {
@@ -45,7 +54,7 @@ export function buildAppManifest(app: AppManifestInput, brandPrimary?: string | 
   return {
     id: base,
     name,
-    short_name: name.slice(0, 12),
+    short_name: (app.brand?.shortName?.trim() || name).slice(0, 12),
     description: app.description.trim().slice(0, 200) || `${name}, una aplicación de tu empresa.`,
     start_url: base,
     scope: `${base}/`,

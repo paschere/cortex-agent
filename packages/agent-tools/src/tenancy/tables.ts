@@ -149,6 +149,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   wa_customer_settings: tenant(),
   wa_customer_conversations: tenant(),
   wa_customer_messages: tenant(),
+  // 0213: mensajes de Cortex a grupos habilitados (cola/registro) y lo que ahí responden.
+  wa_group_outbox: tenant(),
+  wa_group_inbox: tenant(),
 
   // --- Automation -----------------------------------------------------------
   scheduled_jobs: tenant(),
@@ -551,6 +554,8 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // de otra empresa nunca puede dispararse ni recibir un aviso aquí.
   custom_app_automations: tenant(),
   custom_app_automation_runs: tenant(),
+  // 0214: automatizaciones que esperan a una persona (código, captcha, sesión vencida).
+  custom_app_automation_waits: tenant(),
   push_subscriptions: tenant(),
   // 0211: dispositivos compartidos de planta (modo kiosco). Tenant: un dispositivo
   // ajeno dejaría entrar con un PIN a una app que no es de esta empresa.

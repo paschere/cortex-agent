@@ -11,6 +11,14 @@ type Lesson = Pick<StepDraft, 'steps' | 'variables'> & {
   active: boolean;
   limited: boolean;
   startUrl: string;
+  /** Modo «Señalar resultado»: el próximo clic elige el texto que es la respuesta. */
+  marking?: boolean;
+  pendingMark?: {
+    sample: string;
+    suggestedName: string;
+    ok: boolean;
+    problem: string | null;
+  } | null;
 };
 async function request(path: string, method = 'GET', body?: unknown) {
   const response = await fetch(path, {
@@ -36,6 +44,8 @@ export function BrowserWorkspace() {
   const [noteIndex, setNoteIndex] = useState(0);
   const [noteText, setNoteText] = useState('');
   const [effect, setEffect] = useState<'read' | 'write'>('write');
+  const [markName, setMarkName] = useState('');
+  const [markFallback, setMarkFallback] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -82,6 +92,30 @@ export function BrowserWorkspace() {
       clearTimeout(timer);
     };
   }, [sessionId, lesson?.active]);
+  const mark = (body: {
+    op: 'mark_start' | 'mark_cancel' | 'mark_commit';
+    name?: string;
+    fallback?: string;
+  }) =>
+    perform(async () => {
+      const next = (await request(
+        `/api/browser/live/${sessionId}/teaching`,
+        'POST',
+        body,
+      )) as Lesson;
+      setLesson(next);
+      if (body.op !== 'mark_start') {
+        setMarkName('');
+        setMarkFallback('');
+      }
+      if (body.op === 'mark_commit') setNotice('Resultado agregado al trámite.');
+    });
+  // Al señalar algo, el nombre se propone desde la etiqueta vecina («Estado»).
+  const suggestedName = lesson?.pendingMark?.suggestedName ?? '';
+  const pendingSample = lesson?.pendingMark?.sample ?? '';
+  useEffect(() => {
+    if (pendingSample || suggestedName) setMarkName((current) => current || suggestedName);
+  }, [pendingSample, suggestedName]);
   const teach = (op: 'start' | 'stop') =>
     perform(async () => {
       if (op === 'start') {
@@ -367,6 +401,105 @@ export function BrowserWorkspace() {
                     </li>
                   ))}
                 </ol>
+                <section
+                  className="mt-5 border-t border-border pt-4"
+                  aria-label="Señalar resultado"
+                >
+                  <h4 className="text-sm font-medium">Señalar resultado</h4>
+                  {!lesson.marking ? (
+                    <>
+                      <p className="mt-1 text-xs text-ink-muted">
+                        Cuando el portal muestre la respuesta (un estado, «no se encontró», un
+                        valor), señálala para que el trámite la devuelva con un nombre.
+                      </p>
+                      <Button
+                        className="mt-2"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => void mark({ op: 'mark_start' })}
+                      >
+                        Señalar resultado
+                      </Button>
+                    </>
+                  ) : !lesson.pendingMark ? (
+                    <>
+                      <p className="mt-1 text-xs text-ink-muted">
+                        Haz clic sobre el texto de la página que es la respuesta. El clic no se
+                        ejecuta en el portal.
+                      </p>
+                      <Button
+                        className="mt-2"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => void mark({ op: 'mark_cancel' })}
+                      >
+                        Cancelar
+                      </Button>
+                    </>
+                  ) : !lesson.pendingMark.ok ? (
+                    <>
+                      <p role="alert" className="mt-1 text-xs text-red-600">
+                        {lesson.pendingMark.problem}
+                      </p>
+                      <Button
+                        className="mt-2"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => void mark({ op: 'mark_start' })}
+                      >
+                        Señalar otra vez
+                      </Button>
+                    </>
+                  ) : (
+                    <form
+                      className="mt-1"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void mark({
+                          op: 'mark_commit',
+                          name: markName,
+                          ...(markFallback.trim() ? { fallback: markFallback.trim() } : {}),
+                        });
+                      }}
+                    >
+                      <p className="text-xs text-ink-muted">Señalaste:</p>
+                      <p className="mt-1 max-h-24 overflow-auto rounded border border-border bg-surface-2 p-2 text-xs">
+                        {lesson.pendingMark.sample}
+                      </p>
+                      <label htmlFor="mark-name" className="mt-2 block text-xs font-medium">
+                        Nombre del resultado
+                      </label>
+                      <Input
+                        id="mark-name"
+                        value={markName}
+                        maxLength={60}
+                        onChange={(e) => setMarkName(e.target.value)}
+                        placeholder="resultado, estado_guia…"
+                      />
+                      <label htmlFor="mark-fallback" className="mt-2 block text-xs font-medium">
+                        Si no aparece, el resultado es (opcional)
+                      </label>
+                      <Input
+                        id="mark-fallback"
+                        value={markFallback}
+                        maxLength={200}
+                        onChange={(e) => setMarkFallback(e.target.value)}
+                        placeholder="no encontrado"
+                      />
+                      <div className="mt-2 flex gap-2">
+                        <Button disabled={busy || !markName.trim()}>Guardar resultado</Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => void mark({ op: 'mark_cancel' })}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+                </section>
                 <form
                   className="mt-5 border-t border-border pt-4"
                   onSubmit={(e) => {

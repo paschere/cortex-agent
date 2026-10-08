@@ -85,6 +85,13 @@ export interface Step {
   optional?: boolean;
   /** `extract` only: the key this step's text lands under in the result. */
   extractAs?: string;
+  /**
+   * `extract` only: lo que vale el resultado cuando el elemento no aparece (o
+   * aparece vacío). Un portal que contesta «no se encontró» muchas veces no
+   * pinta ningún elemento donde estaba el estado; con esto el trámite devuelve
+   * ese texto en vez de fallar.
+   */
+  extractDefault?: string;
 }
 
 export interface UploadPayload {

@@ -39,6 +39,10 @@ interface Body {
   replying?: boolean;
   replyScope?: string;
   replySpaceId?: string | null;
+  /** «Permitir mensajes de Cortex»: que Cortex ESCRIBA en este grupo por su cuenta (0213). */
+  sending?: boolean;
+  /** Apagado general de los mensajes de Cortex a grupos (sin jid). */
+  pauseSending?: boolean;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -46,6 +50,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const db = getOrgScopedClient(session.organization.id);
 
   const body = (await req.json().catch(() => ({}))) as Body;
+  // El apagado general no nombra un grupo.
+  if (body.pauseSending !== undefined) return setPaused(db, session, body.pauseSending);
   const jid = body.jid?.trim();
   if (!jid) return NextResponse.json({ error: 'Falta el grupo.' }, { status: 400 });
 
@@ -64,6 +70,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Answering is its own switch and is handled on its own. A request that only
   // changes answering must not disturb archiving, and vice versa — they are
   // separate permissions with separate risks (migration 0072).
+  if (body.sending !== undefined) {
+    return setSending(db, session, group as Record<string, unknown>, body.sending);
+  }
   if (body.replying !== undefined) {
     return setReplying(db, session, group as Record<string, unknown>, body);
   }
@@ -223,5 +232,72 @@ async function setReplying(
         : scope === 'knowledge'
           ? 'Listo. Cortex responde cuando lo mencionen y puede citar el espacio que elegiste.'
           : 'Listo. Cortex responde cuando lo mencionen y puede consultar los sistemas de quien pregunta. Asegúrate de que en ese grupo no haya gente de fuera.',
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Mensajes de Cortex (0213)
+// ---------------------------------------------------------------------------
+
+/**
+ * «Permitir mensajes de Cortex»: que Cortex ESCRIBA en este grupo por su cuenta
+ * (herramienta whatsapp.group_send) y lea lo que ahí responden
+ * (whatsapp.group_messages). Es un tercer permiso, independiente de archivar y de
+ * responder a menciones, y lo da un ADMINISTRADOR: el número habla con gente de
+ * fuera. RIESGO: el número no usa la API oficial; WhatsApp puede bloquear números
+ * que escriben de forma automática, por eso hay topes y este apagado.
+ */
+async function setSending(
+  db: ReturnType<typeof getOrgScopedClient>,
+  session: { id: string; role?: string | null },
+  group: Record<string, unknown>,
+  on: boolean,
+): Promise<NextResponse> {
+  if (session.role !== 'org_admin')
+    return NextResponse.json(
+      { error: 'Solo un administrador puede permitir que Cortex escriba en un grupo.' },
+      { status: 403 },
+    );
+  const now = new Date().toISOString();
+  const { error } = await db
+    .from('whatsapp_groups')
+    .update(
+      on
+        ? { send_enabled: true, send_enabled_by: session.id, send_enabled_at: now, updated_at: now }
+        : { send_enabled: false, updated_at: now },
+    )
+    .eq('jid', group.jid as string);
+  if (error) {
+    logger.error(`whatsapp: could not change group sending — ${error.message}`);
+    return NextResponse.json({ error: 'No se pudo guardar el cambio.' }, { status: 500 });
+  }
+  logger.info(`whatsapp: group sending ${on ? 'on' : 'off'} by ${session.id}`);
+  return NextResponse.json({
+    ok: true,
+    sending: on,
+    note: on
+      ? 'Listo. Cortex puede escribir en ese grupo (con topes: máximo 10 mensajes por hora en el grupo y 50 al día en toda la empresa) y leer lo que respondan durante 7 días.'
+      : 'Cortex ya no escribe en ese grupo ni guarda lo que se diga ahí.',
+  });
+}
+
+async function setPaused(
+  db: ReturnType<typeof getOrgScopedClient>,
+  session: { id: string; role?: string | null },
+  paused: boolean,
+): Promise<NextResponse> {
+  if (session.role !== 'org_admin')
+    return NextResponse.json({ error: 'Solo un administrador puede hacer esto.' }, { status: 403 });
+  const { error } = await db
+    .from('whatsapp_sessions')
+    .update({ group_send_paused: paused, updated_at: new Date().toISOString() })
+    .not('organization_id', 'is', null);
+  if (error) return NextResponse.json({ error: 'No se pudo guardar el cambio.' }, { status: 500 });
+  return NextResponse.json({
+    ok: true,
+    paused,
+    note: paused
+      ? 'Apagado: Cortex no manda ningún mensaje a grupos hasta que lo vuelvas a encender.'
+      : 'Encendido: Cortex vuelve a poder escribir en los grupos habilitados.',
   });
 }

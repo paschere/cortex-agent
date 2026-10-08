@@ -45,6 +45,14 @@ export interface Config {
    * tab, and a handful of those is the whole container's memory.
    */
   sessionIdleMs: number;
+  /**
+   * Cuánto sostiene una pestaña que quedó ESPERANDO A UNA PERSONA (un código,
+   * un captcha). Por defecto lo mismo que `sessionIdleMs`; se sube cuando el
+   * trámite lo corre una automatización y nadie está mirando (p. ej. 2 horas).
+   * Cada pestaña sostenida ocupa un cupo de `maxConcurrent` y el perfil de la
+   * persona, así que súbelo con criterio.
+   */
+  handoffHoldMs?: number;
   /** Hard cap on concurrent contexts, so a burst cannot exhaust the box. */
   maxConcurrent: number;
   /** Viewport every run gets, so a flow taught on one shape replays on it. */
@@ -74,6 +82,7 @@ export function loadConfig(): Config {
     runTimeoutMs: number('BROWSER_RUN_TIMEOUT_MS', 180_000),
     stepTimeoutMs: number('BROWSER_STEP_TIMEOUT_MS', 20_000),
     sessionIdleMs: number('BROWSER_SESSION_IDLE_MS', 5 * 60_000),
+    handoffHoldMs: number('BROWSER_HANDOFF_HOLD_MS', number('BROWSER_SESSION_IDLE_MS', 5 * 60_000)),
     maxConcurrent: number('BROWSER_MAX_CONCURRENT', 3),
     // A fixed desktop viewport, and fixed matters more than the numbers. Many
     // portals collapse a form into a hamburger below ~900px, which changes

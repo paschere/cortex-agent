@@ -279,11 +279,37 @@ function LastRun({ flow }: { flow: FlowSummary }) {
   );
 }
 
+/** Qué devolvió cada resultado señalado en la prueba, por su nombre. */
+function ResultValues({ names, values }: { names: string[]; values: Record<string, unknown> }) {
+  if (names.length === 0) return null;
+  return (
+    <dl className="mt-3 space-y-1 rounded-sm border border-border bg-surface-2/50 p-3 text-sm">
+      {names.map((name) => {
+        const v = values[name];
+        return (
+          <div key={name} className="flex flex-wrap gap-2">
+            <dt className="font-mono text-xs text-ink-muted">result.{name}</dt>
+            <dd className="text-ink">
+              {v === undefined || v === '' ? (
+                <span className="text-ink-faint">(no devolvió nada)</span>
+              ) : (
+                String(v)
+              )}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
 function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  /** Lo que devolvió cada resultado señalado en la última prueba (`result.<nombre>`). */
+  const [values, setValues] = useState<Record<string, unknown> | null>(null);
   /**
    * The tab is still open on a bot check, waiting for a person.
    *
@@ -317,6 +343,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
   const run = useCallback(async () => {
     setRunning(true);
     setResult(null);
+    setValues(null);
     setHandoff(null);
     const response = await fetch(`/api/browser/flows/${flow.id}/run`, {
       method: 'POST',
@@ -330,6 +357,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
       costUsd: number;
       modelCalls: number;
       handoff: ChallengeHandoff | null;
+      output?: Record<string, unknown> | null;
       /** La fila que recuerda la pausa (0111), cuando se pudo escribir. */
       pausedAt: string | null;
       asks: string | null;
@@ -342,6 +370,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
           : `${payload.modelCalls} llamada(s) al modelo, ${money(payload.costUsd)}`
       })`,
     );
+    setValues(payload.output ?? {});
     // Only when the browser really did keep the tab: the service declines to
     // hold one when it is out of room, and then this is an ordinary failure
     // with a sentence rather than an offer that cannot be honoured.
@@ -435,6 +464,14 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
           </Button>
         </div>
         {result && <p className="mt-3 text-sm leading-relaxed text-ink">{result}</p>}
+        {values && detail && (
+          <ResultValues
+            names={detail.flow.steps.flatMap((s) =>
+              s.action === 'extract' && s.extractAs ? [s.extractAs] : [],
+            )}
+            values={values}
+          />
+        )}
 
         {/* The portal asked whether we are a robot and the tab is still open.
             Right here, under the button that started the run, because that is

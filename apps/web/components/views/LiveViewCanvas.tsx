@@ -16,14 +16,21 @@ import {
   stateFromComputed,
   withFilterParam,
 } from '@/lib/views/filter-param';
+import {
+  type RecordRef,
+  pageUrlWithRecord,
+  recordFromSearch,
+  withRecordParam,
+} from '@/lib/views/record-param';
 import type { ComputedView } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { Bell, BellOff, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExportMenu } from './ExportMenu';
 import { type SubmitTarget, ViewCanvas } from './ViewCanvas';
 import { LiveStatus, ViewCover } from './blocks/ViewChrome';
 import { useBrandScope, useViewBrand } from './blocks/brand';
+import type { RecordNav } from './blocks/record-nav';
 import { FlashProvider } from './flash-context';
 
 /**
@@ -114,6 +121,12 @@ export function LiveViewCanvas({
   const [filtering, setFiltering] = useState(false);
   const [page, setPage] = useState<string | null>(null);
   const filterParam = useRef(encodeFilterState(stateFromComputed(initial.filtersBar)));
+  // El registro abierto (`?fila=`): vive en la dirección, con un paso de historial por apertura.
+  const recordRef = useRef<RecordRef | null>(
+    initial.record
+      ? { rowId: initial.record.rowId, blockId: initial.record.blockId || null }
+      : null,
+  );
   const seq = useRef(0);
   const [updatedAt, setUpdatedAt] = useState(() => Date.now());
   const [, tick] = useState(0);
@@ -207,7 +220,11 @@ export function LiveViewCanvas({
       inFlight.current = true;
       const mine = ++seq.current;
       try {
-        const url = withFilterParam(dataUrl, filterParam.current, window.location.origin);
+        const url = withRecordParam(
+          withFilterParam(dataUrl, filterParam.current, window.location.origin),
+          recordRef.current,
+          window.location.origin,
+        );
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) throw new Error(String(res.status));
         const body = (await res.json()) as { view: ComputedView };
@@ -241,6 +258,38 @@ export function LiveViewCanvas({
     }
   }, []);
 
+  const nav = useMemo<RecordNav>(() => {
+    const go = (rec: RecordRef | null, push: boolean) => {
+      recordRef.current = rec;
+      try {
+        const href = pageUrlWithRecord(window.location.href, rec);
+        if (push) window.history.pushState(window.history.state, '', href);
+      } catch {
+        /* Sin historial: el registro vale igual en pantalla. */
+      }
+      // Volver a la lista se ve al instante; el registro nuevo espera a su cálculo.
+      if (!rec) setView((v) => ({ ...v, record: null }));
+      void refresh(true);
+      window.scrollTo({ top: 0 });
+    };
+    return {
+      open: (detailBlockId, rowId) => go({ rowId, blockId: detailBlockId }, true),
+      close: () => go(null, true),
+      href: (detailBlockId, rowId) =>
+        pageUrlWithRecord(window.location.href, { rowId, blockId: detailBlockId }),
+    };
+  }, [refresh]);
+
+  // «Atrás» / «adelante» del navegador: la dirección manda sobre lo que se ve.
+  useEffect(() => {
+    const onPop = () => {
+      recordRef.current = recordFromSearch(window.location.search);
+      void refresh(true);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [refresh]);
+
   const changeFilters = useCallback(
     (next: FilterState) => {
       setFilters(next);
@@ -260,6 +309,12 @@ export function LiveViewCanvas({
     const params = new URLSearchParams(window.location.search);
     const p = params.get('p');
     if (p && initial.pages?.some((x) => x.id === p)) setPage(p);
+    // Una dirección con `?fila=` que la página no leyó: se pide ya con el registro.
+    const wanted = recordFromSearch(window.location.search);
+    if (wanted && !initial.record) {
+      recordRef.current = wanted;
+      void refresh(true);
+    }
     const f = params.get('f') ?? '';
     if ((initial.filtersBar?.length ?? 0) > 0 && f !== filterParam.current) {
       filterParam.current = f;
@@ -288,6 +343,13 @@ export function LiveViewCanvas({
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [view.refreshSeconds, refresh]);
+
+  // «Tirar para actualizar» del marco de una app (AppRunner): vuelve a pedir la vista ya.
+  useEffect(() => {
+    const onPull = () => void refresh(true);
+    window.addEventListener('cortex:refresh-view', onPull);
+    return () => window.removeEventListener('cortex:refresh-view', onPull);
+  }, [refresh]);
 
   // El «hace 12 s» se mueve solo.
   useEffect(() => {
@@ -384,6 +446,7 @@ export function LiveViewCanvas({
           view={view}
           target={readOnly ? { kind: 'preview' } : target}
           onChanged={() => void refresh(true)}
+          nav={nav}
           filters={{ state: filters, onChange: changeFilters, pending: filtering }}
           page={{
             current: page,

@@ -6,7 +6,16 @@
 
 export * from './spec';
 export * from './match';
+export * from './ask';
+export * from './limits';
+export * from './poll';
+export * from './poll-run';
+export * from './waits';
 export {
+  type AutomationLimits,
+  DEFAULT_AUTOMATION_LIMITS,
+  MAX_AUTOMATION_LIMITS,
+  resolveLimits,
   APP_DAILY_ASK_CORTEX_CAP,
   APP_DAILY_EMAIL_CAP,
   APP_DAILY_RUN_CAP,

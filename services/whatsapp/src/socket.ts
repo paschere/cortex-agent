@@ -10,10 +10,28 @@ import QRCode from 'qrcode';
 import qrTerminal from 'qrcode-terminal';
 import { isPaired, usePostgresAuthState } from './auth-state';
 import type { Config } from './config';
-import { CortexClient, type GroupContextLine, type OutboundMessage } from './cortex';
-import { extractDirectText, extractGroupMessage, extractMentionSignals } from './extract';
+import {
+  CortexClient,
+  type GroupContextLine,
+  type GroupInboxMessage,
+  type OutboundMessage,
+} from './cortex';
+import {
+  extractDirectText,
+  extractGroupMessage,
+  extractMentionSignals,
+  extractQuote,
+} from './extract';
 import { baileysLogger, logger } from './logger';
-import { type OutboxMessage, gapMs, sanitizeOutbox, typingMs } from './outbox';
+import {
+  type GroupOutboxMessage,
+  GroupSendLimiter,
+  type OutboxMessage,
+  gapMs,
+  sanitizeGroupOutbox,
+  sanitizeOutbox,
+  typingMs,
+} from './outbox';
 import {
   CLOSE_CODES,
   IDLE_HINT,
@@ -156,6 +174,15 @@ export class WhatsappSession {
   private dmEnabled = true;
   /** Una sola tanda de respuestas de personas a la vez. */
   private deliveringOutbox = false;
+  /**
+   * Grupos donde Cortex puede ESCRIBIR por su cuenta (0213) y cuyos mensajes
+   * se reenvían para que lea las respuestas. Se refresca en cada latido.
+   */
+  private sendGroups = new Set<string>();
+  private deliveringGroupOutbox = false;
+  private readonly groupLimiter = new GroupSendLimiter();
+  private groupInbox: GroupInboxMessage[] = [];
+  private groupInboxTimer: NodeJS.Timeout | null = null;
 
   private buffer: OutboundMessage[] = [];
   private flushing = false;
@@ -587,11 +614,18 @@ export class WhatsappSession {
       if (!this.replyGroups.has(jid)) this.recent.delete(jid);
     }
     this.dmEnabled = reply.dmEnabled;
+    this.sendGroups = new Set(reply.sendGroups ?? []);
+    if (this.sendGroups.size === 0) this.groupInbox = [];
 
     // Respuestas de una persona (0185). Nunca esperadas desde el latido: una
     // tanda tarda segundos a propósito y el latido no puede quedarse quieto.
     const outbox = sanitizeOutbox(reply.outbox);
     if (outbox.length > 0) void this.deliverOutbox(outbox);
+    // Mensajes de Cortex a grupos habilitados (0213), con su propia saneada y topes.
+    const groupOutbox = sanitizeGroupOutbox(reply.groupOutbox).filter((m) =>
+      this.sendGroups.has(m.jid),
+    );
+    if (groupOutbox.length > 0) void this.deliverGroupOutbox(groupOutbox);
 
     // Cortex has seen this socket connected with its number and did not object:
     // whatever arrived in the meantime can now be handled.
@@ -662,6 +696,8 @@ export class WhatsappSession {
       this.recent.clear();
       this.allowed = new Map();
       this.replyGroups = new Set();
+      this.sendGroups = new Set();
+      this.groupInbox = [];
       await this.auth?.discard().catch(() => undefined);
       if (sock) {
         try {
@@ -807,10 +843,26 @@ export class WhatsappSession {
     const jid = raw.key?.remoteJid ?? '';
     const archiveFrom = this.allowed.get(jid);
     const canReply = this.replyGroups.has(jid);
-    if (archiveFrom === undefined && !canReply) return;
+    const canSend = this.sendGroups.has(jid);
+    if (archiveFrom === undefined && !canReply && !canSend) return;
 
     const extracted = extractGroupMessage(raw);
     if (!extracted) return;
+
+    // Grupo habilitado para mensajes de Cortex (0213): el texto se reenvía en
+    // tandas pequeñas para que Cortex lea las respuestas. Sólo texto.
+    if (canSend && extracted.body && (extracted.kind === 'text' || extracted.body.length > 0)) {
+      this.queueGroupInbox({
+        groupJid: jid,
+        messageId: extracted.messageId,
+        senderJid: extracted.senderJid,
+        senderName: extracted.senderName,
+        sentAt: extracted.sentAt,
+        body: extracted.body,
+        ...extractQuote(raw),
+      });
+    }
+    if (archiveFrom === undefined && !canReply) return;
 
     if (canReply) {
       const body = extracted.body ?? '';
@@ -1039,6 +1091,77 @@ export class WhatsappSession {
       this.log.error({ err: (err as Error).message }, 'could not answer a direct message');
     } finally {
       if (typing) clearInterval(typing);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Mensajes de Cortex a grupos (Cortex 0213)
+  // -------------------------------------------------------------------------
+
+  /** Reenvío por tandas: unos segundos de espera o 20 mensajes, lo que llegue primero. */
+  private queueGroupInbox(message: GroupInboxMessage): void {
+    this.groupInbox.push(message);
+    if (this.groupInbox.length >= 20) {
+      void this.flushGroupInbox();
+      return;
+    }
+    if (!this.groupInboxTimer) {
+      this.groupInboxTimer = setTimeout(() => {
+        this.groupInboxTimer = null;
+        void this.flushGroupInbox();
+      }, 5_000);
+    }
+  }
+
+  private async flushGroupInbox(): Promise<void> {
+    if (this.groupInboxTimer) {
+      clearTimeout(this.groupInboxTimer);
+      this.groupInboxTimer = null;
+    }
+    const batch = this.groupInbox.splice(0, this.groupInbox.length);
+    if (batch.length === 0) return;
+    const sent = await this.cortex.sendGroupMessages(batch);
+    // Si Cortex no contestó se pierde la tanda: son respuestas a preguntas que
+    // caducan; reintentar sin fin crecería la memoria de un proceso largo.
+    if (!sent) this.log.warn({ count: batch.length }, 'could not forward group messages');
+  }
+
+  /**
+   * Manda a un GRUPO lo que Cortex pidió, de a uno, con «escribiendo…» y pausas,
+   * respetando los topes locales, y le dice a Cortex qué salió y con qué id. Si
+   * una tanda sigue en curso se ignora la nueva: Cortex la vuelve a ofrecer
+   * cuando su reclamo caduca y el acuse evita mandarla dos veces.
+   */
+  private async deliverGroupOutbox(items: GroupOutboxMessage[]): Promise<void> {
+    if (this.deliveringGroupOutbox || this.status !== 'connected') return;
+    this.deliveringGroupOutbox = true;
+    try {
+      for (const [index, item] of items.entries()) {
+        const sock = this.sock;
+        if (!sock || this.status !== 'connected') return;
+        let ok = false;
+        let messageId: string | null = null;
+        let error: string | null = null;
+        if (!this.groupLimiter.tryTake(item.jid)) {
+          error = 'Tope local de mensajes a grupos alcanzado.';
+        } else {
+          try {
+            if (index > 0) await sleep(gapMs());
+            await sock.sendPresenceUpdate('composing', item.jid).catch(() => undefined);
+            await sleep(typingMs(item.text));
+            await sock.sendPresenceUpdate('paused', item.jid).catch(() => undefined);
+            const sentMessage = await sock.sendMessage(item.jid, { text: item.text });
+            messageId = sentMessage?.key?.id ?? null;
+            ok = true;
+          } catch (err) {
+            error = (err as Error).message.slice(0, 200);
+            this.log.error({ err: error }, 'could not deliver a group message');
+          }
+        }
+        await this.cortex.ackGroupSend({ id: item.id, ok, messageId, error });
+      }
+    } finally {
+      this.deliveringGroupOutbox = false;
     }
   }
 
