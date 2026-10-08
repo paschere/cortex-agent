@@ -8,9 +8,10 @@ import {
   matchExercised,
 } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
+import { latestProgress } from '@/lib/tool-progress';
 import type { Message, ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { BrainSources, type CiteFocus } from './BrainSources';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChoicePrompt } from './ChoicePrompt';
@@ -234,6 +235,7 @@ export function MessageBubble({
   onMandateRevoked,
 }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
+  const progress = useMemo(() => latestProgress(message.annotations), [message.annotations]);
   // Scopes the selection menu to THIS answer: a selection that starts in one
   // message and ends in another offers nothing, because a quote spanning two
   // answers has no single source to attribute it to.
@@ -366,7 +368,7 @@ export function MessageBubble({
             // En `rem` y no en `ch` porque los dos tamaños del titular tienen
             // que terminar en la MISMA vertical, y un `ch` a 19px y uno a 15px
             // no miden lo mismo.
-            'max-w-[37rem] whitespace-pre-wrap tracking-[-0.01em] text-ink',
+            'min-w-0 max-w-[37rem] whitespace-pre-wrap [overflow-wrap:anywhere] tracking-[-0.01em] text-ink',
             // Medido en pantalla: una pregunta pegada de cuatro renglones a
             // 19px semibold es la pared que esto vino a quitar, y encima
             // seguía en semibold al bajar a 15px. Larga baja de tamaño Y de
@@ -551,6 +553,7 @@ export function MessageBubble({
               if (steps.length === 0) return null;
               return (
                 <TaskRows
+                  progress={progress}
                   key={`s${i}`}
                   invocations={steps}
                   metrics={metrics ?? null}
@@ -577,6 +580,7 @@ export function MessageBubble({
               <>
                 {steps.length > 0 && (
                   <TaskRows
+                    progress={progress}
                     invocations={steps}
                     metrics={metrics ?? null}
                     isStreaming={isStreaming}
@@ -663,6 +667,7 @@ export function MessageBubble({
               toolCallId={confirmationInvocation?.toolCallId}
               onConfirmed={onConfirmed}
               onSay={onAnswer}
+              waiting={!!isStreaming}
             />
           </div>
         )}

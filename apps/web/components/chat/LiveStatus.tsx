@@ -62,7 +62,7 @@ export function LiveStatus({
       <span className="grid w-7 shrink-0 place-items-center">
         <Presence size="sm" state={state} />
       </span>
-      <span className="flex items-baseline gap-2">
+      <span className="flex min-w-0 items-baseline gap-2 [overflow-wrap:anywhere]">
         <span className="text-sm font-medium text-ink-muted">{label}</span>
         {elapsed !== null && (
           <span className="tabular-nums font-mono text-micro text-ink-faint">{elapsed}s</span>

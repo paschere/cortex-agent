@@ -371,6 +371,7 @@ export async function refreshFeedSource(
       input?: Record<string, unknown>;
       url?: string;
       spreadsheetId?: string;
+      tabs?: string[];
       pagination?: FeedPagination;
       shape?: ApiShape;
     };
@@ -419,7 +420,9 @@ export async function refreshFeedSource(
     });
     if (data.kind === 'google_sheet') {
       if (!config.spreadsheetId) throw new Error('La fuente no conserva el id de Google Sheets.');
-      const result = await readGoogleSheetFeed(context, config.spreadsheetId);
+      const result = await readGoogleSheetFeed(context, config.spreadsheetId, {
+        tabs: config.tabs,
+      });
       return saveRefreshedCapture({
         db,
         actorId,

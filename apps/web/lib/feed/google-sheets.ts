@@ -4,4 +4,5 @@ export {
   googleSpreadsheetId,
   parseGoogleSheetRef,
   readGoogleSheetFeed,
+  readGoogleSheetTab,
 } from '@cortex/agent-tools/src/table-sync/feed-capture';

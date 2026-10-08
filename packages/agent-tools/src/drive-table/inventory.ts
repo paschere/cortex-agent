@@ -3,6 +3,7 @@ import { XLSX_MIME } from '../kb/spreadsheets';
 import type { ToolContext } from '../types';
 import { docTypeKey } from './doc-types';
 import type { FolderFile } from './plan';
+import { mapPool } from './pool';
 
 /**
  * QUÉ HAY EN UNA CARPETA DE DRIVE (y en sus subcarpetas).
@@ -95,7 +96,9 @@ export interface FolderTree {
   truncated: boolean;
   /** Archivos vistos en el recorrido, también los que no se guardaron (0205+). */
   seen?: number;
-  /** Subcarpetas que no se abrieron por el tope de carpetas. */
+  /** Se acabó el tiempo del recorrido antes de abrir todas las carpetas. */
+  timedOut?: boolean;
+  /** Subcarpetas que no se abrieron por el tope de carpetas o de tiempo. */
   foldersLeft?: number;
   /** Subcarpetas que no se abrieron por la profundidad. */
   tooDeep: string[];
@@ -119,19 +122,24 @@ function esc(id: string): string {
   return id.replace(/\\/g, '').replace(/'/g, "\\'");
 }
 
-async function listChildren(drive: DriveAccess, folderId: string): Promise<DriveItem[]> {
+async function listChildren(
+  drive: DriveAccess,
+  folderId: string,
+  light: boolean,
+): Promise<DriveItem[]> {
   const out: DriveItem[] = [];
   let pageToken: string | undefined;
   do {
     const params: Record<string, string> = {
       q: `'${esc(folderId)}' in parents and trashed = false`,
-      fields:
-        'nextPageToken,files(id,name,mimeType,modifiedTime,md5Checksum,size,shortcutDetails(targetId,targetMimeType))',
-      orderBy: 'modifiedTime desc',
+      // Sólo lo que se usa. `md5Checksum` y el orden sirven a la sincronización
+      // (revisión de cada archivo); para proponer o para ver la estructura sobran.
+      fields: `nextPageToken,files(id,name,mimeType,modifiedTime,size,shortcutDetails(targetId,targetMimeType)${light ? '' : ',md5Checksum'})`,
       pageSize: '1000',
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
     };
+    if (!light) params.orderBy = 'modifiedTime desc';
     if (pageToken) params.pageToken = pageToken;
     const page = await driveGet<{ nextPageToken?: string; files?: DriveItem[] }>(
       drive as ToolContext,
@@ -144,18 +152,43 @@ async function listChildren(drive: DriveAccess, folderId: string): Promise<Drive
   return out;
 }
 
+/** Carpetas que se piden a Drive a la vez. */
+export const INVENTORY_CONCURRENCY = 8;
+
+export interface ListTreeOptions {
+  recursive?: boolean;
+  maxDepth?: number;
+  maxFiles?: number;
+  /** Carpetas en vuelo a la vez (por defecto 8). */
+  concurrency?: number;
+  /** Modo liviano: sin `md5Checksum` ni orden (para proponer o mirar la estructura). */
+  light?: boolean;
+  /** Momento (ms desde 1970) pasado el cual no se abren más carpetas. */
+  deadline?: number;
+  /** Avance en una línea, a lo más cada ~0,7 s. */
+  onProgress?: (line: string) => void;
+}
+
 /**
  * Los archivos de la carpeta y, si `recursive`, los de sus subcarpetas hasta
  * `maxDepth` niveles (la raíz es el nivel 0). Para en `maxFiles`.
+ *
+ * Se recorre NIVEL por NIVEL y las carpetas de un nivel se piden en paralelo
+ * (tope `concurrency`); los resultados se procesan en el orden de la cola, así
+ * que el árbol sale igual sin importar cuál respuesta llegó primero. Si pasa
+ * `deadline`, lo que falta por abrir se cuenta en `foldersLeft` y `timedOut`
+ * queda en verdadero: el inventario lo estima en vez de fingir que lo vio todo.
  */
 export async function listFolderTree(
   drive: DriveAccess,
   rootId: string,
-  opts: { recursive?: boolean; maxDepth?: number; maxFiles?: number } = {},
+  opts: ListTreeOptions = {},
 ): Promise<FolderTree> {
   const recursive = opts.recursive ?? false;
   const maxDepth = opts.maxDepth ?? INVENTORY_MAX_DEPTH;
   const maxFiles = opts.maxFiles ?? INVENTORY_MAX_FILES * INVENTORY_LIST_FACTOR;
+  const concurrency = opts.concurrency ?? INVENTORY_CONCURRENCY;
+  const light = opts.light ?? false;
   const tree: FolderTree = {
     files: [],
     folders: [],
@@ -167,81 +200,120 @@ export async function listFolderTree(
     problems: [],
   };
   const visited = new Set<string>([rootId]);
-  const queue: Array<{ id: string; name: string; path: string; depth: number }> = [
-    { id: rootId, name: '', path: '', depth: 0 },
-  ];
+  type Pending = { id: string; name: string; path: string; depth: number };
+  let level: Pending[] = [{ id: rootId, name: '', path: '', depth: 0 }];
   const seenFiles = new Set<string>();
+  const late = () => opts.deadline !== undefined && Date.now() >= opts.deadline;
 
   let opened = 0;
-  while (queue.length) {
-    const here = queue.shift();
-    if (!here) break;
-    if (opened >= INVENTORY_MAX_FOLDERS) {
-      tree.foldersLeft = (tree.foldersLeft ?? 0) + 1 + queue.length;
+  let listed = 0;
+  let lastEmit = 0;
+  const emit = (force = false) => {
+    if (!opts.onProgress) return;
+    const now = Date.now();
+    if (!force && now - lastEmit < 700) return;
+    lastEmit = now;
+    opts.onProgress(
+      `Listé ${listed.toLocaleString('es-CO')} elementos en ${opened.toLocaleString('es-CO')} carpetas…`,
+    );
+  };
+
+  while (level.length) {
+    const room = INVENTORY_MAX_FOLDERS - opened;
+    const batch = level.slice(0, Math.max(0, room));
+    if (batch.length < level.length) {
+      tree.foldersLeft = (tree.foldersLeft ?? 0) + level.length - batch.length;
       tree.truncated = true;
-      break;
     }
-    opened += 1;
-    let items: DriveItem[];
-    try {
-      items = await listChildren(drive, here.id);
-    } catch (err) {
-      if (here.depth === 0) throw err;
-      tree.problems.push(here.path || here.name);
-      continue;
-    }
-    let count = 0;
-    for (const item of items) {
-      let id = item.id;
-      let mime = item.mimeType;
-      if (mime === SHORTCUT_MIME) {
-        // Un acceso directo es lo que apunta: sin destino no hay nada que leer.
-        if (!item.shortcutDetails?.targetId || !item.shortcutDetails.targetMimeType) continue;
-        id = item.shortcutDetails.targetId;
-        mime = item.shortcutDetails.targetMimeType;
+    if (!batch.length) break;
+    // El tiempo se mira antes de abrir cada carpeta (menos la raíz, que siempre se abre).
+    const results = await mapPool(batch, concurrency, async (here) => {
+      if (here.depth > 0 && late()) return { skipped: true as const };
+      try {
+        const items = await listChildren(drive, here.id, light);
+        opened += 1;
+        listed += items.length;
+        emit();
+        return { items };
+      } catch (err) {
+        if (here.depth === 0) throw err;
+        opened += 1;
+        return { error: true as const };
       }
-      const childPath = here.path ? `${here.path} / ${item.name}` : item.name;
-      if (mime === FOLDER_MIME) {
-        if (visited.has(id)) continue;
-        if (!recursive) {
-          tree.skipped.push(item.name);
-          continue;
-        }
-        if (here.depth + 1 > maxDepth) {
-          tree.tooDeep.push(childPath);
-          continue;
-        }
-        visited.add(id);
-        queue.push({ id, name: item.name, path: childPath, depth: here.depth + 1 });
-        continue;
-      }
-      if (seenFiles.has(id)) continue; // el mismo archivo por un atajo y directo
-      seenFiles.add(id);
-      count += 1;
-      tree.seen = (tree.seen ?? 0) + 1;
-      if (tree.files.length >= maxFiles) {
+    });
+
+    const next: Pending[] = [];
+    batch.forEach((here, idx) => {
+      const res = results[idx] as {
+        items?: DriveItem[];
+        skipped?: true;
+        error?: true;
+      };
+      if (res.skipped) {
+        tree.foldersLeft = (tree.foldersLeft ?? 0) + 1;
         tree.truncated = true;
-        continue;
+        tree.timedOut = true;
+        return;
       }
-      tree.files.push({
-        id,
-        name: item.name,
-        mimeType: mime,
-        // Lo mismo que drive-sync: un documento nativo de Google no tiene md5.
-        revision: item.md5Checksum ?? item.modifiedTime ?? '',
-        modifiedTime: item.modifiedTime ?? null,
-        size: item.size ? Number(item.size) : null,
-        path: here.path,
-      });
-    }
-    if (here.depth > 0)
-      tree.folders.push({
-        id: here.id,
-        name: here.name,
-        path: here.path,
-        depth: here.depth,
-        files: count,
-      });
+      if (res.error || !res.items) {
+        tree.problems.push(here.path || here.name);
+        return;
+      }
+      let count = 0;
+      for (const item of res.items) {
+        let id = item.id;
+        let mime = item.mimeType;
+        if (mime === SHORTCUT_MIME) {
+          // Un acceso directo es lo que apunta: sin destino no hay nada que leer.
+          if (!item.shortcutDetails?.targetId || !item.shortcutDetails.targetMimeType) continue;
+          id = item.shortcutDetails.targetId;
+          mime = item.shortcutDetails.targetMimeType;
+        }
+        const childPath = here.path ? `${here.path} / ${item.name}` : item.name;
+        if (mime === FOLDER_MIME) {
+          if (visited.has(id)) continue;
+          if (!recursive) {
+            tree.skipped.push(item.name);
+            continue;
+          }
+          if (here.depth + 1 > maxDepth) {
+            tree.tooDeep.push(childPath);
+            continue;
+          }
+          visited.add(id);
+          next.push({ id, name: item.name, path: childPath, depth: here.depth + 1 });
+          continue;
+        }
+        if (seenFiles.has(id)) continue; // el mismo archivo por un atajo y directo
+        seenFiles.add(id);
+        count += 1;
+        tree.seen = (tree.seen ?? 0) + 1;
+        if (tree.files.length >= maxFiles) {
+          tree.truncated = true;
+          continue;
+        }
+        tree.files.push({
+          id,
+          name: item.name,
+          mimeType: mime,
+          // Lo mismo que drive-sync: un documento nativo de Google no tiene md5.
+          revision: item.md5Checksum ?? item.modifiedTime ?? '',
+          modifiedTime: item.modifiedTime ?? null,
+          size: item.size ? Number(item.size) : null,
+          path: here.path,
+        });
+      }
+      if (here.depth > 0)
+        tree.folders.push({
+          id: here.id,
+          name: here.name,
+          path: here.path,
+          depth: here.depth,
+          files: count,
+        });
+    });
+    emit(true);
+    level = next;
   }
   tree.files.sort((a, b) => (b.modifiedTime ?? '').localeCompare(a.modifiedTime ?? ''));
   return tree;
@@ -283,7 +355,7 @@ export interface FolderInventory {
 export async function inventoryFolder(
   drive: DriveAccess,
   folderId: string,
-  opts: { recursive?: boolean; maxDepth?: number; maxFiles?: number } = {},
+  opts: ListTreeOptions = {},
 ): Promise<FolderInventory> {
   const maxDepth = opts.maxDepth ?? INVENTORY_MAX_DEPTH;
   const maxFiles = opts.maxFiles ?? INVENTORY_MAX_FILES;

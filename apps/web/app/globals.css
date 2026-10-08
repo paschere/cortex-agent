@@ -644,7 +644,7 @@ body {
 .conversation-starts__examples svg { flex-shrink: 0; margin-top: 4px; color: rgb(var(--ink-faint)); }
 .conversation-starts__footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 11px; color: rgb(var(--ink-faint)); }
 .conversation-starts__footer a { color: rgb(var(--primary)); }
-.chat-person-message { margin-left: auto; max-width: min(90%, 620px); padding: 16px 20px; background: rgb(var(--surface-2)); border: 1px solid rgb(var(--border) / .7); border-radius: 20px 20px 5px 20px; }
+.chat-person-message { margin-left: auto; min-width: 0; overflow-wrap: anywhere; max-width: min(90%, 620px); padding: 16px 20px; background: rgb(var(--surface-2)); border: 1px solid rgb(var(--border) / .7); border-radius: 20px 20px 5px 20px; }
 .chat-person-message h2 { font-size: 15px; line-height: 1.75; font-weight: 500; letter-spacing: 0; }
 .chat-cortex-message { padding-top: 6px; }
 .chat-cortex-message .prose { font-size: 15px; line-height: 1.85; }

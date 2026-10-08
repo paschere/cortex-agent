@@ -88,7 +88,7 @@ export function ChoicePrompt({
     return (
       <div className="mt-2 flex items-start gap-2 text-xs text-ink-faint">
         <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span className="min-w-0">
+        <span className="min-w-0 [overflow-wrap:anywhere]">
           Cortex te preguntó: <span className="text-ink-muted">{question}</span>
         </span>
       </div>
@@ -149,7 +149,7 @@ export function ChoicePrompt({
           {/* Nombra el estado del bloque entero, no un valor debajo — por eso
               no es `.field-label`, igual que en ConfirmationPrompt. */}
           <div className="text-micro font-semibold text-primary-ink">Una pregunta para avanzar</div>
-          <p className="mt-1 text-sm font-semibold text-ink">{question}</p>
+          <p className="mt-1 text-sm font-semibold text-ink [overflow-wrap:anywhere]">{question}</p>
         </div>
       </div>
 
@@ -163,7 +163,9 @@ export function ChoicePrompt({
             className="flex w-full items-center gap-3 rounded-sm border border-border bg-surface px-3.5 py-2.5 text-left transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft motion-reduce:transform-none motion-reduce:transition-none"
           >
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-ink">{option.label}</span>
+              <span className="block text-sm font-medium text-ink [overflow-wrap:anywhere]">
+                {option.label}
+              </span>
               {option.detail && (
                 // Lo que distingue una opción de otra suele ser un NIT, una
                 // ciudad o una fecha — evidencia, regla 3 del sistema de

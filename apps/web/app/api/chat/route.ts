@@ -38,6 +38,8 @@ import {
 } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
+import { DISPATCH_TOOL_NAME, resolveDispatch, withNoSuchToolRedirect } from '@/lib/tool-dispatch';
+import { TOOL_PROGRESS_TYPE, createProgressThrottle } from '@/lib/tool-progress';
 import { buildTurnMessages } from '@/lib/turn-messages';
 import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
 import {
@@ -75,7 +77,15 @@ import {
 } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
-import { type CoreMessage, type CoreTool, generateText, jsonSchema, streamText, tool } from 'ai';
+import {
+  type CoreMessage,
+  type CoreTool,
+  createDataStreamResponse,
+  generateText,
+  jsonSchema,
+  streamText,
+  tool,
+} from 'ai';
 import { type NextRequest, NextResponse, after } from 'next/server';
 import { z } from 'zod';
 
@@ -809,6 +819,65 @@ export async function POST(req: NextRequest) {
     }),
   });
 
+  // Sumidero del avance de herramientas: el `dataStream` sólo existe dentro de
+  // `createDataStreamResponse`, pero las herramientas se arman antes. Mientras no
+  // haya stream (o ya se cerró) las líneas se descartan: son cosmética.
+  const progressSink: { write: ((annotation: unknown) => void) | null } = { write: null };
+
+  // Ejecuta una herramienta del registro con todas las garantías de `runTool`
+  // (confirmación, políticas, auditoría). Lo usan la declaración directa y el
+  // despachador `use_tool` de la red de seguridad.
+  const execRegistry = async (
+    t: AnyTool,
+    args: unknown,
+    abortSignal: AbortSignal | undefined,
+    toolCallId: string,
+  ) => {
+    const progress = createProgressThrottle((line) =>
+      progressSink.write?.({ type: TOOL_PROGRESS_TYPE, toolCallId, line, at: Date.now() }),
+    );
+    // Counted and summed here; the per-tool breakdown already exists, one
+    // row per call with its own latency, in `audit_events`. What that
+    // table cannot say is how much of ONE TURN was spent in tools, because
+    // it has no notion of a turn — so only the count and the sum are kept.
+    const toolStarted = performance.now();
+    try {
+      return await runTool(t, args, {
+        ...scopedCtx,
+        signal: abortSignal,
+        onProgress: progress.push,
+      });
+    } catch (err) {
+      if (err instanceof ConfirmationRequiredError) {
+        // Return a sentinel value the client can detect to show a confirmation prompt
+        return {
+          __requires_confirmation: true,
+          toolId: t.id,
+          input: err.input,
+        } as unknown as never;
+      }
+      // Never throw: a failed tool must not kill the turn. Return a
+      // structured error so (a) the model can read it, explain it, and
+      // keep going, and (b) the UI renders it as a failed tool card.
+      //
+      // The envelope is capped for the model; the whole failure — SQL
+      // state, hint, stack — goes to the log, because the envelope is the
+      // only trace a tool failure leaves and it is not enough to debug on.
+      logger.error('tool failed', { tool: t.id, ...toolErrorDetail(err) });
+      return {
+        __error: true,
+        tool: t.id,
+        message: toolErrorMessage(err),
+      } as unknown as never;
+    } finally {
+      // In `finally` so a tool that failed still counts. A turn that spent
+      // eleven seconds discovering it had no Gmail scope spent them.
+      clock.toolFinished(performance.now() - toolStarted);
+      // Una línea de avance pendiente ya no dice nada: la herramienta terminó.
+      progress.cancel();
+    }
+  };
+
   const aiTools: Record<string, CoreTool> = {};
   for (const candidate of selectedTools) {
     if (candidate.kind === 'registry') {
@@ -817,42 +886,8 @@ export async function POST(req: NextRequest) {
       aiTools[t.id.replaceAll('.', '_')] = tool({
         description: t.description,
         parameters: t.inputSchema,
-        execute: async (args, { abortSignal }) => {
-          // Counted and summed here; the per-tool breakdown already exists, one
-          // row per call with its own latency, in `audit_events`. What that
-          // table cannot say is how much of ONE TURN was spent in tools, because
-          // it has no notion of a turn — so only the count and the sum are kept.
-          const toolStarted = performance.now();
-          try {
-            return await runTool(t, args, { ...scopedCtx, signal: abortSignal });
-          } catch (err) {
-            if (err instanceof ConfirmationRequiredError) {
-              // Return a sentinel value the client can detect to show a confirmation prompt
-              return {
-                __requires_confirmation: true,
-                toolId: t.id,
-                input: err.input,
-              } as unknown as never;
-            }
-            // Never throw: a failed tool must not kill the turn. Return a
-            // structured error so (a) the model can read it, explain it, and
-            // keep going, and (b) the UI renders it as a failed tool card.
-            //
-            // The envelope is capped for the model; the whole failure — SQL
-            // state, hint, stack — goes to the log, because the envelope is the
-            // only trace a tool failure leaves and it is not enough to debug on.
-            logger.error('tool failed', { tool: t.id, ...toolErrorDetail(err) });
-            return {
-              __error: true,
-              tool: t.id,
-              message: toolErrorMessage(err),
-            } as unknown as never;
-          } finally {
-            // In `finally` so a tool that failed still counts. A turn that spent
-            // eleven seconds discovering it had no Gmail scope spent them.
-            clock.toolFinished(performance.now() - toolStarted);
-          }
-        },
+        execute: (args, { abortSignal, toolCallId }) =>
+          execRegistry(t, args, abortSignal, toolCallId),
       });
       continue;
     }
@@ -908,6 +943,46 @@ export async function POST(req: NextRequest) {
       },
     });
   }
+
+  // Red de seguridad de la selección por turno: si el modelo llama una
+  // herramienta que no vino declarada (NoSuchToolError), la llamada se redirige
+  // aquí —ver lib/tool-dispatch.ts— y se ejecuta con `runTool` sólo si está
+  // permitida para este agente/usuario (mismos filtros que la selección:
+  // allowedTools, denegaciones, módulos y silenciadas). Si no, el modelo recibe
+  // un error legible en vez de que se caiga el turno. Lo que se despacha queda
+  // «pegajoso» para los siguientes turnos de la conversación.
+  const dispatchAllowed = dropMuted(allCandidates);
+  const dispatchStuck = new Set<string>();
+  aiTools[DISPATCH_TOOL_NAME] = tool({
+    description:
+      'Úsala SOLO si una herramienta que necesitas no aparece en tu lista: pasa su nombre exacto en `tool` y sus argumentos en `args`. Se ejecuta con los mismos permisos y confirmaciones.',
+    parameters: z.object({
+      tool: z.string().min(1).max(120),
+      args: z.record(z.unknown()).default({}),
+    }),
+    execute: async ({ tool: requested, args }, { abortSignal, toolCallId }) => {
+      const resolved = resolveDispatch(requested, dispatchAllowed);
+      if (!resolved.ok || resolved.candidate.kind !== 'registry') {
+        return {
+          __error: true,
+          tool: requested,
+          message: resolved.ok
+            ? 'Las herramientas de servidores externos no se llaman por aquí.'
+            : resolved.message,
+        } as unknown as never;
+      }
+      const target = resolved.candidate.ref;
+      if (!dispatchStuck.has(target.id)) {
+        dispatchStuck.add(target.id);
+        void saveStickyToolIds(db, {
+          conversationId,
+          userId: user.id,
+          ids: [...new Set([...sticky.persistIds, ...dispatchStuck])],
+        });
+      }
+      return execRegistry(target, args, abortSignal, toolCallId);
+    },
+  });
 
   // Read-only analysis of the owner's attached tables, including rows beyond
   // the prompt excerpt. No retrieval, persistence, or external execution.
@@ -1147,7 +1222,9 @@ export async function POST(req: NextRequest) {
     maxSteps: 12,
     abortSignal: req.signal,
     // Argumentos rotos de una herramienta no tumban el turno: ver lib/tool-call-repair.ts.
-    experimental_repairToolCall: createToolCallRepair({ signal: req.signal, surface: 'chat' }),
+    experimental_repairToolCall: withNoSuchToolRedirect(
+      createToolCallRepair({ signal: req.signal, surface: 'chat' }),
+    ),
     // The one measurement that has to happen mid-stream, because it is the only
     // moment that matters and it is over before `onFinish` runs. The callback is
     // a comparison and an assignment — the SDK pauses the stream until it
@@ -1317,19 +1394,32 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  return result.toDataStreamResponse({
+  return createDataStreamResponse({
     headers: { 'X-Conversation-Id': conversationId },
-    // Send the model's reasoning to the client. Opus 5 thinks before it writes,
-    // and on a turn that calls tools that thinking is the only account of why it
-    // chose them — without it the user watches a long silence and then a result,
-    // with no way to judge whether the route taken was sensible.
-    sendReasoning: true,
+    execute: async (dataStream) => {
+      // Anotaciones efímeras del mensaje: sólo viajan por este stream, y
+      // `onFinish` (persistencia) no las lee.
+      progressSink.write = (annotation) => {
+        try {
+          dataStream.writeMessageAnnotation(
+            annotation as Parameters<typeof dataStream.writeMessageAnnotation>[0],
+          );
+        } catch {
+          // Stream ya cerrado: el avance es cosmético.
+        }
+      };
+      // Send the model's reasoning to the client. Opus 5 thinks before it writes,
+      // and on a turn that calls tools that thinking is the only account of why it
+      // chose them — without it the user watches a long silence and then a result,
+      // with no way to judge whether the route taken was sensible.
+      result.mergeIntoDataStream(dataStream, { sendReasoning: true });
+    },
     // An error part on the data stream makes useChat drop the assistant message
     // it was building, so a hiccup the model itself recovered from wiped the
     // whole answer from the screen — the reply was in the database and only
     // reappeared on reload. Surfacing the real reason turns a silent
     // "An error occurred." into something both the user and we can act on.
-    getErrorMessage: (error) => {
+    onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
       // pino es (objeto, mensaje): con el orden al revés el detalle se perdía y
       // en producción sólo quedaba «chat stream error».

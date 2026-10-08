@@ -104,6 +104,10 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   gdrive_search_files: { label: 'Buscar archivos en Drive', icon: 'FolderSearch' },
   gdrive_read_doc: { label: 'Leer documento de Drive', icon: 'FileSearch' },
   gdrive_find_folder: { label: 'Buscar una carpeta de Drive', icon: 'FolderSearch' },
+  gdrive_folder_tree: {
+    label: 'Ver cómo está organizada una carpeta de Drive',
+    icon: 'FolderSearch',
+  },
   gdrive_upload_file: { label: 'Guardar un archivo en una carpeta de Drive', icon: 'FolderUp' },
   schedule_create: { label: 'Programar rutina', icon: 'AlarmClockPlus' },
   schedule_list: { label: 'Ver rutinas programadas', icon: 'AlarmClock' },

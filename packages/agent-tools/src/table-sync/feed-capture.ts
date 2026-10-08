@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { putFile, removeFiles } from '../files/store';
 import { sheetsFetch } from '../gsheets/client';
@@ -83,31 +84,201 @@ export function parseGoogleSheetRef(ref: string): string | null {
   return /^[a-zA-Z0-9_-]{20,}$/.test(trimmed) ? trimmed : null;
 }
 
-/** Bounded snapshot through the current user's workspace Google connection. */
-export async function readGoogleSheetFeed(ctx: ToolContext, id: string) {
-  const meta = await sheetsFetch<{
-    properties: { title: string };
-    sheets: Array<{
-      properties: { title: string; gridProperties?: { rowCount: number; columnCount: number } };
-    }>;
-  }>(ctx, `/${id}?fields=properties(title),sheets(properties(title,gridProperties))`);
-  if (!meta.sheets?.length || meta.sheets.length > 20)
-    throw new Error('Usa un spreadsheet de 1 a 20 pestañas.');
+interface SheetsMeta {
+  properties: { title: string };
+  sheets: Array<{
+    properties: { title: string; gridProperties?: { rowCount: number; columnCount: number } };
+  }>;
+}
+
+type SheetCell = string | number | boolean | null;
+
+export interface SheetTabInfo {
+  title: string;
+  rows: number;
+  cols: number;
+}
+
+/** Última columna que se lee de una pestaña (52 columnas). */
+const LAST_COL = 'AZ';
+/** Sin pestañas elegidas: el comportamiento de siempre. */
+const ALL_TABS_MAX_ROWS = 1000;
+const ALL_TABS_MAX_CELLS = 50_000;
+const ALL_TABS_MAX_TABS = 20;
+/** Con pestañas elegidas el tope sube, y se lee por bloques de rango. */
+export const CHOSEN_TAB_MAX_ROWS = 20_000;
+export const CHOSEN_TABS_MAX_CELLS = 200_000;
+export const SHEET_BLOCK_ROWS = 5000;
+/** Filas que se leen de una pestaña para proponer una tabla (más el encabezado). */
+export const PROPOSE_SAMPLE_ROWS = 300;
+
+/** Título y tamaño de las pestañas, sin leer datos. */
+export async function listGoogleSheetTabs(ctx: ToolContext, id: string) {
+  return fetchSheetsMeta(ctx, id);
+}
+
+async function fetchSheetsMeta(ctx: ToolContext, id: string) {
+  const meta = await sheetsFetch<SheetsMeta>(
+    ctx,
+    `/${id}?fields=properties(title),sheets(properties(title,gridProperties))`,
+  );
+  if (!meta.sheets?.length) throw new Error('El spreadsheet no tiene pestañas.');
+  const tabs: SheetTabInfo[] = meta.sheets.map((s) => ({
+    title: s.properties.title,
+    rows: s.properties.gridProperties?.rowCount ?? 0,
+    cols: s.properties.gridProperties?.columnCount ?? 0,
+  }));
+  return { name: meta.properties.title, tabs };
+}
+
+/** Minúsculas, sin tildes y con espacios simples: «Vuelos  Diarios» = «vuelos diarios». */
+function normalizeTabName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tabsList(tabs: SheetTabInfo[]): string {
+  return tabs.map((t, i) => `${i}: «${t.title}» (${t.rows} filas)`).join('; ');
+}
+
+/**
+ * Elige una pestaña por nombre (sin distinguir mayúsculas, tildes ni espacios
+ * dobles) o por índice. Sin coincidencia exacta acepta la más parecida sólo si
+ * es inequívoca (una única pestaña contiene el texto, o él la contiene); si no,
+ * el error LISTA las pestañas que existen para que el modelo elija sin adivinar.
+ */
+export function resolveSheetTab(tabs: SheetTabInfo[], tab?: string | number): number {
+  if (tab === undefined || tab === '') return 0;
+  const fail = (why: string) =>
+    new ValidationError(
+      `${why} Pestañas de esa hoja: ${tabsList(tabs)}. Vuelve a llamar con el nombre exacto de una de ellas.`,
+    );
+  if (typeof tab === 'number') {
+    if (!Number.isInteger(tab) || tab < 0 || tab >= tabs.length)
+      throw fail(`No existe la pestaña número ${tab}.`);
+    return tab;
+  }
+  const wanted = normalizeTabName(tab);
+  const exact = tabs.findIndex((t) => normalizeTabName(t.title) === wanted);
+  if (exact >= 0) return exact;
+  const similar = tabs
+    .map((t, i) => ({ i, n: normalizeTabName(t.title) }))
+    .filter(({ n }) => wanted && (n.includes(wanted) || wanted.includes(n)));
+  if (similar.length === 1 && similar[0]) return similar[0].i;
+  throw fail(
+    similar.length > 1
+      ? `«${tab}» se parece a varias pestañas.`
+      : `No hay una pestaña llamada «${tab}».`,
+  );
+}
+
+function a1Title(title: string) {
+  return `'${title.replace(/'/g, "''")}'`;
+}
+
+async function fetchValues(ctx: ToolContext, id: string, range: string) {
+  const result = await sheetsFetch<{ values?: SheetCell[][] }>(
+    ctx,
+    `/${id}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`,
+  );
+  return result.values ?? [];
+}
+
+/**
+ * Lee UNA pestaña con un rango acotado (encabezado + `maxRows` filas por
+ * defecto), sin tocar las demás: una hoja operativa de varias pestañas grandes
+ * se puede leer y proponer sin conectarla. `tabs` trae el tamaño de todas para
+ * poder decirle a la persona cuántas filas hay en total.
+ */
+export async function readGoogleSheetTab(
+  ctx: ToolContext,
+  spreadsheetId: string,
+  options: { tab?: string | number; maxRows?: number } = {},
+) {
+  const maxRows = Math.max(1, Math.min(options.maxRows ?? PROPOSE_SAMPLE_ROWS, CHOSEN_TAB_MAX_ROWS));
+  const meta = await fetchSheetsMeta(ctx, spreadsheetId);
+  const index = resolveSheetTab(meta.tabs, options.tab);
+  const info = meta.tabs[index] as SheetTabInfo;
+  const rows = await fetchValues(
+    ctx,
+    spreadsheetId,
+    `${a1Title(info.title)}!A1:${LAST_COL}${maxRows + 1}`,
+  );
+  return {
+    title: meta.name,
+    tab: info.title,
+    tabs: meta.tabs,
+    sheet: { name: info.title, rows } as SheetData,
+    truncated: info.rows > maxRows + 1 || info.cols > 52,
+  };
+}
+
+/**
+ * Lee una pestaña por bloques de rango (A1:AZ5000, A5001:AZ10000…) hasta
+ * `maxRows` filas: no se le pide a Google todo de una. Un bloque que vuelve
+ * corto es el final de los datos.
+ */
+async function readTabInBlocks(
+  ctx: ToolContext,
+  id: string,
+  title: string,
+  gridRows: number,
+  maxRows: number,
+) {
+  const rows: SheetCell[][] = [];
+  const limit = gridRows > 0 ? Math.min(gridRows, maxRows) : maxRows;
+  for (let from = 1; from <= limit; from += SHEET_BLOCK_ROWS) {
+    const to = Math.min(from + SHEET_BLOCK_ROWS - 1, limit);
+    const block = await fetchValues(ctx, id, `${a1Title(title)}!A${from}:${LAST_COL}${to}`);
+    rows.push(...block);
+    if (block.length < to - from + 1) break;
+  }
+  return rows;
+}
+
+/**
+ * Snapshot acotado a través de la conexión de Google de la persona. Sin
+ * `tabs`: todas las pestañas (máx. 20), A1:AZ1000 cada una y 50.000 celdas.
+ * Con `tabs`: sólo esas, hasta 20.000 filas por pestaña y 200.000 celdas,
+ * leídas por bloques. `selected` devuelve los títulos reales elegidos.
+ */
+export async function readGoogleSheetFeed(
+  ctx: ToolContext,
+  id: string,
+  options: { tabs?: string[] } = {},
+) {
+  const meta = await fetchSheetsMeta(ctx, id);
+  const chosen = options.tabs?.length
+    ? [...new Set(options.tabs.map((t) => resolveSheetTab(meta.tabs, t)))].map(
+        (i) => meta.tabs[i] as SheetTabInfo,
+      )
+    : null;
+  if (!chosen && meta.tabs.length > ALL_TABS_MAX_TABS)
+    throw new ValidationError(
+      `Esa hoja tiene ${meta.tabs.length} pestañas (el máximo sin elegir es ${ALL_TABS_MAX_TABS}). Elige las que se usan con tabs. Pestañas: ${tabsList(meta.tabs)}.`,
+    );
+  const maxRows = chosen ? CHOSEN_TAB_MAX_ROWS : ALL_TABS_MAX_ROWS;
+  const maxCells = chosen ? CHOSEN_TABS_MAX_CELLS : ALL_TABS_MAX_CELLS;
   const tables: SheetData[] = [];
   let cells = 0;
   let truncated = false;
-  for (const sheet of meta.sheets) {
-    const { title, gridProperties: grid } = sheet.properties;
-    const range = `'${title.replace(/'/g, "''")}'!A1:AZ1000`;
-    const result = await sheetsFetch<{ values?: Array<Array<string | number | boolean | null>> }>(
-      ctx,
-      `/${id}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`,
-    );
-    const rows = result.values ?? [];
+  for (const info of chosen ?? meta.tabs) {
+    const rows = chosen
+      ? await readTabInBlocks(ctx, id, info.title, info.rows, maxRows)
+      : await fetchValues(ctx, id, `${a1Title(info.title)}!A1:${LAST_COL}${maxRows}`);
     cells += rows.reduce((n, row) => n + row.length, 0);
-    if (cells > 50_000) throw new Error('La captura supera 50.000 celdas. Divide el spreadsheet.');
-    truncated ||= !grid || grid.rowCount > 1000 || grid.columnCount > 52;
-    tables.push({ name: title, rows });
+    if (cells > maxCells)
+      throw new ValidationError(
+        chosen
+          ? `Las pestañas elegidas superan ${maxCells.toLocaleString('es-CO')} celdas. Elige menos pestañas.`
+          : `La captura supera 50.000 celdas. Elige sólo las pestañas que se usan con tabs (pestañas: ${tabsList(meta.tabs)}).`,
+      );
+    truncated ||= !info.rows || info.rows > maxRows || info.cols > 52;
+    tables.push({ name: info.title, rows });
   }
   const text = tables
     .map(
@@ -115,7 +286,22 @@ export async function readGoogleSheetFeed(ctx: ToolContext, id: string) {
         `## ${sheet.name}\n${sheet.rows.map((row) => row.map((v) => v ?? '').join('\t')).join('\n')}`,
     )
     .join('\n\n');
-  return { name: meta.properties.title, text, tables, truncated };
+  return {
+    name: meta.name,
+    text,
+    tables,
+    truncated,
+    selected: chosen ? chosen.map((c) => c.title) : null,
+  };
+}
+
+/**
+ * La config de una fuente de Google Sheets. Sin pestañas queda `{ spreadsheetId }`,
+ * idéntica a la que escribe el Feed, así que el `config_hash` de las fuentes
+ * existentes no cambia; con pestañas es una fuente propia de esas pestañas.
+ */
+export function sheetSourceConfig(spreadsheetId: string, tabs?: string[] | null) {
+  return tabs?.length ? { spreadsheetId, tabs } : { spreadsheetId };
 }
 
 export function hashConfig(config: object) {
@@ -418,10 +604,13 @@ export async function captureGoogleSheetFeed(options: {
   ctx: ToolContext;
   actorId: string;
   spreadsheetId: string;
+  /** Sólo estas pestañas (nombres): se guardan en la fuente y es lo único que se relee. */
+  tabs?: string[];
   count?: number;
 }): Promise<CapturedSheetSummary> {
   const { db, ctx, actorId, spreadsheetId } = options;
-  const result = await readGoogleSheetFeed(ctx, spreadsheetId);
+  const result = await readGoogleSheetFeed(ctx, spreadsheetId, { tabs: options.tabs });
+  const chosen = Boolean(result.selected);
   const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
   const name = result.name.slice(0, 200);
   if (!result.text.trim())
@@ -429,11 +618,20 @@ export async function captureGoogleSheetFeed(options: {
       'No encontré texto legible. Para un escaneo, pega la transcripción.',
       422,
     );
-  if (result.text.length > 200_000 || JSON.stringify(result.tables).length > 2_000_000)
+  // Con pestañas elegidas la hoja puede ser grande a propósito: las tablas
+  // (feed_tables) llevan los datos completos y el texto es sólo la vista previa.
+  const tablesBytes = JSON.stringify(result.tables).length;
+  if (
+    (!chosen && result.text.length > 200_000) ||
+    tablesBytes > (chosen ? 20_000_000 : 2_000_000)
+  )
     throw new FeedCaptureError(
-      'El contenido es demasiado extenso. Divídelo en archivos más pequeños.',
+      chosen
+        ? 'Las pestañas elegidas son demasiado extensas. Elige menos pestañas o divide la hoja.'
+        : 'El contenido es demasiado extenso. Elige sólo las pestañas que se usan (tabs) o divide la hoja.',
       422,
     );
+  const text = result.text.length > 200_000 ? result.text.slice(0, 200_000) : result.text;
   const fingerprint = feedFingerprint({
     text: result.text,
     tables: result.tables,
@@ -448,13 +646,13 @@ export async function captureGoogleSheetFeed(options: {
     sourceKind: 'google_sheet',
     name,
     mime: 'text/markdown',
-    bytes: Buffer.from(result.text),
-    text: result.text,
+    bytes: Buffer.from(text),
+    text,
     tables: result.tables,
     url,
     truncated: result.truncated,
     fingerprint,
-    sourceConfig: { spreadsheetId },
+    sourceConfig: sheetSourceConfig(spreadsheetId, result.selected),
   });
   return {
     attachmentId: saved.entry.id,

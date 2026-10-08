@@ -138,9 +138,12 @@ function isErrorResult(inv: ToolInvocation): boolean {
 function TaskRow({
   invocation,
   durationMs,
+  progress,
 }: {
   invocation: ToolInvocation;
   durationMs: number | null | undefined;
+  /** Última línea de avance de esta llamada (efímera; sólo mientras corre). */
+  progress?: string | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const running = invocation.state === 'call' || invocation.state === 'partial-call';
@@ -211,11 +214,24 @@ function TaskRow({
         />
       </button>
 
+      {running && progress && (
+        // Una línea de avance bajo el renglón, truncada: el chip dice qué está
+        // pasando AHORA ({«Listé 1.200 archivos…»}). Desaparece al terminar.
+        <p
+          className="min-w-0 truncate px-3 pb-1.5 pl-9 text-micro text-ink-muted"
+          aria-live="polite"
+          title={progress}
+          data-testid="tool-progress"
+        >
+          {progress}
+        </p>
+      )}
+
       {open && (
-        <div className="space-y-2 px-3 pb-2.5 pl-9">
+        <div className="min-w-0 space-y-2 px-3 pb-2.5 pl-9">
           {/* The raw id: what identifies this call in the audit log and in a
               support conversation. */}
-          <div className="font-mono text-micro text-ink-faint">{invocation.toolName}</div>
+          <div className="break-all font-mono text-micro text-ink-faint">{invocation.toolName}</div>
           {invocation.args !== undefined && (
             <div>
               <div className="field-label">Argumentos</div>
@@ -302,7 +318,7 @@ function ArgFields({ args, fallbackClassName }: { args: unknown; fallbackClassNa
   }
 
   return (
-    <dl className="mt-1 grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr]">
+    <dl className="mt-1 grid gap-x-4 gap-y-1 sm:grid-cols-[minmax(0,auto)_minmax(0,1fr)]">
       {entries.map(([key, value]) => (
         <div key={key} className="contents">
           <dt className="text-micro uppercase tracking-field text-ink-faint">{key}</dt>
@@ -332,9 +348,12 @@ export function TaskRows({
   metrics,
   isStreaming,
   quiet,
+  progress,
 }: {
   invocations: ToolInvocation[];
   metrics: TurnMetrics | null;
+  /** Última línea de avance por toolCallId (ver lib/tool-progress.ts). */
+  progress?: ReadonlyMap<string, string> | undefined;
   isStreaming?: boolean;
   /** Mientras Cortex piensa y aún no hay prosa, la cabecera Presence cuenta. */
   quiet?: boolean;
@@ -413,6 +432,7 @@ export function TaskRows({
               key={inv.toolCallId}
               invocation={inv}
               durationMs={durations.get(inv.toolCallId)}
+              progress={progress?.get(inv.toolCallId)}
             />
           ))}
         </ul>

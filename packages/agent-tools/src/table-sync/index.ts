@@ -12,10 +12,14 @@ export {
   captureGoogleSheetFeed,
   feedFingerprint,
   googleSpreadsheetId,
+  listGoogleSheetTabs,
   parseGoogleSheetRef,
   persistFeedCapture,
   readGoogleSheetFeed,
+  readGoogleSheetTab,
   registerFeedSourceCapture,
+  resolveSheetTab,
+  sheetSourceConfig,
 } from './feed-capture';
 export { trackersUpdateFromSource } from './enrich-tools';
 export { applyUpdateOnly, createUpdateOnlySync, matchPart } from './enrich';

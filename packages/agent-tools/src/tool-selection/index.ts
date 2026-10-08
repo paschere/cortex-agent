@@ -34,6 +34,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { embedQuery, embeddingModelId } from '../kb/embedder';
+import { intentFamilies } from './intent';
 import {
   SELECTION_THRESHOLD,
   type SelectableTool,
@@ -42,6 +43,7 @@ import {
 } from './rank';
 import { backfillToolVectors, prepareToolVectors } from './store';
 
+export { INTENT_RULES, intentFamilies } from './intent';
 export {
   type SelectableTool,
   type SelectionCalibration,
@@ -173,6 +175,9 @@ export async function selectToolsForTurn<T extends SelectableTool>(
 ): Promise<ToolSelectionResult<T>> {
   const { db, tools, query } = request;
   const alwaysFamilies = new Set(request.alwaysFamilies ?? BASE_FAMILIES);
+  // Reglas de intención (intent.ts): los flujos que el system prompt nombra
+  // llegan con sus familias aunque el ranking semántico no las vea en la frase.
+  for (const family of intentFamilies(query)) alwaysFamilies.add(family);
 
   const everything = (reason: SelectionReason, indexing = DONE): ToolSelectionResult<T> => ({
     tools,

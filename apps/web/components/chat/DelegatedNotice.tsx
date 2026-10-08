@@ -124,7 +124,7 @@ export function DelegatedNotice({ entry, exercised, canRevoke, onRevoked }: Dele
   }
 
   return (
-    <div className="mt-2 rounded-card border border-amber/20 bg-amber-soft px-3.5 py-2.5">
+    <div className="mt-2 min-w-0 rounded-card border border-amber/20 bg-amber-soft px-3.5 py-2.5 [overflow-wrap:anywhere]">
       <div className="flex items-start gap-2.5">
         <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" aria-hidden />
         <div className="min-w-0 flex-1">

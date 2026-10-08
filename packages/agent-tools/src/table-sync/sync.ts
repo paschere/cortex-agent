@@ -12,6 +12,7 @@ import {
   shapeValuesDetailed,
 } from '../trackers/store';
 import { dayOfCell, headerKey, inferSheetFields } from '../views/feed-sources';
+import { resolveSheetTab } from './feed-capture';
 
 /**
  * UNA FUENTE QUE LLENA UNA TABLA SOLA (migración 0161).
@@ -351,8 +352,9 @@ export async function latestSourceSheet(
   db: SupabaseClient,
   sourceId: string,
   actorId: string,
-  sheetIndex: number,
-): Promise<{ sheet: SheetData; sourceName: string } | null> {
+  /** Índice de la pestaña guardada, o su nombre (sin distinguir tildes ni mayúsculas). */
+  sheetIndex: number | string,
+): Promise<{ sheet: SheetData; sourceName: string; index: number } | null> {
   const { data: source, error } = await db
     .from('feed_sources')
     .select('id, name, latest_attachment_id')
@@ -371,8 +373,18 @@ export async function latestSourceSheet(
     .maybeSingle();
   if (cError) throw cError;
   const tables = (capture as { feed_tables: SheetData[] | null } | null)?.feed_tables;
-  const sheet = tables?.[sheetIndex];
-  return sheet ? { sheet, sourceName: s.name } : null;
+  if (!tables?.length) return null;
+  // Con una fuente de pestañas elegidas sólo se guardaron esas: el índice y el
+  // nombre se resuelven contra ellas, no contra todas las del libro.
+  const index =
+    typeof sheetIndex === 'string'
+      ? resolveSheetTab(
+          tables.map((t) => ({ title: t.name, rows: t.rows.length, cols: 0 })),
+          sheetIndex,
+        )
+      : sheetIndex;
+  const sheet = tables[index];
+  return sheet ? { sheet, sourceName: s.name, index } : null;
 }
 
 /**

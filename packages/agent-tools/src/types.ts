@@ -153,6 +153,14 @@ export interface ToolContext {
    * datos. Ver packages/agent-tools/src/safe-actions.
    */
   idempotencyScope?: string;
+  /**
+   * Una línea de avance de una herramienta que tarda («Listé 1.200 archivos en
+   * 40 carpetas…»). Genérica: ninguna herramienta sabe adónde va. OPCIONAL —
+   * quien pueda mostrarla (el chip de la herramienta en el chat) la ata; sin
+   * ella la herramienta trabaja igual y calla. Síncrona, barata y que nunca
+   * lance: un fallo al avisar no puede tumbar el trabajo.
+   */
+  onProgress?: (line: string) => void;
   signal?: AbortSignal;
   withSpan?: <T>(
     name: string,

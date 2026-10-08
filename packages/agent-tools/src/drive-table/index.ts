@@ -3,6 +3,7 @@
  */
 
 import './tools';
+import './folder-tree';
 
 export {
   trackersDriveSyncs,
@@ -41,3 +42,4 @@ export { combineFolderProposal, proposeFromDriveFolder } from './propose-folder'
 export type { FolderFieldProposal, FolderProposal } from './propose-folder';
 export { readSheetRows } from './sheet-read';
 export { resolveFolder } from './tools';
+export { gdriveFolderTree, summarizeTree } from './folder-tree';

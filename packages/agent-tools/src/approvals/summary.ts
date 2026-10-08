@@ -129,6 +129,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   gdrive_search_files: 'Buscar archivos en Drive',
   gdrive_read_doc: 'Leer documento de Drive',
   gdrive_find_folder: 'Buscar una carpeta de Drive',
+  gdrive_folder_tree: 'Ver cómo está organizada una carpeta de Drive',
   gdrive_upload_file: 'Guardar un archivo en una carpeta de Drive',
   schedule_create: 'Programar rutina',
   schedule_list: 'Ver rutinas programadas',

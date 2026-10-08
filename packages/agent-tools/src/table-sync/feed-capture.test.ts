@@ -10,6 +10,9 @@ import {
   captureGoogleSheetFeed,
   hashConfig,
   parseGoogleSheetRef,
+  readGoogleSheetFeed,
+  readGoogleSheetTab,
+  sheetSourceConfig,
 } from './feed-capture';
 
 const ID = 'abcdefghijklmnopqrstuvwx_-123';
@@ -128,5 +131,109 @@ describe('captureGoogleSheetFeed', () => {
     await expect(
       captureGoogleSheetFeed({ db, ctx, actorId: 'u1', spreadsheetId: ID }),
     ).rejects.toBeInstanceOf(FeedCaptureError);
+  });
+});
+
+describe('readGoogleSheetTab', () => {
+  const six = ['Resumen', 'VUELOS DIARIOS DE MERFLEX', 'Históricos', 'Tarifas', 'Clientes', 'Otros'];
+  const meta = {
+    properties: { title: 'Operación' },
+    sheets: six.map((title) => ({
+      properties: { title, gridProperties: { rowCount: 30_000, columnCount: 30 } },
+    })),
+  };
+
+  it('elige por nombre sin distinguir mayúsculas, tildes ni espacios dobles, y pide sólo esa pestaña', async () => {
+    sheets.mockReset();
+    sheets.mockResolvedValueOnce(meta).mockResolvedValueOnce({ values: [['Vuelo'], ['AV1']] });
+    const out = await readGoogleSheetTab(ctx, ID, { tab: 'historicos' });
+    expect(out.tab).toBe('Históricos');
+    expect(out.tabs).toHaveLength(6);
+    expect(sheets).toHaveBeenCalledTimes(2);
+    expect(sheets.mock.calls[1]?.[1]).toContain(encodeURIComponent("'Históricos'!A1:AZ301"));
+    expect(out.truncated).toBe(true);
+    const spaced = await (async () => {
+      sheets.mockReset();
+      sheets.mockResolvedValueOnce(meta).mockResolvedValueOnce({ values: [] });
+      return readGoogleSheetTab(ctx, ID, { tab: '  vuelos   diarios de merflex ' });
+    })();
+    expect(spaced.tab).toBe('VUELOS DIARIOS DE MERFLEX');
+  });
+
+  it('acepta la más parecida sólo si es inequívoca; si no, lista las pestañas', async () => {
+    sheets.mockReset();
+    sheets.mockResolvedValueOnce(meta).mockResolvedValueOnce({ values: [] });
+    expect((await readGoogleSheetTab(ctx, ID, { tab: 'merflex' })).tab).toBe(
+      'VUELOS DIARIOS DE MERFLEX',
+    );
+    sheets.mockReset();
+    sheets.mockResolvedValueOnce(meta);
+    await expect(readGoogleSheetTab(ctx, ID, { tab: 'Inexistente' })).rejects.toThrow(
+      /Pestañas de esa hoja:.*«Resumen».*«VUELOS DIARIOS DE MERFLEX».*«Otros»/,
+    );
+    sheets.mockReset();
+    sheets.mockResolvedValueOnce(meta);
+    await expect(readGoogleSheetTab(ctx, ID, { tab: 99 })).rejects.toThrow(/Pestañas de esa hoja/);
+  });
+
+  it('por índice', async () => {
+    sheets.mockReset();
+    sheets.mockResolvedValueOnce(meta).mockResolvedValueOnce({ values: [['x']] });
+    expect((await readGoogleSheetTab(ctx, ID, { tab: 3 })).tab).toBe('Tarifas');
+  });
+});
+
+describe('readGoogleSheetFeed con pestañas elegidas', () => {
+  const meta = {
+    properties: { title: 'Operación' },
+    sheets: ['A', 'B', 'C', 'D', 'E', 'F'].map((title) => ({
+      properties: { title, gridProperties: { rowCount: 12_000, columnCount: 10 } },
+    })),
+  };
+  const block = (n: number) => Array.from({ length: n }, (_, i) => [`r${i}`, i]);
+
+  it('lee sólo una pestaña de seis grandes, por bloques de 5000 filas', async () => {
+    sheets.mockReset();
+    sheets
+      .mockResolvedValueOnce(meta)
+      .mockResolvedValueOnce({ values: block(5000) })
+      .mockResolvedValueOnce({ values: block(5000) })
+      .mockResolvedValueOnce({ values: block(1500) });
+    const out = await readGoogleSheetFeed(ctx, ID, { tabs: ['b'] });
+    expect(out.selected).toEqual(['B']);
+    expect(out.tables).toHaveLength(1);
+    expect(out.tables[0]?.rows).toHaveLength(11_500);
+    expect(sheets).toHaveBeenCalledTimes(4);
+    expect(decodeURIComponent(String(sheets.mock.calls[1]?.[1]))).toContain("'B'!A1:AZ5000");
+    expect(decodeURIComponent(String(sheets.mock.calls[2]?.[1]))).toContain("'B'!A5001:AZ10000");
+    expect(decodeURIComponent(String(sheets.mock.calls[3]?.[1]))).toContain("'B'!A10001:AZ12000");
+  });
+
+  it('sin pestañas elegidas sigue leyendo todas con A1:AZ1000', async () => {
+    sheets.mockReset();
+    sheets.mockResolvedValueOnce(meta);
+    for (let i = 0; i < 6; i++) sheets.mockResolvedValueOnce({ values: [['a']] });
+    const out = await readGoogleSheetFeed(ctx, ID);
+    expect(out.selected).toBeNull();
+    expect(out.tables).toHaveLength(6);
+    expect(decodeURIComponent(String(sheets.mock.calls[1]?.[1]))).toContain("'A'!A1:AZ1000");
+  });
+
+  it('captura sólo la pestaña y guarda tabs; sin tabs el config_hash es el de siempre', async () => {
+    sheets.mockReset();
+    sheets.mockResolvedValueOnce(meta).mockResolvedValueOnce({ values: [['Vuelo'], ['AV1']] });
+    const { db, sources } = fakeDb({});
+    const out = await captureGoogleSheetFeed({
+      db,
+      ctx,
+      actorId: 'u1',
+      spreadsheetId: ID,
+      tabs: ['c'],
+    });
+    expect(out.tables).toEqual([{ sheet: 0, name: 'C', headers: ['Vuelo'], rows: 1 }]);
+    expect(sources[0]?.config).toEqual({ spreadsheetId: ID, tabs: ['C'] });
+    expect(sources[0]?.config_hash).toBe(hashConfig({ spreadsheetId: ID, tabs: ['C'] }));
+    expect(sheetSourceConfig(ID)).toEqual({ spreadsheetId: ID });
+    expect(hashConfig(sheetSourceConfig(ID, []))).toBe(hashConfig({ spreadsheetId: ID }));
   });
 });

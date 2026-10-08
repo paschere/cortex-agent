@@ -1,12 +1,70 @@
 'use client';
 
 import type { BrainSource } from '@/lib/brain-sources-shape';
+import { looksLikeUrl, shortLinkLabel } from '@/lib/chat-link';
 import { citationLabel, citationSource, rehypeCitations } from '@/lib/citations';
 import { clsx } from 'clsx';
-import type { ComponentPropsWithoutRef } from 'react';
+import { Check, Copy } from 'lucide-react';
+import { type ComponentPropsWithoutRef, type ReactNode, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
+
+/** El texto plano de lo que react-markdown entrega como hijos de un enlace. */
+function plainText(node: ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(plainText).join('');
+  return '';
+}
+
+/**
+ * UN BLOQUE DE CÓDIGO QUE SE DESPLAZA, NO QUE SE SALE.
+ *
+ * El `pre` nunca parte renglón (el código no se reflowa), así que el contenedor
+ * es quien se desplaza en horizontal; el botón copiar vive fuera del
+ * desplazamiento para que no se vaya con el texto.
+ */
+function CodeBlock({ children, ...props }: ComponentPropsWithoutRef<'pre'> & { node?: unknown }) {
+  const { node: _node, ...rest } = props;
+  const ref = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(ref.current?.textContent ?? '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // sin portapapeles (contexto no seguro): el botón simplemente no confirma
+    }
+  };
+  return (
+    <div className="group/code relative my-3 min-w-0 max-w-full">
+      <pre
+        ref={ref}
+        {...rest}
+        className={clsx(
+          rest.className,
+          'scroll-slim !my-0 max-w-full overflow-x-auto whitespace-pre [overflow-wrap:normal]',
+        )}
+      >
+        {children}
+      </pre>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={copied ? 'Código copiado' : 'Copiar código'}
+        className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-2 py-1 text-micro font-medium text-ink-muted opacity-0 shadow-card transition-opacity duration-150 hover:text-ink focus-visible:opacity-100 group-hover/code:opacity-100 max-sm:opacity-100 motion-reduce:transition-none"
+      >
+        {copied ? (
+          <Check className="h-3 w-3" aria-hidden />
+        ) : (
+          <Copy className="h-3 w-3" aria-hidden />
+        )}
+        {copied ? 'Copiado' : 'Copiar'}
+      </button>
+    </div>
+  );
+}
 
 /**
  * The single markdown renderer for anything Cortex says — live chat and
@@ -42,7 +100,17 @@ export function ChatMarkdown({
   return (
     <div
       className={clsx(
-        'prose prose-sm max-w-none text-ink',
+        'prose prose-sm min-w-0 max-w-none text-ink',
+        /*
+          NADA SE SALE DE LA BURBUJA. Una URL de 90 caracteres sin espacios no
+          tiene dónde partirse, y el flex de la columna no la deja encogerse:
+          `overflow-wrap:anywhere` la parte sólo cuando no cabe (las palabras
+          normales siguen enteras) y las figuras anchas —tablas, código— se
+          desplazan en su propio contenedor. Ver los componentes de abajo.
+        */
+        '[overflow-wrap:anywhere] prose-img:h-auto prose-img:max-w-full',
+        'prose-blockquote:pl-3 prose-blockquote:not-italic prose-blockquote:text-ink-muted prose-ol:pl-5 prose-ul:pl-5',
+        '[&_li>ol]:my-1 [&_li>ul]:my-1',
         /*
           UN SOLO TAMAÑO DE ENCABEZADO DENTRO DE UNA RESPUESTA.
 
@@ -82,6 +150,7 @@ export function ChatMarkdown({
         'prose-code:rounded-sm prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-medium prose-code:text-primary-ink prose-code:before:content-[""] prose-code:after:content-[""]',
         'prose-pre:rounded-card prose-pre:border prose-pre:border-border prose-pre:shadow-card',
         'prose-table:text-sm prose-th:text-ink prose-td:text-ink-muted',
+        'prose-th:whitespace-nowrap prose-td:min-w-[6rem] prose-td:max-w-[22rem] prose-td:align-top',
         /*
           EL TEXTO QUE TODAVÍA SE ESTÁ RESOLVIENDO.
           Una máscara sobre el borde final mientras llega. Ver `.answer-landing`
@@ -99,6 +168,43 @@ export function ChatMarkdown({
         // deja explícito para que se vea que se pensó.
         rehypePlugins={[rehypeHighlight, rehypeCitations]}
         components={{
+          pre: CodeBlock,
+          /** Una tabla ancha se desplaza en su caja; la página y la burbuja no se mueven. */
+          table({
+            children,
+            node: _node,
+            ...props
+          }: ComponentPropsWithoutRef<'table'> & { node?: unknown }) {
+            return (
+              <div className="scroll-slim my-3 max-w-full overflow-x-auto rounded-card border border-border">
+                <table {...props} className="!my-0 w-max min-w-full">
+                  {children}
+                </table>
+              </div>
+            );
+          },
+          /** Enlaces largos acortados a dominio + inicio de ruta; el destino completo queda en href y title. */
+          a({
+            children,
+            href,
+            node: _node,
+            ...props
+          }: ComponentPropsWithoutRef<'a'> & { node?: unknown }) {
+            const text = plainText(children);
+            const shown = href && looksLikeUrl(text) ? shortLinkLabel(text) : children;
+            const external = !!href && /^https?:\/\//i.test(href);
+            return (
+              <a
+                {...props}
+                href={href}
+                title={href}
+                {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                className="[overflow-wrap:anywhere]"
+              >
+                {shown}
+              </a>
+            );
+          },
           /**
            * LA CITA EN LÍNEA.
            *

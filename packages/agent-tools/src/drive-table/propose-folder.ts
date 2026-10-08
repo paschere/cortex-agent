@@ -31,6 +31,7 @@ import {
   SHEET_SAMPLE_ROWS,
   compact,
 } from './plan';
+import { mapPool, timeoutSignal } from './pool';
 import { type DocRole, proposeTableFromFolder } from './propose';
 
 /**
@@ -636,9 +637,19 @@ export interface ProposeFolderDeps {
   /** Propone con documentos de muestra de UN tipo (por defecto, el modelo). */
   proposeDocs?: (
     files: FolderFile[],
-    opts: { goal?: string; typeLabel?: string },
+    opts: { goal?: string; typeLabel?: string; deadline?: number; perFileMs?: number },
   ) => Promise<DocProposal>;
 }
+
+/** Tiempo total para proponer; pasado esto se propone con lo que se alcanzó a leer. */
+export const PROPOSE_BUDGET_MS = 25_000;
+/** Parte del presupuesto que puede gastar el recorrido de carpetas. */
+const LIST_SHARE = 0.45;
+/** Tipos de documento (y hojas) que se leen a la vez. */
+const DOC_CONCURRENCY = 3;
+const SHEET_CONCURRENCY = 4;
+/** Tope por archivo de muestra. */
+const PER_FILE_MS = 20_000;
 
 /** Hojas de muestra: repartidas entre los tipos de hoja, no las primeras que salgan. */
 function sheetSamples(sheets: FolderFile[], max: number): FolderFile[] {
@@ -660,15 +671,36 @@ function sheetSamples(sheets: FolderFile[], max: number): FolderFile[] {
 export async function proposeFromDriveFolder(
   drive: DriveAccess,
   folder: { id: string; name: string },
-  opts: { includeSubfolders?: boolean; goal?: string } = {},
+  opts: {
+    includeSubfolders?: boolean;
+    goal?: string;
+    /** Presupuesto total en ms (por defecto 25 s). */
+    budgetMs?: number;
+    /** Una línea de avance para quien espera («listé 1.200 archivos…»). */
+    onProgress?: (line: string) => void;
+  } = {},
   deps: ProposeFolderDeps = {},
 ): Promise<FolderProposal> {
   const dims = { maxDepth: INVENTORY_MAX_DEPTH, maxFiles: INVENTORY_MAX_FILES };
   const wantsDeep = opts.includeSubfolders !== false;
+  const budget = opts.budgetMs ?? PROPOSE_BUDGET_MS;
+  const started = Date.now();
+  const deadline = started + budget;
+  const say = (line: string) => {
+    try {
+      opts.onProgress?.(line);
+    } catch {
+      // el avance es un lujo: nunca tumba la propuesta
+    }
+  };
+  say('Listando la carpeta y sus subcarpetas…');
   const tree = await listFolderTree(drive, folder.id, {
     recursive: wantsDeep,
     maxDepth: dims.maxDepth,
     maxFiles: dims.maxFiles * INVENTORY_LIST_FACTOR,
+    light: true,
+    deadline: started + budget * LIST_SHARE,
+    onProgress: say,
   });
   const recursive = wantsDeep && tree.folders.length > 0;
   const inventory = inventoryOf(tree, { recursive, ...dims });
@@ -677,27 +709,102 @@ export async function proposeFromDriveFolder(
     deps.loadSheets ??
     (async (file: FolderFile) => {
       // Una hoja enorme no se rechaza: para proponer basta el encabezado y las primeras filas.
-      const read = await readDriveFile(drive, file, {
-        sheetRows: true,
-        sheetRowLimit: SHEET_SAMPLE_ROWS,
-      });
-      if (read.kind !== 'sheet') throw new UnreadableFileError('No es una hoja.');
-      return read.sheets;
+      const limit = timeoutSignal(drive.signal, Math.min(PER_FILE_MS, deadline - Date.now()));
+      try {
+        const read = await readDriveFile({ ...drive, signal: limit.signal }, file, {
+          sheetRows: true,
+          sheetRowLimit: SHEET_SAMPLE_ROWS,
+        });
+        if (read.kind !== 'sheet') throw new UnreadableFileError('No es una hoja.');
+        return read.sheets;
+      } finally {
+        limit.done();
+      }
     });
   const notes: string[] = [];
-  const sheets: SheetSample[] = [];
+  if (tree.timedOut)
+    notes.push(
+      `Se acabó el tiempo del recorrido: revisé ${inventory.total.toLocaleString('es-CO')} de unos ${Math.max(inventory.total, inventory.estimatedTotal).toLocaleString('es-CO')} archivos (${(tree.foldersLeft ?? 0).toLocaleString('es-CO')} subcarpetas sin abrir). Propongo con lo que vi; la sincronización sí recorre todo.`,
+    );
+
   const picked = sheetSamples(inventory.sheets, MAX_SHEET_FILES);
   let cut = 0;
-  for (const file of picked) {
-    try {
-      for (const tab of await loadSheets(file)) {
-        if (tab.truncated) cut += 1;
-        sheets.push({ file, tab });
+  const sheetPhase = async () => {
+    const done = await mapPool(picked, SHEET_CONCURRENCY, async (file) => {
+      if (Date.now() >= deadline) return { file, skipped: true as const };
+      say(`Leyendo la hoja «${clip(file.name, 60)}»…`);
+      try {
+        return { file, tabs: await loadSheets(file) };
+      } catch (err) {
+        return { file, error: (err as Error).message.slice(0, 120) };
       }
-    } catch (err) {
-      notes.push(`No pude abrir la hoja «${file.name}»: ${(err as Error).message.slice(0, 120)}`);
+    });
+    const out: SheetSample[] = [];
+    let skipped = 0;
+    for (const r of done) {
+      if ('skipped' in r) skipped += 1;
+      else if ('error' in r) notes.push(`No pude abrir la hoja «${r.file.name}»: ${r.error}`);
+      else
+        for (const tab of r.tabs) {
+          if (tab.truncated) cut += 1;
+          out.push({ file: r.file, tab });
+        }
     }
-  }
+    if (skipped) notes.push(`Se acabó el tiempo antes de leer ${skipped} hoja(s) de muestra.`);
+    return out;
+  };
+
+  // Un tipo de documento por vez en la lista, pero varios a la vez al leer: una muestra
+  // de cada uno, los más numerosos primero.
+  const docFiles = [...inventory.all].filter((f) => {
+    const c = classifyFile(f.mimeType).class;
+    return c === 'document' || c === 'image';
+  });
+  const groups = groupByDocType(docFiles);
+  const propose = deps.proposeDocs ?? ((files, o) => proposeTableFromFolder(drive, files, o));
+  const docPhase = async () => {
+    type DocRead =
+      | { group: DocTypeGroup; proposal: DocProposal }
+      | { group: DocTypeGroup; late: true }
+      | { group: DocTypeGroup; error: string };
+    const done = await mapPool(
+      groups.slice(0, MAX_DOC_TYPES),
+      DOC_CONCURRENCY,
+      async (group): Promise<DocRead> => {
+        const files = docFiles.filter((f) => matchDocType(f.name, f.mimeType, [group.key]));
+        if (deadline - Date.now() < 1500) return { group, late: true as const };
+        say(`Leyendo una muestra de «${clip(group.label, 60)}»…`);
+        try {
+          const proposal = await propose(files, {
+            goal: opts.goal,
+            typeLabel: group.label,
+            deadline,
+            perFileMs: PER_FILE_MS,
+          });
+          return { group, proposal };
+        } catch (err) {
+          return { group, error: (err as Error).message.slice(0, 160) };
+        }
+      },
+    );
+    const out: TypedDoc[] = [];
+    const late: string[] = [];
+    for (const r of done) {
+      if ('proposal' in r) out.push({ group: r.group, proposal: r.proposal });
+      else if ('late' in r) late.push(r.group.label);
+      else
+        notes.push(
+          `No pude leer una muestra de «${r.group.label}» para proponer sus campos: ${r.error}`,
+        );
+    }
+    if (late.length)
+      notes.push(
+        `Se acabó el tiempo (${Math.round(budget / 1000)} s) antes de leer una muestra de: ${late.map((l) => `«${l}»`).join(', ')}. Dime si alguno es el que importa y lo leo aparte.`,
+      );
+    return out;
+  };
+
+  const [sheets, docs] = await Promise.all([sheetPhase(), docPhase()]);
   if (inventory.sheets.length > picked.length)
     notes.push(
       `Para proponer leí ${picked.length} de las ${inventory.sheets.length} hojas, repartidas entre sus tipos.`,
@@ -706,40 +813,29 @@ export async function proposeFromDriveFolder(
     notes.push(
       `${cut} pestaña(s) son muy largas: para proponer leí el encabezado y las primeras ${SHEET_SAMPLE_ROWS} filas; la sincronización lee más (hasta ${SHEET_ROWS_PER_FILE.toLocaleString('es-CO')} filas por archivo).`,
     );
-
-  // Un tipo de documento por vez: una muestra de cada uno, los más numerosos primero.
-  const docs: TypedDoc[] = [];
-  const docFiles = [...inventory.all].filter((f) => {
-    const c = classifyFile(f.mimeType).class;
-    return c === 'document' || c === 'image';
-  });
-  const groups = groupByDocType(docFiles);
-  const propose = deps.proposeDocs ?? ((files, o) => proposeTableFromFolder(drive, files, o));
-  for (const group of groups.slice(0, MAX_DOC_TYPES)) {
-    const files = docFiles.filter((f) => matchDocType(f.name, f.mimeType, [group.key]));
-    try {
-      const proposal = await propose(files, { goal: opts.goal, typeLabel: group.label });
-      docs.push({ group, proposal });
-    } catch (err) {
-      notes.push(
-        `No pude leer una muestra de «${group.label}» para proponer sus campos: ${(err as Error).message.slice(0, 160)}`,
-      );
-    }
-  }
   if (groups.length > MAX_DOC_TYPES)
     notes.push(
       `Hay ${groups.length} tipos de documento; leí una muestra de los ${MAX_DOC_TYPES} más numerosos (${groups
         .slice(MAX_DOC_TYPES)
         .reduce((n, g) => n + g.count, 0)} archivos de los otros no entran).`,
     );
-  return combineFolderProposal({
-    folder,
-    recursive,
-    inventory,
-    sheets,
-    doc: null,
-    docs,
-    goal: opts.goal,
-    notes,
-  });
+  say('Armando la propuesta…');
+  try {
+    return combineFolderProposal({
+      folder,
+      recursive,
+      inventory,
+      sheets,
+      doc: null,
+      docs,
+      goal: opts.goal,
+      notes,
+    });
+  } catch (err) {
+    // Sin nada leído por falta de tiempo, el motivo es el tiempo, no que no haya qué leer.
+    const timeNote = notes.find((n) => n.startsWith('Se acabó el tiempo'));
+    if (timeNote && err instanceof ValidationError)
+      throw new ValidationError(`${timeNote} ${err.message}`);
+    throw err;
+  }
 }

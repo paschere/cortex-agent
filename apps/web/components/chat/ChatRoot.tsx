@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { ChatComposeProvider } from './ChatCompose';
+import { ChatErrorCard } from './ChatErrorCard';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { Presence } from './Presence';
@@ -431,24 +432,20 @@ export function ChatRoot({
       </ChatComposeProvider>
 
       {blocked && (
-        <output
-          className={clsx(
-            'mx-4 mb-2 rounded-card border px-4 py-3 text-xs leading-relaxed',
-            blocked.isLimit
-              ? 'border-amber/25 bg-amber-soft text-amber'
-              : 'border-rose/25 bg-rose-soft text-rose',
-          )}
-        >
-          {blocked.message}
-          {blocked.isLimit && (
-            <>
-              {' '}
-              <Link href="/plan" className="font-semibold underline">
-                Ver plan y consumo
-              </Link>
-            </>
-          )}
-        </output>
+        <ChatErrorCard
+          message={blocked.message}
+          isLimit={blocked.isLimit}
+          busy={isLoading}
+          onRetry={() => {
+            setBlocked(null);
+            void reload();
+          }}
+          onContinue={() => {
+            setBlocked(null);
+            handleSend('sigue');
+          }}
+          onDismiss={() => setBlocked(null)}
+        />
       )}
 
       <InputBar

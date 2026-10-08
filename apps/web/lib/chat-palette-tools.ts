@@ -156,6 +156,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'gdrive.read_doc': 'Léeme el documento de Drive ',
   'gdrive.search_files': 'Busca en Drive ',
   'gdrive.find_folder': 'Busca en mi Drive la carpeta ',
+  'gdrive.folder_tree': 'Muéstrame cómo está organizada la carpeta de Drive ',
   'gdrive.upload_file': 'Guarda en Drive, en la carpeta correcta, el archivo ',
 
   'github.create_issue': 'Crea un issue en GitHub: ',

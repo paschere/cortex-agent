@@ -15,6 +15,12 @@ interface ConfirmationPromptProps {
   onConfirmed?: () => void;
   /** El canal de ChoicePrompt, para una tarjeta que habla por la persona. */
   onSay?: (text: string) => void;
+  /**
+   * Cortex sigue en este turno. La propuesta sólo existe en el servidor cuando
+   * el turno termina y se guarda; aprobar antes daba «No hay una propuesta
+   * pendiente que coincida». Se espera con el botón apagado y se explica.
+   */
+  waiting?: boolean;
 }
 
 type Status = 'pending' | 'running' | 'allowed' | 'cancelled' | 'error';
@@ -26,6 +32,7 @@ export function ConfirmationPrompt({
   toolCallId,
   onConfirmed,
   onSay,
+  waiting = false,
 }: ConfirmationPromptProps) {
   const [status, setStatus] = useState<Status>('pending');
   const [errorMessage, setErrorMessage] = useState('');
@@ -123,8 +130,10 @@ export function ConfirmationPrompt({
           {/* Names the state of the whole block, not a value beneath it, so
               it is deliberately not `.field-label`. */}
           <div className="text-micro font-semibold text-amber">Confirmación requerida</div>
-          <p className="mt-1 text-sm font-semibold text-ink">{summary}</p>
-          <p className="mt-1 text-xs leading-snug text-ink-muted">{confirmationReason(toolId)}</p>
+          <p className="mt-1 text-sm font-semibold text-ink [overflow-wrap:anywhere]">{summary}</p>
+          <p className="mt-1 text-xs leading-snug text-ink-muted [overflow-wrap:anywhere]">
+            {confirmationReason(toolId)}
+          </p>
         </div>
       </div>
 
@@ -156,11 +165,12 @@ export function ConfirmationPrompt({
           </p>
         )}
 
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleAllow}
-            disabled={status === 'running'}
+            disabled={status === 'running' || waiting}
+            title={waiting ? 'Espera a que Cortex termine este paso' : undefined}
             className="inline-flex items-center gap-1.5 rounded-pill bg-amber px-4 py-2 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
           >
             {status === 'running' ? (
@@ -170,7 +180,11 @@ export function ConfirmationPrompt({
             ) : (
               <>
                 <Check className="h-3.5 w-3.5" />{' '}
-                {status === 'error' ? 'Reintentar' : 'Confirmar y ejecutar'}
+                {waiting
+                  ? 'Espera a que Cortex termine'
+                  : status === 'error'
+                    ? 'Reintentar'
+                    : 'Confirmar y ejecutar'}
               </>
             )}
           </button>
