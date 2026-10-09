@@ -3,10 +3,12 @@ import { Building2 } from 'lucide-react';
 
 export function CorporateSupervisionNotice({ kind }: { kind?: WorkspaceKind }) {
   if (kind !== 'company') return null;
+  // Una línea discreta: el aviso tiene que estar (la persona sabe que su
+  // trabajo aquí es de la empresa), pero no merece una tarjeta en el pie.
   return (
-    <div className="flex gap-2 rounded-sm bg-surface-2 px-3 py-2.5 text-micro leading-relaxed text-ink-muted">
-      <Building2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
-      <p>El trabajo realizado en esta empresa puede ser revisado por sus fundadores.</p>
-    </div>
+    <p className="flex items-center gap-1.5 px-2 text-micro leading-snug text-ink-faint">
+      <Building2 className="h-3 w-3 shrink-0" aria-hidden />
+      <span>Los fundadores pueden revisar el trabajo en esta empresa.</span>
+    </p>
   );
 }

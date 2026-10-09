@@ -11,7 +11,7 @@ import type { ActiveOrganization } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
-import { Check, ChevronsUpDown, Loader2, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 /**
@@ -188,45 +188,46 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
               'group flex w-full items-center rounded-sm text-sm transition-colors duration-150',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
               'hover:bg-rail-2 data-[state=open]:bg-rail-2 motion-reduce:transition-none',
-              collapsed ? 'justify-center p-1' : 'gap-2 px-2 py-1.5',
+              collapsed ? 'mx-auto h-9 w-9 justify-center' : 'h-10 gap-2.5 px-1.5',
             )}
           >
             <span
               aria-hidden="true"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-amber-soft text-sm font-extrabold text-amber"
+              className={clsx(
+                'grid shrink-0 place-items-center bg-primary font-bold text-white shadow-card',
+                collapsed
+                  ? 'h-7 w-7 rounded-[9px] text-[13px]'
+                  : 'h-7 w-7 rounded-[9px] text-[13px]',
+              )}
             >
               {workspaceInitial(menu.active.name)}
             </span>
             {!collapsed && (
               <>
                 <span className="min-w-0 flex-1 text-left">
-                  <span className="block truncate font-semibold text-rail-ink">
+                  <span className="block truncate text-[13px] font-semibold leading-tight text-rail-ink">
                     {menu.active.name}
                   </span>
-                  <span className="block truncate text-micro text-rail-ink-faint">
-                    {switching ? 'Cambiando…' : 'Espacio de trabajo'}
+                  <span className="block truncate text-micro leading-tight text-rail-ink-faint">
+                    {switching
+                      ? 'Cambiando…'
+                      : menu.active.kind === 'personal'
+                        ? 'Personal'
+                        : roleLabel(menu.active.role)}
                   </span>
                 </span>
-                {/*
-                  EL DOBLE CHEVRON SÓLO CUANDO HAY ENTRE QUÉ ELEGIR.
-                  Con un único espacio esto no es un selector, y dibujarle las
-                  flechas de un selector sería prometer una lista que no existe
-                  — el menú sigue abriéndose, porque dentro está «crear otro»,
-                  pero no se anuncia como una elección. Mientras no se sabe
-                  (nadie lo ha abierto todavía) tampoco se dibujan: afirmar que
-                  hay varios antes de preguntar es la misma mentira al revés.
-                */}
-                {menu.state === 'choice' && (
-                  <ChevronsUpDown
-                    aria-hidden="true"
-                    strokeWidth={1.75}
-                    className="h-3.5 w-3.5 shrink-0 text-rail-ink-faint"
-                  />
-                )}
-                {switching && (
+                {/* El chevron siempre: el menú siempre abre (dentro está «crear
+                    otra empresa»), y un bloque que se pulsa debe parecerlo. */}
+                {switching ? (
                   <Loader2
                     aria-hidden="true"
                     className="h-3.5 w-3.5 shrink-0 animate-spin text-rail-ink-faint"
+                  />
+                ) : (
+                  <ChevronDown
+                    aria-hidden="true"
+                    strokeWidth={1.75}
+                    className="h-3.5 w-3.5 shrink-0 text-rail-ink-faint transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
                   />
                 )}
               </>
@@ -236,10 +237,10 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
 
         <DropdownMenu.Portal>
           <DropdownMenu.Content
-            side="bottom"
+            side={collapsed ? 'right' : 'bottom'}
             align="start"
             sideOffset={8}
-            className="scroll-slim z-50 max-h-[70vh] w-[17rem] overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
+            className="scroll-slim z-[80] max-h-[70vh] w-[17rem] overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
           >
             <DropdownMenu.Label className="px-2.5 pb-1 pt-1.5 text-micro font-semibold uppercase tracking-field text-ink-faint">
               Estás en
@@ -391,11 +392,11 @@ export function CreateCompanyButton({ collapsed = false }: { collapsed?: boolean
         title={collapsed ? 'Crear empresa' : undefined}
         onClick={() => setCreating(true)}
         className={clsx(
-          'flex min-h-9 w-full items-center rounded-pill text-sm font-semibold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-          collapsed ? 'justify-center px-1' : 'gap-2.5 px-3',
+          'flex h-8 w-full items-center rounded-sm text-[13px] font-medium text-rail-ink-faint transition-colors hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          collapsed ? 'justify-center px-1' : 'gap-2.5 px-2.5',
         )}
       >
-        <Plus className="h-4 w-4 shrink-0" aria-hidden />
+        <Plus className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
         {!collapsed && 'Crear empresa'}
       </button>
       {creating && <CreateWorkspaceDialog onClose={() => setCreating(false)} />}

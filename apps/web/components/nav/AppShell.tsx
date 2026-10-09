@@ -75,6 +75,7 @@ export async function AppShell({
               signals={signals}
               organization={user.organization}
               modulesOff={modulesOff}
+              user={{ name: user.name, email: user.email }}
             />
             {children}
             <PanelHost />

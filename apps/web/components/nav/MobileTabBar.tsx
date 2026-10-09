@@ -51,17 +51,17 @@ export function MobileTabBar({
             aria-current={active ? 'page' : undefined}
             onClick={() => recordVisit(tab.href)}
             className={clsx(
-              'flex min-h-12 flex-col items-center justify-center gap-1 rounded-sm text-micro font-bold',
-              active ? 'text-primary' : 'text-ink-faint hover:text-ink',
+              'group/tab flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-sm text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+              active ? 'text-ink' : 'text-ink-faint hover:text-ink',
             )}
           >
             <span
               className={clsx(
-                'grid h-7 w-12 place-items-center rounded-pill transition-colors',
-                active && 'bg-primary-soft',
+                'grid h-7 w-14 place-items-center rounded-pill transition-[background-color,transform] duration-150 group-active/tab:scale-95 motion-reduce:transition-none',
+                active ? 'bg-primary-soft text-primary' : 'group-hover/tab:bg-surface-2',
               )}
             >
-              <Icon className="h-[22px] w-[22px]" strokeWidth={2} />
+              <Icon className="h-5 w-5" strokeWidth={1.75} />
             </span>
             {tab.label}
           </Link>
@@ -71,10 +71,10 @@ export function MobileTabBar({
         type="button"
         onClick={() => mobile.setOpen(true)}
         aria-haspopup="dialog"
-        className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-sm text-micro font-bold text-ink-faint hover:text-ink"
+        className="group/tab flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-sm text-[11px] font-semibold text-ink-faint hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       >
-        <span className="grid h-7 w-12 place-items-center rounded-pill">
-          <Menu className="h-[22px] w-[22px]" strokeWidth={2} />
+        <span className="grid h-7 w-14 place-items-center rounded-pill transition-[background-color,transform] duration-150 group-active/tab:scale-95 group-hover/tab:bg-surface-2 motion-reduce:transition-none">
+          <Menu className="h-5 w-5" strokeWidth={1.75} />
         </span>
         Más
       </button>

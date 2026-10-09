@@ -18,10 +18,13 @@ import { workspaceHref } from '@/lib/workspace-context';
 import type { ModuleKey } from '@cortex/agent-tools';
 import type { ActiveOrganization, Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import {
   ArrowUpRight,
   ChevronDown,
+  ChevronRight,
+  ChevronsUpDown,
   LayoutDashboard,
   LogOut,
   MoreHorizontal,
@@ -29,11 +32,12 @@ import {
   PanelLeftOpen,
   Search,
   Settings,
+  SquarePen,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useCommandMenu } from './CommandMenuContext';
 import { CorporateSupervisionNotice } from './CorporateSupervisionNotice';
 import { useMobileSidebar } from './MobileSidebarContext';
@@ -41,28 +45,43 @@ import { ThemeToggle } from './ThemeToggle';
 import { CreateCompanyButton, WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 /**
- * EL RAIL, CALMADO.
+ * EL RAIL, REDISEÑADO: CALMO, DENSO Y SIN RUIDO.
  *
- * Tres alturas, de más a menos uso:
+ * La estructura no cambia (ver `lib/nav-shape.ts`); cambia cómo se ve y cómo se
+ * siente:
  *
- *   1. ARRIBA (`rail.pinned`): Chat, Hoy (el plan del día de Cortex, con las
- *      cosas que esperan decisión), «Te espera» (las cuatro colas en UNA fila
- *      con la suma, que se despliega), Vistas, Aplicaciones, Tablas y Cerebro.
- *   2. SECCIONES PLEGABLES con encabezados en español llano (Mi día, Clientes y
- *      ventas, Plata…). Cada una recuerda en `localStorage` si estaba abierta;
- *      sin elección previa sólo «Mi día» y la que contiene la pantalla actual
- *      salen abiertas. Los módulos apagados no dejan encabezados colgando.
- *   3. AL PIE: la tarjeta de «Puesta en marcha» (sólo mientras falte y sólo para
- *      quien administra), y Ajustes, tema y cerrar sesión.
+ *   · CABECERA: el espacio de trabajo como bloque compacto (monograma, nombre,
+ *     rol), «nuevo chat» al lado y una fila «Buscar… ⌘K» debajo.
+ *   · BLOQUE FIJO: Chat (con sus últimos hilos), Hoy, «Te espera» (se despliega
+ *     en el sitio y anima la altura), Vistas, Aplicaciones, Tablas y Cerebro.
+ *     Filas de 32px; la activa lleva un fondo tenue, texto de tinta e icono en
+ *     el color primario. Nada de barras gruesas a la izquierda.
+ *   · SECCIONES: encabezados de 12px sin mayúsculas, con el chevron a la vista
+ *     sólo al pasar el ratón (o si están cerradas). Cada una recuerda en
+ *     `localStorage` (`sidebar_sections`) si estaba abierta.
+ *   · PIE: la tarjeta de «Puesta en marcha» (sólo mientras falte) y la fila de la
+ *     persona con su menú (Ajustes, Plan, Ayuda, tema, cerrar sesión).
+ *   · CONTRAÍDO: 56px de iconos con insignias de punto; se ensancha con un roce.
  *
- * No se quitó ni un destino: `nav-shape.test.ts` suma la unión, y lo que no
- * esté en el rail se alcanza con ⌘K.
+ * El cuerpo (`SidebarBody`) se exporta para que la página de pruebas visuales
+ * (`/v/sidebar-showcase`) lo pinte en cualquier ancho sin montar el layout.
  */
 
 const EMPTY: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
 const NO_MODULES_OFF: ModuleKey[] = [];
 const NO_SIGNALS: ShellSignals = { pilot: 0, setup: null };
 const SECTIONS_KEY = 'sidebar_sections';
+const RECENT_LIMIT = 3;
+
+export interface RecentChat {
+  id: string;
+  title: string;
+}
+
+export interface SidebarUser {
+  name: string | null;
+  email: string;
+}
 
 function matches(path: string, href: string) {
   if (href.includes('?')) return false;
@@ -81,43 +100,168 @@ function readSavedSections(): Record<string, boolean> {
   }
 }
 
-function Navigation({
+/** Los últimos hilos del usuario. Se pide una vez y, dentro del chat, al cambiar de hilo. */
+function useRecentChats(enabled: boolean, path: string, override?: RecentChat[]) {
+  const [items, setItems] = useState<RecentChat[]>(override ?? []);
+  const key = path.startsWith('/chat') ? path : 'otro';
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` sólo cambia al cambiar de hilo.
+  useEffect(() => {
+    if (override || !enabled) return;
+    let alive = true;
+    void fetch('/api/conversations')
+      .then(async (res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return (await res.json()) as {
+          conversations?: Array<{ id: string; title: string | null }>;
+        };
+      })
+      .then((data) => {
+        if (!alive) return;
+        setItems(
+          (data.conversations ?? [])
+            .slice(0, RECENT_LIMIT)
+            .map((c) => ({ id: c.id, title: c.title?.trim() || 'Chat sin título' })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [enabled, key, override]);
+  return override ?? items;
+}
+
+/** Alto animado sin medir: la fila de la rejilla pasa de 0fr a 1fr. */
+function Collapsible({ open, id, children }: { open: boolean; id: string; children: ReactNode }) {
+  return (
+    <div
+      id={id}
+      data-closed={open ? undefined : 'true'}
+      className={clsx(
+        'grid transition-[grid-template-rows,opacity,visibility] duration-200 ease-out motion-reduce:transition-none',
+        open ? 'visible grid-rows-[1fr] opacity-100' : 'invisible grid-rows-[0fr] opacity-0',
+      )}
+    >
+      <div className="-mx-1 min-h-0 overflow-hidden px-1 py-0.5">{children}</div>
+    </div>
+  );
+}
+
+/** Contador pequeño y redondo. En una fila activa se pinta sobre la superficie. */
+function Count({ n, active }: { n: number; active?: boolean }) {
+  return (
+    <span
+      className={clsx(
+        'tabular inline-flex h-5 min-w-5 items-center justify-center rounded-pill px-1.5 text-micro font-semibold leading-none',
+        active ? 'bg-surface text-primary-ink' : 'bg-primary-soft text-primary-ink',
+      )}
+    >
+      {n > 99 ? '99+' : n}
+    </span>
+  );
+}
+
+/** Progreso en un anillo. `currentColor` pinta el avance; el riel va tenue. */
+function Ring({ pct, size = 36 }: { pct: number; size?: number }) {
+  const stroke = 3;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg
+      aria-hidden
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="shrink-0 -rotate-90 text-primary"
+    >
+      <title>Progreso</title>
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        strokeWidth={stroke}
+        className="stroke-rail-border"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - pct / 100)}
+        className="transition-[stroke-dashoffset] duration-500 motion-reduce:transition-none"
+      />
+    </svg>
+  );
+}
+
+const FOCUS =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-0';
+
+export function SidebarBody({
   role,
   counts,
   signals,
-  collapsed,
+  small,
   onNavigate,
   organization,
   onExpand,
   modulesOff,
+  user,
+  headerExtra,
+  onToggleCollapsed,
+  pinnedCollapsed = false,
+  onWorkspaceOpenChange,
+  pathOverride,
+  recentOverride,
 }: {
   /** Módulos que la empresa apagó (0186): sus pantallas no salen en el menú. */
   modulesOff: ModuleKey[];
   role: Role;
   counts: NavCounts;
   signals: ShellSignals;
-  collapsed: boolean;
+  /** El rail estrecho de 56px: sólo iconos. */
+  small: boolean;
+  /** Presente sólo en el cajón del teléfono: cierra el cajón al navegar. */
   onNavigate?: () => void;
   organization?: ActiveOrganization;
+  /** Ensancha el rail estrecho (al pulsar una sección). */
   onExpand: () => void;
+  user?: SidebarUser;
+  /** Lo que va al final de la cabecera (el botón de cerrar del cajón). */
+  headerExtra?: ReactNode;
+  /** Fija/suelta el rail contraído. Sin esto no hay botón. */
+  onToggleCollapsed?: () => void;
+  /** Para el rótulo del botón de arriba: el rail está fijado contraído. */
+  pinnedCollapsed?: boolean;
+  onWorkspaceOpenChange?: (open: boolean) => void;
+  /** Sólo para la página de pruebas: finge la ruta abierta. */
+  pathOverride?: string;
+  /** Sólo para la página de pruebas: hilos inventados, sin red. */
+  recentOverride?: RecentChat[];
 }) {
-  const path = usePathname();
+  const livePath = usePathname();
+  const path = pathOverride ?? livePath;
   const panel = usePanel();
   const commands = useCommandMenu();
   const admin = role === 'org_admin';
   const founder = organization?.kind === 'company' && organization.role === 'owner';
+  const touch = Boolean(onNavigate);
   const rail = buildRail([], admin, modulesOff, signals.setup === null);
   const globalItems: NavItem[] = [
     { href: '/overview', label: 'Todas mis empresas', icon: LayoutDashboard },
   ];
-  // «La empresa» es una sección más; «Todas mis empresas» cuelga de ella.
-  const sections: NavSection[] = [
-    ...rail.rest,
-    {
-      ...rail.company,
-      items: [...(founder ? globalItems : []), ...rail.company.items],
-    },
-  ].filter((section) => section.items.length > 0);
+  const rest: NavSection[] = rail.rest.filter((section) => section.items.length > 0);
+  // «La empresa» es una sección más, con un filete encima; «Todas mis empresas» cuelga de ella.
+  const company: NavSection | null =
+    rail.company.items.length > 0 || founder
+      ? { ...rail.company, items: [...(founder ? globalItems : []), ...rail.company.items] }
+      : null;
+  const sections: NavSection[] = company ? [...rest, company] : rest;
   const waitingCount = rail.waiting.reduce(
     (sum, item) => sum + (item.signal && item.signal !== 'pilot' ? counts[item.signal] : 0),
     0,
@@ -129,11 +273,15 @@ function Navigation({
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const current = selection?.path === path ? selection : null;
-  const waitingOpen = !collapsed && (current ? current.waiting : waitingActive);
-  const scope = onNavigate ? 'mobile' : 'desktop';
+  const waitingOpen = !small && (current ? current.waiting : waitingActive);
+  const scope = touch ? 'mobile' : 'desktop';
+  const recent = useRecentChats(!small, path, recentOverride);
+  const navRef = useRef<HTMLElement>(null);
+
+  const rowH = touch ? 'h-10' : 'h-8';
 
   const sectionOpen = (section: NavSection) =>
-    !collapsed &&
+    !small &&
     (saved[section.id] ??
       (section.id === 'today' || section.items.some((item) => matches(path, item.href))));
   function toggleSection(section: NavSection) {
@@ -191,73 +339,117 @@ function Navigation({
     return item.signal === 'pilot' ? signals.pilot : counts[item.signal];
   }
 
-  /** Una fila de arriba: icono, palabra y, si hay, lo que espera. */
+  /** Flechas arriba/abajo, Inicio y Fin recorren las filas visibles del rail. */
+  function onNavKeyDown(e: React.KeyboardEvent) {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+    const nodes = Array.from(
+      navRef.current?.querySelectorAll<HTMLElement>('[data-nav]') ?? [],
+    ).filter((el) => !el.closest('[data-closed="true"]'));
+    if (nodes.length === 0) return;
+    const index = nodes.indexOf(document.activeElement as HTMLElement);
+    let next = index;
+    if (e.key === 'ArrowDown') next = index < 0 ? 0 : Math.min(nodes.length - 1, index + 1);
+    else if (e.key === 'ArrowUp') next = index < 0 ? nodes.length - 1 : Math.max(0, index - 1);
+    else if (e.key === 'Home') next = 0;
+    else next = nodes.length - 1;
+    e.preventDefault();
+    nodes[next]?.focus();
+  }
+
+  /** Una fila del bloque fijo: icono, palabra y, si hay, lo que espera. */
   function door(item: NavItem) {
     const active = matches(path, item.href);
     const Icon = item.icon;
+    const badge = badgeFor(item);
+    const { onClick } = onClickFor(item);
+    const label = badge ? `${item.label}, ${badge} pendientes` : item.label;
+    return (
+      <Link
+        key={item.href}
+        href={hrefFor(item)}
+        data-nav
+        title={small ? item.label : undefined}
+        aria-label={small ? label : undefined}
+        aria-current={active ? 'page' : undefined}
+        onClick={onClick}
+        className={clsx(
+          'group/row relative flex items-center rounded-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
+          FOCUS,
+          small
+            ? 'mx-auto h-9 w-9 justify-center'
+            : clsx(rowH, 'w-full gap-2.5 px-2.5 text-[14px]'),
+          active
+            ? 'bg-primary-soft text-rail-ink'
+            : 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+        )}
+      >
+        <Icon
+          className={clsx(
+            'h-4 w-4 shrink-0 transition-colors',
+            active ? 'text-primary' : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted',
+          )}
+          strokeWidth={1.75}
+        />
+        {!small && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+        {!small && badge > 0 && <Count n={badge} active={active} />}
+        {small && badge > 0 && (
+          <span
+            aria-hidden
+            className="absolute right-1.5 top-1.5 h-2 w-2 rounded-pill bg-primary ring-2 ring-rail"
+          />
+        )}
+      </Link>
+    );
+  }
+
+  /** Un hilo reciente, sangrado bajo «Chat». */
+  function recentRow(chat: RecentChat) {
+    const href = `/chat/${chat.id}`;
+    const active = path === href;
+    return (
+      <Link
+        key={chat.id}
+        href={organization ? workspaceHref(organization.id, href) : href}
+        data-nav
+        aria-current={active ? 'page' : undefined}
+        onClick={() => onNavigate?.()}
+        className={clsx(
+          'flex items-center rounded-sm pl-2.5 pr-2 text-[13px] transition-colors duration-150 motion-reduce:transition-none',
+          touch ? 'h-9' : 'h-7',
+          FOCUS,
+          active
+            ? 'bg-rail-2 font-medium text-rail-ink'
+            : 'text-rail-ink-faint hover:bg-rail-2 hover:text-rail-ink',
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate">{chat.title}</span>
+      </Link>
+    );
+  }
+
+  /** Las colas de «Te espera»: sangradas, con su cuenta a la derecha. */
+  function queueRow(item: NavItem) {
+    const active = matches(path, item.href);
     const badge = badgeFor(item);
     const { onClick } = onClickFor(item);
     return (
       <Link
         key={item.href}
         href={hrefFor(item)}
-        title={collapsed ? item.label : undefined}
-        aria-label={
-          collapsed ? (badge ? `${item.label}, ${badge} pendientes` : item.label) : undefined
-        }
+        data-nav
         aria-current={active ? 'page' : undefined}
         onClick={onClick}
         className={clsx(
-          'workspace-nav-link flex min-h-11 items-center rounded-pill text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
-          collapsed ? 'justify-center px-1' : 'gap-3 px-3.5',
+          'flex items-center gap-2 rounded-sm pl-2.5 pr-2 text-[13px] transition-colors duration-150 motion-reduce:transition-none',
+          touch ? 'h-9' : 'h-7',
+          FOCUS,
           active
-            ? 'bg-primary-soft font-bold text-primary-ink'
-            : 'font-semibold text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+            ? 'bg-primary-soft font-medium text-rail-ink'
+            : 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
         )}
       >
-        <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-        {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
-        {!collapsed && badge > 0 && (
-          <span className="tabular rounded-pill bg-primary px-2 text-micro font-bold text-white">
-            {badge > 99 ? '99+' : badge}
-          </span>
-        )}
-        {collapsed && badge > 0 && (
-          <span className="tabular ml-0.5 text-micro font-bold text-primary">
-            {badge > 9 ? '9+' : badge}
-          </span>
-        )}
-      </Link>
-    );
-  }
-
-  /** Una fila dentro de «Te espera» o de una sección. */
-  function row(item: NavItem) {
-    const active = matches(path, item.href);
-    const Icon = item.icon;
-    const badge = badgeFor(item);
-    const { wanted, onClick } = onClickFor(item);
-    return (
-      <Link
-        key={item.href}
-        href={hrefFor(item)}
-        aria-current={active ? 'page' : undefined}
-        onClick={onClick}
-        className={clsx(
-          'workspace-nav-link group flex min-h-9 items-center gap-2.5 rounded-pill px-3 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
-          active
-            ? 'bg-primary-soft font-bold text-primary-ink'
-            : 'font-medium text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
-        )}
-      >
-        <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
-        {badge > 0 && (
-          <span className="tabular rounded-pill bg-surface px-2 text-micro font-semibold text-ink-muted ring-1 ring-border">
-            {badge > 99 ? '99+' : badge}
-          </span>
-        )}
-        {wanted && <ArrowUpRight className="h-3 w-3 text-rail-ink-faint" />}
+        {badge > 0 && <Count n={badge} active={active} />}
       </Link>
     );
   }
@@ -269,57 +461,108 @@ function Navigation({
       <div key="waiting">
         <button
           type="button"
+          data-nav
           aria-expanded={waitingOpen}
           aria-controls={`sidebar-${scope}-waiting`}
           aria-label={
-            collapsed
+            small
               ? `${WAITING_LABEL}${waitingCount ? `, ${waitingCount} pendientes` : ''}`
               : undefined
           }
-          title={collapsed ? WAITING_LABEL : undefined}
+          title={small ? WAITING_LABEL : undefined}
           onClick={() => {
-            if (collapsed) onExpand();
+            if (small) onExpand();
             setSelection({ path, waiting: !waitingOpen });
           }}
           className={clsx(
-            'flex min-h-11 w-full items-center rounded-pill text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
-            collapsed ? 'justify-center px-1' : 'gap-3 px-3.5',
-            waitingActive
-              ? 'font-bold text-primary-ink'
-              : 'font-semibold text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+            'group/row relative flex items-center rounded-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
+            FOCUS,
+            small
+              ? 'mx-auto h-9 w-9 justify-center'
+              : clsx(rowH, 'w-full gap-2.5 px-2.5 text-[14px]'),
+            waitingActive && !waitingOpen
+              ? 'bg-primary-soft text-rail-ink'
+              : 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
           )}
         >
-          <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-          {!collapsed && (
+          <Icon
+            className={clsx(
+              'h-4 w-4 shrink-0 transition-colors',
+              waitingActive
+                ? 'text-primary'
+                : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted',
+            )}
+            strokeWidth={1.75}
+          />
+          {!small && (
             <>
-              <span className="flex-1 text-left">{WAITING_LABEL}</span>
-              {waitingCount > 0 && (
-                <span className="tabular rounded-pill bg-primary px-2 text-micro font-bold text-white">
-                  {waitingCount > 99 ? '99+' : waitingCount}
-                </span>
-              )}
-              <ChevronDown
+              <span className="min-w-0 flex-1 truncate text-left">{WAITING_LABEL}</span>
+              {!waitingOpen && waitingCount > 0 && <Count n={waitingCount} />}
+              <ChevronRight
+                aria-hidden
                 className={clsx(
-                  'h-4 w-4 text-rail-ink-faint transition-transform motion-reduce:transition-none',
-                  waitingOpen && 'rotate-180',
+                  'h-3.5 w-3.5 shrink-0 text-rail-ink-faint transition-transform duration-200 motion-reduce:transition-none',
+                  waitingOpen && 'rotate-90',
                 )}
               />
             </>
           )}
-          {collapsed && waitingCount > 0 && (
-            <span className="tabular ml-0.5 text-micro font-bold text-primary">
-              {waitingCount > 9 ? '9+' : waitingCount}
-            </span>
+          {small && waitingCount > 0 && (
+            <span
+              aria-hidden
+              className="absolute right-1.5 top-1.5 h-2 w-2 rounded-pill bg-primary ring-2 ring-rail"
+            />
           )}
         </button>
-        <div
-          id={`sidebar-${scope}-waiting`}
-          hidden={!waitingOpen}
-          className="mb-1 ml-5 mt-1 space-y-0.5 border-l-2 border-rail-border pl-2"
-        >
-          {rail.waiting.map(row)}
-        </div>
+        {!small && (
+          <Collapsible open={waitingOpen} id={`sidebar-${scope}-waiting`}>
+            <div className="ml-[18px] space-y-0.5 border-l border-rail-border pl-2">
+              {rail.waiting.map(queueRow)}
+            </div>
+          </Collapsible>
+        )}
       </div>
+    );
+  }
+
+  /** Una fila dentro de una sección. */
+  function row(item: NavItem) {
+    const active = matches(path, item.href);
+    const Icon = item.icon;
+    const badge = badgeFor(item);
+    const { wanted, onClick } = onClickFor(item);
+    return (
+      <Link
+        key={item.href}
+        href={hrefFor(item)}
+        data-nav
+        aria-current={active ? 'page' : undefined}
+        onClick={onClick}
+        className={clsx(
+          'group/row flex items-center gap-2.5 rounded-sm px-2.5 text-[13px] font-medium transition-colors duration-150 motion-reduce:transition-none',
+          touch ? 'h-10' : 'h-8',
+          FOCUS,
+          active
+            ? 'bg-primary-soft text-rail-ink'
+            : 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+        )}
+      >
+        <Icon
+          className={clsx(
+            'h-4 w-4 shrink-0 transition-colors',
+            active ? 'text-primary' : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted',
+          )}
+          strokeWidth={1.75}
+        />
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        {badge > 0 && <Count n={badge} active={active} />}
+        {wanted && (
+          <ArrowUpRight
+            aria-hidden
+            className="h-3 w-3 shrink-0 text-rail-ink-faint opacity-0 transition-opacity group-hover/row:opacity-100"
+          />
+        )}
+      </Link>
     );
   }
 
@@ -328,46 +571,59 @@ function Navigation({
     const open = sectionOpen(section);
     const hasActive = section.items.some((item) => matches(path, item.href));
     const Icon = section.items[0]?.icon ?? MoreHorizontal;
-    if (collapsed) {
+    if (small) {
       return (
         <button
           key={section.id}
           type="button"
+          data-nav
           onClick={onExpand}
           title={section.label}
           aria-label={section.label}
           className={clsx(
-            'flex min-h-10 w-full items-center justify-center rounded-pill transition-colors hover:bg-rail-2 hover:text-rail-ink',
-            hasActive ? 'text-primary-ink' : 'text-rail-ink-faint',
+            'mx-auto flex h-9 w-9 items-center justify-center rounded-sm transition-colors hover:bg-rail-2',
+            FOCUS,
+            hasActive ? 'text-primary' : 'text-rail-ink-faint hover:text-rail-ink-muted',
           )}
         >
-          <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+          <Icon className="h-4 w-4" strokeWidth={1.75} />
         </button>
       );
     }
     return (
-      <div key={section.id}>
+      <div
+        key={section.id}
+        className={clsx(section.id === 'company' && 'mt-3 border-t border-rail-border pt-3')}
+      >
         <button
           type="button"
+          data-nav
           aria-expanded={open}
           aria-controls={`sidebar-${scope}-${section.id}`}
           onClick={() => toggleSection(section)}
-          className="flex min-h-8 w-full items-center gap-2 rounded-pill px-3 text-left text-micro font-bold uppercase tracking-field text-rail-ink-faint transition-colors hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className={clsx(
+            'group/sec flex w-full items-center gap-1.5 rounded-sm px-2.5 text-left text-micro font-medium text-rail-ink-faint transition-colors hover:text-rail-ink-muted',
+            touch ? 'h-9' : 'h-7',
+            FOCUS,
+          )}
         >
-          <span className="flex-1">{section.label}</span>
+          <span className="min-w-0 flex-1 truncate">{section.label}</span>
           {!open && hasActive && (
             <span aria-hidden className="h-1.5 w-1.5 rounded-pill bg-primary" />
           )}
           <ChevronDown
+            aria-hidden
             className={clsx(
-              'h-3.5 w-3.5 transition-transform motion-reduce:transition-none',
-              !open && '-rotate-90',
+              'h-3.5 w-3.5 shrink-0 transition-[transform,opacity] duration-200 motion-reduce:transition-none',
+              open
+                ? 'opacity-0 group-hover/sec:opacity-100 group-focus-visible/sec:opacity-100'
+                : '-rotate-90 opacity-100',
             )}
           />
         </button>
-        <div id={`sidebar-${scope}-${section.id}`} hidden={!open} className="space-y-0.5 pb-1">
-          {section.items.map(row)}
-        </div>
+        <Collapsible open={open} id={`sidebar-${scope}-${section.id}`}>
+          <div className="space-y-0.5">{section.items.map(row)}</div>
+        </Collapsible>
       </div>
     );
   }
@@ -378,17 +634,19 @@ function Navigation({
     const { ready, total } = signals.setup;
     const pct = total > 0 ? Math.round((ready / total) * 100) : 0;
     const { onClick } = onClickFor(rail.setup);
-    if (collapsed) {
+    if (small) {
       return (
         <Link
           href={hrefFor(rail.setup)}
           onClick={onClick}
           title={`Puesta en marcha: ${ready} de ${total}`}
           aria-label={`Puesta en marcha: ${ready} de ${total} pasos`}
-          className="workspace-nav-link flex min-h-10 flex-col items-center justify-center rounded-pill text-primary hover:bg-rail-2"
+          className={clsx(
+            'mx-auto flex h-9 w-9 items-center justify-center rounded-sm transition-colors hover:bg-rail-2',
+            FOCUS,
+          )}
         >
-          <Settings className="h-[18px] w-[18px]" strokeWidth={2} />
-          <span className="tabular text-micro font-bold">{`${ready}/${total}`}</span>
+          <Ring pct={pct} size={26} />
         </Link>
       );
     }
@@ -396,32 +654,192 @@ function Navigation({
       <Link
         href={hrefFor(rail.setup)}
         onClick={onClick}
-        className="block rounded-sm border border-rail-border bg-canvas p-3 transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        className={clsx(
+          'group/setup flex items-center gap-3 rounded-card border border-rail-border bg-canvas p-3 transition-colors hover:border-border-strong',
+          FOCUS,
+        )}
       >
-        <span className="flex items-center justify-between gap-2 text-sm font-bold text-rail-ink">
-          Puesta en marcha
-          <span className="tabular text-micro font-semibold text-rail-ink-muted">
-            {ready} de {total}
+        <span className="relative grid shrink-0 place-items-center">
+          <Ring pct={pct} />
+          <Settings
+            aria-hidden
+            className="absolute h-3.5 w-3.5 text-rail-ink-muted"
+            strokeWidth={1.75}
+          />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-rail-ink">
+            Puesta en marcha
+          </span>
+          <span className="tabular block truncate text-micro text-rail-ink-muted">
+            {ready} de {total} pasos
           </span>
         </span>
-        <span aria-hidden className="mt-2 block h-1.5 overflow-hidden rounded-pill bg-rail-2">
-          <span className="block h-full rounded-pill bg-primary" style={{ width: `${pct}%` }} />
-        </span>
-        <span className="mt-2 block text-micro text-rail-ink-muted">Sigue con lo que falta</span>
+        <ChevronRight
+          aria-hidden
+          className="h-4 w-4 shrink-0 text-rail-ink-faint transition-transform group-hover/setup:translate-x-0.5 motion-reduce:transition-none"
+        />
       </Link>
     );
   }
 
-  const topRows = rail.pinned.flatMap((item) =>
-    item.href === WAITING_AFTER ? [door(item), waitingRow()] : [door(item)],
+  const label = user?.name?.trim() || user?.email || 'Tu cuenta';
+  const initial = Array.from(label.trim())[0]?.toLocaleUpperCase('es') ?? '?';
+  const footerLinks = rail.footer.filter((item) =>
+    ['/settings', '/plan', '/ayuda'].includes(item.href),
   );
+
+  /** El menú de la persona: lo que antes eran tres filas sueltas al pie. */
+  function userMenu() {
+    return (
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            title={small ? label : undefined}
+            aria-label={`Cuenta de ${label}`}
+            className={clsx(
+              'group/user flex items-center rounded-sm text-left transition-colors hover:bg-rail-2 data-[state=open]:bg-rail-2 motion-reduce:transition-none',
+              FOCUS,
+              small ? 'mx-auto h-9 w-9 justify-center' : 'min-w-0 flex-1 gap-2.5 p-1.5',
+            )}
+          >
+            <span
+              aria-hidden
+              className={clsx(
+                'grid shrink-0 place-items-center rounded-full bg-amber-soft font-semibold text-amber',
+                small ? 'h-7 w-7 text-xs' : 'h-8 w-8 text-[13px]',
+              )}
+            >
+              {initial}
+            </span>
+            {!small && (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold leading-tight text-rail-ink">
+                    {label}
+                  </span>
+                  {user?.name && (
+                    <span className="block truncate text-micro leading-tight text-rail-ink-faint">
+                      {user.email}
+                    </span>
+                  )}
+                </span>
+                <ChevronsUpDown
+                  aria-hidden
+                  className="h-3.5 w-3.5 shrink-0 text-rail-ink-faint"
+                  strokeWidth={1.75}
+                />
+              </>
+            )}
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            side={small ? 'right' : 'top'}
+            align={small ? 'end' : 'start'}
+            sideOffset={8}
+            className="z-[80] w-64 rounded-card border border-border bg-surface p-1.5 shadow-pop"
+          >
+            <div className="px-2.5 pb-2 pt-1.5">
+              <p className="truncate text-[13px] font-semibold text-ink">{label}</p>
+              {user?.name && <p className="truncate text-micro text-ink-faint">{user.email}</p>}
+            </div>
+            <div className="my-1 h-px bg-border" aria-hidden />
+            {footerLinks.map((item) => {
+              const Icon = item.icon;
+              return (
+                <DropdownMenu.Item key={item.href} asChild>
+                  <Link
+                    href={hrefFor(item)}
+                    onClick={onClickFor(item).onClick}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] font-medium text-ink outline-none transition-colors data-[highlighted]:bg-surface-2"
+                  >
+                    <Icon className="h-4 w-4 text-ink-faint" strokeWidth={1.75} />
+                    {item.label}
+                  </Link>
+                </DropdownMenu.Item>
+              );
+            })}
+            <div className="my-1 h-px bg-border" aria-hidden />
+            <div className="px-1 py-1">
+              <p className="px-1.5 pb-1 text-micro font-medium text-ink-faint">Tema</p>
+              <ThemeToggle />
+            </div>
+            <div className="my-1 h-px bg-border" aria-hidden />
+            <DropdownMenu.Item
+              disabled={signingOut}
+              onSelect={(e) => {
+                e.preventDefault();
+                void signOut();
+              }}
+              className="flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] font-medium text-ink outline-none transition-colors data-[disabled]:opacity-60 data-[highlighted]:bg-surface-2"
+            >
+              <LogOut className="h-4 w-4 text-ink-faint" strokeWidth={1.75} aria-hidden />
+              {signingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    );
+  }
+
+  const chatHref = organization ? workspaceHref(organization.id, '/chat') : '/chat';
+  const iconBtn = clsx(
+    'grid shrink-0 place-items-center rounded-sm text-rail-ink-muted transition-colors hover:bg-rail-2 hover:text-rail-ink motion-reduce:transition-none',
+    FOCUS,
+  );
+
+  const topRows = rail.pinned.flatMap((item) => {
+    const base = item.href === WAITING_AFTER ? [door(item), waitingRow()] : [door(item)];
+    if (item.href === '/chat' && !small && recent.length > 0) {
+      return [
+        ...base,
+        <div key="recent" className="ml-[18px] space-y-px border-l border-rail-border pl-2">
+          {recent.map(recentRow)}
+        </div>,
+      ];
+    }
+    return base;
+  });
 
   return (
     <>
-      <nav
-        aria-label="Navegación principal"
-        className="scroll-slim min-h-0 flex-1 overflow-y-auto px-3 pb-4"
-      >
+      {/* CABECERA: el espacio, nuevo chat y la búsqueda. */}
+      <div className={clsx('shrink-0', small ? 'space-y-1 px-2 pt-3' : 'px-3 pt-3')}>
+        <div className={clsx(small ? 'space-y-1' : 'flex items-center gap-1')}>
+          {organization ? (
+            <div className={clsx(!small && 'min-w-0 flex-1')}>
+              <WorkspaceSwitcher
+                active={organization}
+                collapsed={small}
+                onOpenChange={onWorkspaceOpenChange}
+              />
+            </div>
+          ) : (
+            <Link
+              href="/overview"
+              onClick={onNavigate}
+              aria-label="Cortex, abrir vista global"
+              className={clsx('flex min-w-0 flex-1 items-center gap-2 rounded-sm p-1', FOCUS)}
+            >
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary text-white">
+                <CortexSignature className="h-5 w-5" />
+              </span>
+              {!small && <span className="text-sm font-bold text-rail-ink">Cortex</span>}
+            </Link>
+          )}
+          <Link
+            href={chatHref}
+            onClick={() => onNavigate?.()}
+            title="Nuevo chat"
+            aria-label="Nuevo chat"
+            className={clsx(iconBtn, small ? 'mx-auto h-9 w-9' : touch ? 'h-10 w-10' : 'h-8 w-8')}
+          >
+            <SquarePen className="h-4 w-4" strokeWidth={1.75} />
+          </Link>
+          {small ? null : headerExtra}
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -429,110 +847,89 @@ function Navigation({
             onNavigate?.();
           }}
           aria-label="Buscar en Cortex"
+          aria-keyshortcuts="Meta+K Control+K"
+          title={small ? 'Buscar (⌘K)' : undefined}
           className={clsx(
-            'mb-4 flex h-10 w-full items-center rounded-pill border border-rail-border bg-canvas text-sm text-rail-ink-faint transition-colors hover:border-border-strong hover:text-rail-ink-muted',
-            collapsed ? 'justify-center' : 'gap-2.5 px-3.5',
+            'flex items-center text-[13px] text-rail-ink-faint transition-colors hover:text-rail-ink-muted motion-reduce:transition-none',
+            FOCUS,
+            small
+              ? 'mx-auto h-9 w-9 justify-center rounded-sm hover:bg-rail-2'
+              : clsx(
+                  'mt-2 w-full gap-2 rounded-sm border border-rail-border bg-canvas px-2.5 hover:border-border-strong',
+                  touch ? 'h-10' : 'h-8',
+                ),
           )}
         >
-          <Search className="h-4 w-4" />
-          {!collapsed && (
+          <Search className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+          {!small && (
             <>
-              <span className="flex-1 text-left font-medium">Buscar</span>
-              <kbd className="font-sans text-micro font-semibold">⌘K</kbd>
+              <span className="flex-1 text-left">Buscar…</span>
+              <kbd className="font-sans text-micro font-medium">⌘K</kbd>
             </>
           )}
         </button>
+      </div>
 
-        <div className="space-y-1">{topRows}</div>
+      <nav
+        ref={navRef}
+        aria-label="Navegación principal"
+        onKeyDown={onNavKeyDown}
+        className={clsx(
+          'scroll-slim min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-4 pt-3',
+          small ? 'px-2' : 'px-3',
+        )}
+      >
+        <div className="space-y-0.5">{topRows}</div>
 
-        <div className="mt-3 space-y-1 border-t border-rail-border pt-3">
+        <div
+          className={clsx('mt-4 space-y-1', small && 'space-y-1 border-t border-rail-border pt-3')}
+        >
           {sections.map(sectionBlock)}
-          {!collapsed && (
-            <div className="space-y-0.5 pt-1">
+          {!small && (
+            <div className="pt-2">
               <CreateCompanyButton />
-              <button
-                type="button"
-                onClick={() => {
-                  commands.setOpen(true);
-                  onNavigate?.();
-                }}
-                className="workspace-nav-link flex min-h-9 w-full items-center gap-3 rounded-pill px-3 text-left text-sm font-semibold text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink"
-              >
-                <Search className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="min-w-0 flex-1 truncate">Buscar cualquier pantalla</span>
-                <kbd className="text-micro font-semibold text-rail-ink-faint">⌘K</kbd>
-              </button>
             </div>
           )}
         </div>
       </nav>
-      <div className="shrink-0 space-y-2 border-t border-rail-border px-3 py-3">
+
+      {/* PIE: puesta en marcha, la persona y fijar el rail. */}
+      <div
+        className={clsx(
+          'shrink-0 space-y-2 border-t border-rail-border',
+          small ? 'px-2 py-2' : 'px-3 py-3',
+        )}
+        style={touch ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom))' } : undefined}
+      >
         {setupCard()}
-        <div className={clsx('flex items-center gap-1', collapsed && 'flex-col')}>
-          {rail.footer
-            .filter((item) => item.href === '/settings')
-            .map((item) =>
-              collapsed ? (
-                <Link
-                  key={item.href}
-                  href={hrefFor(item)}
-                  title={item.label}
-                  aria-label={item.label}
-                  aria-current={matches(path, item.href) ? 'page' : undefined}
-                  onClick={onClickFor(item).onClick}
-                  className="workspace-nav-link flex min-h-10 items-center justify-center rounded-pill text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink"
-                >
-                  <item.icon className="h-[18px] w-[18px]" strokeWidth={2} />
-                </Link>
+        <div className={clsx('flex items-center gap-1', small && 'flex-col')}>
+          {userMenu()}
+          {onToggleCollapsed && (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label={pinnedCollapsed ? 'Fijar el menú expandido' : 'Contraer el menú'}
+              title={pinnedCollapsed ? 'Expandir el menú' : 'Contraer el menú'}
+              className={clsx(iconBtn, small ? 'mx-auto h-9 w-9' : 'h-8 w-8')}
+            >
+              {small ? (
+                <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
               ) : (
-                <div key={item.href} className="min-w-0 flex-1">
-                  {row(item)}
-                </div>
-              ),
-            )}
-          <ThemeToggle icon />
-        </div>
-        <button
-          type="button"
-          disabled={signingOut}
-          onClick={signOut}
-          aria-label={collapsed ? 'Cerrar sesión' : undefined}
-          title={collapsed ? 'Cerrar sesión' : undefined}
-          className={clsx(
-            'workspace-nav-link flex min-h-10 w-full items-center rounded-pill text-sm font-medium text-rail-ink-muted transition-colors hover:bg-rail-2 hover:text-rail-ink disabled:opacity-60',
-            collapsed ? 'justify-center' : 'gap-2.5 px-3',
+                <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
+              )}
+            </button>
           )}
-        >
-          <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={2} aria-hidden />
-          {!collapsed && <span>{signingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}</span>}
-        </button>
+        </div>
         {signOutError && (
-          <p role="alert" className={clsx('text-xs text-rose', collapsed ? 'sr-only' : 'px-3')}>
+          <p role="alert" className={clsx('text-xs text-rose', small ? 'sr-only' : 'px-1.5')}>
             {signOutError}
           </p>
         )}
-        {!collapsed && organization?.kind === 'company' && (
+        {!small && organization?.kind === 'company' && (
           <CorporateSupervisionNotice kind={organization.kind} />
         )}
       </div>
     </>
-  );
-}
-
-/** La marca: el cuadrado índigo del diseño con la espiral dentro. */
-function Brand({ small, onNavigate }: { small: boolean; onNavigate?: () => void }) {
-  return (
-    <Link
-      href="/overview"
-      onClick={onNavigate}
-      aria-label="Cortex, abrir vista global"
-      className="flex items-center gap-2.5 rounded-sm text-rail-ink"
-    >
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-primary text-white shadow-card">
-        <CortexSignature className="h-6 w-6" />
-      </span>
-      {!small && <span className="text-lg font-extrabold tracking-tight">Cortex</span>}
-    </Link>
   );
 }
 
@@ -542,6 +939,7 @@ export function Sidebar({
   signals = NO_SIGNALS,
   organization,
   modulesOff = NO_MODULES_OFF,
+  user,
 }: {
   role: Role;
   counts?: NavCounts;
@@ -550,6 +948,8 @@ export function Sidebar({
   organization?: ActiveOrganization;
   /** Módulos que la empresa apagó (0186). Lo lee el shell, una vez. */
   modulesOff?: ModuleKey[];
+  /** Quién es, para la fila del pie. */
+  user?: SidebarUser;
 }) {
   const path = usePathname();
   const inChat = path.startsWith('/chat');
@@ -572,70 +972,13 @@ export function Sidebar({
       return !v;
     });
   }
-  function contents(small: boolean, onNavigate?: () => void) {
-    return (
-      <>
-        <div
-          className={clsx(
-            'flex h-16 shrink-0 items-center',
-            small ? 'justify-center' : 'justify-between px-5',
-          )}
-        >
-          <Brand small={small} onNavigate={onNavigate} />
-          {!small && !inChat && !onNavigate && (
-            <button
-              type="button"
-              aria-label={collapsed ? 'Fijar el menú expandido' : 'Contraer el menú'}
-              onClick={toggle}
-              className="rounded-pill p-2 text-rail-ink-faint hover:bg-rail-2 hover:text-rail-ink"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        {organization && (
-          <div
-            className={clsx(
-              'mb-3 shrink-0',
-              small ? 'px-1' : 'mx-3 rounded-sm border border-rail-border bg-canvas p-1',
-            )}
-          >
-            <WorkspaceSwitcher
-              active={organization}
-              collapsed={small}
-              onOpenChange={setWorkspaceOpen}
-            />
-          </div>
-        )}
-        <Navigation
-          role={role}
-          counts={counts}
-          signals={signals}
-          collapsed={small}
-          onNavigate={onNavigate}
-          organization={organization}
-          onExpand={() => setPeek(true)}
-          modulesOff={modulesOff}
-        />
-        {small && !inChat && (
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label="Expandir el menú"
-            className="mx-auto mb-3 rounded-pill p-2 text-rail-ink-muted hover:bg-rail-2"
-          >
-            <PanelLeftOpen className="h-4 w-4" />
-          </button>
-        )}
-      </>
-    );
-  }
+  const shared = { role, counts, signals, organization, modulesOff, user };
   return (
     <>
       <aside
         className={clsx(
-          'relative hidden h-full shrink-0 print:hidden md:flex',
-          compact ? 'w-[72px]' : 'w-[264px]',
+          'relative hidden h-full shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none print:hidden md:flex',
+          compact ? 'w-14' : 'w-[264px]',
         )}
         onMouseEnter={() => compact && setPeek(true)}
         onMouseLeave={() => setPeek(false)}
@@ -646,32 +989,47 @@ export function Sidebar({
       >
         <div
           className={clsx(
-            'workspace-rail flex h-full flex-col border-r border-rail-border bg-rail',
+            'workspace-rail flex h-full flex-col overflow-hidden border-r border-rail-border bg-rail transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none',
             compact ? 'absolute inset-y-0 left-0 z-40' : 'w-full',
-            compact && (expanded ? 'w-[264px] shadow-pop' : 'w-[72px]'),
+            compact && (expanded ? 'w-[264px] shadow-pop' : 'w-14'),
           )}
         >
-          {contents(!expanded)}
+          <SidebarBody
+            {...shared}
+            small={!expanded}
+            onExpand={() => setPeek(true)}
+            onToggleCollapsed={inChat ? undefined : toggle}
+            pinnedCollapsed={collapsed}
+            onWorkspaceOpenChange={setWorkspaceOpen}
+          />
         </div>
       </aside>
       <Dialog.Root open={mobile.open} onOpenChange={mobile.setOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm md:hidden" />
+          <Dialog.Overlay className="sidebar-overlay fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm md:hidden" />
           <Dialog.Content
             aria-describedby={undefined}
-            className="fixed inset-y-0 left-0 z-50 flex w-[min(320px,88vw)] flex-col rounded-r-card bg-rail shadow-pop md:hidden"
+            className="sidebar-drawer fixed inset-y-0 left-0 z-50 flex w-[min(320px,88vw)] flex-col rounded-r-card bg-rail shadow-pop md:hidden"
+            style={{ paddingTop: 'env(safe-area-inset-top)' }}
           >
             <Dialog.Title className="sr-only">Menú de Cortex</Dialog.Title>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                aria-label="Cerrar el menú"
-                className="absolute right-3 top-3.5 z-10 rounded-pill p-2.5 text-rail-ink-muted hover:bg-rail-2"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </Dialog.Close>
-            {contents(false, () => mobile.setOpen(false))}
+            <SidebarBody
+              {...shared}
+              small={false}
+              onExpand={() => {}}
+              onNavigate={() => mobile.setOpen(false)}
+              headerExtra={
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    aria-label="Cerrar el menú"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-sm text-rail-ink-muted transition-colors hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    <X className="h-4 w-4" strokeWidth={1.75} />
+                  </button>
+                </Dialog.Close>
+              }
+            />
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
