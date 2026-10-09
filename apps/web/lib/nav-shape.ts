@@ -3,6 +3,7 @@ import {
   AlarmClock,
   BadgeCheck,
   BarChart3,
+  Bell,
   BookOpen,
   Briefcase,
   Building2,
@@ -15,6 +16,7 @@ import {
   Globe,
   HandCoins,
   Handshake,
+  History,
   Home,
   Hourglass,
   IdCard,
@@ -38,6 +40,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Sun,
   Table2,
   Target,
   Truck,
@@ -152,7 +155,7 @@ export interface NavItem {
    * `waiting-shape.ts` — las únicas cuatro pantallas del producto que guardan
    * trabajo parado esperando a una persona.
    */
-  signal?: WaitingQueue;
+  signal?: WaitingQueue | 'pilot';
   /**
    * Escondida para todo el mundo menos un admin de la organización.
    *
@@ -199,7 +202,22 @@ export const SETUP: NavItem = { href: '/onboarding', label: 'Puesta en marcha', 
 export const VIEWS: NavItem = { href: '/views', label: 'Vistas', icon: LayoutPanelTop };
 /** Aplicaciones (0208): varias pantallas con roles, para operarios y clientes que no son «del equipo». */
 export const APPS: NavItem = { href: '/apps', label: 'Aplicaciones', icon: LayoutGrid };
-export const PINNED: NavItem[] = [SETUP, MANAGEMENT, CHAT, VIEWS, FEED, CALLS, BRAIN];
+/**
+ * «Hoy»: el plan del día de Cortex (/piloto). Su contador son las cosas que dejó
+ * esperando una decisión; no es una de las cuatro colas de «Te espera».
+ */
+export const PILOT: NavItem = { href: '/piloto', label: 'Hoy', icon: Sun, signal: 'pilot' };
+/** Todo lo que Cortex hizo, en frases (/actividad). */
+export const ACTIVITY: NavItem = { href: '/actividad', label: 'Lo que hizo Cortex', icon: History };
+export const NOTIFICATIONS: NavItem = { href: '/notifications', label: 'Avisos', icon: Bell };
+export const TRACKERS: NavItem = { href: '/trackers', label: 'Tablas', icon: Table2 };
+/**
+ * EL BLOQUE DE ARRIBA, en el orden en que se lee. «Te espera» (las cuatro colas,
+ * una sola fila que se despliega) entra justo detrás de `WAITING_AFTER`.
+ * Puesta en marcha ya no está aquí: es una tarjeta al pie mientras falte.
+ */
+export const PINNED: NavItem[] = [CHAT, PILOT, VIEWS, APPS, TRACKERS, BRAIN];
+export const WAITING_AFTER = PILOT.href;
 /** Procesos listos para activar: la puerta del autoservicio. */
 export const PROCESSES: NavItem = { href: '/procesos', label: 'Procesos', icon: Sparkles };
 
@@ -253,38 +271,29 @@ export function waitingHref(counts: WaitingCounts): string {
 // fueron — competían con el chat por la mirada, y el chat es el producto.
 export const SECTIONS: NavSection[] = [
   {
+    // Lo de todos los días que no es una puerta de arriba.
+    id: 'today',
+    label: 'Mi día',
+    items: [MANAGEMENT, HOME, CALLS, FEED, NOTIFICATIONS, ACTIVITY],
+  },
+  {
     // Clientes es el eje del que cuelga el resto del producto (migración 0075):
     // una pregunta sobre un cliente empieza aquí y se sigue hasta el correo, la
     // reunión o el vencimiento. La cartera vive en su sección financiera.
     id: 'work',
-    label: 'Con quién trabajo',
+    label: 'Clientes y ventas',
     items: [
       { href: '/clients', label: 'Clientes', icon: Building2 },
-      // Cotizaciones → pedidos → facturas electrónicas (0182): lo que se le vende
-      // a cada cliente, al lado del cliente.
+      // Cotizaciones → pedidos → facturas electrónicas (0182).
       { href: '/ventas', label: 'Ventas', icon: Receipt },
-      // El embudo comercial (0193): los negocios que vienen, el seguimiento, los
-      // clientes que se están yendo y las encuestas.
+      // El embudo comercial (0193): negocios, seguimiento, clientes que se van, encuestas.
       { href: '/comercial', label: 'Embudo comercial', icon: Handshake },
-      { href: '/trackers', label: 'Tablas', icon: Table2 },
-      APPS,
-    ],
-  },
-  {
-    // Órdenes de servicio y proyectos (0196): el trabajo que se le hace a cada
-    // cliente, con sus horas, costos y margen; y la flota que lo lleva. Sección
-    // propia: las dos son de módulos que muchas empresas tienen apagados, y
-    // apagadas no dejan el encabezado colgando.
-    id: 'operations',
-    label: 'Operación',
-    items: [
-      { href: '/proyectos', label: 'Proyectos', icon: FolderKanban },
-      { href: '/flota', label: 'Flota', icon: Truck },
+      { href: '/prospects', label: 'Prospectos', icon: Radar },
     ],
   },
   {
     id: 'finance',
-    label: 'Finanzas',
+    label: 'Plata',
     items: [
       { href: '/finance', label: 'Resumen financiero', icon: Wallet },
       { href: '/payments', label: 'Cartera y pagos', icon: Wallet },
@@ -300,31 +309,32 @@ export const SECTIONS: NavSection[] = [
     ],
   },
   {
-    // Cuatro familias de tablas sin relación entre sí, no cuatro vistas de una.
-    // Encargos ya no está aquí: es una de las cuatro colas de «Te espera», que
-    // es donde se pregunta por él.
-    id: 'automation',
-    label: 'Lo que hago solo',
+    // Proyectos y flota son de módulos que muchas empresas tienen apagados;
+    // apagados no dejan el encabezado colgando.
+    id: 'operations',
+    label: 'Operación',
     items: [
-      // La etiqueta viene de `browser-shape` para que la pantalla, la paleta y
-      // el catálogo de herramientas no puedan separarse mientras el nombre se
-      // asienta.
-      // Los procesos listos para activar (autoservicio). Es la puerta de la
-      // navegación principal; aquí sólo garantiza que «Más» y la paleta la
-      // alcancen también.
-      PROCESSES,
-      { href: '/browser', label: MODULE.label, icon: Globe },
-      { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
-      { href: '/activations', label: 'Activaciones', icon: BadgeCheck },
-      { href: '/pipelines', label: 'Flujos', icon: Workflow },
-      // Documentos que vencen (0184): Cortex les lee la fecha a los SOAT,
-      // pólizas, licencias y contratos, y avisa solo a quien los renueva.
+      { href: '/proyectos', label: 'Proyectos', icon: FolderKanban },
+      { href: '/flota', label: 'Flota', icon: Truck },
+      // Documentos que vencen (0184): SOAT, pólizas, licencias y contratos.
       { href: '/documentos-vencen', label: 'Documentos que vencen', icon: CalendarClock },
     ],
   },
   {
-    // Contratos y cumplimiento (0195): los papeles con obligaciones y la lista
-    // societaria y legal, con las PQRS y los procesos judiciales.
+    // La gente de la empresa y cómo va su trabajo. `/team` es la puerta de quien
+    // reparte el trabajo; quien no ve al equipo cae en «Mi semana».
+    id: 'people',
+    label: 'Mi equipo',
+    items: [
+      { href: '/team', label: 'Equipo', icon: UsersRound },
+      { href: '/team/yo', label: 'Mi semana', icon: CalendarCheck },
+      { href: '/goals', label: 'Metas', icon: Target },
+      { href: '/nomina', label: 'Nómina', icon: Wallet },
+      { href: '/sst', label: 'SG-SST', icon: ShieldCheck },
+    ],
+  },
+  {
+    // Contratos y cumplimiento (0195): los papeles con obligaciones, las PQRS y los procesos.
     id: 'legal',
     label: 'Legal',
     items: [
@@ -333,28 +343,20 @@ export const SECTIONS: NavSection[] = [
     ],
   },
   {
-    // Leer, no actuar. Todo lo de aquí responde una pregunta sobre un periodo.
-    id: 'review',
-    label: 'Cómo vamos',
+    id: 'automation',
+    label: 'Lo que hago solo',
     items: [
-      // Inicio bajó de las filas fijas: el chat es la puerta, esto es el
-      // recuento de lo que se movió. Sigue existiendo para quien lo busque.
-      HOME,
-      { href: '/goals', label: 'Metas', icon: Target },
-      // El trabajo del equipo (registro de trabajo, 0174). `/team` es la puerta
-      // de quien reparte el trabajo; quien no ve al equipo cae en «Mi semana».
-      { href: '/team', label: 'Equipo', icon: UsersRound },
-      { href: '/team/yo', label: 'Mi semana', icon: CalendarCheck },
-      // Nómina con vacaciones y permisos, y SG-SST (0194): la gente de la empresa.
-      { href: '/nomina', label: 'Nómina', icon: Wallet },
-      { href: '/sst', label: 'SG-SST', icon: ShieldCheck },
+      PROCESSES,
+      // La etiqueta viene de `browser-shape` para que pantalla, paleta y catálogo no se separen.
+      { href: '/browser', label: MODULE.label, icon: Globe },
+      { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
+      { href: '/activations', label: 'Activaciones', icon: BadgeCheck },
+      { href: '/pipelines', label: 'Flujos', icon: Workflow },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
-      { href: '/prospects', label: 'Prospectos', icon: Radar },
     ],
   },
   {
-    // Brain Knowledge subió al bloque fijo. Aquí quedan las fuentes que se
-    // conectan, no el archivo en sí.
+    // Brain Knowledge subió al bloque fijo. Aquí quedan las fuentes que se conectan.
     id: 'sources',
     label: 'De dónde saco todo',
     items: [
@@ -461,8 +463,13 @@ function visibleItems<T extends { href: string }>(
 
 /** El rail entero, ya resuelto: lo que el componente sólo tiene que dibujar. */
 export interface Rail {
-  /** Chat y Brain Knowledge. La fila «Te espera» va detrás y la arma el componente. */
+  /** El bloque de arriba (Chat, Hoy, Vistas…). «Te espera» entra tras `WAITING_AFTER`. */
   pinned: NavItem[];
+  /**
+   * «Puesta en marcha», sólo mientras falte: el componente la dibuja como una
+   * tarjeta de progreso al pie, no como fila. `null` cuando ya está completa.
+   */
+  setup: NavItem | null;
   /** Las cuatro colas, dentro del desplegable de «Te espera». */
   waiting: NavItem[];
   /** Las plazas ganadas, en el orden diseñado y no en el del ranking. */
@@ -494,6 +501,8 @@ export function buildRail(
   admin: boolean,
   /** Módulos que la empresa apagó (0186): sus pantallas no salen. */
   modulesOff: readonly ModuleKey[] = [],
+  /** La puesta en marcha ya está completa: la tarjeta no sale. */
+  setupDone = false,
 ): Rail {
   const chosen = new Set(quick);
   const rest = SECTIONS.map((section) => ({
@@ -503,6 +512,7 @@ export function buildRail(
 
   return {
     pinned: visibleItems(PINNED, modulesOff),
+    setup: setupDone ? null : SETUP,
     waiting: WAITING_ITEMS,
     quick: visibleItems(QUICK_CANDIDATES, modulesOff).filter((item) => chosen.has(item.href)),
     rest,
@@ -520,6 +530,7 @@ export function everyDestination(): string[] {
   const rail = buildRail([], true);
   return [
     ...rail.pinned,
+    ...(rail.setup ? [rail.setup] : []),
     ...rail.waiting,
     ...rail.rest.flatMap((s) => s.items),
     ...rail.company.items,
@@ -592,87 +603,19 @@ export function primaryActive(path: string, item: PrimaryItem): boolean {
 }
 
 // ===========================================================================
-// «MÁS», CORTO
+// LA BARRA DE ABAJO DEL TELÉFONO
 // ===========================================================================
-// «Más» llegó a tener unas treinta filas en siete grupos: todo el producto
-// colgado de un desplegable, que para alguien que empieza es lo mismo que no
-// tener menú. Ahora lleva sólo lo que se usa en la semana, en tres grupos
-// cortos, y una salida a la paleta (⌘K), que sigue alcanzando TODAS las
-// pantallas (`everyDestination` y el test de cobertura no cambian: la paleta
-// se arma con `SECTIONS`, no con esto).
-//
-// Fuera de «Más» (paleta, y la puerta en su propia pantalla): resumen
-// financiero, navegador, rutinas (viven en Procesos), activaciones, flujos,
-// informes, prospectos, chat multiempresa, notificaciones (campana arriba).
+// Chat, Hoy, Vistas y Aplicaciones; «Más» (un botón, no un destino) abre el
+// menú lateral completo, que trae todo lo demás.
 
-export interface MoreGroup {
-  id: string;
-  label: string;
-  items: NavItem[];
-}
-
-const ALL_ITEMS: NavItem[] = [
-  ...PINNED,
-  ...SECTIONS.flatMap((s) => s.items),
-  ...COMPANY.items,
-  ...FOOTER,
-];
-
-function pick(hrefs: string[]): NavItem[] {
-  return hrefs.flatMap((href) => ALL_ITEMS.find((item) => item.href === href) ?? []);
-}
-
-export function moreGroups({
-  admin,
-  founder,
-  modulesOff = [],
-}: {
-  admin: boolean;
-  /** Dueño de al menos una empresa: ve el centro de mando de todas. */
-  founder: boolean;
-  /** Módulos que la empresa apagó (0186): sus pantallas no salen. */
-  modulesOff?: readonly ModuleKey[];
-}): MoreGroup[] {
-  const groups: MoreGroup[] = [
-    {
-      id: 'work',
-      label: 'Mi trabajo',
-      items: [
-        // El lanzador de módulos (/areas): nómina, contratos, estados, proyectos…
-        // se encuentran ahí sin alargar este menú.
-        { href: '/areas', label: 'Todas las áreas', icon: LayoutGrid },
-        ...pick(['/management', '/clients', '/payments', '/goals', '/calls']),
-      ],
-    },
-    {
-      id: 'data',
-      label: 'Mis datos',
-      items: pick(['/trackers', '/kb', '/feed', '/integrations/whatsapp']),
-    },
-    {
-      id: 'company',
-      label: 'La empresa',
-      items: [
-        ...pick(['/onboarding', '/company']),
-        ...(founder ? [{ href: '/overview', label: 'Todas mis empresas', icon: Landmark }] : []),
-        ...pick(['/plan']),
-      ],
-    },
-  ];
-  if (admin) {
-    groups.push({
-      id: 'admin',
-      label: 'Administración',
-      items: pick([
-        '/admin/security',
-        '/admin/mandates',
-        '/admin/usage',
-        '/admin/audit',
-        '/admin/teams',
-      ]),
-    });
-  }
-  return groups
-    .map((g) => ({ ...g, items: visibleItems(g.items, modulesOff) }))
-    .filter((g) => g.items.length > 0);
+export function mobileTabs(modulesOff: readonly ModuleKey[] = []): PrimaryItem[] {
+  return visibleItems<PrimaryItem>(
+    [
+      { ...CHAT, match: ['/chat'] },
+      { ...PILOT, match: ['/piloto'] },
+      { ...VIEWS, match: ['/views'] },
+      { ...APPS, match: ['/apps'] },
+    ],
+    modulesOff,
+  );
 }

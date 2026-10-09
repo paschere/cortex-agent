@@ -370,9 +370,7 @@ function Signal({ card }: { card: SignalCard }) {
       />
       <div className="min-w-0 flex-1">
         <p className="text-xs text-ink">{card.note}</p>
-        {card.asked && (
-          <p className="mt-0.5 truncate text-micro text-ink-faint">«{card.asked}»</p>
-        )}
+        {card.asked && <p className="mt-0.5 truncate text-micro text-ink-faint">«{card.asked}»</p>}
         <p className="mt-0.5 text-micro text-ink-faint">
           {docName(card)}
           {card.chunkIndex >= 0 && ` · fragmento ${card.chunkIndex}`}

@@ -4,6 +4,7 @@ import { activationDispatch, activationRun } from './activation-followup';
 import { appAutomationDispatch, appAutomationRun } from './app-automations';
 import { appLocationSweep } from './app-location';
 import { autopilotDispatch, autopilotRemind, autopilotWorkspace } from './autopilot';
+import { briefingDispatch, briefingWorkspace } from './briefing';
 import { clientsLinkDispatch, clientsLinkWorkspace } from './clients-link';
 import { commitmentsWatchDispatch, commitmentsWatchWorkspace } from './commitments-watch';
 import { devTaskIntake } from './dev-task-intake';
@@ -47,6 +48,8 @@ export {
   autopilotDispatch,
   autopilotWorkspace,
   autopilotRemind,
+  briefingDispatch,
+  briefingWorkspace,
   managementFollowUpDispatch,
   managementFollowUpWorkspace,
   managementWorkflowDispatch,
@@ -113,6 +116,8 @@ export const functions = [
   autopilotDispatch,
   autopilotWorkspace,
   autopilotRemind,
+  briefingDispatch,
+  briefingWorkspace,
   workSyncDispatch,
   workSyncWorkspace,
   workAssigned,

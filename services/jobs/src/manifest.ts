@@ -116,6 +116,9 @@ export const JOBS: JobSpec[] = [
   // hora de corrida (Bogotá) es ésta. Días, festivos y días quietos se deciden
   // en la app. Ver apps/web/inngest/functions/autopilot.ts.
   { name: 'autopilot/dispatch', cron: '5 * * * *', retryLimit: 1, concurrency: 1 },
+  // «Tu día» (0220): 12:00 UTC = 07:00 en Bogotá. Reparte las empresas con agente; el resumen
+  // de cada persona se arma por reglas. Ver apps/web/inngest/functions/briefing.ts.
+  { name: 'briefing/dispatch', cron: '0 12 * * *', retryLimit: 1, concurrency: 1 },
 
   // --- Los que llegan por evento --------------------------------------------
   // retryLimit 0 en los que llaman al modelo: reintentar un turno del agente
@@ -176,6 +179,8 @@ export const JOBS: JobSpec[] = [
   { name: 'autopilot/workspace', retryLimit: 1, concurrency: 3 },
   // El recordatorio de autopilot.remind: la campana de un compañero.
   { name: 'autopilot/remind', retryLimit: 1, concurrency: 5 },
+  // «Tu día» de una empresa: una corrida por empresa y día (la campana lleva clave por día).
+  { name: 'briefing/workspace', retryLimit: 1, concurrency: 3 },
   { name: 'dev/task.intake', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.queued', retryLimit: 0, concurrency: 2, singletonKeyFrom: 'taskId' },
   { name: 'dev/task.status', retryLimit: 1, concurrency: 5 },

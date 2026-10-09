@@ -32,9 +32,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  type FeedbackRecord,
   type TurnRecord,
   decideAdjustments,
   deriveBadCutProposals,
+  deriveFeedbackSignals,
   deriveGapProposals,
   deriveTurnSignals,
   summarizeEvidence,
@@ -123,6 +125,34 @@ function toTurn(row: TurnContextRow): TurnRecord {
             : ('dropped' as const),
       })),
   };
+}
+
+async function readFeedback(db: SupabaseClient, since: string): Promise<FeedbackRecord[]> {
+  const { data, error } = await db
+    .from('chat_message_feedback')
+    .select('id, user_id, conversation_id, rating, reason, created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: true })
+    .limit(2000);
+  // Sin la migración 0219 el resto del aprendizaje sigue funcionando.
+  if (error) return [];
+  return (
+    (data ?? []) as unknown as Array<{
+      id: string;
+      user_id: string;
+      conversation_id: string;
+      rating: number;
+      reason: string | null;
+      created_at: string;
+    }>
+  ).map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    conversationId: r.conversation_id,
+    rating: r.rating === 1 ? 1 : -1,
+    reason: r.reason,
+    createdAt: r.created_at,
+  }));
 }
 
 async function readTurns(db: SupabaseClient, since: string): Promise<TurnRecord[]> {
@@ -314,7 +344,15 @@ export async function runLearningPass(
     new Date(now.getTime() - CORRECTION_WINDOW_DAYS * DAY_MS).toISOString(),
   );
 
-  const fresh = [...deriveTurnSignals(turns, now), ...corrections.signals];
+  const feedback = await readFeedback(
+    db,
+    new Date(now.getTime() - TURN_WINDOW_DAYS * DAY_MS).toISOString(),
+  );
+  const fresh = [
+    ...deriveTurnSignals(turns, now),
+    ...deriveFeedbackSignals(turns, feedback),
+    ...corrections.signals,
+  ];
   const signalsRecorded = await recordSignals(db, org, fresh);
 
   // Read the evidence back out of the table rather than using what was just

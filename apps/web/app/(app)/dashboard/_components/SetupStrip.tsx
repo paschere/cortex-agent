@@ -1,5 +1,6 @@
 import { WelcomeTour } from '@/components/tour/WelcomeTour';
 import type { ViewBrand } from '@/lib/branding/shape';
+import { workspaceHasRealData } from '@/lib/first-run/read';
 import { readSetupSteps } from '@/lib/self-service/read';
 import { type SetupStep, setupProgress } from '@/lib/self-service/setup';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -37,12 +38,18 @@ export async function SetupStrip({
   /** La marca de la empresa: el pulso de ejemplo del recorrido se pinta con ella. */
   brand: ViewBrand | null;
 }) {
-  const all = await readSetupSteps(getOrgScopedClient(organizationId), userId);
+  const sb = getOrgScopedClient(organizationId);
+  const all = await readSetupSteps(sb, userId);
   // Invitar personas y contar la empresa son cosas de quien administra; a los
   // demás no se les pide lo que no pueden hacer.
   const steps = isAdmin ? all : all.filter((s) => s.id !== 'team' && s.id !== 'company');
   const progress = setupProgress(steps);
-  const tour = isEmptyWorkspace(all) ? <WelcomeTour userId={userId} brand={brand} /> : null;
+  // Los datos de ejemplo sólo mientras no haya datos de verdad: con documentos,
+  // facturas u hojas reales, el Inicio ya tiene qué mostrar y el tour se oculta.
+  const tour =
+    isEmptyWorkspace(all) && !(await workspaceHasRealData(sb)) ? (
+      <WelcomeTour userId={userId} brand={brand} />
+    ) : null;
   if (progress.complete) return tour;
 
   return (

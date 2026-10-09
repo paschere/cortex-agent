@@ -24,7 +24,8 @@ export type SignalKind =
   | 'extraction_corrected'
   | 'extraction_rejected'
   | 'extraction_confirmed'
-  | 'field_corrected';
+  | 'field_corrected'
+  | 'answer_rated';
 
 /** Evidence for (+1) or against (-1). */
 export type SignalPolarity = -1 | 1;

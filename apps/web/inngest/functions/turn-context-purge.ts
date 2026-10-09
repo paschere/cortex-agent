@@ -95,7 +95,22 @@ export const turnLatencyPurgeJob: JobHandler = async ({ step }) => {
     logger.info('action idempotency retention sweep', { deleted });
     return { deleted };
   });
-  return { ...latency, actionIdempotencyDeleted: actions.deleted };
+  // El detalle de auditoría (0221): a los 30 días se quita lo que se escribió
+  // en las tablas (datos personales, Ley 1581). Paso propio por la misma razón
+  // que el de arriba: si falla, lo anterior ya quedó hecho.
+  const audit = await step.run('sweep-audit-detail', async () => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db.rpc('audit_detail_purge');
+    if (error) throw new Error(`audit_detail_purge failed: ${error.message}`);
+    const redacted = Number((Array.isArray(data) ? data[0] : data) ?? 0);
+    logger.info('audit detail retention sweep', { redacted });
+    return { redacted };
+  });
+  return {
+    ...latency,
+    actionIdempotencyDeleted: actions.deleted,
+    auditDetailRedacted: audit.redacted,
+  };
 };
 
 export const turnLatencyPurge = inngest.createFunction(

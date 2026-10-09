@@ -1,6 +1,6 @@
 'use client';
 
-import { primaryActive, primaryNav } from '@/lib/nav-shape';
+import { mobileTabs, primaryActive } from '@/lib/nav-shape';
 import { recordVisit } from '@/lib/nav-usage';
 import { workspaceHref } from '@/lib/workspace-context';
 import type { ModuleKey } from '@cortex/agent-tools';
@@ -13,11 +13,10 @@ import { useMobileSidebar } from './MobileSidebarContext';
 /**
  * LA BARRA DE ABAJO DEL TELÉFONO.
  *
- * Cuatro puertas y «Más». Las cuatro son las del diseño móvil — Inicio, Chat,
- * Procesos y Vistas —, lo que se abre con el pulgar varias veces al día. «Más»
- * abre el menú lateral de siempre (`Sidebar`, en su diálogo), que trae Datos,
- * Equipo, «Te espera» con sus contadores y el resto del producto: aquí no se
- * esconde nada que antes estuviera.
+ * Cuatro puertas y «Más»: Chat, Hoy, Vistas y Aplicaciones, lo que se abre con
+ * el pulgar varias veces al día. «Más» abre el menú lateral (`Sidebar`, en su
+ * diálogo), que trae «Te espera» con sus contadores, las secciones y el resto
+ * del producto: aquí no se esconde nada que antes estuviera.
  *
  * No es `position: fixed`: es el último hijo de la columna del layout, así que
  * el contenido (y el compositor del chat) se acortan en vez de quedar tapados.
@@ -32,8 +31,8 @@ export function MobileTabBar({
   /** Módulos que la empresa apagó (0186): sus puertas no salen. */
   modulesOff?: ModuleKey[];
 }) {
-  // Las cuatro primeras puertas de `primaryNav`, que no dependen del rol.
-  const TABS = primaryNav({ admin: false, founder: false, modulesOff }).slice(0, 4);
+  // Chat, Hoy, Vistas y Aplicaciones; «Más» abre el menú lateral completo.
+  const TABS = mobileTabs(modulesOff);
   const path = usePathname();
   const mobile = useMobileSidebar();
   return (

@@ -48,6 +48,7 @@ export {
   SOLO_NET,
   decideAdjustments,
   deriveBadCutProposals,
+  deriveFeedbackSignals,
   deriveGapProposals,
   deriveTurnSignals,
   isDecisive,
@@ -56,7 +57,7 @@ export {
   topicSignature,
   topicWords,
 } from './derive';
-export type { AdjustmentDecision, FragmentEvidence, TurnRecord } from './derive';
+export type { AdjustmentDecision, FeedbackRecord, FragmentEvidence, TurnRecord } from './derive';
 export {
   ADJUSTMENT_DAYS,
   SIGNAL_RETENTION_DAYS,

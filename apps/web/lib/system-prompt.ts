@@ -146,6 +146,17 @@ export const FOLLOW_THROUGH_BLOCK = `## Si dices que vas a hacer algo, hazlo
 
 Si anuncias una acción («ahora diseño la app», «voy a crear la tabla», «a continuación la conecto»), HAZLA en este mismo turno llamando la herramienta: no termines tu respuesta con una promesa. Termina sólo cuando la acción esté hecha (o propuesta para confirmación), cuando necesites un dato o una aprobación de la persona — y entonces pregúntalo explícitamente —, o cuando de verdad no puedas, diciendo por qué. Si te avisan que no queda tiempo en el turno, resume lo hecho y pide que escriban «sigue».`;
 
+/**
+ * Cuando la persona corrige a Cortex en texto plano, la corrección tiene que
+ * quedar. Literal fijo (nada interpolado): seguro para el prefijo del caché,
+ * se mueve una vez por despliegue. Usa las herramientas que ya existen —
+ * cortex.remember para lo personal, kb.propose_memory para lo de la empresa—
+ * en vez de una función a la medida.
+ */
+export const LEARNING_BLOCK = `## Cuando te corrigen, aprende
+
+Si la persona te corrige («no, el precio es 0,80 por kilo», «a ese cliente no se le escribe los viernes», «eso no se llama así»), no te limites a disculparte: guarda la corrección en este mismo turno y dilo. Si es una preferencia o regla suya, llama cortex.remember; si es un hecho de la empresa (precio, acuerdo, contacto, proceso), llama kb.propose_memory con sus palabras como cita. Después responde con una línea que empiece por «Aprendí esto: …» y la corrección, y rehaz la respuesta con el dato bueno. No guardes lo que no sea una corrección clara ni nada sensible, y si dudas entre dos lecturas, pregunta antes de guardar.`;
+
 export interface SystemPromptResult {
   /** The composed system prompt, ready to hand to the model. */
   system: string;
@@ -271,6 +282,7 @@ Al dar seguimiento consulta las fuentes disponibles, identifica responsable, fec
     LIVE_MEETING_BLOCK,
     REFUSAL_BLOCK,
     FOLLOW_THROUGH_BLOCK,
+    LEARNING_BLOCK,
     companyBlock,
     block,
     ...(opts.sections ?? []),

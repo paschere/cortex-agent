@@ -5,6 +5,7 @@ import {
   ValidationError,
 } from '@cortex/core';
 import { hashInput, writeAuditEvent } from './audit.js';
+import { buildAuditDetail, captureBefore } from './audit-detail.js';
 import { ModuleDisabledError, disabledModuleForTool } from './modules/store.js';
 import { consumeToken } from './rate-limit.js';
 import { SAFE_ACTION_CATALOG } from './safe-actions/catalog.js';
@@ -544,6 +545,19 @@ export async function runTool<I, O>(
     });
   }
 
+  // El estado de ANTES, sólo si la herramienta lo declara y la llamada tiene
+  // efectos: es lo que permite deshacerla después desde «Lo que hizo Cortex».
+  // Un fallo aquí nunca frena la llamada; esa acción simplemente no se podrá deshacer.
+  let beforeSnapshot: Record<string, unknown> | null = null;
+  const hasEffects = evaluation.classification.blastRadius !== 'read';
+  if (hasEffects && tool.audit?.before) {
+    try {
+      beforeSnapshot = captureBefore(await tool.audit.before(data, ctx));
+    } catch {
+      beforeSnapshot = null;
+    }
+  }
+
   const startedAt = new Date();
   let result: O;
   try {
@@ -632,6 +646,11 @@ export async function runTool<I, O>(
     });
   }
 
+  // `metadata.detail`: qué se hizo, recortado y sin secretos (audit-detail.ts).
+  const auditDetail = hasEffects
+    ? buildAuditDetail({ input: data, output: outParsed.data, before: beforeSnapshot })
+    : null;
+
   await writeAuditEvent({
     db: ctx.db,
     userId: ctx.userId,
@@ -643,12 +662,13 @@ export async function runTool<I, O>(
     latencyMs: Math.round(performance.now() - t0),
     // Que la auditoría diga cuando un sí heredado abrió la puerta: es la
     // diferencia entre «confirmó» y «se lo habías confirmado hace un rato».
-    ...(viaConversationGrace || guard || verification
+    ...(viaConversationGrace || guard || verification || auditDetail
       ? {
           metadata: {
             ...graceMeta,
             ...idempotencyMeta,
             ...(verification ? { verification } : {}),
+            ...(auditDetail ? { detail: auditDetail } : {}),
           },
         }
       : {}),

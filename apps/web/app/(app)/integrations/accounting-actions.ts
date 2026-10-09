@@ -93,6 +93,7 @@ export async function connectAccountingProgram(input: {
       organizationId: user.organization.id,
       connectionId: conn.id,
     });
+    revalidatePath('/onboarding');
     revalidatePath(PATH);
     return {
       ok: true,

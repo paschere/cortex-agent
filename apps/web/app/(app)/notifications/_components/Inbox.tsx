@@ -33,12 +33,101 @@ async function postRead(body: {
   }
 }
 
+/**
+ * Los botones de un aviso (0220). No llevan herramientas: el servidor lee los
+ * botones de la fila del aviso y ejecuta por el mismo camino que «Aprobar y
+ * hacerlo» de /piloto. «Ver» abre la página del aviso.
+ */
+function ActionButtons({
+  item,
+  onDone,
+  view,
+}: { item: GlobalNotificationView; onDone: () => void; view: () => void }) {
+  const [pending, setPending] = useState<'approve' | 'dismiss' | null>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const first = item.actions[0];
+  if (!first) return null;
+  if (note?.ok) return <output className="text-xs font-semibold text-emerald">{note.text}</output>;
+
+  async function run(decision: 'approve' | 'dismiss') {
+    setPending(decision);
+    try {
+      const res = await fetch('/api/notifications/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notificationId: item.id,
+          organizationId: item.organizationId,
+          index: 0,
+          decision,
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as { ok?: boolean; note?: string } | null;
+      const ok = res.ok && body?.ok === true;
+      setNote({ ok, text: body?.note ?? (ok ? 'Hecho.' : 'No pude hacerlo. Intenta de nuevo.') });
+      if (ok) onDone();
+    } catch {
+      setNote({ ok: false, text: 'No pude hacerlo. Revisa tu conexión.' });
+    }
+    setPending(null);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 pb-4 pl-12 pr-4 sm:pl-[3.25rem] sm:pr-5">
+      <button
+        type="button"
+        disabled={pending !== null}
+        onClick={() => void run('approve')}
+        title={first.title}
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-pill bg-primary px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending === 'approve' ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+        ) : (
+          <Check className="h-3.5 w-3.5" aria-hidden />
+        )}
+        Hacerlo
+      </button>
+      <button
+        type="button"
+        disabled={pending !== null}
+        onClick={() => void run('dismiss')}
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"
+      >
+        Descartar
+      </button>
+      {item.href && (
+        <button
+          type="button"
+          disabled={pending !== null}
+          onClick={view}
+          className="inline-flex min-h-9 items-center rounded-pill px-3 py-1.5 text-xs font-semibold text-primary-ink hover:bg-primary-soft disabled:opacity-50"
+        >
+          Ver
+        </button>
+      )}
+      {note && !note.ok && (
+        <p role="alert" className="w-full text-xs font-semibold text-rose">
+          {note.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Notice({
   item,
   busy,
   open,
   read,
-}: { item: GlobalNotificationView; busy: boolean; open: () => void; read: () => void }) {
+  done,
+}: {
+  item: GlobalNotificationView;
+  busy: boolean;
+  open: () => void;
+  read: () => void;
+  done: () => void;
+}) {
   const unread = item.readAt === null;
   return (
     <li
@@ -107,6 +196,7 @@ function Notice({
           </button>
         )}
       </div>
+      {item.actions.length > 0 && <ActionButtons item={item} onDone={done} view={open} />}
     </li>
   );
 }
@@ -274,6 +364,7 @@ export function Inbox({ initial }: { initial: GlobalNotificationView[] }) {
                       busy={busy === item.id}
                       open={() => void open(item)}
                       read={() => void markOne(item)}
+                      done={() => markLocal(item.id)}
                     />
                   ))}
                 </ul>
@@ -311,6 +402,7 @@ export function Inbox({ initial }: { initial: GlobalNotificationView[] }) {
                       busy={busy === item.id}
                       open={() => void open(item)}
                       read={() => void markOne(item)}
+                      done={() => markLocal(item.id)}
                     />
                   ))}
                 </ul>

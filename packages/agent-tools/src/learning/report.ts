@@ -252,6 +252,7 @@ export const SIGNAL_LABELS: Readonly<Record<SignalKind, string>> = {
   extraction_rejected: 'Descartaron lo que se leyó',
   extraction_confirmed: 'Confirmaron lo que se leyó',
   field_corrected: 'Corrigieron a mano un dato',
+  answer_rated: 'Valoraron la respuesta (👍/👎)',
 };
 
 export const PROPOSAL_LABELS: Readonly<Record<ProposalKind, string>> = {

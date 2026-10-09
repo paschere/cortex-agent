@@ -3,7 +3,7 @@ import { MobileSidebarProvider } from '@/components/nav/MobileSidebarContext';
 import { Sidebar } from '@/components/nav/Sidebar';
 import { PanelHost, PanelProvider } from '@/components/panel/PanelHost';
 import { modulesOffFor } from '@/lib/modules/server';
-import { countNavSignals } from '@/lib/nav-signals';
+import { countNavSignals, readShellSignals } from '@/lib/nav-signals';
 import type { SessionUser } from '@cortex/core';
 import type { ReactNode } from 'react';
 
@@ -52,8 +52,9 @@ export async function AppShell({
   children: ReactNode;
 }) {
   // Los contadores y los módulos apagados (0186) son lecturas independientes.
-  const [counts, modulesOff] = await Promise.all([
+  const [counts, signals, modulesOff] = await Promise.all([
     countNavSignals(user.organization.id, user.id),
+    readShellSignals(user.organization.id, user.role === 'org_admin'),
     modulesOffFor(user.organization.id),
   ]);
 
@@ -71,6 +72,7 @@ export async function AppShell({
             <Sidebar
               role={user.role}
               counts={counts}
+              signals={signals}
               organization={user.organization}
               modulesOff={modulesOff}
             />

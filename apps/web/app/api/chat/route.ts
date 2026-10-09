@@ -31,6 +31,7 @@ import { sanitizeHistory } from '@/lib/strip-empty-messages';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   FOLLOW_THROUGH_BLOCK,
+  LEARNING_BLOCK,
   LIVE_BROWSING_BLOCK,
   LIVE_MEETING_BLOCK,
   REFUSAL_BLOCK,
@@ -1209,7 +1210,7 @@ export async function POST(req: NextRequest) {
   // exactamente su longitud. El de reuniones faltaba desde que se añadió.
   recorder.part(
     'instructions',
-    `${agent.systemPrompt}\n\n${LIVE_BROWSING_BLOCK}\n\n${LIVE_MEETING_BLOCK}\n\n${REFUSAL_BLOCK}\n\n${FOLLOW_THROUGH_BLOCK}`,
+    `${agent.systemPrompt}\n\n${LIVE_BROWSING_BLOCK}\n\n${LIVE_MEETING_BLOCK}\n\n${REFUSAL_BLOCK}\n\n${FOLLOW_THROUGH_BLOCK}\n\n${LEARNING_BLOCK}`,
   );
   recorder.part('memory', memoryBlock);
   // Su propia etiqueta y no sumado a 'memory': lo escribe un admin una vez y lo

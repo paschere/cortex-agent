@@ -248,6 +248,77 @@ function detailFor(kind: SignalKind, extra: Record<string, unknown> = {}) {
   return { kind, ...extra };
 }
 
+/** Un 👍/👎 de una persona sobre una respuesta, reducido a lo que la derivación necesita. */
+export interface FeedbackRecord {
+  id: string;
+  userId: string;
+  conversationId: string;
+  rating: 1 | -1;
+  reason: string | null;
+  createdAt: string;
+}
+
+/**
+ * LA VALORACIÓN EXPLÍCITA, LA SEÑAL MÁS DIRECTA QUE HAY.
+ *
+ * El resto de señales de este módulo son subproductos del trabajo; ésta es la
+ * persona diciéndolo. Se atribuye a los fragmentos que se pegaron sobre la
+ * respuesta valorada: el turno más reciente de esa conversación que no sea
+ * posterior al voto. Un 👎 pesa dos, un 👍 uno (el mismo contrapeso que
+ * `moved_on`: sin evidencia a favor, lo único con historia sería lo que alguien
+ * criticó). Un 👎 por «muy lento» no dice nada de los fragmentos y se omite.
+ * La llave de deduplicación incluye el voto: cambiar de 👍 a 👎 es una señal
+ * nueva, volver a derivar la misma no cuenta dos veces.
+ */
+export function deriveFeedbackSignals(
+  turns: readonly TurnRecord[],
+  feedback: readonly FeedbackRecord[],
+): LearningSignalInput[] {
+  const byConversation = new Map<string, TurnRecord[]>();
+  for (const turn of turns) {
+    const list = byConversation.get(turn.conversationId);
+    if (list) list.push(turn);
+    else byConversation.set(turn.conversationId, [turn]);
+  }
+  for (const list of byConversation.values())
+    list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  const signals: LearningSignalInput[] = [];
+  for (const vote of feedback) {
+    if (vote.rating === -1 && vote.reason === 'slow') continue;
+    const list = byConversation.get(vote.conversationId) ?? [];
+    let turn: TurnRecord | undefined;
+    for (const candidate of list) {
+      if (candidate.createdAt <= vote.createdAt) turn = candidate;
+      else break;
+    }
+    if (!turn || !turn.ran) continue;
+    for (const f of turn.fragments.filter((x) => x.prepended)) {
+      signals.push({
+        kind: 'answer_rated',
+        polarity: vote.rating,
+        weight: vote.rating === -1 ? 2 : 1,
+        documentId: f.documentId,
+        chunkIndex: f.chunkIndex,
+        actorUserId: vote.userId,
+        conversationId: turn.conversationId,
+        turnContextId: turn.id,
+        detail: detailFor('answer_rated', {
+          asked: turn.query,
+          reason: vote.reason,
+          note:
+            vote.rating === -1
+              ? 'Alguien marcó 👎 la respuesta que usó este fragmento.'
+              : 'Alguien marcó 👍 la respuesta que usó este fragmento.',
+        }),
+        dedupeKey: `answer_rated:${vote.id}:${vote.rating}:${f.documentId}:${f.chunkIndex}`,
+        observedAt: vote.createdAt,
+      });
+    }
+  }
+  return signals;
+}
+
 /**
  * Read a window of captured turns and say what they imply about fragments.
  *

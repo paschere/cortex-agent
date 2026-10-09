@@ -1,3 +1,4 @@
+import type { ModuleKey } from '@cortex/agent-tools/src/modules/catalog';
 import { describe, expect, it } from 'vitest';
 import {
   COMPANY,
@@ -5,10 +6,11 @@ import {
   PINNED,
   QUICK_CANDIDATES,
   SECTIONS,
+  WAITING_AFTER,
   WAITING_ITEMS,
   buildRail,
   everyDestination,
-  moreGroups,
+  mobileTabs,
   primaryActive,
   primaryNav,
   routeVisible,
@@ -37,6 +39,7 @@ describe('el rail', () => {
       const rail = buildRail(quick, true);
       const shown = [
         ...rail.pinned,
+        ...(rail.setup ? [rail.setup] : []),
         ...rail.waiting,
         ...rail.quick,
         ...rail.rest.flatMap((s) => s.items),
@@ -51,7 +54,7 @@ describe('el rail', () => {
   it('lo que sube al bloque fijo sale de «Todo», y no está en los dos sitios', () => {
     const rail = buildRail(['/goals', '/schedules'], false);
     const inside = rail.rest.flatMap((s) => s.items).map((i) => i.href);
-    expect(rail.quick.map((i) => i.href)).toEqual(['/schedules', '/goals']);
+    expect(rail.quick.map((i) => i.href)).toEqual(['/goals', '/schedules']);
     expect(inside).not.toContain('/goals');
     expect(inside).not.toContain('/schedules');
     expect(rail.restCount).toBe(inside.length);
@@ -69,10 +72,7 @@ describe('el rail', () => {
   });
 
   it('una sección que se queda vacía no deja su encabezado colgando', () => {
-    const rail = buildRail(
-      ['/clients', '/ventas', '/comercial', '/payments', '/trackers', '/apps'],
-      false,
-    );
+    const rail = buildRail(['/clients', '/ventas', '/comercial', '/prospects'], false);
     expect(rail.rest.map((s) => s.id)).not.toContain('work');
   });
 
@@ -101,14 +101,14 @@ describe('el rail', () => {
     expect(DEFAULT_QUICK).toEqual([]);
     expect(buildRail([], false).quick).toEqual([]);
     expect(PINNED.map((i) => i.href)).toEqual([
-      '/onboarding',
-      '/management',
       '/chat',
+      '/piloto',
       '/views',
-      '/feed',
-      '/calls',
+      '/apps',
+      '/trackers',
       '/kb',
     ]);
+    expect(WAITING_AFTER).toBe('/piloto');
   });
 
   it('Inicio vive en «Todo», no en las filas fijas', () => {
@@ -207,34 +207,66 @@ describe('la navegación principal del autoservicio', () => {
   });
 });
 
-describe('«Más», corto', () => {
-  it('no pasa de quince filas para nadie y no repite lo de la navegación principal', () => {
-    for (const admin of [false, true]) {
-      for (const founder of [false, true]) {
-        const groups = moreGroups({ admin, founder });
-        const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
-        expect(hrefs.length).toBeLessThanOrEqual(admin ? 20 : 15);
-        expect(new Set(hrefs).size).toBe(hrefs.length);
-        const primary = primaryNav({ admin, founder }).map((i) => i.href);
-        expect(hrefs.filter((h) => primary.includes(h))).toEqual([]);
-      }
+describe('el rail calmado', () => {
+  it('«Puesta en marcha» sólo sale como tarjeta mientras falte', () => {
+    expect(buildRail([], true, [], false).setup?.href).toBe('/onboarding');
+    expect(buildRail([], true, [], true).setup).toBeNull();
+    expect(buildRail([], true, [], true).pinned.map((i) => i.href)).not.toContain('/onboarding');
+  });
+
+  it('con la puesta en marcha completa no se pierde ningún otro destino', () => {
+    const done = buildRail([], true, [], true);
+    const shown = new Set(
+      [
+        ...done.pinned,
+        ...done.waiting,
+        ...done.rest.flatMap((s) => s.items),
+        ...done.company.items,
+        ...done.footer,
+      ].map((i) => i.href),
+    );
+    expect([...new Set(everyDestination())].filter((h) => !shown.has(h))).toEqual(['/onboarding']);
+  });
+
+  it('Hoy lleva el contador del piloto y las rutas nuevas son alcanzables', () => {
+    expect(PINNED.find((i) => i.href === '/piloto')?.signal).toBe('pilot');
+    const every = everyDestination();
+    for (const href of ['/piloto', '/actividad', '/notifications', '/trackers', '/apps']) {
+      expect(every, href).toContain(href);
     }
   });
 
-  it('la administración sólo aparece para quien administra', () => {
-    expect(moreGroups({ admin: false, founder: true }).some((g) => g.id === 'admin')).toBe(false);
-    expect(moreGroups({ admin: true, founder: false }).some((g) => g.id === 'admin')).toBe(true);
+  it('los encabezados salen en español llano y ninguna sección queda vacía', () => {
+    const rail = buildRail([], false);
+    expect(rail.rest.map((s) => s.label)).toEqual([
+      'Mi día',
+      'Clientes y ventas',
+      'Plata',
+      'Operación',
+      'Mi equipo',
+      'Legal',
+      'Lo que hago solo',
+      'De dónde saco todo',
+    ]);
+    for (const section of rail.rest) expect(section.items.length).toBeGreaterThan(0);
   });
 
-  it('todo lo que ofrece es un destino real del rail', () => {
-    const known = new Set(everyDestination());
-    for (const g of moreGroups({ admin: true, founder: true })) {
-      for (const item of g.items) {
-        if (item.href !== '/overview' && item.href !== '/areas') {
-          expect(known.has(item.href)).toBe(true);
-        }
-      }
-    }
+  it('apagar todos los módulos opcionales no deja encabezados colgando', () => {
+    const rail = buildRail([], false, [
+      'contracts',
+      'compliance',
+      'fleet',
+      'service_orders',
+      'team',
+    ] as ModuleKey[]);
+    for (const section of rail.rest) expect(section.items.length).toBeGreaterThan(0);
+  });
+
+  it('la barra del teléfono: Chat, Hoy, Vistas y Aplicaciones', () => {
+    expect(mobileTabs().map((t) => t.label)).toEqual(['Chat', 'Hoy', 'Vistas', 'Aplicaciones']);
+    const chat = mobileTabs()[0];
+    if (!chat) throw new Error('falta Chat');
+    expect(primaryActive('/chat/abc', chat)).toBe(true);
   });
 });
 
@@ -263,12 +295,6 @@ describe('los módulos apagados (0186)', () => {
     expect(hrefs).toContain('/clients');
     expect(hrefs).toContain('/payments');
     expect(rail.restCount).toBe(rail.rest.flatMap((s) => s.items).length);
-
-    const more = moreGroups({ admin: false, founder: false, modulesOff: ['taxes'] })
-      .flatMap((g) => g.items)
-      .map((i) => i.href);
-    expect(more).not.toContain('/impuestos');
-    expect(more).toContain('/payments');
   });
 
   it('con Equipo apagado, quien administra conserva la puerta a las personas', () => {

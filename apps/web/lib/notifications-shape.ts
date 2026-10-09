@@ -77,6 +77,11 @@ export const NOTIFICATION_KINDS = [
   'approval_waiting',
   /** Tu resumen diario de lo vencido en el registro de trabajo. Ver la 0177. */
   'work_overdue',
+  /**
+   * «Tu día»: el resumen de la mañana (07:00 de Bogotá, días hábiles). Uno por
+   * persona y día, escrito por reglas. Puede traer botones. Ver la 0220.
+   */
+  'briefing',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -124,6 +129,7 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   work_assigned: 'info',
   approval_waiting: 'warning',
   work_overdue: 'warning',
+  briefing: 'info',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -146,6 +152,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   work_assigned: 'Trabajo',
   approval_waiting: 'Aprobaciones',
   work_overdue: 'Trabajo',
+  briefing: 'Tu día',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */
@@ -160,6 +167,44 @@ export interface NotificationView {
   occurrences: number;
   occurredAt: string;
   readAt: string | null;
+  /** Botones del aviso (0220). Vacío casi siempre. */
+  actions: NotificationAction[];
+}
+
+/**
+ * Un botón de un aviso (0220): referencia una cosa del piloto por su id y su
+ * huella. NUNCA una herramienta suelta; el servidor ejecuta por el mismo camino
+ * que `ItemDecision` en /piloto.
+ */
+export interface NotificationAction {
+  kind: 'autopilot_item';
+  itemId: string;
+  contentHash: string;
+  /** Qué se hace, en una línea. */
+  title: string;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Lee `notifications.actions` sin confiar en lo que haya en la base. */
+export function parseNotificationActions(raw: unknown): NotificationAction[] {
+  if (!Array.isArray(raw)) return [];
+  const out: NotificationAction[] = [];
+  for (const entry of raw.slice(0, 3)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const e = entry as Record<string, unknown>;
+    if (e.kind !== 'autopilot_item') continue;
+    if (typeof e.itemId !== 'string' || !UUID_RE.test(e.itemId)) continue;
+    if (typeof e.contentHash !== 'string' || e.contentHash.length < 8 || e.contentHash.length > 200)
+      continue;
+    out.push({
+      kind: 'autopilot_item',
+      itemId: e.itemId,
+      contentHash: e.contentHash,
+      title: typeof e.title === 'string' ? e.title.slice(0, 160) : 'Hacerlo',
+    });
+  }
+  return out;
 }
 
 /** Un aviso acompañado del espacio al que pertenece en la bandeja global. */

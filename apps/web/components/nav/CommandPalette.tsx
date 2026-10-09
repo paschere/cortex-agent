@@ -67,6 +67,24 @@ const SECTIONS: Section[] = [
         keywords: 'gerente empresa hoy gestion operaciones seguimiento procesos',
       },
       {
+        href: '/piloto',
+        label: 'Hoy',
+        note: 'El plan del día de Cortex y lo que espera tu decisión',
+        keywords: 'hoy piloto automatico plan del dia decisiones autopilot',
+      },
+      {
+        href: '/actividad',
+        label: 'Lo que hizo Cortex',
+        note: 'Todo lo que hizo, en frases, con deshacer cuando se puede',
+        keywords: 'actividad historial auditoria deshacer que hizo cortex timeline',
+      },
+      {
+        href: '/notifications',
+        label: 'Avisos',
+        note: 'Tus notificaciones',
+        keywords: 'notificaciones avisos campana alertas',
+      },
+      {
         href: '/dashboard',
         label: 'Inicio',
         note: 'Lo que se movió mientras no estabas',

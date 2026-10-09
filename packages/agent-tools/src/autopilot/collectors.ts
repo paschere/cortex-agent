@@ -22,6 +22,7 @@ import { type SnapshotPayroll, collectNomina } from '../payroll/autopilot';
 import { type SnapshotProjects, collectProyectos } from '../projects/autopilot-collect';
 import { type SnapshotSst, collectSst } from '../sst/autopilot';
 import { type SnapshotTaxDraft, collectBorradores } from '../tax/autopilot-drafts';
+import { type AnomalySource, collectAnomalias } from './anomalies';
 import type { AutopilotArea, PlanItem } from './types';
 
 /**
@@ -201,6 +202,8 @@ export interface AutopilotSnapshot {
   contractNotices?: SnapshotContractNotice[];
   /** PQRS por vencer y obligaciones de la lista de cumplimiento (0195). */
   compliance?: ComplianceAutopilotSnapshot;
+  /** Fuentes que suelen traer filas, con las horas de sus filas (anomalías). */
+  anomalySources?: AnomalySource[];
   /** Módulos que la empresa apagó (0186): sus recolectores no corren. */
   modulesOff?: ModuleKey[];
 }
@@ -765,6 +768,8 @@ export const COLLECTORS: Array<{
   // 0192: «Cierre de septiembre: faltan 4 cosas» (sólo aviso, días 1–5).
   { area: 'finanzas', run: (s) => collectCierre(s.close, s.today), module: 'accounting_close' },
   { area: 'procesos', run: collectProcesos },
+  // Lo que no falla pero se quedó mudo: sin filas nuevas, o un día muy flojo.
+  { area: 'procesos', run: (s, now) => collectAnomalias(s.anomalySources, now) },
   // Antes que los vencimientos: comparten clave y gana la frase del impuesto.
   { area: 'vencimientos', run: collectImpuestos, module: 'taxes' },
   // 0197: «Borrador de IVA listo para revisión del contador» (sólo aviso, 7 días antes).

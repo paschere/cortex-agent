@@ -103,6 +103,10 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // empresa hasta que alguien con permiso lo acepte. Tenant: una propuesta de
   // otra empresa aceptada aquí sería un «acuerdo» ajeno en la boca de Cortex.
   memory_proposals: tenant(),
+  // Migración 0219: 👍/👎 de cada persona sobre una respuesta del chat, con la
+  // pregunta y la respuesta guardadas. Tenant: alimenta aprendizaje y casos de
+  // evaluación de ESTA empresa y no debe cruzar a otra.
+  chat_message_feedback: tenant(),
   // Migración 0159: qué escalón de mora de qué factura ya se avisó. Tenant: el
   // vigilante de cartera corre por espacio y sólo reclama avisos del suyo.
   receivable_notices: tenant(),
@@ -911,6 +915,7 @@ export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   // Migration 0084. Same shape and the same cron as the sweep above: deletes
   // expired latency rows and returns a count. No workspace, nothing visible.
   turn_latency_purge: 'maintenance',
+  audit_detail_purge: 'maintenance',
   // Migración 0168. Borra las filas de action_idempotency cuya ventana venció
   // hace más de dos días; devuelve un número. Sin empresa, nada visible.
   action_idempotency_purge: 'maintenance',

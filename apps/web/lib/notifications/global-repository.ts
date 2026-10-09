@@ -3,8 +3,10 @@ import {
   type GlobalNotificationView,
   NOTIFICATION_KINDS,
   NOTIFICATION_TONES,
+  type NotificationAction,
   type NotificationKind,
   type NotificationTone,
+  parseNotificationActions,
 } from '@/lib/notifications-shape';
 import type { Pool } from 'pg';
 
@@ -24,6 +26,7 @@ interface GlobalRow extends Record<string, unknown> {
   occurrences: number | null;
   occurred_at: Date | string;
   read_at: Date | string | null;
+  actions: unknown;
 }
 
 /** Minimal shape shared by pg.Pool and a deterministic test double. */
@@ -60,6 +63,7 @@ function toView(row: GlobalRow): GlobalNotificationView {
     occurrences: row.occurrences ?? 1,
     occurredAt: iso(row.occurred_at),
     readAt: row.read_at ? iso(row.read_at) : null,
+    actions: parseNotificationActions(row.actions),
   };
 }
 
@@ -82,7 +86,7 @@ export async function listGlobalNotifications(
             organization.kind as organization_kind,
             notification.kind, notification.tone, notification.title,
             notification.body, notification.href, notification.occurrences,
-            notification.occurred_at, notification.read_at
+            notification.occurred_at, notification.read_at, notification.actions
        ${MEMBERSHIP_JOIN}
        join public.notifications notification
          on notification.organization_id = organization.id
@@ -106,6 +110,41 @@ export async function countGlobalUnread(db: NotificationQuery, baUserId: string)
     [baUserId],
   );
   return Number(rows[0]?.count ?? 0);
+}
+
+export interface NotificationActionTarget {
+  directoryUserId: string;
+  actions: NotificationAction[];
+}
+
+/**
+ * Los botones de UN aviso de esta identidad, y quién es ella dentro de esa
+ * empresa. La membresía se comprueba en la misma sentencia: un aviso de otra
+ * persona, o de una empresa de la que ya no es miembro, no devuelve nada.
+ */
+export async function findNotificationActions(
+  db: NotificationQuery,
+  baUserId: string,
+  target: { id: string; organizationId: string },
+): Promise<NotificationActionTarget | null> {
+  const { rows } = await db.query<{ directory_user_id: string; actions: unknown }>(
+    `select directory.id as directory_user_id, notification.actions
+       ${MEMBERSHIP_JOIN}
+       join public.notifications notification
+         on notification.organization_id = organization.id
+        and notification.user_id = directory.id
+      where membership."userId" = $1
+        and organization.id = $2
+        and notification.id = $3
+      limit 1`,
+    [baUserId, target.organizationId, target.id],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    directoryUserId: row.directory_user_id,
+    actions: parseNotificationActions(row.actions),
+  };
 }
 
 export interface NotificationTarget {

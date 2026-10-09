@@ -39,6 +39,7 @@ import {
   autopilotWorkspaceJob,
 } from '@/inngest/functions/autopilot';
 import { billingRenewalsJob } from '@/inngest/functions/billing-renewals';
+import { briefingDispatchJob, briefingWorkspaceJob } from '@/inngest/functions/briefing';
 import { clientsLinkDispatchJob, clientsLinkWorkspaceJob } from '@/inngest/functions/clients-link';
 import {
   commitmentsWatchDispatchJob,
@@ -140,6 +141,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'clients/link-dispatch': clientsLinkDispatchJob,
   'follow-through/dispatch': followThroughDispatchJob,
   'autopilot/dispatch': autopilotDispatchJob,
+  'briefing/dispatch': briefingDispatchJob,
 
   // --- Por evento: el nombre de siempre, intacto --------------------------
   'errand/advance': errandRunJob,
@@ -172,6 +174,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'follow-through/workspace': followThroughWorkspaceJob,
   'autopilot/workspace': autopilotWorkspaceJob,
   'autopilot/remind': autopilotRemindJob,
+  'briefing/workspace': briefingWorkspaceJob,
   'dev/task.intake': devTaskIntakeJob,
   'dev/task.queued': devTaskRunJob,
   'dev/task.status': devTaskStatusJob,

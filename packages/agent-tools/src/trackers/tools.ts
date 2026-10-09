@@ -256,6 +256,31 @@ export const trackersUpsert = registerTool({
     markdown: z.string(),
   }),
   rateLimit: { perMinute: 30 },
+  // Para poder deshacer una edición: los valores de antes de los campos que
+  // esta llamada va a escribir (sólo los que ya tenían valor).
+  audit: {
+    before: async (input, ctx) => {
+      if (!input.rowId) return null;
+      const tracker = await getTrackerBySlug(ctx.db, input.tracker);
+      if (!tracker) return null;
+      const prior = await ctx.db
+        .from('tracker_rows')
+        .select('values')
+        .eq('id', input.rowId)
+        .eq('tracker_id', tracker.id)
+        .maybeSingle();
+      if (prior.error || !prior.data) return null;
+      const previous = (prior.data as { values?: Record<string, unknown> }).values ?? {};
+      const picked: Record<string, unknown> = {};
+      for (const key of Object.keys(input.values)) {
+        // Un campo que no tenía valor no se puede «restaurar» a vacío: no se
+        // ofrece deshacer si la edición toca alguno.
+        if (!(key in previous)) return null;
+        picked[key] = previous[key];
+      }
+      return picked;
+    },
+  },
   handler: async (input, ctx) => {
     const tracker = await getTrackerBySlug(ctx.db, input.tracker);
     if (!tracker) {

@@ -5,6 +5,7 @@ import type { MandateUsage } from '@/lib/mandates/delegation';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { CalendarClock, KeyRound, Loader2, ShieldOff, User } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -261,6 +262,13 @@ export function MandateList({
                           </button>
                         </>
                       )}
+                      <span aria-hidden>·</span>
+                      <Link
+                        href={`/actividad?permiso=${m.id}`}
+                        className="font-semibold text-primary hover:underline"
+                      >
+                        Lo que hice con este permiso
+                      </Link>
                       {m.usage.money.map((mm) => (
                         <span key={mm.currency} className="tabular">
                           · movió {formatMoney(mm.total, mm.currency)}

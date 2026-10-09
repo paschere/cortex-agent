@@ -1,7 +1,8 @@
-import type { GlobalNotificationView } from '@/lib/notifications-shape';
+import { type GlobalNotificationView, parseNotificationActions } from '@/lib/notifications-shape';
 import { describe, expect, it } from 'vitest';
 import {
   type NotificationQuery,
+  findNotificationActions,
   listGlobalNotifications,
   markGlobalRead,
   notificationSnapshotKey,
@@ -59,6 +60,7 @@ describe('global notification membership boundary', () => {
       occurrences: 1,
       occurredAt: '2026-09-06T12:00:00Z',
       readAt: null,
+      actions: [],
     } satisfies GlobalNotificationView;
     expect(notificationSnapshotKey([{ ...item, occurrences: 2 }])).not.toBe(
       notificationSnapshotKey([item]),
@@ -67,5 +69,51 @@ describe('global notification membership boundary', () => {
       notificationSnapshotKey([item]),
     );
     expect(notificationSnapshotKey([])).not.toBe(notificationSnapshotKey([item]));
+  });
+});
+
+describe('notification action buttons', () => {
+  it('finds the buttons only behind the current membership and never trusts a client user id', async () => {
+    let statement = '';
+    let values: unknown[] | undefined;
+    const db: NotificationQuery = {
+      async query<T extends Record<string, unknown>>(sql: string, input?: unknown[]) {
+        statement = sql;
+        values = input;
+        return {
+          rows: [
+            {
+              directory_user_id: 'dir-1',
+              actions: [
+                {
+                  kind: 'autopilot_item',
+                  itemId: '11111111-1111-4111-8111-111111111111',
+                  contentHash: 'abcdef123456',
+                  title: 'Reintentar',
+                },
+                { kind: 'raw_tool', toolId: 'gmail.send_message', input: {} },
+              ],
+            },
+          ] as unknown as T[],
+        };
+      },
+    };
+    const found = await findNotificationActions(db, 'ba-ana', {
+      id: '22222222-2222-4222-8222-222222222222',
+      organizationId: 'org-acme',
+    });
+    expect(values).toEqual(['ba-ana', 'org-acme', '22222222-2222-4222-8222-222222222222']);
+    expect(statement).toContain('membership."userId" = $1');
+    expect(statement).toContain('notification.user_id = directory.id');
+    expect(found?.directoryUserId).toBe('dir-1');
+    // Una acción que no es del piloto (una herramienta suelta) se descarta al leer.
+    expect(found?.actions).toHaveLength(1);
+  });
+
+  it('parseNotificationActions descarta lo mal formado', () => {
+    expect(parseNotificationActions(null)).toEqual([]);
+    expect(
+      parseNotificationActions([{ kind: 'autopilot_item', itemId: 'x', contentHash: 'y' }]),
+    ).toEqual([]);
   });
 });

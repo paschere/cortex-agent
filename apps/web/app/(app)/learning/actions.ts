@@ -3,10 +3,15 @@
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  decideCaseCandidate,
   decideLearningProposal,
+  forgetMemory,
+  listMemories,
   recordSignal,
+  rememberMemory,
   revokeAdjustment,
   runLearningPass,
+  screenMemory,
 } from '@cortex/agent-tools';
 import { revalidatePath } from 'next/cache';
 import type { ActionResult } from './_components/types';
@@ -132,4 +137,68 @@ export async function noteFragmentCopied(
     observedAt: now.toISOString(),
   });
   return { ok: true };
+}
+
+/**
+ * «Lo que aprendí»: borrar uno de los recuerdos PROPIOS de quien mira. Las
+ * funciones de memoria derivan el conjunto visible del id de la persona dentro
+ * de la base (0051): un id ajeno no coincide con nada.
+ */
+export async function forgetLesson(id: string): Promise<ActionResult> {
+  const user = await requireSession();
+  if (!id) return { ok: false, error: 'Falta decir cuál.' };
+  try {
+    const db = getOrgScopedClient(user.organization.id);
+    const gone = await forgetMemory(db, user.id, id);
+    revalidatePath(PATH);
+    return gone ? { ok: true } : { ok: false, error: 'Ese recuerdo ya no existía.' };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo olvidar.') };
+  }
+}
+
+/** Corregir el texto de un recuerdo propio: se guarda el nuevo y se olvida el viejo. */
+export async function editLesson(id: string, content: string): Promise<ActionResult> {
+  const user = await requireSession();
+  const next = content.trim();
+  if (!id || next.length < 3 || next.length > 240) {
+    return { ok: false, error: 'Escríbelo en una frase corta (hasta 240 caracteres).' };
+  }
+  const screen = screenMemory(next);
+  if (!screen.ok) return { ok: false, error: screen.message ?? 'Eso no se puede guardar.' };
+  try {
+    const db = getOrgScopedClient(user.organization.id);
+    const current = (await listMemories(db, user.id)).find((m) => m.id === id);
+    if (!current) return { ok: false, error: 'Ese recuerdo ya no existía.' };
+    const created = await rememberMemory(db, {
+      userId: user.id,
+      content: next,
+      kind: current.kind,
+      source: 'explicit',
+      status: 'active',
+    });
+    if (!created) return { ok: false, error: 'No se pudo guardar esa versión.' };
+    if (created !== id) await forgetMemory(db, user.id, id);
+    revalidatePath(PATH);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo editar.') };
+  }
+}
+
+/** «Convertir en caso de prueba» (o descartar) un 👎 candidato. */
+export async function decideCase(
+  id: string,
+  decision: 'promoted' | 'dismissed',
+): Promise<ActionResult> {
+  const user = await requireSession();
+  if (!id) return { ok: false, error: 'Falta decir cuál.' };
+  try {
+    const db = getOrgScopedClient(user.organization.id);
+    const done = await decideCaseCandidate(db, id, user.id, decision);
+    revalidatePath(PATH);
+    return done ? { ok: true } : { ok: false, error: 'Ese caso ya no estaba.' };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar la decisión.') };
+  }
 }

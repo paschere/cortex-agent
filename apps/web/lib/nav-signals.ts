@@ -1,5 +1,6 @@
 import 'server-only';
 import { bogotaToday, deriveState } from '@cortex/agent-tools';
+import { buildLaunchPlan, launchProgress } from './management/launch-plan';
 import { getOrgScopedClient } from './supabase/service';
 
 /**
@@ -138,5 +139,114 @@ async function count(run: () => PromiseLike<{ count: number | null }>): Promise<
     return n ?? 0;
   } catch {
     return 0;
+  }
+}
+
+/**
+ * LO QUE EL RAIL DIBUJA ADEMÁS DE LAS COLAS.
+ *
+ * Va aparte de `NavCounts` a propósito: `waiting.ts` pasa esos conteos tal cual
+ * al chat, y mezclar aquí cosas que no son colas de «Te espera» las filtraría.
+ * Misma regla de siempre: es chrome, así que cada lectura se traga su fallo.
+ */
+export interface SetupProgress {
+  ready: number;
+  total: number;
+}
+
+export interface ShellSignals {
+  /** Cosas del piloto que esperan una decisión (las mismas que lista /piloto). */
+  pilot: number;
+  /** Progreso de la puesta en marcha mientras no esté completa; `null` si ya está o no se sabe. */
+  setup: SetupProgress | null;
+}
+
+/** Same window as COOLDOWN_DAYS in agent-tools/src/autopilot/plan.ts (not exported from the barrel). */
+const PILOT_WINDOW_DAYS = 7;
+
+export const NO_SHELL_SIGNALS: ShellSignals = { pilot: 0, setup: null };
+
+export async function readShellSignals(
+  organizationId: string,
+  isAdmin: boolean,
+): Promise<ShellSignals> {
+  try {
+    const db = getOrgScopedClient(organizationId);
+    const since = new Date(Date.now() - PILOT_WINDOW_DAYS * 86_400_000).toISOString();
+    const [pilot, setup] = await Promise.all([
+      // Mirrors listOpenAsks (autopilot/store.ts): status 'asked' inside the cooldown window.
+      count(() =>
+        db
+          .from('autopilot_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'asked')
+          .gte('created_at', since),
+      ),
+      isAdmin ? readSetupProgress(organizationId) : Promise.resolve(null),
+    ]);
+    return { pilot, setup };
+  } catch {
+    return NO_SHELL_SIGNALS;
+  }
+}
+
+/**
+ * Los pasos OBLIGATORIOS de /onboarding, con lecturas de sólo conteo (sin
+ * `readManagement`, que trae 500 asuntos). Si algún paso obligatorio no se pudo
+ * comprobar devuelve `null`: el rail no debe pedir una puesta en marcha que quizá
+ * ya está hecha.
+ */
+async function readSetupProgress(organizationId: string): Promise<SetupProgress | null> {
+  try {
+    const db = getOrgScopedClient(organizationId);
+    const head = { count: 'exact' as const, head: true };
+    const [facts, sources, knowledge, people, goals, verified, profile] = await Promise.all([
+      countOrNull(() => db.from('company_facts').select('id', head)),
+      countOrNull(() => db.from('integrations').select('user_id', head)),
+      countOrNull(() => db.from('kb_documents').select('id', head)),
+      countOrNull(() => db.from('users').select('id', head)),
+      countOrNull(() => db.from('goals').select('id', head).eq('state', 'active')),
+      countOrNull(() =>
+        db.from('management_cases').select('id', head).eq('data->>state', 'verified'),
+      ),
+      db.from('management_profiles').select('data,revision').maybeSingle(),
+    ]);
+    if (profile.error) return null;
+    const row = profile.data as {
+      revision: number;
+      data: { escalationOwnerId?: string | null; playbooks?: unknown[] };
+    } | null;
+    const steps = buildLaunchPlan({
+      facts,
+      configured: (row?.revision ?? 0) > 0,
+      owner: !!row?.data?.escalationOwnerId,
+      sources,
+      knowledge,
+      people,
+      goals,
+      manuals: row?.data?.playbooks?.length ?? 0,
+      browserProfiles: null,
+      browserConfigured: false,
+      mandates: null,
+      routines: null,
+      verified,
+    });
+    const progress = launchProgress(steps);
+    if (progress.complete) return null;
+    if (steps.some((s) => s.required && s.state === 'unknown')) return null;
+    return { ready: progress.ready, total: progress.total };
+  } catch {
+    return null;
+  }
+}
+
+async function countOrNull(
+  run: () => PromiseLike<{ count: number | null; error: unknown }>,
+): Promise<number | null> {
+  try {
+    const res = await run();
+    return res.error ? null : (res.count ?? null);
+  } catch {
+    return null;
   }
 }

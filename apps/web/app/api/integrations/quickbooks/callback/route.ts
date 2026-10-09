@@ -6,6 +6,7 @@ import {
   quickbooksStateKey,
   readQuickbooksState,
 } from '@/lib/accounting/quickbooks-oauth';
+import { CONNECT_FROM_COOKIE, cameFromOnboarding } from '@/lib/first-run/oauth-return';
 import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -35,10 +36,20 @@ import { type NextRequest, NextResponse } from 'next/server';
 export async function GET(req: NextRequest) {
   const user = await requireSession();
   const url = new URL(req.url);
-  const back = (query: string) =>
-    NextResponse.redirect(new URL(`/integrations?${query}#programas-contables`, req.url));
-
   const cookieStore = await cookies();
+  // Si la conexión empezó en el recorrido de los primeros 15 minutos, vuelve allí.
+  const fromOnboarding = cameFromOnboarding(cookieStore.get(CONNECT_FROM_COOKIE)?.value);
+  cookieStore.delete(CONNECT_FROM_COOKIE);
+  const back = (query: string) =>
+    NextResponse.redirect(
+      new URL(
+        fromOnboarding
+          ? `/onboarding?paso=fuentes&${query}`
+          : `/integrations?${query}#programas-contables`,
+        req.url,
+      ),
+    );
+
   const nonce = cookieStore.get(QUICKBOOKS_STATE_COOKIE)?.value;
   cookieStore.delete({ name: QUICKBOOKS_STATE_COOKIE, path: '/api/integrations/quickbooks' });
 

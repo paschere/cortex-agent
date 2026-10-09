@@ -43,6 +43,7 @@ export * from './linear';
 // retrieval reads its adjustments, and its own leaf modules import nothing from
 // this package.
 export * from './learning';
+export * from './feedback';
 export * from './kb';
 // La regla de qué correo merece interrumpir a alguien, y a quién le toca un
 // hilo. Viven en `mail/` porque no dependen de quién sirve el buzón.
@@ -261,6 +262,9 @@ export { previousPeriod } from './goals';
 // hace solo y lo que deja para decidir. Va al final: lee de casi todo lo de
 // arriba (cartera, banco, libro, procesos, compromisos, trabajo, aprobaciones).
 export * from './autopilot';
+
+// «Tu día» (migración 0220): el resumen de la mañana por persona, escrito por reglas.
+export * from './briefing';
 
 // Perseguir lo pendiente y aprender de lo recomendado (migración 0177): agrupar
 // aprobaciones parecidas, recordar lo que lleva días parado, el resumen diario

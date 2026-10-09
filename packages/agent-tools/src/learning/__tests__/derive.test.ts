@@ -3,6 +3,7 @@ import {
   type TurnRecord,
   decideAdjustments,
   deriveBadCutProposals,
+  deriveFeedbackSignals,
   deriveGapProposals,
   deriveTurnSignals,
   isDecisive,
@@ -371,5 +372,87 @@ describe('what it may only propose', () => {
     expect(proposals).toHaveLength(1);
     expect(proposals[0]?.kind).toBe('badly_cut_fragment');
     expect(proposals[0]?.chunkIndex).toBe(8);
+  });
+});
+
+describe('una valoración 👍/👎 es evidencia sobre los fragmentos de esa respuesta', () => {
+  const turns = [
+    turn({
+      id: 't1',
+      createdAt: '2026-08-07T10:00:00Z',
+      query: 'tarifa de bodegaje',
+      fragments: [used('doc-a', 2)],
+    }),
+    turn({
+      id: 't2',
+      createdAt: '2026-08-07T11:00:00Z',
+      query: 'otra cosa',
+      fragments: [used('doc-b', 0)],
+    }),
+  ];
+
+  it('atribuye el 👎 al último turno anterior al voto', () => {
+    const signals = deriveFeedbackSignals(turns, [
+      {
+        id: 'f1',
+        userId: 'ana',
+        conversationId: 'conv-1',
+        rating: -1,
+        reason: 'wrong_data',
+        createdAt: '2026-08-07T10:05:00Z',
+      },
+    ]);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toMatchObject({
+      kind: 'answer_rated',
+      polarity: -1,
+      weight: 2,
+      documentId: 'doc-a',
+      chunkIndex: 2,
+    });
+  });
+
+  it('un 👎 por lentitud no culpa a ningún fragmento', () => {
+    const signals = deriveFeedbackSignals(turns, [
+      {
+        id: 'f2',
+        userId: 'ana',
+        conversationId: 'conv-1',
+        rating: -1,
+        reason: 'slow',
+        createdAt: '2026-08-07T10:05:00Z',
+      },
+    ]);
+    expect(signals).toHaveLength(0);
+  });
+
+  it('el 👍 pesa uno y la llave incluye el voto', () => {
+    const [up] = deriveFeedbackSignals(turns, [
+      {
+        id: 'f3',
+        userId: 'ana',
+        conversationId: 'conv-1',
+        rating: 1,
+        reason: null,
+        createdAt: '2026-08-07T11:30:00Z',
+      },
+    ]);
+    expect(up).toMatchObject({ polarity: 1, weight: 1, documentId: 'doc-b' });
+    expect(up?.dedupeKey).toContain('f3:1');
+  });
+
+  it('ignora votos de otra conversación', () => {
+    expect(
+      deriveFeedbackSignals(turns, [
+        {
+          id: 'f4',
+          userId: 'ana',
+          conversationId: 'otra',
+          rating: -1,
+          reason: null,
+          createdAt: '2026-08-07T12:00:00Z',
+        },
+      ]),
+    ).toHaveLength(0);
   });
 });

@@ -1,6 +1,7 @@
 import 'server-only';
 import {
   NOTIFICATION_TONE_BY_KIND,
+  type NotificationAction,
   type NotificationKind,
   type NotificationSource,
   type NotificationTone,
@@ -102,6 +103,12 @@ export interface NotifyInput {
   groupKey?: string;
   /** Cuándo pasó, si no es ahora. */
   occurredAt?: Date;
+  /**
+   * Botones (0220): referencian cosas del piloto por id y huella, nunca una
+   * herramienta. Como mucho tres; se guardan tal cual y se releen con
+   * `parseNotificationActions`.
+   */
+  actions?: NotificationAction[];
 }
 
 const TITLE_MAX = 160;
@@ -171,7 +178,16 @@ export async function notify(db: SupabaseClient, input: NotifyInput): Promise<st
   const tone = input.tone ?? NOTIFICATION_TONE_BY_KIND[input.kind];
   const occurredAt = (input.occurredAt ?? new Date()).toISOString();
 
-  const shared = { kind: input.kind, tone, title, body, href, occurred_at: occurredAt };
+  const actions = input.actions?.length ? input.actions.slice(0, 3) : null;
+  const shared = {
+    kind: input.kind,
+    tone,
+    title,
+    body,
+    href,
+    occurred_at: occurredAt,
+    ...(actions ? { actions } : {}),
+  };
 
   if (input.dedupeKey) {
     const dedupeKey = clip(input.dedupeKey, 200);
@@ -243,6 +259,27 @@ export async function notify(db: SupabaseClient, input: NotifyInput): Promise<st
   }
 
   return (inserted.data as { id: string } | null)?.id ?? null;
+}
+
+/**
+ * ¿Ya existe un aviso con esta clave de deduplicación para esta persona? Para
+ * los productores que mandan MÁS canales además de la campana (correo, push) y
+ * sólo deben hacerlo la primera vez. `notify()` por sí solo no lo distingue:
+ * devuelve el id tanto si lo creó como si ya estaba.
+ */
+export async function notificationExists(
+  db: SupabaseClient,
+  userId: string,
+  dedupeKey: string,
+): Promise<boolean> {
+  const found = await db
+    .from('notifications')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('dedupe_key', clip(dedupeKey, 200))
+    .maybeSingle();
+  // Ante la duda se asume que ya existe: callar un día es mejor que repetir.
+  return found.error ? true : Boolean(found.data);
 }
 
 /**

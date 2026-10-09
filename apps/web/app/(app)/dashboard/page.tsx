@@ -95,10 +95,10 @@ export default async function DashboardPage() {
   // by way of migration 0085 § 8, every workspace that existed before it.
   const onboarding = await readOnboarding(sb);
   // La primera vez, una empresa nueva va a los primeros 10 minutos (elegir de
-  // dónde salen sus datos y un primer proceso). Después ve el Inicio, que la
+  // dónde salen sus datos y un primer proceso; ahora el recorrido guiado de /onboarding). Después ve el Inicio, que la
   // sigue guiando con la franja de pasos — nunca un asistente del que no se sale.
   if (onboarding.show && !(await cookies()).get(FIRST_STEPS_SEEN_COOKIE)) {
-    redirect('/onboarding/fuentes');
+    redirect('/onboarding');
   }
 
   const [waiting, journal, signalsRes, runsRes, convsRes, brandRow] = await Promise.all([

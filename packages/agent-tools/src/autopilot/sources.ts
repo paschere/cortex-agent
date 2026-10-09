@@ -29,6 +29,7 @@ import { loadTaxDraftsSnapshot } from '../tax/autopilot-drafts';
 import { listTaxObligations, readTaxProfile } from '../tax/store';
 import { toolErrorMessage } from '../tool-error';
 import { lastDaysPeriod, loadTeamReport } from '../work/view-sources';
+import { loadAnomalySources } from './anomalies';
 import type { AutopilotSnapshot, SnapshotInvoice } from './collectors';
 import { STALE_APPROVAL_HOURS } from './collectors';
 
@@ -50,6 +51,7 @@ export type SourceKey =
   | 'banco'
   | 'libro'
   | 'procesos'
+  | 'anomalias'
   | 'vencimientos'
   | 'equipo'
   | 'aprobaciones'
@@ -72,6 +74,7 @@ export const SOURCE_LABEL: Record<SourceKey, string> = {
   banco: 'los extractos del banco',
   libro: 'el libro de plata',
   procesos: 'las sincronizaciones',
+  anomalias: 'el ritmo de las fuentes conectadas',
   vencimientos: 'los vencimientos',
   equipo: 'el registro de trabajo',
   aprobaciones: 'las aprobaciones',
@@ -335,6 +338,8 @@ export async function loadSnapshot(
     () => loadComplianceSnapshot(db, today, names),
     'compliance',
   );
+  // Fuentes que se quedaron mudas (sin fallar): aparte y en paralelo.
+  const anomaliesRead = attempt('anomalias', () => loadAnomalySources(db, now));
   const [overdueInvoices, risk, recon, ledger, syncs, commitments, team, approvals, forecast] =
     await Promise.all([
       attempt('cartera', () => overdueWithContacts(db, today)),
@@ -354,6 +359,7 @@ export async function loadSnapshot(
       attempt('aprobaciones', () => staleApprovals(db, now, names)),
       attempt('caja', () => runForecast(db, { today }), 'finance'),
     ]);
+  const anomalySources = await anomaliesRead;
   const tax = await taxRead;
   const taxDrafts = await draftsRead;
   const documentExpirations = await docsRead;
@@ -400,6 +406,7 @@ export async function loadSnapshot(
     })),
     uncategorized: ledger,
     syncs,
+    anomalySources,
     commitments: commitments?.map((c) => ({
       id: c.id,
       title: c.title,

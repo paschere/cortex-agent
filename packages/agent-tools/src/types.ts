@@ -252,6 +252,15 @@ export interface ToolDef<I, O> {
    * declara aquí, `registerTool` la toma de `safe-actions/catalog.ts`.
    */
   safeAction?: SafeActionPolicy<I, O>;
+  /**
+   * Lo que el rastro de actividad necesita saber ANTES de que la herramienta
+   * cambie algo, para poder deshacerlo después (`audit-detail.ts`). Sólo se
+   * llama en herramientas con efectos; si lanza o devuelve `null`, la fila se
+   * escribe igual y esa acción simplemente no se podrá deshacer.
+   */
+  audit?: {
+    before?: (input: I, ctx: ToolContext) => Promise<Record<string, unknown> | null>;
+  };
   handler: (input: I, ctx: ToolContext) => Promise<O>;
 }
 

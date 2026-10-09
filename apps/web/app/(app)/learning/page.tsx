@@ -1,10 +1,19 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { buildLearningReport } from '@cortex/agent-tools';
+import {
+  FEEDBACK_REASON_LABEL,
+  buildLearningReport,
+  isFeedbackReason,
+  listCaseCandidates,
+  listMemories,
+  listMemoryProposals,
+  toPromotedCase,
+} from '@cortex/agent-tools';
 import { ArrowRight, Sprout } from 'lucide-react';
 import Link from 'next/link';
 import { Learning } from './_components/Learning';
+import { Lessons, type LessonsView } from './_components/Lessons';
 import { toView } from './_lib/view';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +35,7 @@ export default async function LearningPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
   const report = await buildLearningReport(db, { viewerId: user.id });
+  const lessons = await readLessons(db, user.id);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -52,6 +62,38 @@ export default async function LearningPage() {
         }
       />
       <Learning view={toView(report)} />
+      <Lessons view={lessons} />
     </div>
   );
+}
+
+/** Cada lectura falla por su cuenta: sin la migración 0219 la página sigue. */
+async function readLessons(
+  db: ReturnType<typeof getOrgScopedClient>,
+  userId: string,
+): Promise<LessonsView> {
+  const [memories, pendingCases, promoted, proposals] = await Promise.all([
+    listMemories(db, userId).catch(() => []),
+    listCaseCandidates(db, { limit: 20 }).catch(() => []),
+    listCaseCandidates(db, { status: 'promoted', limit: 100 }).catch(() => []),
+    listMemoryProposals(db, { status: 'pending', limit: 50 }).catch(() => []),
+  ]);
+  return {
+    lessons: memories
+      .filter((m) => m.status === 'active')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 40)
+      .map((m) => ({ id: m.id, content: m.content, kind: m.kind, createdAt: m.createdAt })),
+    cases: pendingCases.map((c) => ({
+      id: c.id,
+      question: c.question ?? '',
+      answer: c.answer ?? '',
+      reasonLabel: c.reason && isFeedbackReason(c.reason) ? FEEDBACK_REASON_LABEL[c.reason] : null,
+      comment: c.comment,
+      createdAt: c.createdAt,
+    })),
+    promotedJson: JSON.stringify(promoted.map(toPromotedCase), null, 2),
+    promotedCount: promoted.length,
+    pendingCompanyProposals: proposals.length,
+  };
 }

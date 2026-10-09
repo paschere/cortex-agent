@@ -5,15 +5,13 @@ import { CortexSignature } from '@/components/ui/cortex-signature';
 import { authClient } from '@/lib/auth-client';
 import {
   type NavItem,
-  type PrimaryItem,
+  type NavSection,
+  WAITING_AFTER,
   WAITING_ICON,
   WAITING_LABEL,
   buildRail,
-  moreGroups,
-  primaryActive,
-  primaryNav,
 } from '@/lib/nav-shape';
-import type { NavCounts } from '@/lib/nav-signals';
+import type { NavCounts, ShellSignals } from '@/lib/nav-signals';
 import { recordVisit } from '@/lib/nav-usage';
 import { panelForHref } from '@/lib/panels/shape';
 import { workspaceHref } from '@/lib/workspace-context';
@@ -23,16 +21,14 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import {
   ArrowUpRight,
-  Bell,
   ChevronDown,
   LayoutDashboard,
   LogOut,
-  MessagesSquare,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
-  Users,
+  Settings,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -45,24 +41,28 @@ import { ThemeToggle } from './ThemeToggle';
 import { CreateCompanyButton, WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 /**
- * EL RAIL DEL AUTOSERVICIO.
+ * EL RAIL, CALMADO.
  *
  * Tres alturas, de más a menos uso:
  *
- *   1. LAS PUERTAS (`primaryNav`): Inicio, Chat, Procesos, Vistas, Datos y
- *      Equipo. Grandes, con su icono y sin agrupar — son las seis palabras con
- *      las que el diseño nuevo explica el producto.
- *   2. «TE ESPERA»: las cuatro colas con su contador vivo (`countNavSignals`).
- *      Va visible y no dentro de «Más» porque es la única fila que cambia sola
- *      y cuyo número pide algo.
- *   3. «MÁS»: todo lo demás, con sus encabezados — la consola multiempresa,
- *      Gerencia, Llamadas, Brain Knowledge, finanzas, herramientas, la
- *      administración. Plegado salvo cuando estás dentro de algo suyo. No se
- *      quitó ni un destino: `nav-shape.test.ts` sigue sumando la unión.
+ *   1. ARRIBA (`rail.pinned`): Chat, Hoy (el plan del día de Cortex, con las
+ *      cosas que esperan decisión), «Te espera» (las cuatro colas en UNA fila
+ *      con la suma, que se despliega), Vistas, Aplicaciones, Tablas y Cerebro.
+ *   2. SECCIONES PLEGABLES con encabezados en español llano (Mi día, Clientes y
+ *      ventas, Plata…). Cada una recuerda en `localStorage` si estaba abierta;
+ *      sin elección previa sólo «Mi día» y la que contiene la pantalla actual
+ *      salen abiertas. Los módulos apagados no dejan encabezados colgando.
+ *   3. AL PIE: la tarjeta de «Puesta en marcha» (sólo mientras falte y sólo para
+ *      quien administra), y Ajustes, tema y cerrar sesión.
+ *
+ * No se quitó ni un destino: `nav-shape.test.ts` suma la unión, y lo que no
+ * esté en el rail se alcanza con ⌘K.
  */
 
 const EMPTY: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
 const NO_MODULES_OFF: ModuleKey[] = [];
+const NO_SIGNALS: ShellSignals = { pilot: 0, setup: null };
+const SECTIONS_KEY = 'sidebar_sections';
 
 function matches(path: string, href: string) {
   if (href.includes('?')) return false;
@@ -71,15 +71,20 @@ function matches(path: string, href: string) {
   return path === href || path.startsWith(`${href}/`);
 }
 
-interface Group {
-  id: string;
-  label: string;
-  items: NavItem[];
+function readSavedSections(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(SECTIONS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
 }
 
 function Navigation({
   role,
   counts,
+  signals,
   collapsed,
   onNavigate,
   organization,
@@ -90,6 +95,7 @@ function Navigation({
   modulesOff: ModuleKey[];
   role: Role;
   counts: NavCounts;
+  signals: ShellSignals;
   collapsed: boolean;
   onNavigate?: () => void;
   organization?: ActiveOrganization;
@@ -100,38 +106,43 @@ function Navigation({
   const commands = useCommandMenu();
   const admin = role === 'org_admin';
   const founder = organization?.kind === 'company' && organization.role === 'owner';
-  const rail = buildRail([], admin, modulesOff);
-  const primary = primaryNav({ admin, founder, modulesOff });
-  const primaryHrefs = new Set(primary.map((item) => item.href));
-  // «Más» corto (ver `moreGroups` en lib/nav-shape.ts): lo de la semana en tres
-  // grupos, la administración aparte para quien administra, y el resto en la
-  // paleta. «Todas mis empresas» lleva al centro de mando, que es global.
+  const rail = buildRail([], admin, modulesOff, signals.setup === null);
   const globalItems: NavItem[] = [
     { href: '/overview', label: 'Todas mis empresas', icon: LayoutDashboard },
   ];
-  const groups: Group[] = moreGroups({ admin, founder, modulesOff }).map((g) => ({
-    ...g,
-    items: g.items.filter((item) => !primaryHrefs.has(item.href)),
-  }));
+  // «La empresa» es una sección más; «Todas mis empresas» cuelga de ella.
+  const sections: NavSection[] = [
+    ...rail.rest,
+    {
+      ...rail.company,
+      items: [...(founder ? globalItems : []), ...rail.company.items],
+    },
+  ].filter((section) => section.items.length > 0);
   const waitingCount = rail.waiting.reduce(
-    (sum, item) => sum + (item.signal ? counts[item.signal] : 0),
+    (sum, item) => sum + (item.signal && item.signal !== 'pilot' ? counts[item.signal] : 0),
     0,
   );
   const waitingActive = rail.waiting.some((item) => matches(path, item.href));
-  const moreActive =
-    !primary.some((item) => primaryActive(path, item)) &&
-    [...globalItems, ...groups.flatMap((g) => g.items)].some((item) => matches(path, item.href));
-  const [selection, setSelection] = useState<{
-    path: string;
-    waiting: boolean;
-    more: boolean;
-  } | null>(null);
+  const [selection, setSelection] = useState<{ path: string; waiting: boolean } | null>(null);
+  const [saved, setSaved] = useState<Record<string, boolean>>({});
+  useEffect(() => setSaved(readSavedSections()), []);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const current = selection?.path === path ? selection : null;
   const waitingOpen = !collapsed && (current ? current.waiting : waitingActive);
-  const moreOpen = !collapsed && (current ? current.more : moreActive);
   const scope = onNavigate ? 'mobile' : 'desktop';
+
+  const sectionOpen = (section: NavSection) =>
+    !collapsed &&
+    (saved[section.id] ??
+      (section.id === 'today' || section.items.some((item) => matches(path, item.href))));
+  function toggleSection(section: NavSection) {
+    const next = { ...saved, [section.id]: !sectionOpen(section) };
+    setSaved(next);
+    try {
+      localStorage.setItem(SECTIONS_KEY, JSON.stringify(next));
+    } catch {}
+  }
 
   async function signOut() {
     setSigningOut(true);
@@ -175,17 +186,25 @@ function Navigation({
     };
   }
 
-  /** Una puerta grande: icono, palabra, y nada más. */
-  function door(item: PrimaryItem) {
-    const active = primaryActive(path, item);
+  function badgeFor(item: NavItem) {
+    if (!item.signal) return 0;
+    return item.signal === 'pilot' ? signals.pilot : counts[item.signal];
+  }
+
+  /** Una fila de arriba: icono, palabra y, si hay, lo que espera. */
+  function door(item: NavItem) {
+    const active = matches(path, item.href);
     const Icon = item.icon;
+    const badge = badgeFor(item);
     const { onClick } = onClickFor(item);
     return (
       <Link
         key={item.href}
         href={hrefFor(item)}
         title={collapsed ? item.label : undefined}
-        aria-label={collapsed ? item.label : undefined}
+        aria-label={
+          collapsed ? (badge ? `${item.label}, ${badge} pendientes` : item.label) : undefined
+        }
         aria-current={active ? 'page' : undefined}
         onClick={onClick}
         className={clsx(
@@ -198,15 +217,25 @@ function Navigation({
       >
         <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
         {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+        {!collapsed && badge > 0 && (
+          <span className="tabular rounded-pill bg-primary px-2 text-micro font-bold text-white">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+        {collapsed && badge > 0 && (
+          <span className="tabular ml-0.5 text-micro font-bold text-primary">
+            {badge > 9 ? '9+' : badge}
+          </span>
+        )}
       </Link>
     );
   }
 
-  /** Una fila de «Te espera» o de «Más». */
+  /** Una fila dentro de «Te espera» o de una sección. */
   function row(item: NavItem) {
     const active = matches(path, item.href);
     const Icon = item.icon;
-    const badge = item.signal ? counts[item.signal] : 0;
+    const badge = badgeFor(item);
     const { wanted, onClick } = onClickFor(item);
     return (
       <Link
@@ -233,75 +262,159 @@ function Navigation({
     );
   }
 
-  /** Un desplegable: «Te espera» o «Más». En el rail estrecho, ensancha. */
-  function disclosure({
-    id,
-    label,
-    icon: Icon,
-    open,
-    active,
-    count,
-    onToggle,
-  }: {
-    id: string;
-    label: string;
-    icon: NavItem['icon'];
-    open: boolean;
-    active: boolean;
-    count: number;
-    onToggle: () => void;
-  }) {
+  /** «Te espera»: una fila con la suma que despliega las cuatro colas. */
+  function waitingRow() {
+    const Icon = WAITING_ICON;
     return (
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={`sidebar-${scope}-${id}`}
-        aria-label={collapsed ? `${label}${count ? `, ${count} pendientes` : ''}` : undefined}
-        title={collapsed ? label : undefined}
-        onClick={() => {
-          if (collapsed) onExpand();
-          onToggle();
-        }}
-        className={clsx(
-          'flex min-h-11 w-full items-center rounded-pill text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
-          collapsed ? 'justify-center px-1' : 'gap-3 px-3.5',
-          active
-            ? 'font-bold text-primary-ink'
-            : 'font-semibold text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
-        )}
-      >
-        <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-        {!collapsed && (
-          <>
-            <span className="flex-1 text-left">{label}</span>
-            {count > 0 && (
-              <span className="tabular rounded-pill bg-primary px-2 text-micro font-bold text-white">
-                {count > 99 ? '99+' : count}
-              </span>
-            )}
-            <ChevronDown
-              className={clsx(
-                'h-4 w-4 text-rail-ink-faint transition-transform motion-reduce:transition-none',
-                open && 'rotate-180',
+      <div key="waiting">
+        <button
+          type="button"
+          aria-expanded={waitingOpen}
+          aria-controls={`sidebar-${scope}-waiting`}
+          aria-label={
+            collapsed
+              ? `${WAITING_LABEL}${waitingCount ? `, ${waitingCount} pendientes` : ''}`
+              : undefined
+          }
+          title={collapsed ? WAITING_LABEL : undefined}
+          onClick={() => {
+            if (collapsed) onExpand();
+            setSelection({ path, waiting: !waitingOpen });
+          }}
+          className={clsx(
+            'flex min-h-11 w-full items-center rounded-pill text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
+            collapsed ? 'justify-center px-1' : 'gap-3 px-3.5',
+            waitingActive
+              ? 'font-bold text-primary-ink'
+              : 'font-semibold text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+          )}
+        >
+          <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-left">{WAITING_LABEL}</span>
+              {waitingCount > 0 && (
+                <span className="tabular rounded-pill bg-primary px-2 text-micro font-bold text-white">
+                  {waitingCount > 99 ? '99+' : waitingCount}
+                </span>
               )}
-            />
-          </>
-        )}
-        {collapsed && count > 0 && (
-          <span className="tabular ml-0.5 text-micro font-bold text-primary">
-            {count > 9 ? '9+' : count}
-          </span>
-        )}
-      </button>
+              <ChevronDown
+                className={clsx(
+                  'h-4 w-4 text-rail-ink-faint transition-transform motion-reduce:transition-none',
+                  waitingOpen && 'rotate-180',
+                )}
+              />
+            </>
+          )}
+          {collapsed && waitingCount > 0 && (
+            <span className="tabular ml-0.5 text-micro font-bold text-primary">
+              {waitingCount > 9 ? '9+' : waitingCount}
+            </span>
+          )}
+        </button>
+        <div
+          id={`sidebar-${scope}-waiting`}
+          hidden={!waitingOpen}
+          className="mb-1 ml-5 mt-1 space-y-0.5 border-l-2 border-rail-border pl-2"
+        >
+          {rail.waiting.map(row)}
+        </div>
+      </div>
     );
   }
 
-  const toggle = (key: 'waiting' | 'more') =>
-    setSelection({
-      path,
-      waiting: key === 'waiting' ? !waitingOpen : waitingOpen,
-      more: key === 'more' ? !moreOpen : moreOpen,
-    });
+  /** Una sección plegable. En el rail estrecho es un icono que ensancha el rail. */
+  function sectionBlock(section: NavSection) {
+    const open = sectionOpen(section);
+    const hasActive = section.items.some((item) => matches(path, item.href));
+    const Icon = section.items[0]?.icon ?? MoreHorizontal;
+    if (collapsed) {
+      return (
+        <button
+          key={section.id}
+          type="button"
+          onClick={onExpand}
+          title={section.label}
+          aria-label={section.label}
+          className={clsx(
+            'flex min-h-10 w-full items-center justify-center rounded-pill transition-colors hover:bg-rail-2 hover:text-rail-ink',
+            hasActive ? 'text-primary-ink' : 'text-rail-ink-faint',
+          )}
+        >
+          <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+        </button>
+      );
+    }
+    return (
+      <div key={section.id}>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={`sidebar-${scope}-${section.id}`}
+          onClick={() => toggleSection(section)}
+          className="flex min-h-8 w-full items-center gap-2 rounded-pill px-3 text-left text-micro font-bold uppercase tracking-field text-rail-ink-faint transition-colors hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <span className="flex-1">{section.label}</span>
+          {!open && hasActive && (
+            <span aria-hidden className="h-1.5 w-1.5 rounded-pill bg-primary" />
+          )}
+          <ChevronDown
+            className={clsx(
+              'h-3.5 w-3.5 transition-transform motion-reduce:transition-none',
+              !open && '-rotate-90',
+            )}
+          />
+        </button>
+        <div id={`sidebar-${scope}-${section.id}`} hidden={!open} className="space-y-0.5 pb-1">
+          {section.items.map(row)}
+        </div>
+      </div>
+    );
+  }
+
+  /** La tarjeta de «Puesta en marcha»: sólo mientras falte. */
+  function setupCard() {
+    if (!rail.setup || !signals.setup) return null;
+    const { ready, total } = signals.setup;
+    const pct = total > 0 ? Math.round((ready / total) * 100) : 0;
+    const { onClick } = onClickFor(rail.setup);
+    if (collapsed) {
+      return (
+        <Link
+          href={hrefFor(rail.setup)}
+          onClick={onClick}
+          title={`Puesta en marcha: ${ready} de ${total}`}
+          aria-label={`Puesta en marcha: ${ready} de ${total} pasos`}
+          className="workspace-nav-link flex min-h-10 flex-col items-center justify-center rounded-pill text-primary hover:bg-rail-2"
+        >
+          <Settings className="h-[18px] w-[18px]" strokeWidth={2} />
+          <span className="tabular text-micro font-bold">{`${ready}/${total}`}</span>
+        </Link>
+      );
+    }
+    return (
+      <Link
+        href={hrefFor(rail.setup)}
+        onClick={onClick}
+        className="block rounded-sm border border-rail-border bg-canvas p-3 transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <span className="flex items-center justify-between gap-2 text-sm font-bold text-rail-ink">
+          Puesta en marcha
+          <span className="tabular text-micro font-semibold text-rail-ink-muted">
+            {ready} de {total}
+          </span>
+        </span>
+        <span aria-hidden className="mt-2 block h-1.5 overflow-hidden rounded-pill bg-rail-2">
+          <span className="block h-full rounded-pill bg-primary" style={{ width: `${pct}%` }} />
+        </span>
+        <span className="mt-2 block text-micro text-rail-ink-muted">Sigue con lo que falta</span>
+      </Link>
+    );
+  }
+
+  const topRows = rail.pinned.flatMap((item) =>
+    item.href === WAITING_AFTER ? [door(item), waitingRow()] : [door(item)],
+  );
 
   return (
     <>
@@ -330,45 +443,12 @@ function Navigation({
           )}
         </button>
 
-        <div className="space-y-1">{primary.map(door)}</div>
+        <div className="space-y-1">{topRows}</div>
 
-        <div className="mt-3 border-t border-rail-border pt-3">
-          {disclosure({
-            id: 'waiting',
-            label: WAITING_LABEL,
-            icon: WAITING_ICON,
-            open: waitingOpen,
-            active: waitingActive,
-            count: waitingCount,
-            onToggle: () => toggle('waiting'),
-          })}
-          <div
-            id={`sidebar-${scope}-waiting`}
-            hidden={!waitingOpen}
-            className="mb-1 ml-5 mt-1 space-y-0.5 border-l-2 border-rail-border pl-2"
-          >
-            {rail.waiting.map(row)}
-          </div>
-
-          {disclosure({
-            id: 'more',
-            label: 'Más',
-            icon: MoreHorizontal,
-            open: moreOpen,
-            active: moreActive,
-            count: 0,
-            onToggle: () => toggle('more'),
-          })}
-          <div id={`sidebar-${scope}-more`} hidden={!moreOpen} className="mt-1 space-y-3">
-            {groups.map((group) => (
-              <div key={group.id}>
-                <p className="px-3 pb-1 pt-2 text-micro font-bold uppercase tracking-field text-rail-ink-faint">
-                  {group.label}
-                </p>
-                <div className="space-y-0.5">{group.items.map(row)}</div>
-              </div>
-            ))}
-            <div className="space-y-0.5 pb-1">
+        <div className="mt-3 space-y-1 border-t border-rail-border pt-3">
+          {sections.map(sectionBlock)}
+          {!collapsed && (
+            <div className="space-y-0.5 pt-1">
               <CreateCompanyButton />
               <button
                 type="button"
@@ -383,10 +463,11 @@ function Navigation({
                 <kbd className="text-micro font-semibold text-rail-ink-faint">⌘K</kbd>
               </button>
             </div>
-          </div>
+          )}
         </div>
       </nav>
       <div className="shrink-0 space-y-2 border-t border-rail-border px-3 py-3">
+        {setupCard()}
         <div className={clsx('flex items-center gap-1', collapsed && 'flex-col')}>
           {rail.footer
             .filter((item) => item.href === '/settings')
@@ -458,11 +539,14 @@ function Brand({ small, onNavigate }: { small: boolean; onNavigate?: () => void 
 export function Sidebar({
   role,
   counts = EMPTY,
+  signals = NO_SIGNALS,
   organization,
   modulesOff = NO_MODULES_OFF,
 }: {
   role: Role;
   counts?: NavCounts;
+  /** Hoy (decisiones del piloto) y progreso de la puesta en marcha. */
+  signals?: ShellSignals;
   organization?: ActiveOrganization;
   /** Módulos que la empresa apagó (0186). Lo lee el shell, una vez. */
   modulesOff?: ModuleKey[];
@@ -526,6 +610,7 @@ export function Sidebar({
         <Navigation
           role={role}
           counts={counts}
+          signals={signals}
           collapsed={small}
           onNavigate={onNavigate}
           organization={organization}

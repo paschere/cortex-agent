@@ -15,6 +15,7 @@ export function Topbar({ email }: { email?: string }) {
   const rail = buildRail([], true);
   const items = [
     ...rail.pinned,
+    ...(rail.setup ? [rail.setup] : []),
     ...rail.waiting,
     ...rail.rest.flatMap((s) => s.items),
     ...rail.company.items,

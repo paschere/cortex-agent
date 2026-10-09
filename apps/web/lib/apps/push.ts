@@ -60,7 +60,7 @@ export type PushSender = (
   vapid: VapidConfig,
 ) => Promise<void>;
 
-const realSender: PushSender = async (sub, body, vapid) => {
+export const realSender: PushSender = async (sub, body, vapid) => {
   await webpush.sendNotification(sub, body, {
     vapidDetails: {
       subject: vapid.subject,

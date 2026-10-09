@@ -5,6 +5,7 @@ import { requireNotificationAccount } from '@/lib/notifications/account';
 import { listGlobalNotifications } from '@/lib/notifications/global-repository';
 import { BellRing } from 'lucide-react';
 import { Inbox } from './_components/Inbox';
+import { PushToggle } from './_components/PushToggle';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,7 @@ export default async function NotificationsPage() {
         icon={<BellRing className="h-5 w-5" />}
       />
       <Panel className="overflow-hidden">
+        <PushToggle />
         <Inbox initial={notifications} />
       </Panel>
     </>

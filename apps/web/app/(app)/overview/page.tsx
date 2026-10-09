@@ -2,6 +2,7 @@ import { CreateCompanyButton } from '@/components/nav/WorkspaceSwitcher';
 import { CompanyGroups } from '@/components/overview/CompanyGroups';
 import { FounderOverview } from '@/components/overview/FounderOverview';
 import { FounderTabs } from '@/components/overview/FounderTabs';
+import { QualityHealth } from '@/components/overview/QualityHealth';
 import { PageHeader } from '@/components/ui/page-header';
 import { signupMode } from '@/lib/billing/config';
 import { isPlatformOperator } from '@/lib/billing/operators';
@@ -9,6 +10,7 @@ import { readOwnedBusiness } from '@/lib/founder-business';
 import { readFounderConsole } from '@/lib/founder-console';
 import { buildConsoleRows } from '@/lib/founder-console-shape';
 import { requireFounderContext } from '@/lib/founder-guard';
+import { readOwnedQuality } from '@/lib/quality-health';
 import { workspaceHref } from '@/lib/workspace-context';
 import { LayoutDashboard, MessagesSquare } from 'lucide-react';
 import Link from 'next/link';
@@ -99,6 +101,7 @@ export default async function OverviewPage({
           <CompanyGroups initialGroups={data.groups} initialAvailable={data.availableForGroups} />
         </div>
       )}
+      {founder && <QualityHealth companies={await readOwnedQuality(context.owned)} />}
     </>
   );
 }

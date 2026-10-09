@@ -159,6 +159,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. "Which workspaces have the autopilot on at this Bogotá hour" spans the install; the raw handle selects organization_id off autopilot_settings and nothing else. Each id rides on its own event and the run builds every handle (settings, snapshot, items, runTool context, notify) pinned to it.',
   ],
   [
+    'inngest/functions/briefing.ts',
+    'Cron. "Which workspaces have an agent" spans the install; the raw handle selects organization_id off agents and nothing else. Each id rides on its own event and the per-workspace job builds every handle (reads, notify, push, directory) pinned to it.',
+  ],
+  [
     'inngest/functions/clients-link.ts',
     'Cron. "Which workspaces have clients or an accounting connection" spans the install; the raw handle selects organization_id and nothing else. Each id rides on its own event and linkClientRecords runs with a handle pinned to it.',
   ],

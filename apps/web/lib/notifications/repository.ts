@@ -5,6 +5,7 @@ import {
   type NotificationKind,
   type NotificationTone,
   type NotificationView,
+  parseNotificationActions,
 } from '@/lib/notifications-shape';
 import { logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -52,6 +53,7 @@ interface Row {
   occurrences: number | null;
   occurred_at: string;
   read_at: string | null;
+  actions?: unknown;
 }
 
 const KNOWN_KINDS = new Set<string>(NOTIFICATION_KINDS);
@@ -77,6 +79,7 @@ function toView(row: Row): NotificationView {
     occurrences: row.occurrences ?? 1,
     occurredAt: row.occurred_at,
     readAt: row.read_at,
+    actions: parseNotificationActions(row.actions),
   };
 }
 
@@ -88,7 +91,7 @@ export async function listNotifications(
 ): Promise<NotificationView[]> {
   const result = await db
     .from('notifications')
-    .select('id, kind, tone, title, body, href, occurrences, occurred_at, read_at')
+    .select('id, kind, tone, title, body, href, occurrences, occurred_at, read_at, actions')
     .eq('user_id', userId)
     .order('occurred_at', { ascending: false })
     .limit(Math.min(Math.max(options.limit ?? DEFAULT_LIMIT, 1), 200));
