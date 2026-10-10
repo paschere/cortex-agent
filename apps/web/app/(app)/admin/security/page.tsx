@@ -1,4 +1,7 @@
 import { SURFACE_LABEL, fetchUserNames, riskSignals } from '@/app/api/admin/_lib/audit-filters';
+import { BarChart } from '@/components/charts/BarChart';
+import { CHART_COLOR } from '@/components/charts/colors';
+import { shortDay } from '@/components/charts/scales';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
@@ -160,7 +163,6 @@ export default async function SecurityPage() {
     const day = new Date(now - i * DAY).toISOString().slice(0, 10);
     timeline.push({ day, flagged: byDay[day]?.flagged ?? 0, blocked: byDay[day]?.blocked ?? 0 });
   }
-  const maxDay = Math.max(1, ...timeline.map((d) => d.flagged + d.blocked));
   const timelineTotal = timeline.reduce((n, d) => n + d.flagged + d.blocked, 0);
 
   const recent = events.slice(0, 25);
@@ -264,35 +266,28 @@ export default async function SecurityPage() {
               No se marcó ni se bloqueó nada en esta ventana.
             </div>
           ) : (
-            <div className="flex h-28 items-end gap-1">
-              {timeline.map((d) => {
-                const total = d.flagged + d.blocked;
-                const h = Math.round((total / maxDay) * 100);
-                const blockedH = total > 0 ? Math.round((d.blocked / total) * h) : 0;
-                return (
-                  <div
-                    key={d.day}
-                    className="flex-1"
-                    title={`${d.day}: ${d.flagged} marcadas, ${d.blocked} bloqueadas`}
-                  >
-                    {/* The stack reads as one meter, so it takes one rounded cap
-                        rather than each segment fighting for its own corner. */}
-                    <div className="flex h-28 flex-col justify-end overflow-hidden rounded-t-pill">
-                      <div className="w-full bg-rose" style={{ height: `${blockedH}%` }} />
-                      <div
-                        className="w-full bg-amber"
-                        style={{ height: `${Math.max(total > 0 ? 2 : 0, h - blockedH)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <BarChart
+              labels={timeline.map((d) => shortDay(d.day))}
+              titles={timeline.map((d) => d.day)}
+              bars={[
+                {
+                  id: 'flagged',
+                  label: 'Marcadas',
+                  color: CHART_COLOR.amber,
+                  values: timeline.map((d) => d.flagged),
+                },
+                {
+                  id: 'blocked',
+                  label: 'Bloqueadas',
+                  color: CHART_COLOR.rose,
+                  values: timeline.map((d) => d.blocked),
+                },
+              ]}
+              height={170}
+              legend={false}
+              ariaLabel={`Marcadas frente a bloqueadas por día, ${timelineTotal} en total entre ${timeline[0]?.day} y ${timeline[timeline.length - 1]?.day}`}
+            />
           )}
-          <div className="tabular mt-1.5 flex justify-between text-micro text-ink-faint">
-            <span>{timeline[0]?.day}</span>
-            <span>{timeline[timeline.length - 1]?.day}</span>
-          </div>
         </Panel>
 
         <div className="grid gap-4 lg:grid-cols-2">

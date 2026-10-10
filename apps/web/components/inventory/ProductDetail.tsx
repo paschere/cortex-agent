@@ -9,6 +9,8 @@ import { ArrowLeft, BarChart3, History, Package, Settings2, Warehouse } from 'lu
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { BarChart } from '../charts/BarChart';
+import { CHART_COLOR } from '../charts/colors';
 import { FIELD, Feedback, NUMBER_FIELD, TONE_TEXT, Tiles, readNumber } from './parts';
 
 /**
@@ -84,11 +86,8 @@ export function ProductDetail({
 }
 
 function ConsumptionChart({ view }: { view: ProductDetailView }) {
-  const W = 640;
-  const H = 160;
-  const pad = 24;
-  const n = view.weekly.length || 1;
-  const bw = (W - pad * 2) / n;
+  const n = view.weekly.length;
+  const unit = (q: number) => `${q.toLocaleString('es-CO')} ${view.unit}`;
   return (
     <Panel>
       <PanelHead
@@ -97,45 +96,26 @@ function ConsumptionChart({ view }: { view: ProductDetailView }) {
         right={<span className="tabular">{view.dailyLabel}</span>}
       />
       <div className="px-6 pb-5 pt-3">
-        <svg
-          viewBox={`0 0 ${W} ${H + 22}`}
-          className="h-auto w-full"
-          role="img"
-          aria-label="Salidas por semana, últimas 13 semanas"
-        >
-          <line x1={pad} x2={W - pad} y1={H} y2={H} className="stroke-border" strokeWidth={1} />
-          {view.weekly.map((w, i) => {
-            const h = (w.qty / view.weeklyMax) * (H - 16);
-            const x = pad + i * bw + bw * 0.18;
-            return (
-              <g key={w.label}>
-                <rect
-                  x={x}
-                  y={H - h}
-                  width={bw * 0.64}
-                  height={Math.max(h, w.qty > 0 ? 2 : 0)}
-                  rx={3}
-                  className={clsx(i === n - 1 ? 'fill-primary' : 'fill-primary/40')}
-                >
-                  <title>{`Semana del ${w.label}: ${w.qty.toLocaleString('es-CO')} ${view.unit}`}</title>
-                </rect>
-                {(i % 2 === 0 || i === n - 1) && (
-                  <text
-                    x={x + bw * 0.32}
-                    y={H + 15}
-                    textAnchor="middle"
-                    className="fill-ink-faint text-micro"
-                  >
-                    {w.label}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
-        {view.weekly.every((w) => w.qty === 0) && (
-          <p className="text-xs text-ink-faint">Sin salidas en las últimas 13 semanas.</p>
-        )}
+        <BarChart
+          labels={view.weekly.map((w) => w.label)}
+          titles={view.weekly.map((w) => `Semana del ${w.label}`)}
+          bars={[
+            {
+              id: 'qty',
+              label: 'Salidas',
+              color: CHART_COLOR.primary,
+              values: view.weekly.map((w) => w.qty),
+              display: view.weekly.map((w) => unit(w.qty)),
+            },
+          ]}
+          nowIndex={n > 0 ? n - 1 : undefined}
+          nowLabel="esta semana"
+          formatValue={unit}
+          height={190}
+          legend={false}
+          emptyNote="Sin salidas en las últimas 13 semanas"
+          ariaLabel={`Salidas por semana, últimas 13 semanas: ${view.weekly.map((w) => `${w.label} ${unit(w.qty)}`).join(', ')}`}
+        />
       </div>
     </Panel>
   );

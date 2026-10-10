@@ -138,16 +138,33 @@ function timeSeries(
     );
   }
 
-  const line = pts.map((p, i) => `${num(x(i))},${num(y(p.value))}`).join(' ');
-  const area = `${num(padL)},${num(padT + plotH)} ${line} ${num(x(pts.length - 1))},${num(padT + plotH)}`;
+  const coords = pts.map((p, i) => ({ x: x(i), y: y(p.value) }));
+  const curve = monotoneCurve(coords);
+  const baseY = padT + plotH;
+  const last = coords[coords.length - 1] as { x: number; y: number };
+  const first = coords[0] as { x: number; y: number };
+  const area =
+    coords.length > 1 ? `${curve}L${num(last.x)},${num(baseY)}L${num(first.x)},${num(baseY)}Z` : '';
+  const gradId = `${opts.idPrefix}-g`;
 
+  // Every value is written when there are few buckets; past nine only the last
+  // one is, because a label on every point turns the line into a number cloud.
+  const labelAll = pts.length <= 9;
   const marks = pts
     .map((p, i) => {
       const cx = x(i);
       const cy = y(p.value);
+      const isLast = i === pts.length - 1;
       return [
-        `<circle class="rp-dot ${fillClass(chart.tone)}" cx="${num(cx)}" cy="${num(cy)}" r="3.5" />`,
-        `<text class="rp-point-value" x="${num(cx)}" y="${num(cy - 10)}" text-anchor="middle">${escapeHtml(fmtCount(p.value))}</text>`,
+        isLast
+          ? `<circle class="rp-halo ${fillClass(chart.tone)}" cx="${num(cx)}" cy="${num(cy)}" r="8" />`
+          : '',
+        labelAll || isLast
+          ? `<circle class="rp-dot ${fillClass(chart.tone)}" cx="${num(cx)}" cy="${num(cy)}" r="${isLast ? 4.5 : 3.5}" />`
+          : '',
+        labelAll || isLast
+          ? `<text class="rp-point-value" x="${num(cx)}" y="${num(cy - 12)}" text-anchor="middle">${escapeHtml(fmtCount(p.value))}</text>`
+          : '',
       ].join('');
     })
     .join('');
@@ -164,17 +181,75 @@ function timeSeries(
     )
     .join('');
 
+  const defs = `<defs><linearGradient id="${escapeHtml(gradId)}" x1="0" y1="0" x2="0" y2="1"><stop class="rp-stop-${escapeHtml(chart.tone)}" offset="0%" stop-opacity="0.32" /><stop class="rp-stop-${escapeHtml(chart.tone)}" offset="100%" stop-opacity="0" /></linearGradient></defs>`;
+
   return svg(
     [
+      defs,
       grid.join(''),
-      `<polygon class="rp-area ${fillClass(chart.tone)}" points="${area}" />`,
-      `<polyline class="rp-line ${strokeClass(chart.tone)}" points="${line}" />`,
+      area ? `<path class="rp-area-g" d="${area}" fill="url(#${escapeHtml(gradId)})" />` : '',
+      coords.length > 1 ? `<path class="rp-line ${strokeClass(chart.tone)}" d="${curve}" />` : '',
       marks,
       ticks,
     ].join(''),
     H,
     opts,
   );
+}
+
+/**
+ * Monotone cubic (Fritsch–Carlson) through the points: smooth, and it never
+ * overshoots the data — a series that only rises does not grow a hump. This
+ * is a copy of `monotonePath` in apps/web/components/charts/scales.ts: this
+ * package cannot import from the app, and the report must render the same
+ * bytes on the server whatever the app does.
+ */
+function monotoneCurve(pts: ReadonlyArray<{ x: number; y: number }>): string {
+  const n = pts.length;
+  const p0 = pts[0];
+  if (!p0) return '';
+  if (n === 1) return `M${num(p0.x)},${num(p0.y)}`;
+  const dx: number[] = [];
+  const slope: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i] as { x: number; y: number };
+    const b = pts[i + 1] as { x: number; y: number };
+    const d = b.x - a.x || 1e-9;
+    dx.push(d);
+    slope.push((b.y - a.y) / d);
+  }
+  const m: number[] = new Array(n).fill(0);
+  m[0] = slope[0] as number;
+  m[n - 1] = slope[n - 2] as number;
+  for (let i = 1; i < n - 1; i++) {
+    const s0 = slope[i - 1] as number;
+    const s1 = slope[i] as number;
+    m[i] = s0 * s1 <= 0 ? 0 : (s0 + s1) / 2;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const sl = slope[i] as number;
+    if (sl === 0) {
+      m[i] = 0;
+      m[i + 1] = 0;
+      continue;
+    }
+    const a = (m[i] as number) / sl;
+    const b = (m[i + 1] as number) / sl;
+    const h = a * a + b * b;
+    if (h > 9) {
+      const t = 3 / Math.sqrt(h);
+      m[i] = t * a * sl;
+      m[i + 1] = t * b * sl;
+    }
+  }
+  let d = `M${num(p0.x)},${num(p0.y)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i] as { x: number; y: number };
+    const b = pts[i + 1] as { x: number; y: number };
+    const w = (dx[i] as number) / 3;
+    d += `C${num(a.x + w)},${num(a.y + w * (m[i] as number))} ${num(b.x - w)},${num(b.y - w * (m[i + 1] as number))} ${num(b.x)},${num(b.y)}`;
+  }
+  return d;
 }
 
 /** 1, 2, 5, 10, 20, 50 … — the intervals people actually put on an axis. */

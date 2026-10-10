@@ -5,6 +5,9 @@ import { clsx } from 'clsx';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ExternalLink, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { BarChart } from '../charts/BarChart';
+import { CHART_COLOR } from '../charts/colors';
+import { formatFull } from '../charts/scales';
 import { MarkDoneButton } from './MarkDoneButton';
 import type { TeamActions } from './types';
 
@@ -314,50 +317,34 @@ export function ItemList({
  */
 export function WeekBars({ weeks, label }: { weeks: WeekPoint[]; label: string }) {
   const max = Math.max(1, ...weeks.map((w) => w.done));
-  const W = 220;
-  const H = 64;
-  const gap = 6;
-  const bw = (W - gap * (weeks.length - 1)) / weeks.length;
   const current = weeks.at(-1);
+  const currentIndex = weeks.findIndex((w) => w.current);
   return (
     <figure className="min-w-0">
-      <svg
-        viewBox={`0 0 ${W} ${H + 14}`}
-        className="h-auto w-full max-w-[280px]"
-        role="img"
-        aria-label={`${label}: cerrados por semana, ${weeks.map((w) => `${w.label} ${w.done}`).join(', ')}`}
-      >
-        <line x1={0} x2={W} y1={H} y2={H} className="stroke-border" strokeWidth={1} />
-        {weeks.map((w, k) => {
-          const h = w.done === 0 ? 2 : Math.max(3, (w.done / max) * (H - 14));
-          const x = k * (bw + gap);
-          return (
-            <g key={w.from}>
-              <title>{`Semana del ${w.label}: ${w.done} cerrados, ${w.open} abiertos al cierre${w.current ? ' (en curso)' : ''}`}</title>
-              <rect x={x - 2} y={0} width={bw + 4} height={H} className="fill-transparent" />
-              <rect
-                x={x}
-                y={H - h}
-                width={bw}
-                height={h}
-                rx={4}
-                className={w.current ? 'fill-primary/40' : 'fill-primary'}
-              />
-              {(k === 0 || w.current) && (
-                <text
-                  x={k === 0 ? x : x + bw}
-                  y={H + 11}
-                  textAnchor={k === 0 ? 'start' : 'end'}
-                  className="fill-ink-faint font-mono"
-                  fontSize={9}
-                >
-                  {w.label}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
+      <BarChart
+        labels={weeks.map((w) => w.label)}
+        titles={weeks.map((w) => `Semana del ${w.label}${w.current ? ' (en curso)' : ''}`)}
+        bars={[
+          {
+            id: 'done',
+            label: 'Cerrados',
+            color: CHART_COLOR.emerald,
+            values: weeks.map((w) => w.done),
+            dim: currentIndex >= 0 ? [currentIndex] : [],
+          },
+        ]}
+        nowIndex={currentIndex >= 0 ? currentIndex : undefined}
+        nowLabel="en curso"
+        tooltipExtra={(i) => (
+          <span className="block">{weeks[i]?.open ?? 0} abiertos al cierre</span>
+        )}
+        formatValue={(n) => formatFull(n)}
+        formatAxis={(n) => formatFull(n)}
+        height={170}
+        legend={false}
+        emptyNote="Nada cerrado en estas semanas"
+        ariaLabel={`${label}: cerrados por semana, ${weeks.map((w) => `${w.label} ${w.done}`).join(', ')}`}
+      />
       <figcaption className="mt-1 text-micro text-ink-muted">
         Cerrados por semana · máx. <span className="tabular">{max}</span>
         {current ? (

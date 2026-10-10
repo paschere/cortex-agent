@@ -1,9 +1,11 @@
 'use client';
 
-import type { ComputedBlock, Tone } from '@cortex/agent-tools';
+import type { ComputedBlock } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Target } from 'lucide-react';
-import { useId } from 'react';
+import { Target } from 'lucide-react';
+import { DeltaPill } from '../../charts/DeltaPill';
+import { Sparkline } from '../../charts/Sparkline';
+import { axisFormatterFor } from '../../charts/scales';
 import { Card, TONE_BAR, TONE_COLOR, TONE_SOFT } from './theme';
 
 /**
@@ -67,7 +69,7 @@ export function MetricBlock({ block }: { block: Metric }) {
       </div>
       <div className="mt-3" style={{ containerType: 'inline-size' }}>
         <p
-          className="tabular whitespace-nowrap font-mono font-semibold leading-none tracking-tight text-ink"
+          className="tabular whitespace-nowrap tabular-nums font-semibold leading-none tracking-tight text-ink"
           style={{ fontSize: fit }}
         >
           {block.display}
@@ -76,7 +78,14 @@ export function MetricBlock({ block }: { block: Metric }) {
       {compare && <Trend compare={compare} />}
       {compare && compare.series.length >= 2 && (
         <div className="mt-auto pt-4">
-          <Sparkline series={compare.series} tone={block.tone} />
+          <Sparkline
+            values={compare.series.map((x) => x.value)}
+            labels={compare.series.map((x) => x.label)}
+            color={TONE_COLOR[block.tone]}
+            format={axisFormatterFor(block.display)}
+            name={block.title}
+            showLabels
+          />
         </div>
       )}
       {block.goal ? (
@@ -105,7 +114,7 @@ export function MetricBlock({ block }: { block: Metric }) {
                 </span>
               )}
             </span>
-            <span className="tabular font-mono text-ink-faint">{block.goal.display}</span>
+            <span className="tabular tabular-nums text-ink-faint">{block.goal.display}</span>
           </div>
           {/* biome-ignore lint/a11y/useFocusableInteractive: una barra de avance se lee, no se usa. */}
           <div
@@ -141,13 +150,6 @@ export function MetricBlock({ block }: { block: Metric }) {
 }
 
 function Trend({ compare }: { compare: NonNullable<Metric['compare']> }) {
-  const Arrow =
-    compare.direction === 'up'
-      ? ArrowUpRight
-      : compare.direction === 'down'
-        ? ArrowDownRight
-        : ArrowRight;
-  const tone: Tone | null = compare.good === null ? null : compare.good ? 'emerald' : 'rose';
   const delta =
     compare.delta === null
       ? compare.direction === 'flat'
@@ -156,91 +158,15 @@ function Trend({ compare }: { compare: NonNullable<Metric['compare']> }) {
       : `${compare.delta > 0 ? '+' : ''}${PERCENT.format(compare.delta * 100)} %`;
   return (
     <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-faint">
-      <span
-        className={clsx(
-          'tabular inline-flex items-center gap-0.5 rounded-pill py-0.5 pl-1.5 pr-2 font-mono font-semibold',
-          tone ? TONE_SOFT[tone] : 'bg-surface-2 text-ink-muted',
-        )}
-      >
-        <Arrow className="h-3.5 w-3.5" aria-hidden />
-        {delta}
-        {compare.good !== null && (
-          <span className="sr-only">{compare.good ? ' (bien)' : ' (mal)'}</span>
-        )}
-      </span>
+      <DeltaPill
+        ratio={compare.delta === null ? (compare.direction === 'flat' ? 0 : null) : compare.delta}
+        good={compare.good}
+        text={delta.replace('-', '−')}
+      />
       <span>
         {compare.previousLabel}{' '}
-        <span className="tabular font-mono text-ink-muted">{compare.previousDisplay}</span>
+        <span className="tabular tabular-nums text-ink-muted">{compare.previousDisplay}</span>
       </span>
     </p>
-  );
-}
-
-/**
- * Una línea mínima, sin ejes: la forma de los últimos períodos, con el área
- * en degradado y el punto de hoy. Es dibujo, no dato — el lector de pantalla
- * recibe la serie en texto.
- */
-export function Sparkline({
-  series,
-  tone,
-}: { series: Array<{ label: string; value: number }>; tone: Tone }) {
-  const gradient = `spark-${useId().replace(/:/g, '')}`;
-  if (series.length < 2) return null;
-  const values = series.map((s) => s.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const W = 100;
-  const H = 36;
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * W;
-    const y = H - 3 - ((v - min) / span) * (H - 8);
-    return [x, y] as const;
-  });
-  const line = pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
-  const last = pts[pts.length - 1] ?? [W, H / 2];
-  const color = TONE_COLOR[tone];
-  return (
-    <figure className="relative m-0">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="h-10 w-full overflow-visible"
-        aria-hidden="true"
-      >
-        <defs>
-          <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <polygon points={`0,${H} ${line} ${W},${H}`} fill={`url(#${gradient})`} />
-        <polyline
-          points={line}
-          fill="none"
-          stroke={color}
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      {/* El punto de hoy, en HTML para que no se deforme con el SVG estirado. */}
-      <span
-        aria-hidden
-        className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-pill border-2 border-surface"
-        style={{
-          left: `${(last[0] / W) * 100}%`,
-          top: `${(last[1] / H) * 100}%`,
-          background: color,
-        }}
-      />
-      <figcaption className="mt-1 flex justify-between text-micro text-ink-faint">
-        <span>{series[0]?.label}</span>
-        <span>{series[series.length - 1]?.label}</span>
-        <span className="sr-only">{series.map((s) => `${s.label}: ${s.value}`).join('; ')}</span>
-      </figcaption>
-    </figure>
   );
 }

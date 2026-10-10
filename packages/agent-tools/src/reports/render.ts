@@ -132,11 +132,13 @@ export const REPORT_CSS = `
 .rp-caption{margin:12px 0 0;font-size:12.5px;color:var(--rp-ink-muted)}
 .rp-alt{margin:4px 0 0;font-size:12.5px;color:var(--rp-ink-faint)}
 
-.rp-grid{stroke:var(--rp-border);stroke-width:1}
+.rp-grid{stroke:var(--rp-border);stroke-width:1;stroke-dasharray:2 4}
 .rp-axis-line{stroke:var(--rp-border);stroke-width:1.5}
 .rp-axis{font-family:var(--rp-mono);font-size:10.5px;fill:var(--rp-ink-faint)}
 .rp-line{fill:none;stroke-width:2.25;stroke-linejoin:round;stroke-linecap:round}
 .rp-area{opacity:.10}
+.rp-halo{opacity:.18}
+.rp-stop-primary{stop-color:var(--rp-primary)} .rp-stop-emerald{stop-color:var(--rp-emerald)} .rp-stop-amber{stop-color:var(--rp-amber)} .rp-stop-rose{stop-color:var(--rp-rose)} .rp-stop-sky{stop-color:var(--rp-sky)} .rp-stop-ink{stop-color:var(--rp-ink-faint)}
 .rp-dot{stroke:var(--rp-surface);stroke-width:1.5}
 .rp-point-value{font-family:var(--rp-mono);font-size:10.5px;fill:var(--rp-ink-muted)}
 .rp-bar-track{fill:var(--rp-surface-2)}

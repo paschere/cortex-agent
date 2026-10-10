@@ -3,8 +3,10 @@
 import { cardHref } from '@/lib/apps/app-nav';
 import type { ComputedHome, ComputedHomeCard } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { ArrowRight, ArrowUpRight, CheckCircle2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
+import { DeltaPill } from '../charts/DeltaPill';
+import { Sparkline } from '../charts/Sparkline';
 import { Glyph } from './AppGlyph';
 import { AppIllustration } from './AppIllustration';
 
@@ -65,62 +67,21 @@ const CARD =
   'app-press group relative flex min-h-11 flex-col overflow-hidden rounded-card border border-border bg-surface shadow-card motion-reduce:transition-none';
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50';
 
-/** El micrográfico: una línea con su área, del color del tono. Sólo si hay ≥ 2 puntos. */
-function Sparkline({ values, className }: { values: number[]; className?: string }) {
-  if (values.length < 2) return null;
-  const W = 120;
-  const H = 36;
-  const PAD = 3;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const pts = values.map((v, i) => {
-    const x = PAD + (i / (values.length - 1)) * (W - PAD * 2);
-    const y = H - PAD - ((v - min) / span) * (H - PAD * 2);
-    return [x, y] as const;
-  });
-  const line = pts
-    .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`)
-    .join(' ');
-  const last = pts[pts.length - 1] as readonly [number, number];
-  const area = `${line} L${last[0].toFixed(1)} ${H} L${PAD} ${H} Z`;
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      role="presentation"
-      aria-hidden
-      className={clsx('h-9 w-full overflow-visible', className)}
-    >
-      <path d={area} fill="currentColor" opacity="0.12" />
-      <path
-        d={line}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-      <circle cx={last[0]} cy={last[1]} r="3" fill="currentColor" />
-    </svg>
-  );
-}
-
 /** «▲ 3 vs. antes»: la diferencia entre el último valor de la serie y el anterior. */
 function Trend({ values }: { values: number[] }) {
   if (values.length < 2) return null;
-  const delta = (values[values.length - 1] ?? 0) - (values[values.length - 2] ?? 0);
-  const Icon = delta < 0 ? TrendingDown : TrendingUp;
+  const last = values[values.length - 1] ?? 0;
+  const prev = values[values.length - 2] ?? 0;
+  const delta = last - prev;
   return (
-    <span className="inline-flex items-center gap-1 rounded-pill bg-surface-2 px-2 py-0.5 text-micro font-semibold text-ink-muted">
-      <Icon className="h-3 w-3" aria-hidden />
-      <span className="tabular font-mono">
-        {delta > 0 ? '+' : delta < 0 ? '−' : ''}
-        {Math.abs(delta)}
-      </span>
+    <>
+      <DeltaPill
+        ratio={delta === 0 ? 0 : delta / (Math.abs(prev) || 1)}
+        good={null}
+        text={`${delta > 0 ? '+' : delta < 0 ? '−' : '='}${Math.abs(delta)}`}
+      />
       <span className="sr-only"> frente a la medición anterior</span>
-    </span>
+    </>
   );
 }
 
@@ -317,7 +278,7 @@ function Counter({
       </span>
       {series.length >= 2 ? (
         <span className={clsx('mt-2 block', tone.text)}>
-          <Sparkline values={series} />
+          <Sparkline values={series} color="currentColor" height={36} name={card.text} />
         </span>
       ) : (
         card.empty &&

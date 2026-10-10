@@ -1,7 +1,16 @@
 'use client';
 
+import { SegmentStrip } from '@/components/charts/SegmentBar';
+import { CHART_COLOR } from '@/components/charts/colors';
 import { clsx } from 'clsx';
-import { PART_FILL, PART_LABEL, PART_NOTE, type PartView, type TurnView } from './types';
+import {
+  PART_FILL,
+  PART_LABEL,
+  PART_NOTE,
+  type PartKey,
+  type PartView,
+  type TurnView,
+} from './types';
 
 /**
  * Where the context went — one bar, then the ledger under it.
@@ -27,6 +36,17 @@ import { PART_FILL, PART_LABEL, PART_NOTE, type PartView, type TurnView } from '
  */
 
 const LOCALE = 'es-CO';
+
+/** El color de cada parte en la tira: el mismo de su punto en la lista de abajo. */
+const PART_COLOR: Record<PartKey, string> = {
+  instructions: CHART_COLOR.ink,
+  memory: CHART_COLOR.sky,
+  company: 'rgb(var(--primary) / 0.6)',
+  knowledge: CHART_COLOR.primary,
+  history: 'rgb(var(--ink-muted))',
+  tools: CHART_COLOR.amber,
+  question: CHART_COLOR.emerald,
+};
 
 function num(value: number): string {
   return value.toLocaleString(LOCALE);
@@ -59,16 +79,17 @@ export function ContextWeight({ turn }: { turn: TurnView }) {
       </p>
 
       {/* One strip, because the parts share one budget. */}
-      <div className="mt-2.5 flex h-2.5 w-full overflow-hidden rounded-pill bg-surface-2">
-        {parts.map((part) => (
-          <span
-            key={part.key}
-            className={clsx(PART_FILL[part.key], 'h-full')}
-            style={{ width: `${part.share * 100}%` }}
-            title={`${PART_LABEL[part.key]} · ${pct(part.share)}`}
-          />
-        ))}
-      </div>
+      <SegmentStrip
+        className="mt-2.5"
+        name="El peso del contexto"
+        items={parts.map((part) => ({
+          key: part.key,
+          label: PART_LABEL[part.key],
+          value: part.share,
+          display: pct(part.share),
+          color: PART_COLOR[part.key],
+        }))}
+      />
 
       <ul className="mt-2.5 space-y-1.5">
         {parts.map((part) => (
@@ -94,9 +115,7 @@ function Row({ part, biggest }: { part: PartView; biggest: boolean }) {
         </span>
         <span className="ml-2 text-micro text-ink-faint">{PART_NOTE[part.key]}</span>
       </span>
-      <span className="tabular shrink-0 text-micro font-semibold text-ink">
-        {pct(part.share)}
-      </span>
+      <span className="tabular shrink-0 text-micro font-semibold text-ink">{pct(part.share)}</span>
       <span className="tabular w-[92px] shrink-0 text-right text-micro text-ink-faint">
         ~{num(part.tokens)} tokens
       </span>

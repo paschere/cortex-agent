@@ -1,5 +1,8 @@
 'use client';
 
+import { BarChart } from '@/components/charts/BarChart';
+import { CHART_COLOR } from '@/components/charts/colors';
+import { formatCompact } from '@/components/charts/scales';
 import DataGrid from '@/components/datagrid/DataGrid';
 import type { GridColumn, GridRow } from '@/components/datagrid/types';
 import {
@@ -680,12 +683,6 @@ function ForecastTab(props: BudgetScreenProps) {
       </Panel>
     );
   const p = f.pnl;
-  const max = Math.max(
-    1,
-    ...p.months.map((m) =>
-      Math.max(m.sales + m.otherIncome + m.scenarioIn, m.expenses + m.scenarioOut),
-    ),
-  );
   const s = props.scenario;
   return (
     <div className="space-y-6">
@@ -740,36 +737,36 @@ function ForecastTab(props: BudgetScreenProps) {
             </li>
           </ul>
         </div>
-        <ol
-          className="grid h-44 grid-cols-12 items-end gap-1 sm:gap-2"
-          aria-label="Pronóstico por mes"
-        >
-          {p.months.slice(0, 12).map((m) => {
-            const inn = m.sales + m.otherIncome + m.scenarioIn;
-            const out = m.expenses + m.scenarioOut;
-            return (
-              <li
-                key={m.month}
-                className="flex h-full flex-col justify-end"
-                title={`${m.month}: entra ${fullMoney(inn)}, sale ${fullMoney(out)}, resultado ${fullMoney(m.margin)}`}
-              >
-                <div className="flex h-full items-end justify-center gap-0.5">
-                  <span
-                    className="w-1/2 max-w-4 rounded-t bg-emerald/80"
-                    style={{ height: `${(inn / max) * 100}%` }}
-                  />
-                  <span
-                    className="w-1/2 max-w-4 rounded-t bg-ink-faint/55"
-                    style={{ height: `${(out / max) * 100}%` }}
-                  />
-                </div>
-                <span className="mt-1 text-center text-micro uppercase text-ink-faint">
-                  {shortMonthKey(m.month).split(' ')[0]}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        <BarChart
+          barMode="grouped"
+          labels={p.months.slice(0, 12).map((m) => shortMonthKey(m.month).split(' ')[0] ?? m.month)}
+          titles={p.months.slice(0, 12).map((m) => shortMonthKey(m.month))}
+          bars={[
+            {
+              id: 'in',
+              label: 'Entra',
+              color: CHART_COLOR.emerald,
+              values: p.months.slice(0, 12).map((m) => m.sales + m.otherIncome + m.scenarioIn),
+            },
+            {
+              id: 'out',
+              label: 'Sale',
+              color: 'rgb(var(--ink-faint) / 0.55)',
+              values: p.months.slice(0, 12).map((m) => m.expenses + m.scenarioOut),
+            },
+          ]}
+          formatAxis={(n) => formatCompact(n, { money: true })}
+          formatValue={(n) => fullMoney(n)}
+          height={230}
+          legend={false}
+          ariaLabel={`Pronóstico por mes: ${p.months
+            .slice(0, 12)
+            .map(
+              (m) =>
+                `${m.month} entra ${fullMoney(m.sales + m.otherIncome + m.scenarioIn)}, sale ${fullMoney(m.expenses + m.scenarioOut)}, resultado ${fullMoney(m.margin)}`,
+            )
+            .join('; ')}`}
+        />
         <h3 className="mt-5 text-sm font-bold text-ink">Supuestos</h3>
         <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-ink-muted">
           {p.assumptions.map((a) => (

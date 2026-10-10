@@ -1,4 +1,8 @@
 import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
+import { BarChart } from '@/components/charts/BarChart';
+import { SegmentBar } from '@/components/charts/SegmentBar';
+import { CHART_COLOR } from '@/components/charts/colors';
+import { shortDay, toneOfClass } from '@/components/charts/scales';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { cacheSavingsUsd, formatUsd, rateFor, stepCostUsd } from '@/lib/model-pricing';
@@ -46,7 +50,7 @@ const SELECT_FULL =
   'user_id, tool_id, status, latency_ms, created_at, surface, risk_level, metadata';
 const SELECT_LEGACY = 'user_id, tool_id, status, latency_ms, created_at, metadata';
 
-/** Horizontal stacked bar + legend, built from plain divs. */
+/** Barra segmentada + leyenda con las cifras (kit de gráficos). */
 function StackedBar({
   segments,
   total,
@@ -54,38 +58,17 @@ function StackedBar({
   segments: Array<{ key: string; label: string; value: number; color: string }>;
   total: number;
 }) {
-  const visible = segments.filter((s) => s.value > 0);
   return (
-    <div>
-      {total === 0 ? (
-        <div className="h-3 w-full rounded-full border border-border bg-surface-2" />
-      ) : (
-        <div className="flex h-3 w-full overflow-hidden rounded-full border border-border bg-surface-2">
-          {visible.map((s) => (
-            <div
-              key={s.key}
-              className={s.color}
-              style={{ width: `${(s.value / total) * 100}%` }}
-              title={`${s.label}: ${s.value} (${Math.round((s.value / total) * 100)}%)`}
-            />
-          ))}
-        </div>
-      )}
-      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
-        {segments.map((s) => (
-          <LegendDot
-            key={s.key}
-            color={s.color}
-            label={s.label}
-            value={
-              total === 0
-                ? '0'
-                : `${s.value.toLocaleString()} · ${Math.round((s.value / total) * 100)}%`
-            }
-          />
-        ))}
-      </div>
-    </div>
+    <SegmentBar
+      name="Reparto"
+      items={segments.map((s) => ({
+        key: s.key,
+        label: s.label,
+        value: total === 0 ? 0 : s.value,
+        display: s.value.toLocaleString('es-CO'),
+        color: CHART_COLOR[toneOfClass(s.color)],
+      }))}
+    />
   );
 }
 
@@ -339,14 +322,12 @@ export default async function UsagePage({
     const day = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
     daySeries.push({ day, ok: byDay[day]?.ok ?? 0, error: byDay[day]?.error ?? 0 });
   }
-  const maxDay = Math.max(1, ...daySeries.map((d) => d.ok + d.error));
 
   const tokenSeries = daySeries.map((d) => ({
     day: d.day,
     in: tokensByDay[d.day]?.in ?? 0,
     out: tokensByDay[d.day]?.out ?? 0,
   }));
-  const maxTokenDay = Math.max(1, ...tokenSeries.map((d) => d.in + d.out));
   const totalTokens = tokensIn + tokensOut;
   const tokensPerDay = Math.round(totalTokens / days);
 
@@ -431,35 +412,26 @@ export default async function UsagePage({
         {/* Daily activity */}
         <Panel className="p-4">
           <div className="field-label mb-3">Actividad diaria</div>
-          <div className="flex h-28 items-end gap-1">
-            {daySeries.map((d) => {
-              const total = d.ok + d.error;
-              const h = Math.round((total / maxDay) * 100);
-              const errH = total > 0 ? Math.round((d.error / total) * h) : 0;
-              return (
-                <div
-                  key={d.day}
-                  className="group relative flex-1"
-                  title={`${d.day}: ${total} llamadas (${d.error} con error)`}
-                >
-                  <div className="flex h-28 flex-col justify-end overflow-hidden">
-                    <div
-                      className={clsx('w-full bg-rose', errH > 0 && 'rounded-t-full')}
-                      style={{ height: `${errH}%` }}
-                    />
-                    <div
-                      className={clsx('w-full bg-primary', errH === 0 && 'rounded-t-full')}
-                      style={{ height: `${Math.max(total > 0 ? 2 : 0, h - errH)}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="tabular mt-1.5 flex justify-between text-micro text-ink-faint">
-            <span>{daySeries[0]?.day}</span>
-            <span>{daySeries[daySeries.length - 1]?.day}</span>
-          </div>
+          <BarChart
+            labels={daySeries.map((d) => shortDay(d.day))}
+            titles={daySeries.map((d) => d.day)}
+            bars={[
+              {
+                id: 'ok',
+                label: 'Bien',
+                color: CHART_COLOR.primary,
+                values: daySeries.map((d) => d.ok),
+              },
+              {
+                id: 'error',
+                label: 'Con error',
+                color: CHART_COLOR.rose,
+                values: daySeries.map((d) => d.error),
+              },
+            ]}
+            height={190}
+            ariaLabel={`Actividad diaria de llamadas entre ${daySeries[0]?.day} y ${daySeries[daySeries.length - 1]?.day}`}
+          />
         </Panel>
 
         {/* Where it ran + how risky it was */}
@@ -517,38 +489,32 @@ export default async function UsagePage({
             </div>
           ) : (
             <>
-              <div className="flex h-20 items-end gap-1">
-                {tokenSeries.map((d) => {
-                  const total = d.in + d.out;
-                  const h = Math.round((total / maxTokenDay) * 100);
-                  const outH = total > 0 ? Math.round((d.out / total) * h) : 0;
-                  return (
-                    <div
-                      key={d.day}
-                      className="flex-1"
-                      title={`${d.day}: ${d.in.toLocaleString('es-CO')} de entrada / ${d.out.toLocaleString('es-CO')} de salida`}
-                    >
-                      <div className="flex h-20 flex-col justify-end overflow-hidden">
-                        <div
-                          className={clsx('w-full bg-primary', outH > 0 && 'rounded-t-full')}
-                          style={{ height: `${outH}%` }}
-                        />
-                        <div
-                          className={clsx('w-full bg-sky', outH === 0 && 'rounded-t-full')}
-                          style={{ height: `${Math.max(total > 0 ? 2 : 0, h - outH)}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="tabular mt-1.5 flex justify-between text-micro text-ink-faint">
-                <span>{tokenSeries[0]?.day}</span>
-                <span>
-                  {turns.toLocaleString('es-CO')} turno{turns === 1 ? '' : 's'}
-                </span>
-                <span>{tokenSeries[tokenSeries.length - 1]?.day}</span>
-              </div>
+              <BarChart
+                labels={tokenSeries.map((d) => shortDay(d.day))}
+                titles={tokenSeries.map((d) => d.day)}
+                bars={[
+                  {
+                    id: 'in',
+                    label: 'Entrada',
+                    color: CHART_COLOR.sky,
+                    values: tokenSeries.map((d) => d.in),
+                  },
+                  {
+                    id: 'out',
+                    label: 'Salida',
+                    color: CHART_COLOR.primary,
+                    values: tokenSeries.map((d) => d.out),
+                  },
+                ]}
+                formatValue={formatTokens}
+                formatAxis={formatTokens}
+                height={170}
+                legend={false}
+                ariaLabel={`Tokens por día entre ${tokenSeries[0]?.day} y ${tokenSeries[tokenSeries.length - 1]?.day}`}
+              />
+              <p className="tabular mt-1 text-center text-micro text-ink-faint">
+                {turns.toLocaleString('es-CO')} turno{turns === 1 ? '' : 's'}
+              </p>
             </>
           )}
         </Panel>

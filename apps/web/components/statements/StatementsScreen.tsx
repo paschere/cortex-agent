@@ -1,5 +1,8 @@
 'use client';
 
+import { BarChart } from '@/components/charts/BarChart';
+import { CHART_COLOR } from '@/components/charts/colors';
+import { formatCompact } from '@/components/charts/scales';
 import DataGrid from '@/components/datagrid/DataGrid';
 import type { GridColumn, GridRow } from '@/components/datagrid/types';
 import { ActionNote, pillLink, pillPrimary, statusPill } from '@/components/finance/pieces';
@@ -510,10 +513,6 @@ function IncomeTab(props: StatementsScreenProps) {
   });
   // Una utilidad sin gastos registrados no se dibuja: sería la barra de ventas otra vez.
   const netOf = (mo: (typeof months)[number]) => (mo.expensesMissing ? 0 : mo.values.utilidad_neta);
-  const maxBar = Math.max(
-    1,
-    ...months.map((mo) => Math.max(mo.values.ingresos, Math.abs(netOf(mo)))),
-  );
   const monthsWithData = months.filter((mo) => mo.hasData).length;
 
   return (
@@ -530,42 +529,36 @@ function IncomeTab(props: StatementsScreenProps) {
             </li>
           </ul>
         </div>
-        <ol
-          className="grid h-40 items-end gap-1.5 sm:gap-3"
-          style={{ gridTemplateColumns: `repeat(${Math.max(months.length, 1)}, minmax(0, 1fr))` }}
-          aria-label="Ventas y utilidad neta por mes"
-        >
-          {months.map((mo) => {
-            const sales = (Math.max(mo.values.ingresos, 0) / maxBar) * 100;
-            const net = (Math.abs(netOf(mo)) / maxBar) * 100;
-            return (
-              <li
-                key={mo.month}
-                className="flex h-full flex-col justify-end"
-                title={`${mo.month}: ventas ${fullMoney(mo.values.ingresos)} · ${mo.expensesMissing ? 'utilidad sin calcular (faltan los gastos)' : `utilidad ${fullMoney(mo.values.utilidad_neta)}`}`}
-              >
-                <div className="flex h-full items-end justify-center gap-0.5">
-                  <span
-                    className="w-1/2 max-w-4 rounded-t bg-emerald/80"
-                    style={{ height: `${Math.max(sales, mo.hasData ? 2 : 0)}%` }}
-                  />
-                  <span
-                    className={clsx(
-                      'w-1/2 max-w-4 rounded-t',
-                      netOf(mo) < 0 ? 'bg-rose/80' : 'bg-primary/80',
-                    )}
-                    style={{
-                      height: `${mo.expensesMissing ? 0 : Math.max(net, mo.hasData ? 2 : 0)}%`,
-                    }}
-                  />
-                </div>
-                <span className="mt-1 text-center text-micro uppercase text-ink-faint">
-                  {MONTHS_SHORT[Number(mo.month.slice(5, 7)) - 1]}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        <BarChart
+          barMode="grouped"
+          labels={months.map((mo) => MONTHS_SHORT[Number(mo.month.slice(5, 7)) - 1] ?? mo.month)}
+          titles={months.map((mo) => mo.month)}
+          bars={[
+            {
+              id: 'sales',
+              label: 'Ventas',
+              color: CHART_COLOR.emerald,
+              values: months.map((mo) => Math.max(mo.values.ingresos, 0)),
+              display: months.map((mo) => fullMoney(mo.values.ingresos)),
+            },
+            {
+              id: 'net',
+              label: 'Utilidad neta',
+              color: CHART_COLOR.primary,
+              negativeColor: CHART_COLOR.rose,
+              values: months.map((mo) => netOf(mo)),
+              display: months.map((mo) =>
+                mo.expensesMissing ? 'sin calcular (faltan los gastos)' : fullMoney(netOf(mo)),
+              ),
+            },
+          ]}
+          formatAxis={(n) => formatCompact(n, { money: true })}
+          formatValue={(n) => fullMoney(n)}
+          height={220}
+          legend={false}
+          emptyNote="Todavía no hay movimientos"
+          ariaLabel={`Ventas y utilidad neta por mes en ${data.year}: ${months.map((mo) => `${mo.month} ventas ${fullMoney(mo.values.ingresos)}, ${mo.expensesMissing ? 'utilidad sin calcular' : `utilidad ${fullMoney(netOf(mo))}`}`).join('; ')}`}
+        />
         {monthsWithData === 0 ? (
           <p className="mt-3 text-xs text-ink-muted">
             Todavía no hay movimientos en {data.year}: cuando el libro tenga ventas y gastos, salen

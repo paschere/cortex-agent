@@ -1,5 +1,8 @@
 'use client';
 
+import { BarChart } from '@/components/charts/BarChart';
+import { CHART_COLOR } from '@/components/charts/colors';
+import { formatCompact } from '@/components/charts/scales';
 import DataGrid from '@/components/datagrid/DataGrid';
 import type { GridColumn, GridRow, GridView } from '@/components/datagrid/types';
 import { Button } from '@/components/ui/button';
@@ -251,30 +254,34 @@ function ForecastCard({ forecast }: { forecast: ForecastView }) {
         title="Pronóstico ponderado"
         note={`Valor × probabilidad, por mes de cierre esperado. Abierto: ${forecast.pipelineTotalLabel}; ponderado: ${forecast.pipelineWeightedLabel}.`}
       />
-      <ul className="m-0 flex h-40 list-none items-end gap-2 px-5" aria-label="Pronóstico por mes">
-        {forecast.bars.map((b) => (
-          <li
-            key={b.month}
-            className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1.5"
-            title={`${b.label}: ${b.weightedLabel} ponderado de ${b.totalLabel} (${b.count} negocio${b.count === 1 ? '' : 's'})`}
-          >
-            <span className="tabular truncate text-micro font-semibold text-ink">
-              {b.weighted > 0 ? b.weightedLabel : ''}
-            </span>
-            <span
-              className="w-full max-w-14 rounded-t-[4px] bg-primary transition-opacity duration-150 group-hover:opacity-80 motion-reduce:transition-none"
-              style={{ height: `${Math.max(b.weighted > 0 ? 4 : 1, Math.round(b.share * 96))}px` }}
-            />
-            <span className="sr-only">{b.label}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="flex gap-2 border-t border-border px-5 py-2">
-        {forecast.bars.map((b) => (
-          <span key={b.month} className="flex-1 text-center text-micro text-ink-faint">
-            {b.label}
-          </span>
-        ))}
+      <div className="px-5 pb-3">
+        <BarChart
+          labels={forecast.bars.map((b) => b.label)}
+          bars={[
+            {
+              id: 'weighted',
+              label: 'Ponderado',
+              color: CHART_COLOR.primary,
+              values: forecast.bars.map((b) => b.weighted),
+              display: forecast.bars.map((b) => b.weightedLabel),
+            },
+          ]}
+          formatAxis={(n) => formatCompact(n, { money: true })}
+          formatValue={(n) => formatCompact(n, { money: true })}
+          tooltipExtra={(i) => {
+            const b = forecast.bars[i];
+            return b ? (
+              <span className="block">
+                {b.weightedLabel} ponderado de {b.totalLabel} ({b.count} negocio
+                {b.count === 1 ? '' : 's'})
+              </span>
+            ) : null;
+          }}
+          height={200}
+          legend={false}
+          emptyNote="Sin negocios con cierre esperado"
+          ariaLabel={`Pronóstico ponderado por mes: ${forecast.bars.map((b) => `${b.label} ${b.weightedLabel} ponderado de ${b.totalLabel}`).join('; ')}`}
+        />
       </div>
       {forecast.notes.length > 0 && (
         <ul className="space-y-1 border-t border-border bg-surface-2/40 px-5 py-3 text-xs leading-relaxed text-ink-muted">

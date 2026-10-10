@@ -1,7 +1,8 @@
 'use client';
 
+import { BarChart } from '@/components/charts/BarChart';
+import { CHART_COLOR } from '@/components/charts/colors';
 import { Panel, PanelHead } from '@/components/ui/panel';
-import { clsx } from 'clsx';
 import { LOBE_NAME } from './field/field-math';
 import { num, weekLabel } from './format';
 import type { BrainStats, IntakeKey } from './types';
@@ -24,8 +25,6 @@ export function GrowthPanel({ stats, focus }: { stats: BrainStats; focus?: Intak
   const peak = Math.max(...stats.growth.map((w) => w.added), 1);
   const anything = stats.growth.some((w) => w.added > 0);
   const quarter = stats.growth.reduce((sum, w) => sum + w.added, 0);
-  const first = stats.growth[0];
-  const last = stats.growth[stats.growth.length - 1];
 
   return (
     <Panel>
@@ -42,38 +41,29 @@ export function GrowthPanel({ stats, focus }: { stats: BrainStats; focus?: Intak
       </p>
 
       <div className="border-t border-border px-5 pb-4 pt-4">
-        <div className="flex items-end gap-1" style={{ height: 96 }}>
-          {stats.growth.map((week) => {
-            const h = week.added === 0 ? 2 : Math.max(4, (week.added / peak) * 96);
-            return (
-              <div
-                key={week.start}
-                className="group relative flex-1"
-                style={{ height: `${h}px` }}
-                title={`${weekLabel(week.start)}: ${num(week.added)}`}
-              >
-                <div
-                  className={clsx(
-                    'h-full w-full rounded-t-[2px] transition-[height] duration-700',
-                    week.added === 0 ? 'bg-border' : 'bg-primary',
-                  )}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Ruled baseline, then the ends of the axis labelled directly — a
-            legend would only repeat what two dates already say. */}
-        <div className="mt-1 border-t border-border-strong pt-1.5">
-          <div className="flex items-center justify-between text-micro text-ink-faint">
-            <span className="tabular">{first ? weekLabel(first.start) : ''}</span>
-            <span>
-              máximo <span className="stat-num text-ink-muted">{num(peak)}</span> por semana
-            </span>
-            <span className="tabular">{last ? `${weekLabel(last.start)} (esta)` : ''}</span>
-          </div>
-        </div>
+        <BarChart
+          labels={stats.growth.map((w) => weekLabel(w.start))}
+          bars={[
+            {
+              id: 'added',
+              label: 'Documentos',
+              color: CHART_COLOR.primary,
+              values: stats.growth.map((w) => w.added),
+              dim: stats.growth.length ? [stats.growth.length - 1] : [],
+            },
+          ]}
+          nowIndex={stats.growth.length ? stats.growth.length - 1 : undefined}
+          nowLabel="esta semana"
+          formatValue={(n) => `${num(n)} doc.`}
+          formatAxis={(n) => num(n)}
+          height={170}
+          legend={false}
+          emptyNote="Nada nuevo en estas semanas"
+          ariaLabel={`Documentos que entraron por semana, últimas 12 semanas: ${stats.growth.map((w) => `${weekLabel(w.start)} ${num(w.added)}`).join(', ')}`}
+        />
+        <p className="mt-1 text-center text-micro text-ink-faint">
+          máximo <span className="stat-num text-ink-muted">{num(peak)}</span> por semana
+        </p>
       </div>
     </Panel>
   );

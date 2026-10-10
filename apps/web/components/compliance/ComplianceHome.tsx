@@ -26,6 +26,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { ProgressRing } from '../charts/ProgressRing';
 import type {
   ActionResult,
   AreaView,
@@ -192,32 +193,7 @@ function Empty({ base }: { base: string }) {
 // ---------------------------------------------------------------------------
 
 function Ring({ percent }: { percent: number }) {
-  const r = 18;
-  const c = 2 * Math.PI * r;
-  return (
-    <svg viewBox="0 0 44 44" className="h-11 w-11 shrink-0" aria-hidden>
-      <title>Avance</title>
-      <circle
-        cx="22"
-        cy="22"
-        r={r}
-        fill="none"
-        stroke="var(--color-surface-2, #eef0f4)"
-        strokeWidth="5"
-      />
-      <circle
-        cx="22"
-        cy="22"
-        r={r}
-        fill="none"
-        stroke={percent >= 100 ? 'var(--color-emerald, #059669)' : 'var(--color-primary, #4338ca)'}
-        strokeWidth="5"
-        strokeLinecap="round"
-        strokeDasharray={`${(percent / 100) * c} ${c}`}
-        transform="rotate(-90 22 22)"
-      />
-    </svg>
-  );
+  return <ProgressRing percent={percent} />;
 }
 
 function Checklist({ areas, actions }: { areas: AreaView[]; actions: ComplianceActions }) {

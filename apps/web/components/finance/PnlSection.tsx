@@ -1,5 +1,8 @@
 'use client';
 
+import { BarChart } from '@/components/charts/BarChart';
+import { CHART_COLOR } from '@/components/charts/colors';
+import { formatCompact } from '@/components/charts/scales';
 import {
   type Piece,
   type PnlMonth,
@@ -273,61 +276,39 @@ function Trend({
   onFocus: (m: string) => void;
   currency: string;
 }) {
-  const max = Math.max(1, ...months.flatMap((m) => [m.sales + m.otherIncome, m.expenses]));
   const fm = (n: number) => formatMoney(n, currency);
+  const selectedIndex = months.findIndex((m) => m.month === focus);
   return (
-    <div>
-      <ul className="mb-2 flex gap-4 text-micro text-ink-muted" aria-hidden>
-        <li className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded bg-emerald" /> Entró
-        </li>
-        <li className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded bg-ink-faint/55" /> Salió
-        </li>
-      </ul>
-      <ol
-        className="grid h-36 grid-cols-12 items-end gap-1 sm:gap-2"
-        aria-label="Entradas y salidas por mes"
-      >
-        {months.map((m) => {
-          const income = m.sales + m.otherIncome;
-          const selected = m.month === focus;
-          return (
-            <li key={m.month} className="h-full">
-              <button
-                type="button"
-                onClick={() => onFocus(m.month)}
-                aria-pressed={selected}
-                aria-label={`${monthLabel(m.month)}: entró ${fm(income)}, salió ${fm(m.expenses)}, margen ${fm(m.margin)}`}
-                title={`${monthLabel(m.month)} · margen ${fm(m.margin)}`}
-                className={clsx(
-                  'flex h-full w-full flex-col items-center justify-end gap-1 rounded-sm px-0.5 pb-0.5 pt-1 transition-colors',
-                  selected ? 'bg-primary-soft' : 'hover:bg-surface-2',
-                )}
-              >
-                <span className="flex h-full w-full items-end justify-center gap-[2px]">
-                  <span
-                    className="w-1/3 max-w-3 rounded-t bg-emerald"
-                    style={{ height: `${(income / max) * 100}%` }}
-                  />
-                  <span
-                    className="w-1/3 max-w-3 rounded-t bg-ink-faint/55"
-                    style={{ height: `${(m.expenses / max) * 100}%` }}
-                  />
-                </span>
-                <span
-                  className={clsx(
-                    'font-mono text-micro',
-                    selected ? 'font-semibold text-primary-ink' : 'text-ink-faint',
-                  )}
-                >
-                  {monthShort(m.month)}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+    <BarChart
+      barMode="grouped"
+      labels={months.map((m) => monthShort(m.month))}
+      titles={months.map((m) => `${monthLabel(m.month)} · margen ${fm(m.margin)}`)}
+      bars={[
+        {
+          id: 'in',
+          label: 'Entró',
+          color: CHART_COLOR.emerald,
+          values: months.map((m) => m.sales + m.otherIncome),
+          display: months.map((m) => fm(m.sales + m.otherIncome)),
+        },
+        {
+          id: 'out',
+          label: 'Salió',
+          color: 'rgb(var(--ink-faint) / 0.55)',
+          values: months.map((m) => m.expenses),
+          display: months.map((m) => fm(m.expenses)),
+        },
+      ]}
+      selectedIndex={selectedIndex >= 0 ? selectedIndex : null}
+      onSelect={(i) => {
+        const m = months[i];
+        if (m) onFocus(m.month);
+      }}
+      formatAxis={(n) => formatCompact(n, { money: currency.toUpperCase() === 'COP' })}
+      formatValue={fm}
+      tooltipHint="Toca para ver el mes"
+      height={220}
+      ariaLabel={`Entradas y salidas por mes: ${months.map((m) => `${monthLabel(m.month)} entró ${fm(m.sales + m.otherIncome)}, salió ${fm(m.expenses)}, margen ${fm(m.margin)}`).join('; ')}. Con las flechas se recorre mes por mes y con Enter se elige.`}
+    />
   );
 }
