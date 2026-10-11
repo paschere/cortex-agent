@@ -1,5 +1,6 @@
 import { RunDetail } from '@/components/autopilot/RunDetail';
 import { buildRunView } from '@/lib/autopilot/screen';
+import { requireModulePage } from '@/lib/modules/page';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { qualifiedToolLabel } from '@/lib/tool-taxonomy';
@@ -17,6 +18,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * botón. La corrida se lee con el handle de la empresa: una de otra no existe.
  */
 export default async function PilotoRunPage({ params }: { params: Promise<{ runId: string }> }) {
+  const off = await requireModulePage('autopilot');
+  if (off) return off;
   const { runId } = await params;
   if (!UUID_RE.test(runId)) notFound();
   const user = await requireSession();

@@ -26,7 +26,7 @@ export default async function ChatLayout({ children }: { children: ReactNode }) 
   const modulesOff = await modulesOffFor(user.organization.id);
   return (
     <AppShell user={user}>
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="cortex-sheet flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* El chat mide `h-full`: sin esta caja mediría la columna entera y
             empujaría la barra del teléfono fuera de la pantalla. */}
         <BillingBanner organizationId={user.organization.id} />

@@ -11,7 +11,7 @@ import type { ActiveOrganization } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
-import { Check, ChevronDown, Loader2, Plus, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 /**
@@ -85,6 +85,8 @@ export interface WorkspaceSwitcherProps {
   active: ActiveOrganization;
   /** El rail contraído (72px) o asomándose desde el chat (56px). */
   collapsed: boolean;
+  /** Sube cada vez que otra parte del rail (el menú de la cuenta) pide abrir el selector. */
+  openSignal?: number;
   /**
    * Que el menú está abierto, para quien dibuje el rail.
    *
@@ -112,8 +114,20 @@ async function post(url: string, body: unknown, fallback: string): Promise<strin
   }
 }
 
-export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: WorkspaceSwitcherProps) {
+export function WorkspaceSwitcher({
+  active,
+  collapsed,
+  onOpenChange,
+  openSignal = 0,
+}: WorkspaceSwitcherProps) {
   const [open, setOpen] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo reacciona a la señal.
+  useEffect(() => {
+    if (openSignal > 0) {
+      setOpen(true);
+      onOpenChange?.(true);
+    }
+  }, [openSignal]);
   const [data, setData] = useState<WorkspaceListPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -185,30 +199,25 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
             title={collapsed ? menu.active.name : undefined}
             aria-label={`Espacio de trabajo: ${menu.active.name}`}
             className={clsx(
-              'group flex w-full items-center rounded-sm text-sm transition-colors duration-150',
+              'group flex w-full items-center rounded-[12px] text-sm transition-colors duration-150',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
               'hover:bg-rail-2 data-[state=open]:bg-rail-2 motion-reduce:transition-none',
-              collapsed ? 'mx-auto h-9 w-9 justify-center' : 'h-10 gap-2.5 px-1.5',
+              collapsed ? 'mx-auto h-11 w-11 justify-center' : 'gap-2.5 px-2.5 py-1.5',
             )}
           >
             <span
               aria-hidden="true"
-              className={clsx(
-                'grid shrink-0 place-items-center bg-primary font-bold text-white shadow-card',
-                collapsed
-                  ? 'h-7 w-7 rounded-[9px] text-[13px]'
-                  : 'h-7 w-7 rounded-[9px] text-[13px]',
-              )}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-ink font-display text-[20px] leading-none text-canvas"
             >
               {workspaceInitial(menu.active.name)}
             </span>
             {!collapsed && (
               <>
                 <span className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[13px] font-semibold leading-tight text-rail-ink">
+                  <span className="block truncate text-[14px] font-semibold leading-tight text-rail-ink">
                     {menu.active.name}
                   </span>
-                  <span className="block truncate text-micro leading-tight text-rail-ink-faint">
+                  <span className="block truncate text-[12px] leading-tight text-rail-ink-faint">
                     {switching
                       ? 'Cambiando…'
                       : menu.active.kind === 'personal'
@@ -224,10 +233,10 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
                     className="h-3.5 w-3.5 shrink-0 animate-spin text-rail-ink-faint"
                   />
                 ) : (
-                  <ChevronDown
+                  <ChevronsUpDown
                     aria-hidden="true"
-                    strokeWidth={1.75}
-                    className="h-3.5 w-3.5 shrink-0 text-rail-ink-faint transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+                    strokeWidth={2}
+                    className="h-3.5 w-3.5 shrink-0 text-rail-ink-faint"
                   />
                 )}
               </>
@@ -392,7 +401,7 @@ export function CreateCompanyButton({ collapsed = false }: { collapsed?: boolean
         title={collapsed ? 'Crear empresa' : undefined}
         onClick={() => setCreating(true)}
         className={clsx(
-          'flex h-8 w-full items-center rounded-sm text-[13px] font-medium text-rail-ink-faint transition-colors hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          'flex h-8 w-full items-center rounded-[10px] text-[13px] font-medium text-rail-ink-faint transition-colors hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           collapsed ? 'justify-center px-1' : 'gap-2.5 px-2.5',
         )}
       >

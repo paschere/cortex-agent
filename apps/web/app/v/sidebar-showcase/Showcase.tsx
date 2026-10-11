@@ -31,7 +31,7 @@ function Frame({ title, width, children }: { title: string; width: number; child
       <figcaption className="mb-2 text-xs font-semibold text-ink-muted">{title}</figcaption>
       <div
         style={{ width }}
-        className="workspace-rail flex h-[760px] flex-col overflow-hidden rounded-card border border-rail-border bg-rail shadow-card"
+        className="workspace-rail flex h-[860px] flex-col overflow-hidden rounded-card bg-rail shadow-sheet"
       >
         {children}
       </div>
@@ -58,7 +58,7 @@ export function SidebarShowcase({ dark }: { dark: boolean }) {
       {/* biome-ignore lint/a11y/useValidAriaRole: `role` es el rol de Cortex, no de ARIA. */}
       <CommandMenuProvider role="org_admin">
         <PanelProvider>
-          <div className="cortex-workspace min-h-screen bg-canvas p-6">
+          <div className="cortex-workspace min-h-screen bg-surface-2 p-6">
             <div className="flex flex-wrap items-start gap-6">
               <Frame title="Expandido · con insignias y puesta en marcha (3 de 5)" width={264}>
                 <SidebarBody
@@ -93,7 +93,7 @@ export function SidebarShowcase({ dark }: { dark: boolean }) {
                   onToggleCollapsed={() => {}}
                 />
               </Frame>
-              <Frame title="Contraído · 56px" width={56}>
+              <Frame title="Plegado · 68px" width={68}>
                 <SidebarBody
                   {...base}
                   small
@@ -119,7 +119,7 @@ export function SidebarShowcase({ dark }: { dark: boolean }) {
                   Barra de pestañas · 375px
                 </figcaption>
                 <div className="overflow-hidden rounded-card border border-border">
-                  <div className="h-24 bg-canvas" />
+                  <div className="h-24 bg-surface" />
                   {/* La barra es `md:hidden`: aquí se fuerza visible con un wrapper. */}
                   <div className="[&_nav]:!grid">
                     <MobileTabBar organizationId="fixture" />

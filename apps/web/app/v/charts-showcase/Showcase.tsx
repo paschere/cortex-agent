@@ -4,6 +4,7 @@ import { AreaChart } from '@/components/charts/AreaChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { ChartEmpty } from '@/components/charts/ChartEmpty';
 import { DeltaPill } from '@/components/charts/DeltaPill';
+import { MetricChart } from '@/components/charts/MetricChart';
 import { ProgressRing } from '@/components/charts/ProgressRing';
 import { RankBars } from '@/components/charts/RankBars';
 import { SegmentBar } from '@/components/charts/SegmentBar';
@@ -14,7 +15,8 @@ import { CashFlowChart } from '@/components/finance/CashFlowChart';
 import { applyTheme } from '@/components/nav/ThemeToggle';
 import { Panel } from '@/components/ui/panel';
 import type { ChartWeek } from '@/lib/finance/dashboard-shape';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { TODAY, hoyFixture } from '../hoy-showcase/data';
 
 const money = (n: number) => formatCompact(n, { money: true });
 
@@ -125,6 +127,7 @@ function Kpi({
 export function ChartsShowcase({ dark: initial }: { dark: boolean }) {
   const [dark, setDark] = useState(initial);
   const [picked, setPicked] = useState<string | null>(null);
+  const metrics = useMemo(() => hoyFixture().money?.metrics ?? [], []);
   useEffect(() => {
     applyTheme(dark ? 'dark' : 'light');
   }, [dark]);
@@ -164,6 +167,24 @@ export function ChartsShowcase({ dark: initial }: { dark: boolean }) {
           />
           <Kpi title="Clientes nuevos" value="0" values={[0, 0, 0, 0]} tone="emerald" />
           <Kpi title="Cotizaciones" value="12" values={[12]} tone="sky" />
+        </section>
+
+        <section aria-label="Gráfico de métrica" className="space-y-4">
+          <div>
+            <h2 className="text-lg font-extrabold text-ink">Gráfico de métrica: todo en uno</h2>
+            <p className="text-sm text-ink-muted">
+              Rango 7 d · 30 d · 90 d · 12 m, comparar con el período anterior, arrastrar para
+              acercar (doble clic acerca, + y - con el teclado, «Restablecer»), ficha con todas las
+              series y el cambio, eventos, caja mínima y rango probable de la proyección, clic en un
+              punto para abrir los registros, «Pregúntale a Cortex» y descarga en CSV, PNG o SVG.
+            </p>
+          </div>
+          {metrics.map((m) => (
+            <Panel key={m.id} className="p-4 sm:p-5">
+              <h3 className="mb-1 text-sm font-extrabold text-ink">{m.label}</h3>
+              <MetricChart metric={m} today={TODAY} height={240} />
+            </Panel>
+          ))}
         </section>
 
         <div className="grid gap-5 lg:grid-cols-2">

@@ -38,6 +38,8 @@ const config: Config = {
         amber: { DEFAULT: rgb('--amber'), soft: rgb('--amber-soft') },
         sky: { DEFAULT: rgb('--sky'), soft: rgb('--sky-soft') },
         rose: { DEFAULT: rgb('--rose'), soft: rgb('--rose-soft') },
+        highlight: rgb('--highlight'),
+        star: rgb('--star'),
       },
       borderRadius: {
         card: 'var(--radius)',
@@ -56,9 +58,12 @@ const config: Config = {
       boxShadow: {
         card: 'var(--shadow-card)',
         pop: 'var(--shadow-pop)',
+        sheet: 'var(--shadow-sheet)',
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Títulos y cifras grandes («cuaderno»). Newsreader, con eje óptico.
+        display: ['var(--font-display)', 'Georgia', 'Times New Roman', 'serif'],
         // Reach for this on anything the user might check, quote or copy.
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },

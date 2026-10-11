@@ -2,7 +2,7 @@ import './globals.css';
 import 'highlight.js/styles/github-dark-dimmed.css';
 import { REPORT_CSS_HREF } from '@/lib/report-css';
 import type { Metadata, Viewport } from 'next';
-import { JetBrains_Mono, Manrope } from 'next/font/google';
+import { JetBrains_Mono, Manrope, Newsreader } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { Providers } from './providers';
 import { ServiceWorker } from './service-worker';
@@ -23,6 +23,15 @@ const manrope = Manrope({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700', '800'],
   variable: '--font-sans',
+  display: 'swap',
+});
+
+/** Newsreader: la serif de los títulos y las cifras grandes («cuaderno»). Eje óptico incluido. */
+const newsreader = Newsreader({
+  subsets: ['latin'],
+  axes: ['opsz'],
+  style: ['normal', 'italic'],
+  variable: '--font-display',
   display: 'swap',
 });
 
@@ -70,8 +79,8 @@ export const metadata: Metadata = {
  */
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#F6F5F1' },
-    { media: '(prefers-color-scheme: dark)', color: '#141311' },
+    { media: '(prefers-color-scheme: light)', color: '#F7F5EF' },
+    { media: '(prefers-color-scheme: dark)', color: '#171613' },
   ],
   viewportFit: 'cover',
 };
@@ -98,7 +107,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     // <html> antes de que React hidrate, y ese atributo no viene del servidor.
     <html
       lang="es-CO"
-      className={`${manrope.variable} ${jetbrainsMono.variable}`}
+      className={`${manrope.variable} ${newsreader.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <head>

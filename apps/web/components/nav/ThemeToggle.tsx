@@ -84,10 +84,9 @@ export function ThemeToggle({ icon = false }: { icon?: boolean }) {
   }
 
   return (
-    <fieldset className="flex items-center gap-0.5 rounded-pill border border-rail-border bg-canvas p-0.5">
+    <fieldset className="flex items-center gap-1">
       <legend className="sr-only">Tema</legend>
       {OPTIONS.map((option) => {
-        const Icon = option.icon;
         const active = option.value === choice;
         return (
           <button
@@ -96,13 +95,12 @@ export function ThemeToggle({ icon = false }: { icon?: boolean }) {
             aria-pressed={active}
             onClick={() => choose(option.value)}
             className={clsx(
-              'flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-pill px-2 text-micro font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
+              'flex h-[30px] flex-1 items-center justify-center rounded-[8px] text-[13px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
               active
-                ? 'bg-surface text-rail-ink shadow-card ring-1 ring-rail-border'
-                : 'text-rail-ink-faint hover:text-rail-ink',
+                ? 'bg-surface font-semibold text-ink shadow-card'
+                : 'text-ink-faint hover:text-ink',
             )}
           >
-            <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             {option.label}
           </button>
         );

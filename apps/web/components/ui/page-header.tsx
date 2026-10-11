@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 /**
  * Consistent page identity; the primary action stays beside the heading.
  *
- * The self-service design wants the heading to do the talking: big, extrabold,
- * tight — 26px on a phone, 36px from tablet up — with the subtitle at reading
+ * The self-service design wants the heading to do the talking: en serif («cuaderno»,
+ * Newsreader) — 32px en un teléfono, 40px desde tableta — with the subtitle at reading
  * size underneath. Every page that uses this inherits it.
  */
 export function PageHeader({
@@ -22,9 +22,7 @@ export function PageHeader({
           </span>
         )}
         <div className="min-w-0">
-          <h1 className="page-heading text-balance text-xl font-extrabold text-ink md:text-display">
-            {title}
-          </h1>
+          <h1 className="page-heading title-display text-balance text-ink">{title}</h1>
           {subtitle && (
             <p className="page-subtitle mt-2 max-w-2xl text-pretty text-base leading-relaxed text-ink-muted">
               {subtitle}

@@ -18,45 +18,53 @@
    las páginas públicas (vistas compartidas, recuperación de contraseña) se
    quedan en claro, que es lo que su público espera de un enlace. */
 
+/* «Cuaderno»: papel cálido de fondo, hoja blanca encima, tinta tibia y un
+   índigo que es el producto. Los textos pequeños (ink-faint, amber, emerald)
+   se oscurecieron respecto al boceto para llegar a 4,5:1 sobre blanco. */
 :root {
   color-scheme: light;
 
-  --canvas: 246 245 241;
+  --canvas: 247 245 239;
   --surface: 255 255 255;
-  --surface-2: 243 242 237;
-  --border: 231 229 223;
-  --border-strong: 218 216 209;
+  --surface-2: 244 241 233;
+  --border: 237 233 224;
+  --border-strong: 226 222 212;
 
-  --ink: 23 23 31;
-  --ink-muted: 91 91 102;
-  --ink-faint: 107 107 118;
+  --ink: 35 33 28;
+  --ink-muted: 74 70 62;
+  --ink-faint: 112 107 96;
 
-  --rail: 255 255 255;
-  --rail-2: 243 242 237;
-  --rail-border: 231 229 223;
-  --rail-ink: 23 23 31;
-  --rail-ink-muted: 74 74 85;
-  --rail-ink-faint: 107 107 118;
+  --rail: 247 245 239;
+  --rail-2: 239 236 228;
+  --rail-border: 226 222 212;
+  --rail-ink: 35 33 28;
+  --rail-ink-muted: 74 70 62;
+  --rail-ink-faint: 112 107 96;
 
-  --primary: 67 56 202;
-  --primary-strong: 49 46 129;
-  --primary-soft: 238 240 255;
-  --primary-ink: 49 46 129;
+  --primary: 59 52 196;
+  --primary-strong: 39 33 145;
+  --primary-soft: 232 230 251;
+  --primary-ink: 39 33 145;
 
-  --emerald: 4 120 87;
-  --emerald-soft: 236 248 242;
-  --amber: 180 83 9;
-  --amber-soft: 255 244 229;
-  --rose: 190 18 60;
-  --rose-soft: 253 238 240;
+  --emerald: 36 130 90;
+  --emerald-soft: 227 241 234;
+  --amber: 150 100 0;
+  --amber-soft: 253 241 214;
+  --rose: 194 58 82;
+  --rose-soft: 252 233 236;
   --sky: 3 105 161;
-  --sky-soft: 234 245 252;
+  --sky-soft: 232 243 250;
+
+  /* El marcador amarillo (subrayado de lo que importa) y la estrella de «Hoy». */
+  --highlight: 246 231 164;
+  --star: 242 183 5;
 
   --radius: 18px;
   --radius-sm: 12px;
 
-  --shadow-card: 0 1px 2px rgb(23 23 31 / 0.04), 0 6px 20px -12px rgb(23 23 31 / 0.08);
-  --shadow-pop: 0 20px 48px -16px rgb(23 23 31 / 0.22), 0 2px 6px rgb(23 23 31 / 0.05);
+  --shadow-card: 0 0 0 1px rgb(35 33 28 / 0.05), 0 1px 2px rgb(35 33 28 / 0.04);
+  --shadow-pop: 0 20px 48px -16px rgb(35 33 28 / 0.25), 0 0 0 1px rgb(35 33 28 / 0.06);
+  --shadow-sheet: 0 0 0 1px rgb(35 33 28 / 0.05), 0 1px 3px rgb(35 33 28 / 0.05);
 }
 
 html,
@@ -85,6 +93,47 @@ body {
 .stat-num {
   font-weight: 600;
   letter-spacing: -0.03em;
+}
+
+/* --- Tipografía «cuaderno» ----------------------------------------------
+   Newsreader (serif) para lo que se lee como título o como cifra grande;
+   Manrope sigue siendo el cuerpo. `.title-display` es el título de página;
+   `.stat-display` la cifra grande, en cifras alineadas y de caja alta. */
+.title-display {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.022em;
+}
+@media (min-width: 768px) {
+  .title-display {
+    font-size: 40px;
+  }
+}
+.stat-display {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+/* La hoja blanca sobre el papel: el contenido del espacio de trabajo. */
+@media screen {
+  .cortex-sheet {
+    background: rgb(var(--surface));
+  }
+}
+@media screen and (min-width: 768px) {
+  .cortex-sheet {
+    margin: 8px 8px 8px 0;
+    border-radius: 18px;
+    box-shadow: var(--shadow-sheet);
+    overflow: hidden;
+  }
 }
 
 /* --- Field label --------------------------------------------------------
@@ -366,67 +415,73 @@ body {
 @media screen {
   :root[data-theme="dark"]:has(.cortex-workspace) {
     color-scheme: dark;
-    --canvas: 20 19 17;
-    --surface: 29 28 25;
-    --surface-2: 38 37 33;
-    --border: 52 50 46;
-    --border-strong: 76 74 68;
-    --ink: 241 239 233;
-    --ink-muted: 187 184 175;
-    --ink-faint: 155 152 143;
-    --rail: 24 23 21;
-    --rail-2: 40 39 35;
-    --rail-border: 46 44 40;
-    --rail-ink: 241 239 233;
-    --rail-ink-muted: 187 184 175;
-    --rail-ink-faint: 155 152 143;
-    --primary: 151 157 255;
-    --primary-strong: 186 190 255;
-    --primary-soft: 41 41 76;
-    --primary-ink: 199 202 255;
-    --emerald: 74 214 158;
-    --emerald-soft: 22 49 39;
-    --amber: 247 182 92;
-    --amber-soft: 56 40 20;
-    --rose: 255 128 150;
-    --rose-soft: 64 26 36;
+    --canvas: 23 22 19;
+    --surface: 31 30 26;
+    --surface-2: 40 38 33;
+    --border: 52 50 44;
+    --border-strong: 74 71 63;
+    --ink: 240 237 229;
+    --ink-muted: 190 186 176;
+    --ink-faint: 156 152 141;
+    --rail: 23 22 19;
+    --rail-2: 38 36 31;
+    --rail-border: 52 50 44;
+    --rail-ink: 240 237 229;
+    --rail-ink-muted: 190 186 176;
+    --rail-ink-faint: 156 152 141;
+    --primary: 148 143 245;
+    --primary-strong: 190 187 252;
+    --primary-soft: 38 36 78;
+    --primary-ink: 200 197 252;
+    --emerald: 82 200 150;
+    --emerald-soft: 24 46 37;
+    --amber: 232 176 70;
+    --amber-soft: 52 40 18;
+    --rose: 244 125 145;
+    --rose-soft: 62 28 36;
     --sky: 120 198 240;
     --sky-soft: 22 44 58;
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -14px rgb(0 0 0 / 0.5);
-    --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.7), inset 0 1px rgb(255 255 255 / 0.04);
+    --highlight: 98 84 26;
+    --star: 242 183 5;
+    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.06);
+    --shadow-sheet: 0 0 0 1px rgb(255 255 255 / 0.05), 0 1px 3px rgb(0 0 0 / 0.3);
   }
 }
 @media screen and (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):has(.cortex-workspace) {
     color-scheme: dark;
-    --canvas: 20 19 17;
-    --surface: 29 28 25;
-    --surface-2: 38 37 33;
-    --border: 52 50 46;
-    --border-strong: 76 74 68;
-    --ink: 241 239 233;
-    --ink-muted: 187 184 175;
-    --ink-faint: 155 152 143;
-    --rail: 24 23 21;
-    --rail-2: 40 39 35;
-    --rail-border: 46 44 40;
-    --rail-ink: 241 239 233;
-    --rail-ink-muted: 187 184 175;
-    --rail-ink-faint: 155 152 143;
-    --primary: 151 157 255;
-    --primary-strong: 186 190 255;
-    --primary-soft: 41 41 76;
-    --primary-ink: 199 202 255;
-    --emerald: 74 214 158;
-    --emerald-soft: 22 49 39;
-    --amber: 247 182 92;
-    --amber-soft: 56 40 20;
-    --rose: 255 128 150;
-    --rose-soft: 64 26 36;
+    --canvas: 23 22 19;
+    --surface: 31 30 26;
+    --surface-2: 40 38 33;
+    --border: 52 50 44;
+    --border-strong: 74 71 63;
+    --ink: 240 237 229;
+    --ink-muted: 190 186 176;
+    --ink-faint: 156 152 141;
+    --rail: 23 22 19;
+    --rail-2: 38 36 31;
+    --rail-border: 52 50 44;
+    --rail-ink: 240 237 229;
+    --rail-ink-muted: 190 186 176;
+    --rail-ink-faint: 156 152 141;
+    --primary: 148 143 245;
+    --primary-strong: 190 187 252;
+    --primary-soft: 38 36 78;
+    --primary-ink: 200 197 252;
+    --emerald: 82 200 150;
+    --emerald-soft: 24 46 37;
+    --amber: 232 176 70;
+    --amber-soft: 52 40 18;
+    --rose: 244 125 145;
+    --rose-soft: 62 28 36;
     --sky: 120 198 240;
     --sky-soft: 22 44 58;
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -14px rgb(0 0 0 / 0.5);
-    --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.7), inset 0 1px rgb(255 255 255 / 0.04);
+    --highlight: 98 84 26;
+    --star: 242 183 5;
+    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-pop: 0 24px 64px -16px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.06);
+    --shadow-sheet: 0 0 0 1px rgb(255 255 255 / 0.05), 0 1px 3px rgb(0 0 0 / 0.3);
   }
 }
 
@@ -455,7 +510,7 @@ body {
     background: rgb(var(--surface) / 0.85);
     backdrop-filter: saturate(1.4) blur(16px);
   }
-  .cortex-workspace .page-heading { font-weight: 800; letter-spacing: -0.025em; line-height: 1.12; }
+  .cortex-workspace .page-heading { font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   .cortex-workspace .management-intro { position: relative; padding: 24px 0 18px; isolation: isolate; }
   .cortex-workspace .management-intro header { position: relative; z-index: 1; }
   .cortex-workspace .management-intro .page-identity { display: none; }
@@ -466,7 +521,7 @@ body {
   .cortex-workspace .management-stat { border: 0; border-radius: 0; background: transparent; padding: 8px 24px; position: relative; }
   .cortex-workspace .management-stat + .management-stat { border-left: 1px solid rgb(var(--border)); }
   .cortex-workspace .management-stat:first-child { padding-left: 0; }
-  .cortex-workspace .management-stat strong { margin-top: 10px; font-size: 38px; line-height: 1.1; font-weight: 800; letter-spacing: -0.035em; }
+  .cortex-workspace .management-stat strong { margin-top: 10px; font-family: var(--font-display), Georgia, serif; font-size: 38px; line-height: 1.1; font-weight: 400; letter-spacing: -0.02em; font-variant-numeric: tabular-nums lining-nums; }
   .cortex-workspace .management-stat[aria-pressed="true"]::after { content: ''; position: absolute; bottom: -27px; left: 24px; right: 24px; height: 3px; border-radius: 3px; background: rgb(var(--primary)); }
   .cortex-workspace .management-stat[data-kind="risk"] strong { color: rgb(var(--amber)); }
   .cortex-workspace .management-stat[data-kind="verified"] strong { color: rgb(var(--emerald)); }

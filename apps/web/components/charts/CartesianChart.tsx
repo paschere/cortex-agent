@@ -1,11 +1,12 @@
 'use client';
 
 import { clsx } from 'clsx';
-import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChartEmpty } from './ChartEmpty';
 import { ChartLegend, type LegendItem } from './ChartLegend';
 import { ChartTooltip, type TooltipRow } from './ChartTooltip';
 import { AXIS, CHART_COLOR, GRID, SURFACE } from './colors';
+import { brushIndexes, indexFromPx } from './interactive';
 import {
   type Pt,
   areaPath,
@@ -77,6 +78,8 @@ export interface BarSeries {
   negativeColor?: string;
   /** Índices que se dibujan más claros (p. ej. la semana en curso). */
   dim?: number[];
+  /** Con una línea de comparación: ¿subir es bueno? (por defecto sí). */
+  goodWhenUp?: boolean;
 }
 
 export interface ChartMarker {
@@ -127,6 +130,17 @@ export interface CartesianChartProps {
   className?: string;
   /** Pega el último valor al borde derecho (sparkline grande). */
   compactAxis?: boolean;
+  /**
+   * Pincel: arrastrar (ratón o lápiz) sobre el área marca un rango y avisa con
+   * sus dos posiciones. Un clic sin arrastre sigue siendo `onSelect`.
+   */
+  onBrush?: (from: number, to: number) => void;
+  /** Doble clic / doble toque: acercar alrededor de esa posición. */
+  onZoomAt?: (index: number) => void;
+  /** Teclado: `+` acerca, `-` aleja, `0` restablece. */
+  onZoomKey?: (action: 'in' | 'out' | 'reset', index: number | null) => void;
+  /** Cuenta de lo que se ve, para el lector de pantalla («Mostrando del 3 al 20 de oct»). */
+  zoomNote?: string;
 }
 
 const EASE_GAP = 2;
@@ -159,6 +173,8 @@ export function CartesianChart(props: CartesianChartProps) {
   const uid = useId().replace(/:/g, '');
   const [box, width] = useChartWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
+  const [drag, setDrag] = useState<{ a: number; b: number } | null>(null);
+  const dragged = useRef(false);
   const n = labels.length;
   const hasBars = bars.length > 0;
 
@@ -212,10 +228,9 @@ export function CartesianChart(props: CartesianChartProps) {
   const baseY = domain.min >= 0 ? pad.top + plotH : y0;
 
   // ---- Interacción ---------------------------------------------------------
+  const geo = { n, plotW, hasBars };
   const pick = (clientX: number, rect: DOMRect) => {
-    const px = clientX - rect.left;
-    const i = hasBars ? Math.floor(px / band) : n > 1 ? Math.round((px - inset) / step) : 0;
-    setActive(Math.min(n - 1, Math.max(0, i)));
+    setActive(indexFromPx(clientX - rect.left, geo));
   };
   useEffect(() => {
     if (active === null) return;
@@ -278,11 +293,18 @@ export function CartesianChart(props: CartesianChartProps) {
     for (const b of bars) {
       const v = b.values[i];
       if (v === undefined) continue;
-      rows.push({
+      const row: TooltipRow = {
         label: b.label,
         value: b.display?.[i] ?? formatValue(v),
         color: v < 0 && b.negativeColor ? b.negativeColor : b.color,
-      });
+      };
+      // Una sola serie de barras y una línea de comparación: el cambio va en su fila.
+      const prev = cmp && bars.length === 1 && b === bars[0] ? cmp.values[i] : null;
+      if (prev !== null && prev !== undefined) {
+        row.delta = deltaRatio(v, prev);
+        row.good = row.delta === null ? null : row.delta >= 0 === (b.goodWhenUp ?? true);
+      }
+      rows.push(row);
     }
     return rows;
   };
@@ -358,6 +380,16 @@ export function CartesianChart(props: CartesianChartProps) {
             setActive(n - 1);
           } else if (e.key === 'Escape') {
             setActive(null);
+            setDrag(null);
+          } else if (props.onZoomKey && (e.key === '+' || e.key === '=')) {
+            e.preventDefault();
+            props.onZoomKey('in', active);
+          } else if (props.onZoomKey && (e.key === '-' || e.key === '_')) {
+            e.preventDefault();
+            props.onZoomKey('out', active);
+          } else if (props.onZoomKey && e.key === '0') {
+            e.preventDefault();
+            props.onZoomKey('reset', active);
           } else if ((e.key === 'Enter' || e.key === ' ') && active !== null && onSelect) {
             e.preventDefault();
             onSelect(active);
@@ -366,7 +398,13 @@ export function CartesianChart(props: CartesianChartProps) {
         onBlur={() => setActive(null)}
       >
         {ready && (
-          <svg width={width} height={height} className="block overflow-visible" aria-hidden="true">
+          <svg
+            width={width}
+            height={height}
+            className="block overflow-visible"
+            aria-hidden="true"
+            data-cx-chart=""
+          >
             <defs>
               {lines.map((l, si) =>
                 l.area ? (
@@ -679,6 +717,20 @@ export function CartesianChart(props: CartesianChartProps) {
                 );
               })}
 
+            {/* Selección del pincel */}
+            {drag && (
+              <rect
+                x={pad.left + Math.min(drag.a, drag.b)}
+                y={pad.top}
+                width={Math.abs(drag.b - drag.a)}
+                height={plotH}
+                rx={4}
+                fill="rgb(var(--primary) / 0.12)"
+                stroke="rgb(var(--primary) / 0.5)"
+                strokeWidth={1}
+              />
+            )}
+
             {/* Eje x */}
             {xLabels.map((i) => (
               <text
@@ -714,16 +766,45 @@ export function CartesianChart(props: CartesianChartProps) {
               touchAction: 'pan-y',
             }}
             onPointerMove={(e) => {
-              pick(e.clientX, e.currentTarget.getBoundingClientRect());
+              const rect = e.currentTarget.getBoundingClientRect();
+              pick(e.clientX, rect);
+              if (drag) {
+                const px = Math.min(Math.max(e.clientX - rect.left, 0), plotW);
+                if (Math.abs(px - drag.a) > 4) dragged.current = true;
+                setDrag({ a: drag.a, b: px });
+              }
             }}
             onPointerDown={(e) => {
-              pick(e.clientX, e.currentTarget.getBoundingClientRect());
+              const rect = e.currentTarget.getBoundingClientRect();
+              pick(e.clientX, rect);
+              dragged.current = false;
+              if (props.onBrush && e.pointerType !== 'touch' && e.button === 0) {
+                const px = Math.min(Math.max(e.clientX - rect.left, 0), plotW);
+                setDrag({ a: px, b: px });
+                e.currentTarget.setPointerCapture(e.pointerId);
+              }
             }}
+            onPointerUp={(e) => {
+              if (!drag) return;
+              const hit = brushIndexes(drag.a, drag.b, geo);
+              setDrag(null);
+              if (e.currentTarget.hasPointerCapture(e.pointerId))
+                e.currentTarget.releasePointerCapture(e.pointerId);
+              if (hit && dragged.current) props.onBrush?.(hit[0], hit[1]);
+            }}
+            onPointerCancel={() => setDrag(null)}
             onPointerLeave={(e) => {
-              if (e.pointerType === 'mouse') setActive(null);
+              if (e.pointerType === 'mouse' && !drag) setActive(null);
             }}
             onClick={() => {
+              if (dragged.current) {
+                dragged.current = false;
+                return;
+              }
               if (active !== null && onSelect) onSelect(active);
+            }}
+            onDoubleClick={() => {
+              if (active !== null) props.onZoomAt?.(active);
             }}
           />
         )}
@@ -758,6 +839,7 @@ export function CartesianChart(props: CartesianChartProps) {
         )}
         <span className="sr-only" aria-live="polite">
           {activeText}
+          {props.zoomNote ? ` ${props.zoomNote}` : ''}
         </span>
       </div>
     </div>

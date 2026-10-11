@@ -605,16 +605,23 @@ export function primaryActive(path: string, item: PrimaryItem): boolean {
 // ===========================================================================
 // LA BARRA DE ABAJO DEL TELÉFONO
 // ===========================================================================
-// Chat, Hoy, Vistas y Aplicaciones; «Más» (un botón, no un destino) abre el
-// menú lateral completo, que trae todo lo demás.
+// Hoy, Chat, Te espera y Vistas; «Más» (un botón, no un destino) abre el
+// menú lateral completo, que trae todo lo demás (Aplicaciones incluida).
+// «Te espera» aterriza en la primera cola (la más urgente por reloj) y se
+// enciende en cualquiera de las cuatro.
 
 export function mobileTabs(modulesOff: readonly ModuleKey[] = []): PrimaryItem[] {
   return visibleItems<PrimaryItem>(
     [
-      { ...CHAT, match: ['/chat'] },
       { ...PILOT, match: ['/piloto'] },
+      { ...CHAT, match: ['/chat'] },
+      {
+        href: QUEUE_HREF[WAITING_QUEUES[0]],
+        label: WAITING_LABEL,
+        icon: WAITING_ICON,
+        match: WAITING_QUEUES.map((queue) => QUEUE_HREF[queue]),
+      },
       { ...VIEWS, match: ['/views'] },
-      { ...APPS, match: ['/apps'] },
     ],
     modulesOff,
   );

@@ -225,7 +225,7 @@ export const MODULES: readonly CortexModule[] = [
     description: 'El plan de cada mañana: hace lo rutinario y te pregunta lo demás.',
     area: 'Dirección',
     toolPrefixes: ['autopilot.'],
-    routes: ['/piloto'],
+    routes: ['/piloto/panel'],
     defaultOn: true,
   },
   {

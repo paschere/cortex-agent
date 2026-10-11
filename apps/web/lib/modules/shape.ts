@@ -46,7 +46,7 @@ export const ROUTE_LABEL: Record<string, string> = {
   '/flota': 'Flota',
   '/documentos-vencen': 'Documentos que vencen',
   '/team': 'Equipo y «Mi semana»',
-  '/piloto': 'Piloto automático',
+  '/piloto/panel': 'Piloto automático',
   '/integrations/whatsapp/atencion': 'Atención por WhatsApp',
   '/informe-socios': 'Informe para socios',
   '/prospects': 'Prospectos',

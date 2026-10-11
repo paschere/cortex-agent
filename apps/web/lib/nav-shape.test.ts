@@ -262,9 +262,12 @@ describe('el rail calmado', () => {
     for (const section of rail.rest) expect(section.items.length).toBeGreaterThan(0);
   });
 
-  it('la barra del teléfono: Chat, Hoy, Vistas y Aplicaciones', () => {
-    expect(mobileTabs().map((t) => t.label)).toEqual(['Chat', 'Hoy', 'Vistas', 'Aplicaciones']);
-    const chat = mobileTabs()[0];
+  it('la barra del teléfono: Hoy, Chat, Te espera y Vistas', () => {
+    expect(mobileTabs().map((t) => t.label)).toEqual(['Hoy', 'Chat', 'Te espera', 'Vistas']);
+    const waiting = mobileTabs()[2];
+    if (!waiting) throw new Error('falta Te espera');
+    expect(primaryActive('/commitments', waiting)).toBe(true);
+    const chat = mobileTabs()[1];
     if (!chat) throw new Error('falta Chat');
     expect(primaryActive('/chat/abc', chat)).toBe(true);
   });

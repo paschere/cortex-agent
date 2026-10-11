@@ -23,7 +23,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const modulesOff = await modulesOffFor(user.organization.id);
   return (
     <AppShell user={user}>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="cortex-sheet flex min-w-0 flex-1 flex-col">
         <Topbar email={user.email} />
         <BillingBanner organizationId={user.organization.id} />
         <main className="scroll-slim flex-1 overflow-y-auto print:overflow-visible">

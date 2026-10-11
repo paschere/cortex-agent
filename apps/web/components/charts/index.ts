@@ -18,3 +18,8 @@ export { RankBars, type RankItem } from './RankBars';
 export { SegmentBar, SegmentStrip, type SegmentItem } from './SegmentBar';
 export { Sparkline } from './Sparkline';
 export * from './scales';
+export { DrillSheet } from './DrillSheet';
+export { MetricChart, type MetricChartInfo } from './MetricChart';
+export { metricFormatters } from './metric-format';
+export type { MetricEvent, MetricModel } from './metric-types';
+export * from './interactive';

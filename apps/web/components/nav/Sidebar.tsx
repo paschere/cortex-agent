@@ -4,12 +4,14 @@ import { usePanel } from '@/components/panel/PanelHost';
 import { CortexSignature } from '@/components/ui/cortex-signature';
 import { authClient } from '@/lib/auth-client';
 import {
+  ACTIVITY,
   type NavItem,
   type NavSection,
+  PILOT,
   WAITING_AFTER,
-  WAITING_ICON,
   WAITING_LABEL,
   buildRail,
+  routeVisible,
 } from '@/lib/nav-shape';
 import type { NavCounts, ShellSignals } from '@/lib/nav-signals';
 import { recordVisit } from '@/lib/nav-usage';
@@ -22,17 +24,17 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import {
   ArrowUpRight,
+  Check,
   ChevronDown,
   ChevronRight,
-  ChevronsUpDown,
+  Inbox,
   LayoutDashboard,
-  LogOut,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
-  Search,
-  Settings,
+  Plus,
   SquarePen,
+  Star,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -45,26 +47,27 @@ import { ThemeToggle } from './ThemeToggle';
 import { CreateCompanyButton, WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 /**
- * EL RAIL, REDISEÑADO: CALMO, DENSO Y SIN RUIDO.
+ * EL RAIL, ESTILO CUADERNO.
  *
- * La estructura no cambia (ver `lib/nav-shape.ts`); cambia cómo se ve y cómo se
- * siente:
+ * La estructura de datos no cambia (ver `lib/nav-shape.ts`); cambia la pintura:
  *
- *   · CABECERA: el espacio de trabajo como bloque compacto (monograma, nombre,
- *     rol), «nuevo chat» al lado y una fila «Buscar… ⌘K» debajo.
- *   · BLOQUE FIJO: Chat (con sus últimos hilos), Hoy, «Te espera» (se despliega
- *     en el sitio y anima la altura), Vistas, Aplicaciones, Tablas y Cerebro.
- *     Filas de 32px; la activa lleva un fondo tenue, texto de tinta e icono en
- *     el color primario. Nada de barras gruesas a la izquierda.
- *   · SECCIONES: encabezados de 12px sin mayúsculas, con el chevron a la vista
- *     sólo al pasar el ratón (o si están cerradas). Cada una recuerda en
- *     `localStorage` (`sidebar_sections`) si estaba abierta.
- *   · PIE: la tarjeta de «Puesta en marcha» (sólo mientras falte) y la fila de la
- *     persona con su menú (Ajustes, Plan, Ayuda, tema, cerrar sesión).
- *   · CONTRAÍDO: 56px de iconos con insignias de punto; se ensancha con un roce.
+ *   · El rail es el PAPEL (`bg-rail` = el lienzo) y el contenido va en una hoja
+ *     blanca redondeada a su derecha (`.cortex-sheet`, ver `globals.css`).
+ *   · CABECERA: el espacio de trabajo (monograma, nombre, rol) y la píldora
+ *     blanca «Pídele algo a Cortex ⌘K», que abre la paleta.
+ *   · ARRIBA: Hoy (con su estrella), Chat (con sus últimos hilos), Te espera
+ *     (se despliega en el sitio con sus cuatro colas) y «Lo que hizo Cortex».
+ *   · «MI EMPRESA»: una fila por área (Plata, Clientes, Operación, Equipo, Legal)
+ *     con su letra en pastel; cada una despliega sus pantallas.
+ *   · «MIS ESPACIOS»: Vistas, Tablas, Aplicaciones y Cerebro.
+ *   · «MÁS»: el resto de secciones del producto, plegables como siempre.
+ *   · PIE: la tarjeta de «Puesta en marcha» (sólo mientras falte) y la persona
+ *     con su menú «…» (Ajustes, Plan, Ayuda, Cambiar de empresa, tema, salir).
+ *   · PLEGADO: 68px de iconos y letras; se ensancha con un roce.
  *
- * El cuerpo (`SidebarBody`) se exporta para que la página de pruebas visuales
- * (`/v/sidebar-showcase`) lo pinte en cualquier ancho sin montar el layout.
+ * Cada sección y cada grupo recuerda en `localStorage` (`sidebar_sections`) si
+ * estaba abierto. El cuerpo (`SidebarBody`) se exporta para que la página de
+ * pruebas visuales (`/v/sidebar-showcase`) lo pinte en cualquier ancho.
  */
 
 const EMPTY: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
@@ -131,6 +134,26 @@ function useRecentChats(enabled: boolean, path: string, override?: RecentChat[])
   return override ?? items;
 }
 
+/** Las áreas de «Mi empresa»: su sección en `nav-shape`, su palabra, su letra y su pastel. */
+type Tone = 'primary' | 'rose' | 'emerald' | 'amber' | 'sky';
+const AREAS: Array<{ id: string; label: string; letter: string; tone: Tone }> = [
+  { id: 'finance', label: 'Plata', letter: '$', tone: 'primary' },
+  { id: 'work', label: 'Clientes', letter: 'C', tone: 'rose' },
+  { id: 'operations', label: 'Operación', letter: 'O', tone: 'emerald' },
+  { id: 'people', label: 'Equipo', letter: 'E', tone: 'amber' },
+  { id: 'legal', label: 'Legal', letter: 'L', tone: 'sky' },
+];
+const TONE: Record<Tone, string> = {
+  primary: 'bg-primary-soft text-primary-ink',
+  rose: 'bg-rose-soft text-rose',
+  emerald: 'bg-emerald-soft text-emerald',
+  amber: 'bg-amber-soft text-amber',
+  sky: 'bg-sky-soft text-sky',
+};
+/** Orden de «Mis espacios». Lo que el rail fije y no esté aquí se agrega al final. */
+const SPACES_ORDER = ['/views', '/trackers', '/apps', '/kb'];
+const GROUP_PREFIX = 'group:';
+
 /** Alto animado sin medir: la fila de la rejilla pasa de 0fr a 1fr. */
 function Collapsible({ open, id, children }: { open: boolean; id: string; children: ReactNode }) {
   return (
@@ -147,13 +170,13 @@ function Collapsible({ open, id, children }: { open: boolean; id: string; childr
   );
 }
 
-/** Contador pequeño y redondo. En una fila activa se pinta sobre la superficie. */
-function Count({ n, active }: { n: number; active?: boolean }) {
+/** Cuenta de una fila: cifra tenue, o píldora rosa cuando algo espera. */
+function Count({ n, rose }: { n: number; rose?: boolean }) {
   return (
     <span
       className={clsx(
-        'tabular inline-flex h-5 min-w-5 items-center justify-center rounded-pill px-1.5 text-micro font-semibold leading-none',
-        active ? 'bg-surface text-primary-ink' : 'bg-primary-soft text-primary-ink',
+        'tabular text-[12px] font-bold leading-none',
+        rose ? 'rounded-pill bg-rose-soft px-2 py-1 text-rose' : 'text-rail-ink-faint',
       )}
     >
       {n > 99 ? '99+' : n}
@@ -161,46 +184,61 @@ function Count({ n, active }: { n: number; active?: boolean }) {
   );
 }
 
-/** Progreso en un anillo. `currentColor` pinta el avance; el riel va tenue. */
-function Ring({ pct, size = 36 }: { pct: number; size?: number }) {
-  const stroke = 3;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
+/** La letra en pastel de un área. */
+function Tile({ letter, tone, size = 20 }: { letter: string; tone: Tone; size?: 20 | 22 }) {
   return (
-    <svg
+    <span
       aria-hidden
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className="shrink-0 -rotate-90 text-primary"
+      className={clsx(
+        'grid shrink-0 place-items-center font-bold',
+        size === 20
+          ? 'h-5 w-5 rounded-[6px] text-[11px]'
+          : 'h-[22px] w-[22px] rounded-[7px] text-[12px]',
+        TONE[tone],
+      )}
     >
-      <title>Progreso</title>
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        strokeWidth={stroke}
-        className="stroke-rail-border"
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={c * (1 - pct / 100)}
-        className="transition-[stroke-dashoffset] duration-500 motion-reduce:transition-none"
-      />
-    </svg>
+      {letter}
+    </span>
+  );
+}
+
+/** Los pasos de la puesta en marcha, en segmentos: llenos los hechos. */
+function Segments({ ready, total }: { ready: number; total: number }) {
+  const n = Math.min(Math.max(total, 1), 12);
+  const filled = total > 12 ? Math.round((ready / total) * n) : ready;
+  return (
+    <div className="flex gap-1" aria-hidden>
+      {Array.from({ length: n }, (_, i) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: segmentos fijos, sin identidad propia.
+          key={i}
+          className={clsx('h-[5px] flex-1 rounded-[3px]', i < filled ? 'bg-primary' : 'bg-rail-2')}
+        />
+      ))}
+    </div>
   );
 }
 
 const FOCUS =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-0';
+/** La fila activa se levanta del papel: hoja blanca con filete. */
+const ACTIVE_ROW = 'bg-surface font-semibold text-rail-ink shadow-card';
+const IDLE_ROW = 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink';
+
+function initialsOf(label: string) {
+  const parts = label
+    .trim()
+    .split(/[\s@.]+/)
+    .filter(Boolean);
+  const letters = parts.length > 1 ? [parts[0], parts[1]] : [parts[0]];
+  return (
+    letters
+      .map((w) => Array.from(w ?? '')[0] ?? '')
+      .join('')
+      .toLocaleUpperCase('es')
+      .slice(0, 2) || '?'
+  );
+}
 
 export function SidebarBody({
   role,
@@ -224,7 +262,7 @@ export function SidebarBody({
   role: Role;
   counts: NavCounts;
   signals: ShellSignals;
-  /** El rail estrecho de 56px: sólo iconos. */
+  /** El rail estrecho de 68px: sólo iconos. */
   small: boolean;
   /** Presente sólo en el cajón del teléfono: cierra el cajón al navegar. */
   onNavigate?: () => void;
@@ -255,13 +293,38 @@ export function SidebarBody({
   const globalItems: NavItem[] = [
     { href: '/overview', label: 'Todas mis empresas', icon: LayoutDashboard },
   ];
-  const rest: NavSection[] = rail.rest.filter((section) => section.items.length > 0);
-  // «La empresa» es una sección más, con un filete encima; «Todas mis empresas» cuelga de ella.
+  // «Lo que hizo Cortex» sube al bloque de arriba: se quita de su sección para no repetirse.
+  const showActivity = routeVisible(ACTIVITY.href, modulesOff);
+  const rest: NavSection[] = rail.rest
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.href !== ACTIVITY.href),
+    }))
+    .filter((section) => section.items.length > 0);
+  // «La empresa» es una sección más; «Todas mis empresas» cuelga de ella.
   const company: NavSection | null =
     rail.company.items.length > 0 || founder
       ? { ...rail.company, items: [...(founder ? globalItems : []), ...rail.company.items] }
       : null;
-  const sections: NavSection[] = company ? [...rest, company] : rest;
+  const areas = AREAS.flatMap((area) => {
+    const section = rest.find((s) => s.id === area.id);
+    return section ? [{ ...area, section }] : [];
+  });
+  const areaIds = new Set(AREAS.map((a) => a.id));
+  const more: NavSection[] = [
+    ...rest.filter((s) => !areaIds.has(s.id)),
+    ...(company ? [company] : []),
+  ];
+  const pinnedBy = new Map(rail.pinned.map((item) => [item.href, item]));
+  const hoy = pinnedBy.get(PILOT.href);
+  const chat = pinnedBy.get('/chat');
+  const spaces = [
+    ...SPACES_ORDER.flatMap((href) => pinnedBy.get(href) ?? []),
+    ...rail.pinned.filter(
+      (item) =>
+        item.href !== PILOT.href && item.href !== '/chat' && !SPACES_ORDER.includes(item.href),
+    ),
+  ];
   const waitingCount = rail.waiting.reduce(
     (sum, item) => sum + (item.signal && item.signal !== 'pilot' ? counts[item.signal] : 0),
     0,
@@ -272,24 +335,32 @@ export function SidebarBody({
   useEffect(() => setSaved(readSavedSections()), []);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [switcherSignal, setSwitcherSignal] = useState(0);
   const current = selection?.path === path ? selection : null;
   const waitingOpen = !small && (current ? current.waiting : waitingActive);
   const scope = touch ? 'mobile' : 'desktop';
   const recent = useRecentChats(!small, path, recentOverride);
   const navRef = useRef<HTMLElement>(null);
 
-  const rowH = touch ? 'h-10' : 'h-8';
+  const rowH = touch ? 'h-11' : 'h-9';
+  const subH = touch ? 'h-10' : 'h-8';
 
   const sectionOpen = (section: NavSection) =>
     !small &&
     (saved[section.id] ??
       (section.id === 'today' || section.items.some((item) => matches(path, item.href))));
-  function toggleSection(section: NavSection) {
-    const next = { ...saved, [section.id]: !sectionOpen(section) };
+  const groupOpen = (id: string) => !small && (saved[GROUP_PREFIX + id] ?? true);
+  function persist(next: Record<string, boolean>) {
     setSaved(next);
     try {
       localStorage.setItem(SECTIONS_KEY, JSON.stringify(next));
     } catch {}
+  }
+  function toggleSection(section: NavSection) {
+    persist({ ...saved, [section.id]: !sectionOpen(section) });
+  }
+  function toggleGroup(id: string) {
+    persist({ ...saved, [GROUP_PREFIX + id]: !groupOpen(id) });
   }
 
   async function signOut() {
@@ -356,10 +427,32 @@ export function SidebarBody({
     nodes[next]?.focus();
   }
 
-  /** Una fila del bloque fijo: icono, palabra y, si hay, lo que espera. */
+  /** El icono de una puerta: la estrella de Hoy, el índigo del chat, el verde de lo hecho. */
+  function doorIcon(item: NavItem, active: boolean, size: string) {
+    if (item.href === PILOT.href) {
+      return (
+        <Star
+          className={clsx(size, 'shrink-0 fill-star text-star')}
+          strokeWidth={1.25}
+          aria-hidden
+        />
+      );
+    }
+    const Icon = item.href === ACTIVITY.href ? Check : item.icon;
+    const color =
+      item.href === '/chat'
+        ? 'text-primary'
+        : item.href === ACTIVITY.href
+          ? 'text-emerald'
+          : active
+            ? 'text-rail-ink'
+            : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted';
+    return <Icon className={clsx(size, 'shrink-0 transition-colors', color)} strokeWidth={1.75} />;
+  }
+
+  /** Una puerta del rail: icono, palabra y, si hay, lo que espera. */
   function door(item: NavItem) {
     const active = matches(path, item.href);
-    const Icon = item.icon;
     const badge = badgeFor(item);
     const { onClick } = onClickFor(item);
     const label = badge ? `${item.label}, ${badge} pendientes` : item.label;
@@ -373,33 +466,60 @@ export function SidebarBody({
         aria-current={active ? 'page' : undefined}
         onClick={onClick}
         className={clsx(
-          'group/row relative flex items-center rounded-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
+          'group/row relative flex min-w-0 items-center rounded-[10px] text-[14px] transition-colors duration-150 motion-reduce:transition-none',
           FOCUS,
           small
-            ? 'mx-auto h-9 w-9 justify-center'
-            : clsx(rowH, 'w-full gap-2.5 px-2.5 text-[14px]'),
-          active
-            ? 'bg-primary-soft text-rail-ink'
-            : 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+            ? clsx(
+                'mx-auto h-10 w-10 justify-center rounded-[12px]',
+                active && 'bg-surface shadow-card',
+              )
+            : clsx(
+                rowH,
+                'w-full gap-2.5 px-3',
+                active ? ACTIVE_ROW : clsx('font-medium', IDLE_ROW),
+              ),
         )}
       >
-        <Icon
-          className={clsx(
-            'h-4 w-4 shrink-0 transition-colors',
-            active ? 'text-primary' : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted',
-          )}
-          strokeWidth={1.75}
-        />
+        {doorIcon(item, active, small ? 'h-[18px] w-[18px]' : 'h-4 w-4')}
         {!small && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
-        {!small && badge > 0 && <Count n={badge} active={active} />}
-        {small && badge > 0 && (
-          <span
-            aria-hidden
-            className="absolute right-1.5 top-1.5 h-2 w-2 rounded-pill bg-primary ring-2 ring-rail"
-          />
-        )}
+        {!small && badge > 0 && <Count n={badge} />}
       </Link>
     );
+  }
+
+  /** Chat: la puerta, «nuevo chat» al roce y los últimos hilos debajo. */
+  function chatRows(item: NavItem) {
+    const rows: ReactNode[] = [];
+    rows.push(
+      small ? (
+        door(item)
+      ) : (
+        <div key={item.href} className="group/chat relative">
+          {door(item)}
+          <Link
+            href={chatHref}
+            onClick={() => onNavigate?.()}
+            title="Nuevo chat"
+            aria-label="Nuevo chat"
+            className={clsx(
+              'absolute right-1.5 top-1/2 grid -translate-y-1/2 place-items-center rounded-[8px] bg-rail text-rail-ink-muted opacity-0 transition-opacity hover:bg-rail-2 hover:text-rail-ink group-focus-within/chat:opacity-100 group-hover/chat:opacity-100 motion-reduce:transition-none',
+              touch ? 'h-8 w-8 opacity-100' : 'h-6 w-6',
+              FOCUS,
+            )}
+          >
+            <SquarePen className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </Link>
+        </div>
+      ),
+    );
+    if (!small && recent.length > 0) {
+      rows.push(
+        <div key="recent" className="flex flex-col pl-[38px]">
+          {recent.map(recentRow)}
+        </div>,
+      );
+    }
+    return rows;
   }
 
   /** Un hilo reciente, sangrado bajo «Chat». */
@@ -414,7 +534,7 @@ export function SidebarBody({
         aria-current={active ? 'page' : undefined}
         onClick={() => onNavigate?.()}
         className={clsx(
-          'flex items-center rounded-sm pl-2.5 pr-2 text-[13px] transition-colors duration-150 motion-reduce:transition-none',
+          'flex items-center rounded-[8px] px-2 text-[13px] transition-colors duration-150 motion-reduce:transition-none',
           touch ? 'h-9' : 'h-7',
           FOCUS,
           active
@@ -440,23 +560,20 @@ export function SidebarBody({
         aria-current={active ? 'page' : undefined}
         onClick={onClick}
         className={clsx(
-          'flex items-center gap-2 rounded-sm pl-2.5 pr-2 text-[13px] transition-colors duration-150 motion-reduce:transition-none',
-          touch ? 'h-9' : 'h-7',
+          'flex items-center gap-2 rounded-[8px] px-2 text-[13px] transition-colors duration-150 motion-reduce:transition-none',
+          subH,
           FOCUS,
-          active
-            ? 'bg-primary-soft font-medium text-rail-ink'
-            : 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+          active ? 'bg-rail-2 font-semibold text-rail-ink' : IDLE_ROW,
         )}
       >
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
-        {badge > 0 && <Count n={badge} active={active} />}
+        {badge > 0 && <Count n={badge} />}
       </Link>
     );
   }
 
   /** «Te espera»: una fila con la suma que despliega las cuatro colas. */
   function waitingRow() {
-    const Icon = WAITING_ICON;
     return (
       <div key="waiting">
         <button
@@ -475,29 +592,22 @@ export function SidebarBody({
             setSelection({ path, waiting: !waitingOpen });
           }}
           className={clsx(
-            'group/row relative flex items-center rounded-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
+            'group/row relative flex items-center rounded-[10px] text-[14px] transition-colors duration-150 motion-reduce:transition-none',
             FOCUS,
             small
-              ? 'mx-auto h-9 w-9 justify-center'
-              : clsx(rowH, 'w-full gap-2.5 px-2.5 text-[14px]'),
-            waitingActive && !waitingOpen
-              ? 'bg-primary-soft text-rail-ink'
-              : 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+              ? 'mx-auto h-10 w-10 justify-center rounded-[12px]'
+              : clsx(rowH, 'w-full gap-2.5 px-3 font-medium'),
+            waitingActive && !waitingOpen && !small ? ACTIVE_ROW : IDLE_ROW,
           )}
         >
-          <Icon
-            className={clsx(
-              'h-4 w-4 shrink-0 transition-colors',
-              waitingActive
-                ? 'text-primary'
-                : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted',
-            )}
+          <Inbox
+            className={clsx('shrink-0 text-rose', small ? 'h-[18px] w-[18px]' : 'h-4 w-4')}
             strokeWidth={1.75}
           />
           {!small && (
             <>
               <span className="min-w-0 flex-1 truncate text-left">{WAITING_LABEL}</span>
-              {!waitingOpen && waitingCount > 0 && <Count n={waitingCount} />}
+              {!waitingOpen && waitingCount > 0 && <Count n={waitingCount} rose />}
               <ChevronRight
                 aria-hidden
                 className={clsx(
@@ -510,22 +620,22 @@ export function SidebarBody({
           {small && waitingCount > 0 && (
             <span
               aria-hidden
-              className="absolute right-1.5 top-1.5 h-2 w-2 rounded-pill bg-primary ring-2 ring-rail"
-            />
+              className="tabular absolute right-0.5 top-1 grid h-[14px] min-w-[14px] place-items-center rounded-pill bg-rose px-1 text-[9px] font-bold leading-none text-white"
+            >
+              {waitingCount > 99 ? '99+' : waitingCount}
+            </span>
           )}
         </button>
         {!small && (
           <Collapsible open={waitingOpen} id={`sidebar-${scope}-waiting`}>
-            <div className="ml-[18px] space-y-0.5 border-l border-rail-border pl-2">
-              {rail.waiting.map(queueRow)}
-            </div>
+            <div className="space-y-0.5 pl-[30px]">{rail.waiting.map(queueRow)}</div>
           </Collapsible>
         )}
       </div>
     );
   }
 
-  /** Una fila dentro de una sección. */
+  /** Una pantalla dentro de un área o una sección. */
   function row(item: NavItem) {
     const active = matches(path, item.href);
     const Icon = item.icon;
@@ -539,23 +649,21 @@ export function SidebarBody({
         aria-current={active ? 'page' : undefined}
         onClick={onClick}
         className={clsx(
-          'group/row flex items-center gap-2.5 rounded-sm px-2.5 text-[13px] font-medium transition-colors duration-150 motion-reduce:transition-none',
-          touch ? 'h-10' : 'h-8',
+          'group/row flex items-center gap-2.5 rounded-[8px] px-2 text-[13px] transition-colors duration-150 motion-reduce:transition-none',
+          subH,
           FOCUS,
-          active
-            ? 'bg-primary-soft text-rail-ink'
-            : 'text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+          active ? 'bg-rail-2 font-semibold text-rail-ink' : IDLE_ROW,
         )}
       >
         <Icon
           className={clsx(
-            'h-4 w-4 shrink-0 transition-colors',
-            active ? 'text-primary' : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted',
+            'h-3.5 w-3.5 shrink-0 transition-colors',
+            active ? 'text-rail-ink' : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted',
           )}
           strokeWidth={1.75}
         />
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
-        {badge > 0 && <Count n={badge} active={active} />}
+        {badge > 0 && <Count n={badge} />}
         {wanted && (
           <ArrowUpRight
             aria-hidden
@@ -566,7 +674,140 @@ export function SidebarBody({
     );
   }
 
-  /** Una sección plegable. En el rail estrecho es un icono que ensancha el rail. */
+  /** Un espacio propio (Vistas, Tablas…): icono gris cálido y la palabra. */
+  function spaceRow(item: NavItem) {
+    const active = matches(path, item.href);
+    const Icon = item.icon;
+    const { wanted, onClick } = onClickFor(item);
+    const badge = badgeFor(item);
+    return (
+      <Link
+        key={item.href}
+        href={hrefFor(item)}
+        data-nav
+        title={small ? item.label : undefined}
+        aria-label={small ? item.label : undefined}
+        aria-current={active ? 'page' : undefined}
+        onClick={onClick}
+        className={clsx(
+          'group/row flex items-center rounded-[10px] text-[14px] transition-colors duration-150 motion-reduce:transition-none',
+          FOCUS,
+          small
+            ? clsx(
+                'mx-auto h-10 w-10 justify-center rounded-[12px]',
+                active && 'bg-surface shadow-card',
+              )
+            : clsx(
+                touch ? 'h-11' : 'h-[34px]',
+                'gap-2.5 px-3',
+                active ? ACTIVE_ROW : clsx('font-medium', IDLE_ROW),
+              ),
+        )}
+      >
+        <Icon
+          className={clsx(
+            'shrink-0 transition-colors',
+            small ? 'h-[18px] w-[18px]' : 'h-4 w-4',
+            active ? 'text-rail-ink' : 'text-rail-ink-faint group-hover/row:text-rail-ink-muted',
+          )}
+          strokeWidth={1.75}
+        />
+        {!small && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+        {!small && badge > 0 && <Count n={badge} />}
+        {!small && wanted && (
+          <ArrowUpRight
+            aria-hidden
+            className="h-3 w-3 shrink-0 text-rail-ink-faint opacity-0 transition-opacity group-hover/row:opacity-100"
+          />
+        )}
+      </Link>
+    );
+  }
+
+  /** Un área de «Mi empresa»: letra en pastel; se despliega con sus pantallas. */
+  function areaBlock(area: (typeof areas)[number]) {
+    const { section } = area;
+    const open = sectionOpen(section);
+    const hasActive = section.items.some((item) => matches(path, item.href));
+    if (small) {
+      return (
+        <button
+          key={section.id}
+          type="button"
+          data-nav
+          onClick={onExpand}
+          title={area.label}
+          aria-label={area.label}
+          className={clsx(
+            'mx-auto grid h-10 w-10 place-items-center rounded-[12px] transition-colors hover:bg-rail-2',
+            FOCUS,
+            hasActive && 'bg-surface shadow-card',
+          )}
+        >
+          <Tile letter={area.letter} tone={area.tone} size={22} />
+        </button>
+      );
+    }
+    return (
+      <div key={section.id}>
+        <button
+          type="button"
+          data-nav
+          aria-expanded={open}
+          aria-controls={`sidebar-${scope}-${section.id}`}
+          onClick={() => toggleSection(section)}
+          className={clsx(
+            'group/row flex w-full items-center gap-2.5 rounded-[10px] px-3 text-left text-[14px] font-medium transition-colors duration-150 motion-reduce:transition-none',
+            touch ? 'h-11' : 'h-[34px]',
+            FOCUS,
+            hasActive && !open ? ACTIVE_ROW : IDLE_ROW,
+          )}
+        >
+          <Tile letter={area.letter} tone={area.tone} />
+          <span className="min-w-0 flex-1 truncate">{area.label}</span>
+          <ChevronRight
+            aria-hidden
+            className={clsx(
+              'h-3.5 w-3.5 shrink-0 text-rail-ink-faint transition-transform duration-200 motion-reduce:transition-none',
+              open && 'rotate-90',
+            )}
+          />
+        </button>
+        <Collapsible open={open} id={`sidebar-${scope}-${section.id}`}>
+          <div className="space-y-0.5 pl-[30px]">{section.items.map(row)}</div>
+        </Collapsible>
+      </div>
+    );
+  }
+
+  /** El encabezado de un grupo («Mi empresa», «Mis espacios», «Más»). */
+  function groupHeader(id: string, label: string, open: boolean) {
+    return (
+      <button
+        type="button"
+        data-nav
+        aria-expanded={open}
+        aria-controls={`sidebar-${scope}-group-${id}`}
+        onClick={() => toggleGroup(id)}
+        className={clsx(
+          'group/sec flex w-full items-center gap-1.5 rounded-[8px] px-3 text-left text-[12px] font-semibold text-rail-ink-faint transition-colors hover:text-rail-ink-muted',
+          touch ? 'h-9' : 'h-7',
+          FOCUS,
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <ChevronDown
+          aria-hidden
+          className={clsx(
+            'h-3 w-3 shrink-0 transition-transform duration-200 motion-reduce:transition-none',
+            !open && '-rotate-90',
+          )}
+        />
+      </button>
+    );
+  }
+
+  /** Una sección plegable del resto del producto. En el rail estrecho es un icono. */
   function sectionBlock(section: NavSection) {
     const open = sectionOpen(section);
     const hasActive = section.items.some((item) => matches(path, item.href));
@@ -581,20 +822,19 @@ export function SidebarBody({
           title={section.label}
           aria-label={section.label}
           className={clsx(
-            'mx-auto flex h-9 w-9 items-center justify-center rounded-sm transition-colors hover:bg-rail-2',
+            'mx-auto grid h-10 w-10 place-items-center rounded-[12px] transition-colors hover:bg-rail-2',
             FOCUS,
-            hasActive ? 'text-primary' : 'text-rail-ink-faint hover:text-rail-ink-muted',
+            hasActive
+              ? 'bg-surface text-rail-ink shadow-card'
+              : 'text-rail-ink-faint hover:text-rail-ink-muted',
           )}
         >
-          <Icon className="h-4 w-4" strokeWidth={1.75} />
+          <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
         </button>
       );
     }
     return (
-      <div
-        key={section.id}
-        className={clsx(section.id === 'company' && 'mt-3 border-t border-rail-border pt-3')}
-      >
+      <div key={section.id}>
         <button
           type="button"
           data-nav
@@ -602,27 +842,24 @@ export function SidebarBody({
           aria-controls={`sidebar-${scope}-${section.id}`}
           onClick={() => toggleSection(section)}
           className={clsx(
-            'group/sec flex w-full items-center gap-1.5 rounded-sm px-2.5 text-left text-micro font-medium text-rail-ink-faint transition-colors hover:text-rail-ink-muted',
-            touch ? 'h-9' : 'h-7',
+            'group/row flex w-full items-center gap-2.5 rounded-[10px] px-3 text-left text-[14px] font-medium transition-colors duration-150 motion-reduce:transition-none',
+            touch ? 'h-11' : 'h-[34px]',
             FOCUS,
+            hasActive && !open ? ACTIVE_ROW : IDLE_ROW,
           )}
         >
+          <Icon className="h-4 w-4 shrink-0 text-rail-ink-faint" strokeWidth={1.75} />
           <span className="min-w-0 flex-1 truncate">{section.label}</span>
-          {!open && hasActive && (
-            <span aria-hidden className="h-1.5 w-1.5 rounded-pill bg-primary" />
-          )}
-          <ChevronDown
+          <ChevronRight
             aria-hidden
             className={clsx(
-              'h-3.5 w-3.5 shrink-0 transition-[transform,opacity] duration-200 motion-reduce:transition-none',
-              open
-                ? 'opacity-0 group-hover/sec:opacity-100 group-focus-visible/sec:opacity-100'
-                : '-rotate-90 opacity-100',
+              'h-3.5 w-3.5 shrink-0 text-rail-ink-faint transition-transform duration-200 motion-reduce:transition-none',
+              open && 'rotate-90',
             )}
           />
         </button>
         <Collapsible open={open} id={`sidebar-${scope}-${section.id}`}>
-          <div className="space-y-0.5">{section.items.map(row)}</div>
+          <div className="space-y-0.5 pl-[30px]">{section.items.map(row)}</div>
         </Collapsible>
       </div>
     );
@@ -632,7 +869,6 @@ export function SidebarBody({
   function setupCard() {
     if (!rail.setup || !signals.setup) return null;
     const { ready, total } = signals.setup;
-    const pct = total > 0 ? Math.round((ready / total) * 100) : 0;
     const { onClick } = onClickFor(rail.setup);
     if (small) {
       return (
@@ -642,11 +878,13 @@ export function SidebarBody({
           title={`Puesta en marcha: ${ready} de ${total}`}
           aria-label={`Puesta en marcha: ${ready} de ${total} pasos`}
           className={clsx(
-            'mx-auto flex h-9 w-9 items-center justify-center rounded-sm transition-colors hover:bg-rail-2',
+            'mx-auto grid h-10 w-10 place-items-center rounded-[12px] bg-surface shadow-card',
             FOCUS,
           )}
         >
-          <Ring pct={pct} size={26} />
+          <span className="tabular text-[11px] font-bold text-primary-ink">
+            {ready}/{total}
+          </span>
         </Link>
       );
     }
@@ -655,41 +893,42 @@ export function SidebarBody({
         href={hrefFor(rail.setup)}
         onClick={onClick}
         className={clsx(
-          'group/setup flex items-center gap-3 rounded-card border border-rail-border bg-canvas p-3 transition-colors hover:border-border-strong',
+          'group/setup flex flex-col gap-2.5 rounded-[14px] bg-surface p-3.5 shadow-card transition-shadow motion-reduce:transition-none',
           FOCUS,
         )}
       >
-        <span className="relative grid shrink-0 place-items-center">
-          <Ring pct={pct} />
-          <Settings
-            aria-hidden
-            className="absolute h-3.5 w-3.5 text-rail-ink-muted"
-            strokeWidth={1.75}
-          />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold text-rail-ink">
+        <span className="flex items-center gap-2.5">
+          <span className="title-display min-w-0 flex-1 truncate !text-[17px] !leading-tight text-rail-ink md:!text-[17px]">
             Puesta en marcha
           </span>
-          <span className="tabular block truncate text-micro text-rail-ink-muted">
-            {ready} de {total} pasos
+          <span className="tabular shrink-0 text-[12px] text-rail-ink-faint">
+            {ready} de {total}
           </span>
         </span>
-        <ChevronRight
-          aria-hidden
-          className="h-4 w-4 shrink-0 text-rail-ink-faint transition-transform group-hover/setup:translate-x-0.5 motion-reduce:transition-none"
-        />
+        <Segments ready={ready} total={total} />
+        <span className="text-[13px] font-semibold text-primary">
+          Seguir con la puesta en marcha
+          <span
+            aria-hidden
+            className="inline-block transition-transform group-hover/setup:translate-x-0.5"
+          >
+            {' '}
+            →
+          </span>
+        </span>
       </Link>
     );
   }
 
   const label = user?.name?.trim() || user?.email || 'Tu cuenta';
-  const initial = Array.from(label.trim())[0]?.toLocaleUpperCase('es') ?? '?';
+  const initials = initialsOf(label);
   const footerLinks = rail.footer.filter((item) =>
     ['/settings', '/plan', '/ayuda'].includes(item.href),
   );
+  const menuItem =
+    'flex h-9 cursor-pointer items-center gap-2.5 rounded-[10px] px-2.5 text-[14px] text-ink-muted outline-none transition-colors data-[highlighted]:bg-canvas data-[highlighted]:text-ink';
 
-  /** El menú de la persona: lo que antes eran tres filas sueltas al pie. */
+  /** El menú de la persona: ajustes, plan, ayuda, cambiar de empresa, tema y salir. */
   function userMenu() {
     return (
       <DropdownMenu.Root>
@@ -699,35 +938,28 @@ export function SidebarBody({
             title={small ? label : undefined}
             aria-label={`Cuenta de ${label}`}
             className={clsx(
-              'group/user flex items-center rounded-sm text-left transition-colors hover:bg-rail-2 data-[state=open]:bg-rail-2 motion-reduce:transition-none',
+              'group/user flex items-center rounded-[10px] text-left transition-colors hover:bg-rail-2 data-[state=open]:bg-rail-2 motion-reduce:transition-none',
               FOCUS,
-              small ? 'mx-auto h-9 w-9 justify-center' : 'min-w-0 flex-1 gap-2.5 p-1.5',
+              small ? 'mx-auto h-10 w-10 justify-center' : 'min-w-0 flex-1 gap-2.5 px-2.5 py-1.5',
             )}
           >
             <span
               aria-hidden
               className={clsx(
-                'grid shrink-0 place-items-center rounded-full bg-amber-soft font-semibold text-amber',
-                small ? 'h-7 w-7 text-xs' : 'h-8 w-8 text-[13px]',
+                'grid shrink-0 place-items-center rounded-full bg-highlight font-bold text-ink',
+                small ? 'h-8 w-8 text-[12px]' : 'h-[30px] w-[30px] text-[12px]',
               )}
             >
-              {initial}
+              {initials}
             </span>
             {!small && (
               <>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-semibold leading-tight text-rail-ink">
-                    {label}
-                  </span>
-                  {user?.name && (
-                    <span className="block truncate text-micro leading-tight text-rail-ink-faint">
-                      {user.email}
-                    </span>
-                  )}
+                <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-rail-ink">
+                  {label}
                 </span>
-                <ChevronsUpDown
+                <MoreHorizontal
                   aria-hidden
-                  className="h-3.5 w-3.5 shrink-0 text-rail-ink-faint"
+                  className="h-4 w-4 shrink-0 text-rail-ink-faint"
                   strokeWidth={1.75}
                 />
               </>
@@ -739,43 +971,42 @@ export function SidebarBody({
             side={small ? 'right' : 'top'}
             align={small ? 'end' : 'start'}
             sideOffset={8}
-            className="z-[80] w-64 rounded-card border border-border bg-surface p-1.5 shadow-pop"
+            className="z-[80] w-64 rounded-[16px] bg-surface p-2 shadow-pop"
           >
-            <div className="px-2.5 pb-2 pt-1.5">
-              <p className="truncate text-[13px] font-semibold text-ink">{label}</p>
-              {user?.name && <p className="truncate text-micro text-ink-faint">{user.email}</p>}
+            <div className="flex flex-col px-2.5 pb-3 pt-2.5">
+              <p className="title-display truncate !text-[18px] !leading-tight text-ink md:!text-[18px]">
+                {label}
+              </p>
+              {user?.name && <p className="truncate text-[13px] text-ink-faint">{user.email}</p>}
             </div>
-            <div className="my-1 h-px bg-border" aria-hidden />
-            {footerLinks.map((item) => {
-              const Icon = item.icon;
-              return (
-                <DropdownMenu.Item key={item.href} asChild>
-                  <Link
-                    href={hrefFor(item)}
-                    onClick={onClickFor(item).onClick}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] font-medium text-ink outline-none transition-colors data-[highlighted]:bg-surface-2"
-                  >
-                    <Icon className="h-4 w-4 text-ink-faint" strokeWidth={1.75} />
-                    {item.label}
-                  </Link>
-                </DropdownMenu.Item>
-              );
-            })}
-            <div className="my-1 h-px bg-border" aria-hidden />
-            <div className="px-1 py-1">
-              <p className="px-1.5 pb-1 text-micro font-medium text-ink-faint">Tema</p>
+            {footerLinks.map((item) => (
+              <DropdownMenu.Item key={item.href} asChild>
+                <Link href={hrefFor(item)} onClick={onClickFor(item).onClick} className={menuItem}>
+                  {item.label}
+                </Link>
+              </DropdownMenu.Item>
+            ))}
+            {organization && (
+              <DropdownMenu.Item
+                onSelect={() => {
+                  setTimeout(() => setSwitcherSignal((n) => n + 1), 60);
+                }}
+                className={menuItem}
+              >
+                Cambiar de empresa
+              </DropdownMenu.Item>
+            )}
+            <div className="my-1.5 rounded-[12px] bg-canvas p-1.5">
               <ThemeToggle />
             </div>
-            <div className="my-1 h-px bg-border" aria-hidden />
             <DropdownMenu.Item
               disabled={signingOut}
               onSelect={(e) => {
                 e.preventDefault();
                 void signOut();
               }}
-              className="flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] font-medium text-ink outline-none transition-colors data-[disabled]:opacity-60 data-[highlighted]:bg-surface-2"
+              className={clsx(menuItem, '!text-rose data-[disabled]:opacity-60')}
             >
-              <LogOut className="h-4 w-4 text-ink-faint" strokeWidth={1.75} aria-hidden />
               {signingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}
             </DropdownMenu.Item>
           </DropdownMenu.Content>
@@ -786,27 +1017,16 @@ export function SidebarBody({
 
   const chatHref = organization ? workspaceHref(organization.id, '/chat') : '/chat';
   const iconBtn = clsx(
-    'grid shrink-0 place-items-center rounded-sm text-rail-ink-muted transition-colors hover:bg-rail-2 hover:text-rail-ink motion-reduce:transition-none',
+    'grid shrink-0 place-items-center rounded-[10px] text-rail-ink-muted transition-colors hover:bg-rail-2 hover:text-rail-ink motion-reduce:transition-none',
     FOCUS,
   );
 
-  const topRows = rail.pinned.flatMap((item) => {
-    const base = item.href === WAITING_AFTER ? [door(item), waitingRow()] : [door(item)];
-    if (item.href === '/chat' && !small && recent.length > 0) {
-      return [
-        ...base,
-        <div key="recent" className="ml-[18px] space-y-px border-l border-rail-border pl-2">
-          {recent.map(recentRow)}
-        </div>,
-      ];
-    }
-    return base;
-  });
+  const divider = <span aria-hidden className="mx-auto my-2 block h-px w-6 bg-rail-border" />;
 
   return (
     <>
-      {/* CABECERA: el espacio, nuevo chat y la búsqueda. */}
-      <div className={clsx('shrink-0', small ? 'space-y-1 px-2 pt-3' : 'px-3 pt-3')}>
+      {/* CABECERA: el espacio y la píldora de «Pídele algo a Cortex». */}
+      <div className={clsx('shrink-0', small ? 'space-y-2 px-2 pt-4' : 'px-3 pt-4')}>
         <div className={clsx(small ? 'space-y-1' : 'flex items-center gap-1')}>
           {organization ? (
             <div className={clsx(!small && 'min-w-0 flex-1')}>
@@ -814,6 +1034,7 @@ export function SidebarBody({
                 active={organization}
                 collapsed={small}
                 onOpenChange={onWorkspaceOpenChange}
+                openSignal={switcherSignal}
               />
             </div>
           ) : (
@@ -821,23 +1042,14 @@ export function SidebarBody({
               href="/overview"
               onClick={onNavigate}
               aria-label="Cortex, abrir vista global"
-              className={clsx('flex min-w-0 flex-1 items-center gap-2 rounded-sm p-1', FOCUS)}
+              className={clsx('flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] p-1', FOCUS)}
             >
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary text-white">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary text-white">
                 <CortexSignature className="h-5 w-5" />
               </span>
               {!small && <span className="text-sm font-bold text-rail-ink">Cortex</span>}
             </Link>
           )}
-          <Link
-            href={chatHref}
-            onClick={() => onNavigate?.()}
-            title="Nuevo chat"
-            aria-label="Nuevo chat"
-            className={clsx(iconBtn, small ? 'mx-auto h-9 w-9' : touch ? 'h-10 w-10' : 'h-8 w-8')}
-          >
-            <SquarePen className="h-4 w-4" strokeWidth={1.75} />
-          </Link>
           {small ? null : headerExtra}
         </div>
         <button
@@ -846,25 +1058,24 @@ export function SidebarBody({
             commands.setOpen(true);
             onNavigate?.();
           }}
-          aria-label="Buscar en Cortex"
+          aria-label="Pídele algo a Cortex o busca"
           aria-keyshortcuts="Meta+K Control+K"
-          title={small ? 'Buscar (⌘K)' : undefined}
+          title={small ? 'Pídele algo a Cortex (⌘K)' : undefined}
           className={clsx(
-            'flex items-center text-[13px] text-rail-ink-faint transition-colors hover:text-rail-ink-muted motion-reduce:transition-none',
+            'flex items-center bg-surface text-[14px] text-rail-ink-faint shadow-card transition-colors hover:text-rail-ink-muted motion-reduce:transition-none',
             FOCUS,
             small
-              ? 'mx-auto h-9 w-9 justify-center rounded-sm hover:bg-rail-2'
-              : clsx(
-                  'mt-2 w-full gap-2 rounded-sm border border-rail-border bg-canvas px-2.5 hover:border-border-strong',
-                  touch ? 'h-10' : 'h-8',
-                ),
+              ? 'mx-auto h-10 w-10 justify-center rounded-[12px]'
+              : clsx('mt-3 w-full gap-2.5 rounded-[12px] px-3', touch ? 'h-11' : 'h-10'),
           )}
         >
-          <Search className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+          <Plus className="h-[15px] w-[15px] shrink-0 text-primary" strokeWidth={2} />
           {!small && (
             <>
-              <span className="flex-1 text-left">Buscar…</span>
-              <kbd className="font-sans text-micro font-medium">⌘K</kbd>
+              <span className="min-w-0 flex-1 truncate text-left">Pídele algo a Cortex</span>
+              <kbd className="rounded-[6px] bg-rail-2 px-1.5 py-0.5 font-sans text-[11px] font-semibold">
+                ⌘K
+              </kbd>
             </>
           )}
         </button>
@@ -875,30 +1086,62 @@ export function SidebarBody({
         aria-label="Navegación principal"
         onKeyDown={onNavKeyDown}
         className={clsx(
-          'scroll-slim min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-4 pt-3',
-          small ? 'px-2' : 'px-3',
+          'scroll-slim min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-4',
+          small ? 'px-2 pt-3' : 'px-3 pt-3',
         )}
       >
-        <div className="space-y-0.5">{topRows}</div>
+        <div className={clsx(small ? 'space-y-1.5' : 'space-y-0.5')}>
+          {hoy && door(hoy)}
+          {chat && chatRows(chat)}
+          {waitingRow()}
+          {showActivity && door(ACTIVITY)}
+        </div>
 
-        <div
-          className={clsx('mt-4 space-y-1', small && 'space-y-1 border-t border-rail-border pt-3')}
-        >
-          {sections.map(sectionBlock)}
-          {!small && (
-            <div className="pt-2">
+        {small ? (
+          <div className="space-y-1.5">
+            {divider}
+            {areas.map(areaBlock)}
+            {spaces.length > 0 && divider}
+            {spaces.map(spaceRow)}
+            {more.length > 0 && divider}
+            {more.map(sectionBlock)}
+          </div>
+        ) : (
+          <>
+            {areas.length > 0 && (
+              <div className="mt-5">
+                {groupHeader('empresa', 'Mi empresa', groupOpen('empresa'))}
+                <Collapsible open={groupOpen('empresa')} id={`sidebar-${scope}-group-empresa`}>
+                  <div className="space-y-0.5">{areas.map(areaBlock)}</div>
+                </Collapsible>
+              </div>
+            )}
+            {spaces.length > 0 && (
+              <div className="mt-3">
+                {groupHeader('espacios', 'Mis espacios', groupOpen('espacios'))}
+                <Collapsible open={groupOpen('espacios')} id={`sidebar-${scope}-group-espacios`}>
+                  <div className="space-y-0.5">{spaces.map(spaceRow)}</div>
+                </Collapsible>
+              </div>
+            )}
+            {more.length > 0 && (
+              <div className="mt-3">
+                {groupHeader('mas', 'Más', groupOpen('mas'))}
+                <Collapsible open={groupOpen('mas')} id={`sidebar-${scope}-group-mas`}>
+                  <div className="space-y-0.5">{more.map(sectionBlock)}</div>
+                </Collapsible>
+              </div>
+            )}
+            <div className="pt-3">
               <CreateCompanyButton />
             </div>
-          )}
-        </div>
+          </>
+        )}
       </nav>
 
       {/* PIE: puesta en marcha, la persona y fijar el rail. */}
       <div
-        className={clsx(
-          'shrink-0 space-y-2 border-t border-rail-border',
-          small ? 'px-2 py-2' : 'px-3 py-3',
-        )}
+        className={clsx('shrink-0 space-y-2', small ? 'px-2 py-3' : 'px-3 pb-3 pt-1')}
         style={touch ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom))' } : undefined}
       >
         {setupCard()}
@@ -910,7 +1153,7 @@ export function SidebarBody({
               onClick={onToggleCollapsed}
               aria-label={pinnedCollapsed ? 'Fijar el menú expandido' : 'Contraer el menú'}
               title={pinnedCollapsed ? 'Expandir el menú' : 'Contraer el menú'}
-              className={clsx(iconBtn, small ? 'mx-auto h-9 w-9' : 'h-8 w-8')}
+              className={clsx(iconBtn, small ? 'mx-auto h-10 w-10' : 'h-8 w-8')}
             >
               {small ? (
                 <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
@@ -978,7 +1221,7 @@ export function Sidebar({
       <aside
         className={clsx(
           'relative hidden h-full shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none print:hidden md:flex',
-          compact ? 'w-14' : 'w-[264px]',
+          compact ? 'w-[68px]' : 'w-64',
         )}
         onMouseEnter={() => compact && setPeek(true)}
         onMouseLeave={() => setPeek(false)}
@@ -989,9 +1232,9 @@ export function Sidebar({
       >
         <div
           className={clsx(
-            'workspace-rail flex h-full flex-col overflow-hidden border-r border-rail-border bg-rail transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none',
+            'workspace-rail flex h-full flex-col overflow-hidden bg-rail transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none',
             compact ? 'absolute inset-y-0 left-0 z-40' : 'w-full',
-            compact && (expanded ? 'w-[264px] shadow-pop' : 'w-14'),
+            compact && (expanded ? 'w-64 rounded-r-[18px] shadow-pop' : 'w-[68px]'),
           )}
         >
           <SidebarBody
@@ -1023,7 +1266,7 @@ export function Sidebar({
                   <button
                     type="button"
                     aria-label="Cerrar el menú"
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-sm text-rail-ink-muted transition-colors hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] text-rail-ink-muted transition-colors hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     <X className="h-4 w-4" strokeWidth={1.75} />
                   </button>
