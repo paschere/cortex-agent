@@ -1,5 +1,7 @@
+import { AreaKpiStrip } from '@/components/nav/AreaKpiStrip';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { teamKpis } from '@/lib/area-kpis';
 import type { PersonCardModel, SignalCardModel, TeamScreen } from '@/lib/team/screen';
 import { clsx } from 'clsx';
 import {
@@ -89,6 +91,20 @@ export function TeamOverview({
           </>
         }
       />
+
+      {screen.empty ? null : (
+        <AreaKpiStrip
+          label="Cifras del equipo"
+          kpis={teamKpis({
+            people: screen.people.length,
+            attention: screen.attention.length,
+            recognitions: screen.recognitions.length,
+            unassigned: screen.unassigned
+              ? { count: screen.unassigned.count, overdue: screen.unassigned.overdue }
+              : null,
+          })}
+        />
+      )}
 
       {screen.empty ? (
         <EmptyTeam

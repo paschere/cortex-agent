@@ -1,7 +1,9 @@
 import type { HoyView } from '@/lib/hoy/view';
 import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { ActivityTable } from './ActivityTable';
 import { HoyHero } from './HoyHero';
+import { OpsRow } from './OpsRow';
 import { type DecideFn, TodoList } from './TodoList';
 
 /**
@@ -47,6 +49,8 @@ export function HoyDashboard({ view, decide }: { view: HoyView; decide: DecideFn
       {view.money && view.money.metrics.length > 0 && (
         <HoyHero metrics={view.money.metrics} kpis={view.money.kpis} today={view.today} />
       )}
+
+      {view.ops && view.ops.length > 0 && <OpsRow kpis={view.ops} />}
 
       <TodoList
         todos={view.todos}
@@ -118,6 +122,8 @@ export function HoyDashboard({ view, decide }: { view: HoyView; decide: DecideFn
           </table>
         </section>
       )}
+
+      {view.activity && view.activity.length > 0 && <ActivityTable rows={view.activity} />}
 
       {view.closing && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-5 text-sm text-ink-muted">

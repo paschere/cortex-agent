@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
 
   const { data: events } = await db
     .from('audit_events')
-    .select('tool_id, latency_ms, status, created_at')
+    .select('tool_id, latency_ms, status, created_at, decision')
     .eq('conversation_id', conversationId)
     .gte('created_at', startedAt)
     // The turn's own summary row, not a tool. Excluded so it cannot be matched
@@ -134,6 +134,9 @@ export async function GET(req: NextRequest) {
         toolId: e.tool_id as string,
         ms: (e.latency_ms as number | null) ?? null,
         status: e.status as string,
+        /** `confirmed` = lo aprobó una persona; `delegated` = lo hizo solo con permiso. */
+        decision: (e.decision as string | null) ?? null,
+        at: e.created_at as string,
       })),
     },
   });

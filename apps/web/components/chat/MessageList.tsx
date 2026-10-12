@@ -1,12 +1,14 @@
 'use client';
 
 import type { BrainSource } from '@/lib/brain-sources-shape';
+import type { TurnInvocation } from '@/lib/chat-turn';
 import { type ExercisedMandate, planNotices } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { WaitingNoticeData } from '@/lib/waiting-shape';
 import type { Message } from 'ai';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useChatArtifacts } from './ChatArtifacts';
 import { EmptyState } from './EmptyState';
 import { LiveStatus } from './LiveStatus';
 import { MessageBubble } from './MessageBubble';
@@ -366,6 +368,38 @@ export function MessageList({
       clearTimeout(timer);
     };
   }, [isLoading, conversationId, messages]);
+
+  /**
+   * El último turno, ofrecido al panel de la derecha («Fuentes» y «Actividad»).
+   *
+   * Se publica cuando el turno termina o cambia su forma (una llamada nueva, un
+   * resultado), no en cada token: la firma sólo mira los ids y estados.
+   */
+  const artifacts = useChatArtifacts();
+  const setTurn = artifacts?.setTurn;
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant') ?? null;
+  const turnSignature = `${lastAssistant?.id ?? ''}|${(lastAssistant?.toolInvocations ?? [])
+    .map((i) => `${i.toolCallId}:${i.state}`)
+    .join(
+      ',',
+    )}|${isLoading ? 'w' : ''}|${metrics ? metrics.totalMs : ''}|${freshSources?.length ?? initialBrainSources?.[lastAssistant?.id ?? '']?.length ?? 0}`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la firma resume lo que cambia.
+  useEffect(() => {
+    if (!setTurn) return;
+    if (!lastAssistant) {
+      setTurn(null);
+      return;
+    }
+    const isLastMessage = messages[messages.length - 1]?.id === lastAssistant.id;
+    setTurn({
+      invocations: (lastAssistant.toolInvocations ?? []) as TurnInvocation[],
+      brain:
+        (isLastMessage && freshSources ? freshSources : initialBrainSources?.[lastAssistant.id]) ??
+        [],
+      metrics: isLastMessage ? metrics : null,
+      working: isLoading && isLastMessage,
+    });
+  }, [turnSignature, setTurn]);
 
   /**
    * ¿Ya se ancló este hilo en su final? Un ref y no un estado: cambia dentro

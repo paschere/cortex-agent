@@ -1,4 +1,5 @@
 import { addDaysIso } from '@/components/charts/interactive';
+import { buildOps } from '@/lib/hoy/ops';
 import { buildHoyMetrics, narrative } from '@/lib/hoy/shape';
 import type { HoyView } from '@/lib/hoy/view';
 import type {
@@ -212,6 +213,8 @@ export function hoyFixture(opts: FixtureOptions = {}): HoyView {
           decide: { itemId: 'i1', contentHash: 'h1', approveLabel: 'Enviar' },
           href: '/approvals',
           hrefLabel: 'Editar',
+          ageLabel: 'espera hace 2 días',
+          risk: { label: 'Riesgo alto', tone: 'rose' as const },
         },
         {
           id: 'a2',
@@ -222,6 +225,8 @@ export function hoyFixture(opts: FixtureOptions = {}): HoyView {
           decide: { itemId: 'i2', contentHash: 'h2', approveLabel: 'Hacerlo' },
           href: '/pagar',
           hrefLabel: 'Ver de dónde sale',
+          ageLabel: 'espera hace 5 horas',
+          risk: { label: 'Riesgo alto', tone: 'rose' as const },
         },
         {
           id: 'a3',
@@ -232,6 +237,8 @@ export function hoyFixture(opts: FixtureOptions = {}): HoyView {
           decide: null,
           href: '/feed',
           hrefLabel: 'Abrir',
+          ageLabel: 'espera hace 9 horas',
+          risk: null,
         },
       ];
   const parties = [
@@ -281,6 +288,68 @@ export function hoyFixture(opts: FixtureOptions = {}): HoyView {
     due: opts.sinPlata
       ? null
       : { total: '$ 31.940.000', overdue: '$ 21.190.000', parties, href: '/finance#me-deben' },
+    ops: buildOps({
+      today: TODAY,
+      runs: Array.from({ length: 14 }, (_, i) => ({
+        day: addDaysIso(TODAY, -i),
+        done: i === 0 ? 4 : 2 + ((i * 3) % 5),
+        failed: i === 0 ? 1 : i % 6 === 0 ? 2 : 0,
+      })),
+      approvals: { count: opts.vacio ? 0 : 5, oldestDays: opts.vacio ? null : 3 },
+      commitments: { overdue: opts.vacio ? 0 : 2, oldestDays: opts.vacio ? null : 6 },
+    }),
+    activity: [
+      {
+        id: 'x1',
+        eventIds: ['x1'],
+        when: 'Hoy 08:05',
+        text: 'Aprobé la cotización de Agrícola del Sur',
+        on: 'Documento',
+        who: 'Solo, con permiso',
+        failed: false,
+        undoLabel: null,
+      },
+      {
+        id: 'x2',
+        eventIds: ['x2'],
+        when: 'Hoy 07:40',
+        text: 'Cruzé 3 pagos con sus facturas',
+        on: 'Plata',
+        who: 'Solo, con permiso',
+        failed: false,
+        undoLabel: null,
+      },
+      {
+        id: 'x3',
+        eventIds: ['x3'],
+        when: 'Ayer 17:12',
+        text: 'Envié un correo a Nexa Logística por FE-2198',
+        on: 'Correo',
+        who: 'Aprobado por ti',
+        failed: false,
+        undoLabel: null,
+      },
+      {
+        id: 'x4',
+        eventIds: ['x4'],
+        when: 'Ayer 16:50',
+        text: 'Anoté una fila en Prealertas',
+        on: 'Tabla',
+        who: 'Pedido por Ana',
+        failed: false,
+        undoLabel: 'Quitar la fila',
+      },
+      {
+        id: 'x5',
+        eventIds: ['x5'],
+        when: 'Ayer 09:30',
+        text: 'No pude completar esto: leí la hoja «Prealertas»',
+        on: 'Tabla',
+        who: 'Solo, con permiso',
+        failed: true,
+        undoLabel: null,
+      },
+    ],
     closing: {
       text: 'Hoy hice cuatro cosas solo: cruzar tres pagos y avisar de una factura.',
       href: '/actividad',

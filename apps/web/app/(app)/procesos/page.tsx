@@ -1,8 +1,13 @@
 import { ProcessesPanel } from '@/app/(app)/dashboard/_components/ProcessesPanel';
+import { AreaKpiStrip } from '@/components/nav/AreaKpiStrip';
 import { ProcessCatalog } from '@/components/self-service/ProcessCatalog';
 import { PageHeader } from '@/components/ui/page-header';
+import { operationsKpis } from '@/lib/area-kpis';
 import { modulesOffFor } from '@/lib/modules/server';
+import { countNavSignals } from '@/lib/nav-signals';
+import { readProcesses } from '@/lib/self-service/read';
 import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { Sparkles } from 'lucide-react';
 import { Suspense } from 'react';
 
@@ -21,6 +26,10 @@ export default async function ProcessesPage() {
   const user = await requireSession();
   // Los procesos de un módulo apagado (0186) no se ofrecen.
   const modulesOff = await modulesOffFor(user.organization.id);
+  const [items, counts] = await Promise.all([
+    readProcesses(getOrgScopedClient(user.organization.id), user.id).catch(() => null),
+    countNavSignals(user.organization.id, user.id),
+  ]);
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 pb-10">
       {/* La misma cabecera que el resto de pantallas: Procesos es una puerta
@@ -33,8 +42,22 @@ export default async function ProcessesPage() {
         />
       </div>
 
+      {items ? (
+        <AreaKpiStrip
+          label="Cifras de Operación"
+          kpis={operationsKpis({
+            processes: items.map((i) => ({ state: i.state })),
+            blockedErrands: counts.errands,
+          })}
+        />
+      ) : null}
+
       <Suspense fallback={null}>
-        <ProcessesPanel organizationId={user.organization.id} userId={user.id} />
+        <ProcessesPanel
+          organizationId={user.organization.id}
+          userId={user.id}
+          items={items ?? undefined}
+        />
       </Suspense>
 
       <section aria-labelledby="listos" className="flex flex-col gap-4">

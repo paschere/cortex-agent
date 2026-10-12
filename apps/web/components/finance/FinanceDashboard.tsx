@@ -28,11 +28,14 @@ export function FinanceDashboard({
   links,
   actions,
   documents,
+  kpis,
 }: {
   data: Data;
   links: FinanceLinks;
   actions: FinanceActions;
   documents?: ReactNode;
+  /** La franja de cifras de arriba del área (la arma la página con lo que ya leyó). */
+  kpis?: ReactNode;
 }) {
   const params = {
     includeEstimatedSales: data.includeEstimatedSales,
@@ -50,6 +53,8 @@ export function FinanceDashboard({
           <AskFinance chat={links.chat} context={financeContext(data)} />
         </div>
       </div>
+
+      {data.empty ? null : kpis}
 
       {data.empty ? (
         <EmptyFinance links={links} />

@@ -62,6 +62,9 @@ export interface ItemView {
   /** Para un correo: a quién y con qué asunto. */
   preview: { to: string; subject: string; body: string } | null;
   decidedAt: string | null;
+  /** Cuándo se dejó esperando y con qué herramienta (para la edad y el riesgo en «Hoy»). */
+  createdAt?: string | null;
+  toolId?: string | null;
 }
 
 export interface PlanView {
@@ -280,6 +283,8 @@ export function viewOfRow(
     actionLabel: actionLabelOf(r.tool_id, toolLabel),
     preview: previewOf(r.tool_id, r.tool_input),
     decidedAt: r.decided_at,
+    createdAt: r.created_at,
+    toolId: r.tool_id,
   };
 }
 

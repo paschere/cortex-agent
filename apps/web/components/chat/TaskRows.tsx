@@ -32,7 +32,13 @@ export interface TurnMetrics {
   totalMs: number;
   toolCalls: number;
   toolMs: number;
-  calls: Array<{ toolId: string; ms: number | null; status: string }>;
+  calls: Array<{
+    toolId: string;
+    ms: number | null;
+    status: string;
+    decision?: string | null;
+    at?: string | null;
+  }>;
 }
 
 /**

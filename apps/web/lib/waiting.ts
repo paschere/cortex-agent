@@ -97,6 +97,10 @@ export interface WaitingQueueView {
   /** De `countNavSignals`. Es el número que dibuja la barra lateral. */
   count: number;
   items: WaitingItem[];
+  /** Días que lleva esperando lo más antiguo de la cola (en vencimientos: lo más pasado). */
+  oldestDays?: number | null;
+  /** Cuántos vencimientos ya se pasaron (sólo la cola de compromisos). */
+  overdue?: number;
   /** Con qué frase se explica que no se pudo leer. `null` si se leyó bien. */
   error: string | null;
 }
@@ -197,6 +201,8 @@ export async function readWaitingIndex(
       href: QUEUE_HREF[queue],
       count: counts[queue],
       items: previews[queue].items,
+      oldestDays: previews[queue].oldestDays,
+      overdue: previews[queue].overdue,
       error: previews[queue].error,
     })),
   };

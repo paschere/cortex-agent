@@ -14,9 +14,10 @@ import { Menu } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
-import { ArtifactPanel, ChatArtifactsProvider } from './ChatArtifacts';
+import { ArtifactPanel, ChatArtifactsProvider, ComputerPill } from './ChatArtifacts';
 import { ChatComposeProvider } from './ChatCompose';
 import { ChatErrorCard } from './ChatErrorCard';
+import { ConversationHeader } from './ConversationHeader';
 import { FollowUps } from './FollowUps';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
@@ -204,6 +205,18 @@ export function ChatRoot({
    */
   const [frames, setFrames] = useState<Record<string, ScreenFrame>>({});
 
+  const [renamed, setRenamed] = useState<string | null>(null);
+  const headerTitle =
+    renamed ??
+    title ??
+    (!conversationId && waiting?.lead
+      ? clipTitle(waiting.lead.title, 48)
+      : !conversationId && waiting && waiting.total > 0
+        ? waiting.sentence
+        : conversationId
+          ? 'Conversación'
+          : 'Conversación nueva');
+
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
 
   const { messages, append, reload, isLoading, setMessages, stop } = useChat({
@@ -389,6 +402,40 @@ export function ChatRoot({
   const lastAnswer =
     lastMessage?.role === 'assistant' && lastMessage.content.trim() ? lastMessage : null;
 
+  /**
+   * TECLADO DEL CHAT.
+   *   «/»   lleva el cursor al compositor (⌘K es la paleta global del shell).
+   *   ⌘↵   aprueba la tarjeta de confirmación con el foco o, sin foco en un
+   *         campo, la primera que espera.
+   * Esc cierra el panel: lo atiende ArtifactPanel.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const typing = Boolean(t?.closest('input, textarea, select, [contenteditable="true"]'));
+      if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const box = document.querySelector<HTMLTextAreaElement>('textarea[data-composer]');
+        if (box) {
+          e.preventDefault();
+          box.focus();
+        }
+        return;
+      }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !typing) {
+        const card = t?.closest('[data-approval-card]');
+        const button =
+          card?.querySelector<HTMLButtonElement>('[data-approve]:not(:disabled)') ??
+          document.querySelector<HTMLButtonElement>('[data-approve]:not(:disabled)');
+        if (button) {
+          e.preventDefault();
+          button.click();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const handleRegenerate = useCallback(() => void reload(), [reload]);
   const handleAgentChange = useCallback(
     (slug: string) => {
@@ -415,23 +462,19 @@ export function ChatRoot({
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <div className="flex min-w-0 items-center gap-2.5">
-                <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
-                <div className="min-w-0 truncate font-display text-lg tracking-[-0.01em] text-ink">
-                  {title ??
-                    (!conversationId && waiting?.lead
-                      ? clipTitle(waiting.lead.title, 48)
-                      : !conversationId && waiting && waiting.total > 0
-                        ? waiting.sentence
-                        : conversationId
-                          ? 'Conversación'
-                          : 'Conversación nueva')}
-                </div>
-              </div>
+              <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
+              <ConversationHeader
+                conversationId={conversationId}
+                title={headerTitle}
+                onTitle={setRenamed}
+                scope={scope}
+                messages={messages}
+              />
+              <ComputerPill />
               {messages.length > 0 && waiting && (waiting.total > 0 || waiting.lead) ? (
                 <WaitingNotice waiting={waiting} onAsk={handleSend} />
               ) : null}
-              <div className="ml-auto flex min-w-0 shrink items-center gap-3">
+              <div className="flex min-w-0 shrink items-center gap-3">
                 <Link href="/management" className="chat-header-link">
                   Agenda
                 </Link>

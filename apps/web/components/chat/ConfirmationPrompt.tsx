@@ -1,10 +1,14 @@
 'use client';
 
 import { confirmationFollowUp, confirmationReason } from '@/lib/confirmation-notes';
+import { riskOfTool } from '@/lib/risk';
+import { chipClass } from '@/lib/status-chip';
+import { essentialArgs } from '@/lib/tool-args';
 import { confirmationSummary } from '@/lib/tool-labels';
 import { clsx } from 'clsx';
-import { Check, ChevronDown, Loader2, ShieldAlert, X } from 'lucide-react';
+import { Check, ChevronDown, Loader2, MessageSquareX, Pencil, ShieldAlert, X } from 'lucide-react';
 import { useState } from 'react';
+import { useChatCompose } from './ChatCompose';
 import { resolveView } from './results/registry';
 
 interface ConfirmationPromptProps {
@@ -38,6 +42,9 @@ export function ConfirmationPrompt({
   const [errorMessage, setErrorMessage] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [executed, setExecuted] = useState<unknown>(undefined);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const compose = useChatCompose();
 
   async function handleAllow() {
     setStatus('running');
@@ -83,6 +90,16 @@ export function ConfirmationPrompt({
     input && typeof input === 'object' ? (input as Record<string, unknown>) : {},
   );
 
+  const risk = riskOfTool(toolId);
+  const changes = essentialArgs(input);
+  const say = onSay ?? compose?.ask;
+
+  function handleReject() {
+    const why = reason.trim();
+    setStatus('cancelled');
+    if (why && say) say(`No apruebes esto: ${summary}. Motivo: ${why}`);
+  }
+
   // ---- Resolved states ----
   if (status === 'allowed') {
     // Si lo ejecutado tiene vista propia (la pestaña viva del navegador, un
@@ -121,7 +138,10 @@ export function ConfirmationPrompt({
   // Amber, never red: this is an action waiting on a decision, not one that
   // was refused, and red is reserved for what cannot be undone.
   return (
-    <div className="overflow-hidden rounded-card border border-amber/25 bg-surface shadow-card">
+    <div
+      data-approval-card
+      className="overflow-hidden rounded-card border border-amber/25 bg-surface shadow-card"
+    >
       <div className="flex items-start gap-3 bg-amber-soft px-4 py-3.5">
         <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-amber/15 text-amber">
           <ShieldAlert className="h-[18px] w-[18px]" />
@@ -129,7 +149,10 @@ export function ConfirmationPrompt({
         <div className="min-w-0 flex-1">
           {/* Names the state of the whole block, not a value beneath it, so
               it is deliberately not `.field-label`. */}
-          <div className="text-micro font-semibold text-amber">Confirmación requerida</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-micro font-semibold text-amber">Confirmación requerida</span>
+            <span className={chipClass(risk.tone)}>{risk.label}</span>
+          </div>
           <p className="mt-1 text-sm font-semibold text-ink [overflow-wrap:anywhere]">{summary}</p>
           <p className="mt-1 text-xs leading-snug text-ink-muted [overflow-wrap:anywhere]">
             {confirmationReason(toolId)}
@@ -138,6 +161,14 @@ export function ConfirmationPrompt({
       </div>
 
       <div className="px-4 py-3">
+        {changes && (
+          <div className="mb-2 rounded-sm bg-surface-2 px-3 py-2">
+            <div className="text-micro font-semibold text-ink-faint">Qué va a cambiar</div>
+            <p className="mt-0.5 text-xs leading-snug text-ink [overflow-wrap:anywhere]">
+              {changes}
+            </p>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setShowDetails((v) => !v)}
@@ -169,6 +200,7 @@ export function ConfirmationPrompt({
           <button
             type="button"
             onClick={handleAllow}
+            data-approve
             disabled={status === 'running' || waiting}
             title={waiting ? 'Espera a que Cortex termine este paso' : undefined}
             className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
@@ -196,7 +228,55 @@ export function ConfirmationPrompt({
           >
             Descartar
           </button>
+          {compose && (
+            <button
+              type="button"
+              disabled={status === 'running'}
+              onClick={() => compose.compose(`Antes de ejecutar «${summary}», cámbialo así: `)}
+              className="inline-flex items-center gap-1.5 rounded-pill px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60 motion-reduce:transition-none"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar
+            </button>
+          )}
+          {say && (
+            <button
+              type="button"
+              disabled={status === 'running'}
+              onClick={() => setRejecting((v) => !v)}
+              aria-expanded={rejecting}
+              className="inline-flex items-center gap-1.5 rounded-pill px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60 motion-reduce:transition-none"
+            >
+              <MessageSquareX className="h-3.5 w-3.5" aria-hidden /> Rechazar con motivo
+            </button>
+          )}
+          <kbd className="ml-auto hidden rounded-sm border border-border px-1.5 py-0.5 font-mono text-micro text-ink-faint sm:inline">
+            ⌘↵ aprobar
+          </kbd>
         </div>
+        {rejecting && (
+          <div className="mt-2 flex flex-col gap-2">
+            <label
+              className="text-micro font-semibold text-ink-faint"
+              htmlFor={`why-${toolCallId ?? toolId}`}
+            >
+              ¿Por qué no? Cortex lo tendrá en cuenta.
+            </label>
+            <textarea
+              id={`why-${toolCallId ?? toolId}`}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              className="w-full resize-none rounded-sm border border-border bg-surface px-2.5 py-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            />
+            <button
+              type="button"
+              onClick={handleReject}
+              className="self-start rounded-pill bg-rose px-4 py-1.5 text-sm font-semibold text-white"
+            >
+              Rechazar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

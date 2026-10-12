@@ -2,6 +2,8 @@
 
 import { FinanceDashboard } from '@/components/finance/FinanceDashboard';
 import type { FinanceActions } from '@/components/finance/types';
+import { AreaKpiStrip } from '@/components/nav/AreaKpiStrip';
+import { financeKpis } from '@/lib/area-kpis';
 import type { FinanceDashboard as Data } from '@/lib/finance/dashboard-shape';
 import { useEffect } from 'react';
 
@@ -51,6 +53,23 @@ export function FinanzasFixture({ dark, data, self }: { dark: boolean; data: Dat
     <div className="cortex-workspace min-h-screen bg-canvas">
       <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-7">
         <FinanceDashboard
+          kpis={
+            <AreaKpiStrip
+              label="Cifras de Plata"
+              kpis={financeKpis({
+                cash: data.cash.ok ? data.cash.data : null,
+                weeklyClosing: data.forecast.ok
+                  ? data.forecast.data.base.weeks.map((w) => ({
+                      start: w.start,
+                      closing: w.closing,
+                    }))
+                  : null,
+                due: data.due.ok ? data.due.data : null,
+                pnl: data.pnl.ok ? data.pnl.data : null,
+                nextTax: { title: 'IVA bimestral', dueLabel: '15 de octubre' },
+              })}
+            />
+          }
           data={data}
           actions={ACTIONS}
           links={{

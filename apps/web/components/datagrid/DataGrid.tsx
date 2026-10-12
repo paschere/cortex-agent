@@ -7,8 +7,18 @@ import type {
   GridRow,
   GridView,
 } from '@/components/datagrid/types';
+import { groupTotals } from '@/lib/datagrid/aggregate';
 import { csvFileName, toCsv } from '@/lib/datagrid/csv';
-import { bogotaDay, formatNumber } from '@/lib/datagrid/format';
+import { bogotaDay, formatMoney, formatNumber } from '@/lib/datagrid/format';
+import {
+  type GridDensity,
+  applyPrefs,
+  gridKeyFor,
+  parsePrefs,
+  prefsFromView,
+  prefsStorageKey,
+  serializePrefs,
+} from '@/lib/datagrid/prefs';
 import { VIEW_PARAM, decodeView, encodeView, searchWithView } from '@/lib/datagrid/url';
 import {
   type GridGroup,
@@ -31,6 +41,8 @@ import {
   LoaderCircle,
   Pencil,
   Plus,
+  Rows3,
+  Rows4,
   Search,
   SlidersHorizontal,
   Sparkles,
@@ -38,8 +50,9 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { RecordActivity } from './RecordActivity';
 import { TableLayout } from './TableLayout';
 import {
   AddColumnDialog,
@@ -61,6 +74,7 @@ import {
   boardColumns,
   dateColumns,
 } from './panels';
+import { useGridUser } from './prefs-context';
 import {
   PopoverButton,
   Toasts,
@@ -177,10 +191,20 @@ export function DataGrid(props: DataGridProps) {
   );
 
   // --- La vista -----------------------------------------------------------------
-  const baseView = useMemo(
-    () => normalizeView(columns, props.initialView),
-    [columns, props.initialView],
-  );
+  // Preferencias de cada persona (columnas, orden, anchos, densidad), en su navegador.
+  const userKey = useGridUser();
+  const pathname = usePathname();
+  const storeKey =
+    props.prefsKey === false
+      ? null
+      : prefsStorageKey(userKey, props.prefsKey ?? gridKeyFor(pathname ?? '/', noun.many));
+  const [prefs, setPrefs] = useState<ReturnType<typeof parsePrefs> | null>(null);
+  const [density, setDensity] = useState<GridDensity>('comfortable');
+  const lastSaved = useRef('');
+  const baseView = useMemo(() => {
+    const base = normalizeView(columns, props.initialView);
+    return prefs ? applyPrefs(base, columns, prefs) : base;
+  }, [columns, props.initialView, prefs]);
   const [view, setViewState] = useState<GridView>(() =>
     normalizeView(props.columns, props.initialView),
   );
@@ -194,26 +218,35 @@ export function DataGrid(props: DataGridProps) {
   // (el servidor no ve la URL completa y el primer dibujo tiene que coincidir).
   // biome-ignore lint/correctness/useExhaustiveDependencies: solo al montar.
   useEffect(() => {
-    if (urlParam) {
-      const fromUrl = decodeView(
-        new URLSearchParams(window.location.search).get(urlParam),
-        columns,
-      );
-      if (fromUrl) setViewState(fromUrl);
-    }
+    let stored: ReturnType<typeof parsePrefs> = {};
+    try {
+      if (storeKey) stored = parsePrefs(window.localStorage.getItem(storeKey));
+    } catch {}
+    setPrefs(stored);
+    const applied = applyPrefs(normalizeView(columns, props.initialView), columns, stored);
+    lastSaved.current = serializePrefs(prefsFromView(applied, stored.density ?? 'comfortable'));
+    if (stored.density) setDensity(stored.density);
+    const fromUrl = urlParam
+      ? decodeView(new URLSearchParams(window.location.search).get(urlParam), columns)
+      : null;
+    if (fromUrl) setViewState(fromUrl);
+    else if (Object.keys(stored).length) setViewState((v) => applyPrefs(v, columns, stored));
     mounted.current = true;
   }, []);
 
+  // Recordar columnas, orden, anchos y densidad (no con una vista guardada abierta: esa manda).
   useEffect(() => {
-    if (!mounted.current || !urlParam) return;
+    if (!mounted.current || !storeKey || view.id) return;
+    const text = serializePrefs(prefsFromView(view, density));
+    if (text === lastSaved.current) return;
     const t = window.setTimeout(() => {
-      const differs = shapeKey(view) !== shapeKey(baseView) || Boolean(view.id);
-      const next = `${window.location.pathname}${searchWithView(window.location.search, differs ? view : null, urlParam)}${window.location.hash}`;
-      if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`)
-        window.history.replaceState(window.history.state, '', next);
-    }, 250);
+      lastSaved.current = text;
+      try {
+        window.localStorage.setItem(storeKey, text);
+      } catch {}
+    }, 300);
     return () => window.clearTimeout(t);
-  }, [view, baseView, urlParam]);
+  }, [view, density, storeKey]);
 
   // --- Filas (con cambios por adelantado) --------------------------------------
   const [rows, setRows] = useState<GridRow[]>(propRows);
@@ -356,6 +389,10 @@ export function DataGrid(props: DataGridProps) {
     });
   }, [rows]);
   const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
+  const selectedTotals = useMemo(
+    () => groupTotals(selectedRows, visibleColumns(columns, view)).slice(0, 3),
+    [selectedRows, columns, view],
+  );
 
   // --- Escribir ------------------------------------------------------------------------
   const patchRows = useCallback(
@@ -502,6 +539,23 @@ export function DataGrid(props: DataGridProps) {
     },
     [router],
   );
+
+  const previewRow = useCallback((row: GridRow) => setDetailId(row.id), []);
+
+  // «/» salta al buscador, como en Linear o Attio (no si ya se está escribiendo).
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (!searchRef.current || searchRef.current.offsetParent === null) return;
+      e.preventDefault();
+      searchRef.current.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // --- Vistas guardadas ------------------------------------------------------------------
   const activeSaved = saved.find((v) => v.id && v.id === view.id);
@@ -652,6 +706,11 @@ export function DataGrid(props: DataGridProps) {
       : `${formatNumber(shown, 0)} de ${formatNumber(total, 0)} ${noun.many}`;
   const [sheetOpen, setSheetOpen] = useState(false);
   const title = titleColumn(columns);
+  const activityRef = (row: GridRow) => {
+    if (typeof props.recordActivity === 'function') return props.recordActivity(row);
+    const name = title ? String(row.values[title.key] ?? '').trim() : '';
+    return { ids: [row.id], terms: name ? [name] : [] };
+  };
 
   // --- Dibujar -------------------------------------------------------------------------
   const clearAll = () => {
@@ -664,10 +723,11 @@ export function DataGrid(props: DataGridProps) {
     <label className={clsx('relative flex items-center', mobile ? 'min-w-0 flex-1' : 'w-64')}>
       <Search className="pointer-events-none absolute left-3 h-4 w-4 text-ink-faint" aria-hidden />
       <input
+        ref={searchRef}
         type="search"
         value={searchText}
         onChange={(e) => setSearchText(e.target.value)}
-        placeholder={`Buscar ${noun.many}…`}
+        placeholder={`Buscar ${noun.many}…  (/)`}
         aria-label={`Buscar ${noun.many}`}
         className="h-9 w-full rounded-pill border border-border bg-surface pl-9 pr-3 text-xs text-ink placeholder:text-ink-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       />
@@ -831,6 +891,8 @@ export function DataGrid(props: DataGridProps) {
         canEdit={canEdit}
         onCellEdit={(id, key, value) => void editCell(id, key, value)}
         onOpenRow={openRow}
+        onPreviewRow={previewRow}
+        density={density}
         onAddColumn={onAddColumn ? () => setAddColumnOpen(true) : null}
         onCreateInGroup={onCreate && view.groupBy ? createInGroup : null}
         onEndReached={serverMode ? loadMore : undefined}
@@ -930,6 +992,24 @@ export function DataGrid(props: DataGridProps) {
           {loading ? (
             <LoaderCircle className="h-4 w-4 animate-spin text-ink-faint" aria-label="Cargando" />
           ) : null}
+          {!mobile && layout === 'table' ? (
+            <button
+              type="button"
+              onClick={() => setDensity(density === 'compact' ? 'comfortable' : 'compact')}
+              aria-pressed={density === 'compact'}
+              className={toolbarButton}
+              title={density === 'compact' ? 'Filas cómodas' : 'Filas compactas'}
+            >
+              {density === 'compact' ? (
+                <Rows4 className="h-4 w-4" aria-hidden />
+              ) : (
+                <Rows3 className="h-4 w-4" aria-hidden />
+              )}
+              <span className="hidden xl:inline">
+                {density === 'compact' ? 'Compacto' : 'Cómodo'}
+              </span>
+            </button>
+          ) : null}
           {!mobile ? (
             <button
               type="button"
@@ -1026,6 +1106,18 @@ export function DataGrid(props: DataGridProps) {
             {words.o}
             {selected.size === 1 ? '' : 's'}
           </span>
+          {selectedTotals.map((t) => (
+            <span
+              key={t.column.key}
+              className="tabular rounded-pill bg-surface px-2.5 py-1 text-micro font-semibold text-ink"
+              title={`Suma de ${t.column.label} en lo marcado`}
+            >
+              {t.column.label}:{' '}
+              {t.column.type === 'money'
+                ? formatMoney(t.value, t.column.currency)
+                : formatNumber(t.value)}
+            </span>
+          ))}
           {onEdit || onBulkEdit ? (
             <BulkButton
               columns={columns}
@@ -1094,6 +1186,11 @@ export function DataGrid(props: DataGridProps) {
         onDelete={onDelete && detailRow ? () => setConfirmIds([detailRow.id]) : null}
         custom={detailRow && props.renderRowDetail ? props.renderRowDetail(detailRow) : undefined}
         extra={detailRow && props.renderRowExtra ? props.renderRowExtra(detailRow) : undefined}
+        activity={
+          detailRow && props.recordActivity !== false ? (
+            <RecordActivity recordRef={activityRef(detailRow)} />
+          ) : undefined
+        }
       />
       {onAddColumn ? (
         <AddColumnDialog

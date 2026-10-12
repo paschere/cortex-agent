@@ -104,7 +104,7 @@ function setSheetOpen(next: boolean) {
   emit();
 }
 
-function usePinned(): [ReadonlySet<string>, (id: string) => void] {
+export function usePinned(): [ReadonlySet<string>, (id: string) => void] {
   const raw = useSyncExternalStore(
     subscribe,
     () => readLS(KEY_PINNED) ?? '',

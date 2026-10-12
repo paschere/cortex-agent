@@ -6,7 +6,7 @@ import { asBoolean, formatValue, isNumericType } from '@/lib/datagrid/format';
 import type { GridGroup } from '@/lib/datagrid/view';
 import { LIVE_FLASH_CLASS } from '@/lib/live-signal';
 import { clsx } from 'clsx';
-import { ArrowDown, ArrowUp, ChevronRight, PanelRightOpen, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, Eye, PanelRightOpen, Plus } from 'lucide-react';
 import Link from 'next/link';
 import {
   type KeyboardEvent,
@@ -19,6 +19,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { ColumnFilterButton } from './ColumnFilter';
 import { CellEditor, CellValue, OptionChip } from './cells';
 import { Popover, TYPE_ICON, useStable } from './primitives';
 
@@ -37,6 +38,9 @@ import { Popover, TYPE_ICON, useStable } from './primitives';
  */
 
 export const ROW_H = 40;
+const ROW_H_COMFORT = ROW_H;
+/** Altura de la fila en modo compacto (densidad alta, como Linear). */
+export const ROW_H_COMPACT = 32;
 const HEADER_H = 40;
 const FOOTER_H = 40;
 const CHECK_W = 44;
@@ -82,6 +86,8 @@ export interface TableLayoutProps {
   canEdit: boolean;
   onCellEdit: (rowId: string, key: string, value: unknown) => void;
   onOpenRow: ((row: GridRow) => void) | null;
+  /** Panel lateral con el detalle, aun si la fila tiene página propia (p, Mayús+Enter). */
+  onPreviewRow?: ((row: GridRow) => void) | null;
   onAddColumn: (() => void) | null;
   onCreateInGroup: ((group: GridGroup) => void) | null;
   onEndReached?: () => void;
@@ -92,11 +98,15 @@ export interface TableLayoutProps {
   onCopy?: (text: string) => void;
   /** Filas que acaban de llegar o cambiar: titilan unos segundos. */
   flashIds?: ReadonlySet<string>;
+  /** «Cómodo» (40 px) o «compacto» (32 px). */
+  density?: 'comfortable' | 'compact';
+  /** j/k mueven la fila activa; Esc suelta; Enter abre. La pantalla puede escuchar «/». */
 }
 
 export function TableLayout(props: TableLayoutProps) {
   const { gridId, columns, rows, groups, view, setView, selected, canEdit, height } = props;
 
+  const ROW_H = props.density === 'compact' ? ROW_H_COMPACT : ROW_H_COMFORT;
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewport, setViewport] = useState(600);
@@ -199,7 +209,7 @@ export function TableLayout(props: TableLayoutProps) {
         else if (right > el.scrollLeft + el.clientWidth) el.scrollLeft = right - el.clientWidth;
       }
     },
-    [rowPos, offsets, widths],
+    [rowPos, offsets, widths, ROW_H],
   );
 
   const isEditable = useCallback(
@@ -291,7 +301,8 @@ export function TableLayout(props: TableLayoutProps) {
           if (col?.type === 'boolean') {
             if (row) props.onCellEdit(row.id, col.key, !(asBoolean(row.values[col.key]) ?? false));
           } else setEditing({ row: a.row, col: a.col });
-        } else if (a.col === 0 && row && props.onOpenRow) props.onOpenRow(row);
+        } else if (row && e.shiftKey && props.onPreviewRow) props.onPreviewRow(row);
+        else if (row && props.onOpenRow) props.onOpenRow(row);
         return;
       case ' ':
         e.preventDefault();
@@ -311,6 +322,21 @@ export function TableLayout(props: TableLayoutProps) {
         if (selected.size) props.onToggleAll();
         return;
       default:
+        // j/k/x al estilo Linear: solo donde la celda no se edita (ahí escribir empieza a editar).
+        if (
+          !mod &&
+          !e.altKey &&
+          (e.key === 'j' || e.key === 'k' || e.key === 'x' || e.key === 'p') &&
+          !isEditable(row, col)
+        ) {
+          e.preventDefault();
+          if (e.key === 'p') {
+            if (row) props.onPreviewRow?.(row);
+          } else if (e.key === 'x') {
+            if (row) props.onToggleRow(row.id, a.row, e.shiftKey);
+          } else move(a.row + (e.key === 'j' ? 1 : -1), a.col);
+          return;
+        }
         if (mod && (e.key === 'c' || e.key === 'C') && row && col) {
           props.onCopy?.(formatValue(col, row.values[col.key]));
           return;
@@ -492,6 +518,12 @@ export function TableLayout(props: TableLayoutProps) {
                       </span>
                     ) : null}
                   </button>
+                  <ColumnFilterButton
+                    column={col}
+                    view={view}
+                    setView={setView}
+                    people={props.people}
+                  />
                   {/* biome-ignore lint/a11y/useSemanticElements: separador que se arrastra o se mueve con flechas. */}
                   <div
                     role="separator"
@@ -556,6 +588,7 @@ export function TableLayout(props: TableLayoutProps) {
                   group={item.group}
                   collapsed={item.collapsed}
                   top={pos * ROW_H}
+                  rowH={ROW_H}
                   columns={columns}
                   widths={widths}
                   view={view}
@@ -581,6 +614,7 @@ export function TableLayout(props: TableLayoutProps) {
                 row={item.row}
                 index={rowIndex}
                 top={pos * ROW_H}
+                rowH={ROW_H}
                 columns={columns}
                 widths={widths}
                 selected={selected.has(item.row.id)}
@@ -592,6 +626,7 @@ export function TableLayout(props: TableLayoutProps) {
                 onCellClick={stableClick}
                 onToggle={props.onToggleRow}
                 onOpen={props.onOpenRow}
+                onPreview={props.onPreviewRow}
                 onCommit={stableCommit}
                 onCancel={stableCancel}
               />
@@ -623,6 +658,7 @@ const Row = memo(function Row({
   row,
   index,
   top,
+  rowH,
   columns,
   widths,
   selected,
@@ -634,6 +670,7 @@ const Row = memo(function Row({
   onCellClick,
   onToggle,
   onOpen,
+  onPreview,
   onCommit,
   onCancel,
 }: {
@@ -641,6 +678,7 @@ const Row = memo(function Row({
   row: GridRow;
   index: number;
   top: number;
+  rowH: number;
   columns: GridColumn[];
   widths: number[];
   selected: boolean;
@@ -652,6 +690,7 @@ const Row = memo(function Row({
   onCellClick: (row: number, col: number, e: React.MouseEvent) => void;
   onToggle: (id: string, index: number, range: boolean) => void;
   onOpen: ((row: GridRow) => void) | null;
+  onPreview?: ((row: GridRow) => void) | null;
   onCommit: (row: number, col: number, value: unknown, move?: 'next' | 'prev' | 'down') => void;
   onCancel: () => void;
 }) {
@@ -670,7 +709,7 @@ const Row = memo(function Row({
       aria-rowindex={index + 2}
       aria-selected={selected}
       className="group/r absolute left-0 flex border-b border-border"
-      style={{ top, height: ROW_H, width: '100%' }}
+      style={{ top, height: rowH, width: '100%' }}
     >
       {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: celda de la grilla ARIA; el foco lo lleva la grilla (aria-activedescendant). */}
       <div
@@ -729,15 +768,32 @@ const Row = memo(function Row({
             </span>
             {i === 0 && onOpen ? (
               row.href ? (
-                <Link
-                  href={row.href}
-                  tabIndex={-1}
-                  onClick={(e) => e.stopPropagation()}
-                  className="ml-1 grid h-6 w-6 shrink-0 place-items-center rounded-pill text-ink-faint opacity-0 hover:bg-surface hover:text-primary group-hover/r:opacity-100"
-                  aria-label="Abrir"
-                >
-                  <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
-                </Link>
+                <>
+                  {onPreview ? (
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPreview(row);
+                      }}
+                      className="ml-1 grid h-6 w-6 shrink-0 place-items-center rounded-pill text-ink-faint opacity-0 hover:bg-surface hover:text-primary group-hover/r:opacity-100"
+                      aria-label="Vista previa"
+                      title="Vista previa (p)"
+                    >
+                      <Eye className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  ) : null}
+                  <Link
+                    href={row.href}
+                    tabIndex={-1}
+                    onClick={(e) => e.stopPropagation()}
+                    className="ml-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-pill text-ink-faint opacity-0 hover:bg-surface hover:text-primary group-hover/r:opacity-100"
+                    aria-label="Abrir"
+                  >
+                    <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
+                  </Link>
+                </>
               ) : (
                 <button
                   type="button"
@@ -782,6 +838,7 @@ function GroupHeader({
   group,
   collapsed,
   top,
+  rowH,
   columns,
   widths,
   view,
@@ -792,6 +849,7 @@ function GroupHeader({
   group: GridGroup;
   collapsed: boolean;
   top: number;
+  rowH: number;
   columns: GridColumn[];
   widths: number[];
   view: GridView;
@@ -806,7 +864,7 @@ function GroupHeader({
     <div
       role="row"
       className="absolute left-0 flex border-b border-border bg-canvas"
-      style={{ top, height: ROW_H, width: '100%' }}
+      style={{ top, height: rowH, width: '100%' }}
     >
       {/* biome-ignore lint/a11y/useSemanticElements lint/a11y/useFocusableInteractive: celda de la grilla ARIA; el foco lo lleva la grilla (aria-activedescendant). */}
       <div

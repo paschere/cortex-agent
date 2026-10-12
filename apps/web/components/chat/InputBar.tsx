@@ -682,6 +682,7 @@ export function InputBar({
       >
         <textarea
           ref={textareaRef}
+          data-composer
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}

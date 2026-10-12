@@ -1,9 +1,11 @@
+import { AreaKpiStrip } from '@/components/nav/AreaKpiStrip';
+import { dataKpis } from '@/lib/area-kpis';
 import { readPeopleNames, readTableSyncs } from '@/lib/datagrid/tracker-read';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { workspaceHref } from '@/lib/workspace-context';
-import { listTrackers, readWorkSettings } from '@cortex/agent-tools';
+import { bogotaToday, listTrackers, readWorkSettings } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { TrackersIndex } from './TrackersIndex';
 import { createTracker, importTrackerRows, readSpreadsheetFile } from './actions';
@@ -101,6 +103,20 @@ export default async function TrackersPage() {
 
   return (
     <TrackersIndex
+      kpis={
+        <AreaKpiStrip
+          label="Cifras de Datos"
+          hrefOf={(h) => workspaceHref(user.organization.id, h)}
+          kpis={dataKpis({
+            today: bogotaToday(),
+            tables: cards.map((c) => ({
+              rowCount: c.rowCount,
+              updatedAt: c.updatedAt,
+              syncs: c.syncs.length,
+            })),
+          })}
+        />
+      }
       cards={cards}
       actions={actions}
       schemaActions={schemaActions}

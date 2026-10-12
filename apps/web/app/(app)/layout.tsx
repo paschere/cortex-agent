@@ -1,10 +1,12 @@
 import { BillingBanner } from '@/components/billing/BillingBanner';
+import { GridUserProvider } from '@/components/datagrid/prefs-context';
 import { ConsentGate } from '@/components/legal/ConsentGate';
 import { AppShell } from '@/components/nav/AppShell';
 import { AreaTabs } from '@/components/nav/AreaTabs';
 import { MobileTabBar } from '@/components/nav/MobileTabBar';
 import { Topbar } from '@/components/nav/Topbar';
 import { modulesOffFor } from '@/lib/modules/server';
+import { readAreaTabCounts } from '@/lib/nav-signals';
 import { requireSession } from '@/lib/session';
 import type { ReactNode } from 'react';
 
@@ -21,7 +23,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // middleware is what turns a signed-out visit into a redirect.
   const user = await requireSession();
   // La misma lectura que hace el shell, servida por `cache` (lib/modules/server).
-  const modulesOff = await modulesOffFor(user.organization.id);
+  const [modulesOff, tabCounts] = await Promise.all([
+    modulesOffFor(user.organization.id),
+    readAreaTabCounts(user.organization.id, user.id),
+  ]);
   return (
     <AppShell user={user}>
       <div className="cortex-sheet flex min-w-0 flex-1 flex-col">
@@ -34,8 +39,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               modulesOff={modulesOff}
               organizationId={user.organization.id}
               userKey={user.email}
+              counts={tabCounts}
             />
-            {children}
+            <GridUserProvider userKey={user.email}>{children}</GridUserProvider>
           </div>
         </main>
         <MobileTabBar organizationId={user.organization.id} modulesOff={modulesOff} />

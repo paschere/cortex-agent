@@ -1,7 +1,8 @@
 import 'server-only';
 import { bogotaToday, deriveState } from '@cortex/agent-tools';
+import { cache } from 'react';
 import { buildLaunchPlan, launchProgress } from './management/launch-plan';
-import type { Shortcut } from './nav-shape';
+import { type Shortcut, tabCountsFrom } from './nav-shape';
 import { getOrgScopedClient } from './supabase/service';
 
 /**
@@ -55,7 +56,10 @@ const NONE: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 }
  */
 const DEADLINE_HORIZON_DAYS = 120;
 
-export async function countNavSignals(organizationId: string, userId: string): Promise<NavCounts> {
+// `cache`: el shell y las pestañas de área piden lo mismo en la misma petición; se lee una vez.
+export const countNavSignals = cache(countNavSignalsOnce);
+
+async function countNavSignalsOnce(organizationId: string, userId: string): Promise<NavCounts> {
   try {
     const db = getOrgScopedClient(organizationId);
     const nowIso = new Date().toISOString();
@@ -318,5 +322,44 @@ async function countOrNull(
     return res.error ? null : (res.count ?? null);
   } catch {
     return null;
+  }
+}
+
+/**
+ * LOS NÚMEROS DE LAS PESTAÑAS DE ÁREA. Mismo pacto que arriba: es chrome, cada
+ * lectura se traga su fallo. Cartera cuenta como `readLedger` (por cobrar, sin
+ * duplicados ni excluidas, esperada y con vencimiento ya pasado); Por pagar, las
+ * facturas que esperan revisión o aprobación (`AWAITING_APPROVAL`).
+ */
+export async function readAreaTabCounts(
+  organizationId: string,
+  userId: string,
+): Promise<Record<string, number>> {
+  try {
+    const db = getOrgScopedClient(organizationId);
+    const today = bogotaToday();
+    const [queues, overdueReceivables, payablesToReview] = await Promise.all([
+      countNavSignals(organizationId, userId),
+      count(() =>
+        db
+          .from('ledger_movements')
+          .select('id', { count: 'exact', head: true })
+          .eq('direction', 'in')
+          .eq('kind', 'receivable')
+          .eq('status', 'expected')
+          .is('duplicate_of', null)
+          .is('excluded_reason', null)
+          .lt('due_date', today),
+      ),
+      count(() =>
+        db
+          .from('payable_invoices')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['recibida', 'por_aprobar']),
+      ),
+    ]);
+    return tabCountsFrom({ ...queues, overdueReceivables, payablesToReview });
+  } catch {
+    return {};
   }
 }

@@ -1,5 +1,6 @@
 import type { MetricModel } from '@/components/charts/metric-types';
 import type { StatusTone } from '@/lib/status-chip';
+import type { ActivityRowView, OpsKpi } from './ops';
 import type { KpiView, NarrativePart } from './shape';
 
 /**
@@ -20,6 +21,10 @@ export interface TodoView {
   /** «Editar» o «Abrir»: a dónde ir a verlo completo. */
   href: string | null;
   hrefLabel: string;
+  /** «espera hace 2 días». */
+  ageLabel?: string | null;
+  /** Qué tan delicado es decidirlo. */
+  risk?: { label: string; tone: StatusTone } | null;
 }
 
 export interface DoneView {
@@ -61,6 +66,10 @@ export interface HoyView {
     parties: DuePartyView[];
     href: string;
   };
+  /** La fila «Operación»; vacía si no hay de dónde sacarla. */
+  ops?: OpsKpi[];
+  /** Lo que hizo Cortex, para la tabla de abajo. */
+  activity?: ActivityRowView[];
   closing: { text: string; href: string; hrefLabel: string } | null;
   /** El piloto automático, si el módulo está prendido. */
   panelHref: string | null;

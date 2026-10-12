@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { decisionLabel, eventMentions, recordActivity } from './record';
 import { applyActivityFilter, applyActivityScope, canSeeEvent, parseActivityFilter } from './scope';
 import { describeEvent, isTimelineEvent, pastFirstPerson } from './sentences';
 import { buildTimeline, groupByDay, weeklyCounts, weeklySentence } from './timeline';
@@ -271,5 +272,50 @@ describe('permisos de /actividad', () => {
     ]);
     expect(parseActivityFilter('auto')).toBe('auto');
     expect(parseActivityFilter('raro')).toBe('all');
+  });
+});
+
+describe('actividad de un registro', () => {
+  const INV = '9d0c1f52-7a3e-4b8e-8f0d-0a1b2c3d4e5f';
+  const approve = ev({
+    id: 'a1',
+    user_id: 'u2',
+    tool_id: 'payables.approve',
+    decision: 'confirmed',
+    detail: { input: { ids: [INV], note: 'Factura F-1023' }, result: {} },
+  });
+  const other = ev({
+    id: 'a2',
+    tool_id: 'payables.approve',
+    detail: { input: { ids: ['11111111-2222-3333-4444-555555555555'] }, result: {} },
+  });
+  const auto = ev({
+    id: 'a3',
+    tool_id: 'payables.schedule',
+    decision: 'delegated',
+    mandate_id: 'm1',
+    detail: { input: { id: INV }, result: {} },
+  });
+
+  it('encuentra por id exacto y por nombre largo, no por prefijos', () => {
+    expect(eventMentions(approve, { ids: [INV] })).toBe(true);
+    expect(eventMentions(other, { ids: [INV] })).toBe(false);
+    expect(eventMentions(approve, { ids: [], terms: ['f-1023'] })).toBe(true);
+    expect(eventMentions(approve, { ids: [], terms: ['f-1'] })).toBe(false);
+    expect(eventMentions(ev({}), { ids: [INV] })).toBe(false);
+  });
+
+  it('dice quién y cómo se decidió', () => {
+    const lines = recordActivity([approve, other, auto], { ids: [INV] }, { u2: 'Ana' });
+    expect(lines.map((l) => l.id)).toEqual(['a1', 'a3']);
+    expect(lines[0]?.who).toBe('Ana');
+    expect(lines[0]?.decision).toBe('Aprobado por una persona');
+    expect(lines[1]?.who).toBe('Cortex');
+    expect(lines[1]?.decision).toBe('Delegado por un permiso');
+    expect(decisionLabel(other)).toBe('Permitido');
+  });
+
+  it('respeta el tope', () => {
+    expect(recordActivity([approve, auto], { ids: [INV] }, {}, 1)).toHaveLength(1);
   });
 });

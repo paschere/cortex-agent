@@ -276,6 +276,7 @@ export function RowDrawer({
   onDelete,
   custom,
   extra,
+  activity,
 }: {
   row: GridRow | null;
   columns: GridColumn[];
@@ -287,6 +288,8 @@ export function RowDrawer({
   onDelete: (() => void) | null;
   custom?: ReactNode;
   extra?: ReactNode;
+  /** «Actividad» del registro: quién hizo o aprobó qué. */
+  activity?: ReactNode;
 }) {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   return (
@@ -376,6 +379,7 @@ export function RowDrawer({
           ))
         : null}
       {row && extra ? <div className="mt-4 border-t border-border pt-4">{extra}</div> : null}
+      {row && activity ? <div className="mt-4 border-t border-border pt-4">{activity}</div> : null}
     </Sheet>
   );
 }

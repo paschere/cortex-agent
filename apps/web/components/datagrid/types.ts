@@ -185,4 +185,16 @@ export interface DataGridProps {
   renderRowExtra?: (row: GridRow) => React.ReactNode;
   /** (opcional) Filas que acaban de llegar o cambiar: titilan (LIVE_FLASH_CLASS). */
   flashIds?: ReadonlySet<string>;
+  /**
+   * (opcional) Llave para recordar columnas, orden, anchos y densidad de cada
+   * persona en su navegador. Por defecto sale de la ruta y del nombre de lo que
+   * lista; `false` apaga el recuerdo (p. ej. dos tablas iguales en una pantalla).
+   */
+  prefsKey?: string | false;
+  /**
+   * (opcional) Cómo buscar en la auditoría lo que le pasó a una fila para la
+   * sección «Actividad» del panel. Por defecto: su id y el valor de la primera
+   * columna. `false` quita la sección.
+   */
+  recordActivity?: false | ((row: GridRow) => { ids: string[]; terms?: string[] });
 }

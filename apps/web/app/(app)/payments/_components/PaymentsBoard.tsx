@@ -1,21 +1,18 @@
 'use client';
 
+import DataGrid from '@/components/datagrid/DataGrid';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Panel, PanelHead } from '@/components/ui/panel';
-import {
-  CURRENCIES,
-  PAYMENT_STATE_LABEL,
-  PAYMENT_STATE_NOTE,
-  PAYMENT_STATE_TONE,
-} from '@/lib/payments-shape';
+import { CURRENCIES } from '@/lib/payments-shape';
 import { chipClass } from '@/lib/status-chip';
 import clsx from 'clsx';
 import { Banknote, Loader2, Quote, Scale } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { recordPayment, resolveDispute } from '../actions';
 import { plural, shortDate } from './format';
+import { ledgerColumns, ledgerRow } from './ledger-grid';
 import type {
   ActionResult,
   ClientOption,
@@ -46,10 +43,8 @@ export function PaymentsBoard({ receivables, disputes, payments, clients, today 
     <div className="space-y-6">
       <Receivables view={receivables} />
       <Disputes disputes={disputes} />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <RecordForm clients={clients} today={today} />
-        <Ledger payments={payments} />
-      </div>
+      <RecordForm clients={clients} today={today} />
+      <Ledger payments={payments} />
     </div>
   );
 }
@@ -485,6 +480,8 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
 // ---------------------------------------------------------------------------
 
 function Ledger({ payments }: { payments: PaymentView[] }) {
+  const columns = useMemo(() => ledgerColumns(payments), [payments]);
+  const rows = useMemo(() => payments.map(ledgerRow), [payments]);
   return (
     <Panel className="overflow-hidden">
       <PanelHead title="Lo que hay registrado" />
@@ -500,28 +497,18 @@ function Ledger({ payments }: { payments: PaymentView[] }) {
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-border">
-          {payments.map((p) => (
-            <li key={p.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3">
-              <span className="stat-num text-base font-semibold text-ink">
-                {p.kind === 'reversal' ? `− ${p.amount}` : p.amount}
-              </span>
-              <span className="text-sm text-ink-muted">
-                {p.client ?? 'sin cliente'} · {p.paidOn}
-              </span>
-              {p.invoiceNumber ? (
-                <span className="text-xs text-ink-faint tabular">{p.invoiceNumber}</span>
-              ) : null}
-              <span
-                className={clsx(chipClass(PAYMENT_STATE_TONE[p.state]), 'ml-auto')}
-                title={PAYMENT_STATE_NOTE[p.state]}
-              >
-                {PAYMENT_STATE_LABEL[p.state]}
-              </span>
-              <span className="text-micro text-ink-faint">{plural(p.sourceCount, 'fuente')}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="p-4">
+          <DataGrid
+            columns={columns}
+            rows={rows}
+            noun={{ one: 'pago', many: 'pagos' }}
+            exportName="pagos-registrados"
+            initialView={{ sort: [{ key: 'paidOn', dir: 'desc' }] }}
+            askCortexContext="Mira los pagos registrados de la cartera."
+            urlParam="pagos"
+            height="max(360px, calc(100dvh - 360px))"
+          />
+        </div>
       )}
     </Panel>
   );

@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { chatWith, timeAgo } from './[slug]/TrackerScreen';
 import type { SchemaActions } from './schema-types';
 import type { SyncBadge, TrackerCardData, TrackersIndexActions } from './types';
@@ -76,6 +76,7 @@ export function TrackersIndex({
   links,
   hrefForTable,
   schemaActions,
+  kpis,
 }: {
   cards: TrackerCardData[];
   actions: TrackersIndexActions;
@@ -85,6 +86,8 @@ export function TrackersIndex({
   hrefForTable?: (slug: string) => string;
   /** Crear con campos y reglas (o desde una hoja conectada); sin él, el botón no aparece. */
   schemaActions?: SchemaActions;
+  /** La franja de cifras de arriba del área Datos. */
+  kpis?: ReactNode;
 }) {
   const pageRouter = useRouter();
   const [schemaOpen, setSchemaOpen] = useState(false);
@@ -170,6 +173,8 @@ export function TrackersIndex({
           ) : null
         }
       />
+
+      {cards.length > 0 ? kpis : null}
 
       {cards.length > 6 ? (
         <label className="relative mb-5 flex max-w-sm items-center">

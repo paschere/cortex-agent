@@ -1,6 +1,7 @@
 import type { GridColumn, GridRow } from '@/components/datagrid/types';
 import { describe, expect, it } from 'vitest';
 import { aggregate, aggregateOf, formatAggregate, groupTotals } from './aggregate';
+import { columnFilterOf, quickFilterFor, quickInputOf, replaceColumnFilter } from './column-filter';
 import { csvFileName, csvValue, detectSeparator, parseCsv, toCsv } from './csv';
 import {
   dayKey,
@@ -13,6 +14,15 @@ import {
   parseInput,
   parseNumber,
 } from './format';
+import {
+  applyPrefs,
+  gridKeyFor,
+  parsePrefs,
+  prefsFromView,
+  prefsStorageKey,
+  samePrefs,
+  serializePrefs,
+} from './prefs';
 import {
   UPDATED_KEY,
   fieldKeyFrom,
@@ -519,5 +529,124 @@ describe('trackers', () => {
     const into = planImport(['PLACA', 'Otra'], [['XYZ', '1']], fields);
     expect(into.fields.map((f) => f.key)).toEqual(['placa']);
     expect(into.notes[0]).toContain('Otra');
+  });
+});
+
+describe('preferencias por persona', () => {
+  const cols: GridColumn[] = [
+    { key: 'name', label: 'Nombre', type: 'text', pinned: true },
+    { key: 'amount', label: 'Monto', type: 'money' },
+    { key: 'due', label: 'Vence', type: 'date' },
+  ];
+  const baseView = normalizeView(cols);
+
+  it('la llave es estable y distingue persona y tabla', () => {
+    expect(prefsStorageKey(' Ana@X.com ', 'pagar#facturas')).toBe(
+      'cortex.grid.v1:ana@x.com:pagar#facturas',
+    );
+    expect(prefsStorageKey('', 'a')).toContain(':anon:');
+    expect(gridKeyFor('/inventario/123456/x', 'Piezas')).toBe('inventario/x#piezas');
+    expect(gridKeyFor('/', 'Filas')).toBe('inicio#filas');
+  });
+
+  it('lee con tolerancia y descarta basura', () => {
+    expect(parsePrefs(null)).toEqual({});
+    expect(parsePrefs('{no json')).toEqual({});
+    expect(parsePrefs('[1]')).toEqual({});
+    expect(
+      parsePrefs('{"hidden":["a",3],"density":"compact","widths":{"a":10,"b":200},"x":1}'),
+    ).toEqual({ hidden: ['a'], density: 'compact', widths: { b: 200 } });
+    expect(parsePrefs('{"density":"enorme"}')).toEqual({});
+  });
+
+  it('ida y vuelta', () => {
+    const p = prefsFromView(
+      { hidden: ['due'], order: ['amount', 'name'], widths: { amount: 220 } },
+      'compact',
+    );
+    expect(parsePrefs(serializePrefs(p))).toEqual(p);
+  });
+
+  it('aplica sólo lo que existe y nunca oculta la columna fija', () => {
+    const v = applyPrefs(baseView, cols, {
+      hidden: ['name', 'due', 'borrada'],
+      order: ['due', 'borrada', 'amount'],
+      widths: { amount: 300, borrada: 99 },
+    });
+    expect(v.hidden).toEqual(['due']);
+    expect(v.order).toEqual(['due', 'amount']);
+    expect(v.widths).toEqual({ amount: 300 });
+    expect(visibleColumns(cols, v).map((c) => c.key)).toEqual(['name', 'amount']);
+    expect(v.filters).toEqual(baseView.filters);
+  });
+
+  it('samePrefs compara por contenido', () => {
+    expect(samePrefs({ density: 'compact' }, { density: 'compact' })).toBe(true);
+    expect(samePrefs({ density: 'compact' }, { density: 'comfortable' })).toBe(false);
+  });
+});
+
+describe('filtro rápido de columna', () => {
+  const opt: GridColumn = {
+    key: 'st',
+    label: 'Estado',
+    type: 'status',
+    options: [{ value: 'a' }, { value: 'b' }],
+  };
+  const money: GridColumn = { key: 'm', label: 'Monto', type: 'money' };
+  const txt: GridColumn = { key: 't', label: 'Nombre', type: 'text' };
+  const bool: GridColumn = { key: 'b', label: 'Activo', type: 'boolean' };
+
+  it('arma el filtro que cada tipo entiende', () => {
+    expect(quickFilterFor(opt, { list: ['a'] })).toEqual({ key: 'st', op: 'in', value: ['a'] });
+    expect(quickFilterFor(opt, { list: [] })).toBeNull();
+    expect(quickFilterFor(money, { min: '100' })).toEqual({
+      key: 'm',
+      op: 'between',
+      value: ['100', ''],
+    });
+    expect(quickFilterFor(money, {})).toBeNull();
+    expect(quickFilterFor(txt, { text: '  ana ' })).toEqual({
+      key: 't',
+      op: 'contains',
+      value: 'ana',
+    });
+    expect(quickFilterFor(txt, { text: ' ' })).toBeNull();
+    expect(quickFilterFor(bool, { bool: false })).toEqual({ key: 'b', op: 'eq', value: false });
+    expect(quickFilterFor(bool, { bool: null })).toBeNull();
+  });
+
+  it('reemplaza sólo el de su columna', () => {
+    const base = [
+      { key: 'st', op: 'in' as const, value: ['a'] },
+      { key: 't', op: 'contains' as const, value: 'x' },
+    ];
+    const next = replaceColumnFilter(base, 'st', { key: 'st', op: 'in', value: ['b'] });
+    expect(next[0]?.value).toEqual(['b']);
+    expect(next).toHaveLength(2);
+    expect(replaceColumnFilter(base, 'st', null)).toEqual([base[1]]);
+    expect(
+      replaceColumnFilter(base, 'm', { key: 'm', op: 'between', value: ['1', ''] }),
+    ).toHaveLength(3);
+    expect(columnFilterOf(base, 't')?.value).toBe('x');
+  });
+
+  it('lee el filtro de vuelta para el formulario', () => {
+    expect(quickInputOf(money, { key: 'm', op: 'between', value: ['5', '9'] })).toEqual({
+      min: '5',
+      max: '9',
+    });
+    expect(quickInputOf(opt, { key: 'st', op: 'in', value: ['a'] })).toEqual({ list: ['a'] });
+    expect(quickInputOf(txt, undefined)).toEqual({});
+  });
+
+  it('el filtro rápido filtra de verdad', () => {
+    const rows: GridRow[] = [
+      { id: '1', values: { m: 50 } },
+      { id: '2', values: { m: 500 } },
+    ];
+    const f = quickFilterFor(money, { min: '100' });
+    const res = applyView(rows, [money], normalizeView([money], { filters: f ? [f] : [] }));
+    expect(res.rows.map((r) => r.id)).toEqual(['2']);
   });
 });

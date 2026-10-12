@@ -26,6 +26,7 @@ import {
   pruneFavorites,
   routeVisible,
   sidebarDestinations,
+  tabCountsFrom,
   toggleFavorite,
   waitingHref,
 } from './nav-shape';
@@ -572,5 +573,30 @@ describe('favoritos', () => {
   it('una llave por persona y por empresa', () => {
     expect(favoritesKey('a@x.co', 'org1')).not.toBe(favoritesKey('a@x.co', 'org2'));
     expect(favoritesKey('a@x.co', 'org1')).not.toBe(favoritesKey('b@x.co', 'org1'));
+  });
+});
+
+describe('los números de las pestañas', () => {
+  it('sólo deja lo que es mayor que cero y lo pone en su ruta', () => {
+    expect(
+      tabCountsFrom({ approvals: 3, actions: 0, overdueReceivables: 12.4, payablesToReview: 5 }),
+    ).toEqual({ '/approvals': 3, '/payments': 12, '/pagar': 5 });
+    expect(tabCountsFrom({})).toEqual({});
+    expect(tabCountsFrom({ errands: Number.NaN, commitments: -2 })).toEqual({});
+  });
+
+  it('cada ruta con número es una pestaña que existe', () => {
+    const hrefs = new Set(AREAS.flatMap((a) => [...a.tabs, ...(a.also ?? [])].map((t) => t.href)));
+    for (const href of Object.keys(
+      tabCountsFrom({
+        approvals: 1,
+        actions: 1,
+        commitments: 1,
+        errands: 1,
+        overdueReceivables: 1,
+        payablesToReview: 1,
+      }),
+    ))
+      expect(hrefs.has(href)).toBe(true);
   });
 });

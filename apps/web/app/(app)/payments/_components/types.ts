@@ -69,8 +69,12 @@ export interface PaymentView {
   kind: PaymentKind;
   kindLabel: string;
   amount: string;
+  /** El importe como número (negativo en una reversión): lo que ordena y suma la tabla. */
+  amountValue: number;
   currency: string;
   paidOn: string;
+  /** La fecha de calendario AAAA-MM-DD, para ordenar y filtrar. */
+  paidOnIso: string;
   client: string | null;
   invoiceNumber: string | null;
   state: PaymentState;

@@ -1,9 +1,13 @@
 import 'server-only';
 
+import { fetchUserNames } from '@/app/api/admin/_lib/audit-filters';
+import { loadActivity, loadUndoneIds } from '@/lib/activity/load';
+import { buildTimeline } from '@/lib/activity/timeline';
 import { timeLabel, viewOfRow } from '@/lib/autopilot/screen';
 import { buildCash, buildDue, formatDay, maskPayroll } from '@/lib/finance/dashboard-shape';
 import { fullMoney } from '@/lib/finance/dashboard-shape';
 import { companyModules } from '@/lib/modules/server';
+import { ageDays, riskOfPilotItem, riskOfTool, waitingAge } from '@/lib/risk';
 import { qualifiedToolLabel } from '@/lib/tool-taxonomy';
 import { readWaitingIndex } from '@/lib/waiting';
 import {
@@ -23,6 +27,7 @@ import { listAccounts, loadLedger } from '@cortex/agent-tools/src/ledger/store';
 import type { ForecastResult, LedgerMovement } from '@cortex/agent-tools/src/ledger/types';
 import { withPayablesOverlay } from '@cortex/agent-tools/src/payables/overlay';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { activityRows, buildOps } from './ops';
 import { buildHoyMetrics, greetingFor, narrative } from './shape';
 import type { DoneView, DuePartyView, HoyView, TodoView } from './view';
 
@@ -86,6 +91,14 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
       decide,
       href: v.approvalsHref ?? v.href,
       hrefLabel: v.preview ? 'Editar' : 'Ver de dónde sale',
+      ageLabel: waitingAge(v.createdAt),
+      risk: v.toolId
+        ? riskOfTool(v.toolId)
+        : riskOfPilotItem({
+            area: v.area,
+            hasAmount: Boolean(v.amountLabel),
+            hasPreview: Boolean(v.preview),
+          }),
     });
   }
   let queueExtra = 0;
@@ -101,6 +114,8 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
           decide: null,
           href: q.href,
           hrefLabel: 'Abrir',
+          ageLabel: it.when ? `espera: ${it.when}` : null,
+          risk: null,
         });
       else queueExtra += 1;
     }
@@ -168,6 +183,33 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
         }
     : null;
 
+  const approvalsQueue = waiting?.queues.find((q) => q.queue === 'approvals');
+  const commitmentsQueue = waiting?.queues.find((q) => q.queue === 'commitments');
+  const askAges = (pilot?.asks ?? [])
+    .map((a) => ageDays(a.createdAt))
+    .filter((n): n is number => n !== null);
+  const approvalAges = [approvalsQueue?.oldestDays ?? null, ...askAges].filter(
+    (n): n is number => n !== null,
+  );
+  const ops = buildOps({
+    today,
+    runs: pilot ? pilot.runs : null,
+    approvals: waiting
+      ? {
+          count: (waiting.counts.approvals ?? 0) + (pilot?.asks.length ?? 0),
+          oldestDays: approvalAges.length ? Math.max(...approvalAges) : null,
+        }
+      : null,
+    commitments:
+      waiting && commitmentsQueue
+        ? {
+            overdue: commitmentsQueue.overdue ?? 0,
+            oldestDays: commitmentsQueue.oldestDays ?? null,
+          }
+        : null,
+  });
+  const activity = (await safe(() => readActivityRows(db, input, canDecide === true))) ?? [];
+
   return {
     today,
     dateLabel: new Intl.DateTimeFormat('es-CO', {
@@ -185,10 +227,29 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
     todosMoreHref: autopilotOn ? '/piloto/panel' : null,
     canDecide: canDecide === true,
     done: pilot?.done ?? [],
+    ops,
+    activity,
     due: dueView,
     closing,
     panelHref: autopilotOn ? '/piloto/panel' : null,
   };
+}
+
+async function readActivityRows(db: SupabaseClient, input: ReadHoyInput, manager: boolean) {
+  const viewer = { id: input.userId, isManager: input.isAdmin || manager };
+  const page = await loadActivity(db, viewer, { filter: 'all', limit: 8 });
+  const undone = await loadUndoneIds(
+    db,
+    page.events.map((e) => e.id),
+  );
+  const lines = buildTimeline(page.events, { undoneIds: undone });
+  const names = viewer.isManager
+    ? await fetchUserNames(
+        db,
+        lines.map((l) => l.userId),
+      ).catch(() => ({}))
+    : {};
+  return activityRows(lines, { meId: input.userId, names });
 }
 
 function clamp(s: string, n: number): string {
@@ -263,6 +324,6 @@ async function readPilot(db: SupabaseClient, today: string) {
     moreAsks: Math.max(0, askViews.length - MAX_TODOS),
     done,
     summary: todayRun?.summary ?? null,
-    runs: runs.map((r) => ({ day: r.run_on, done: r.done_count })),
+    runs: runs.map((r) => ({ day: r.run_on, done: r.done_count, failed: r.failed_count })),
   };
 }

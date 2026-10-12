@@ -1,6 +1,6 @@
 'use client';
 
-import { areaTabsFor } from '@/lib/nav-shape';
+import { TAB_COUNT_TONE, areaTabsFor } from '@/lib/nav-shape';
 import { recordVisit } from '@/lib/nav-usage';
 import { workspaceHref } from '@/lib/workspace-context';
 import type { ModuleKey } from '@cortex/agent-tools';
@@ -35,6 +35,7 @@ export function AreaTabs({
   modulesOff,
   organizationId,
   userKey,
+  counts,
   pathOverride,
 }: {
   admin: boolean;
@@ -42,6 +43,8 @@ export function AreaTabs({
   organizationId?: string;
   /** Con qué llave se guardan los favoritos de esta persona. */
   userKey: string;
+  /** Cuántas cosas esperan en cada pestaña (por ruta); las que no están, sin número. */
+  counts?: Record<string, number>;
   /** Sólo para la página de pruebas. */
   pathOverride?: string;
 }) {
@@ -108,6 +111,7 @@ export function AreaTabs({
             className={tabClass(t.href === active)}
           >
             {t.label}
+            <TabCount n={counts?.[t.href]} tone={TAB_COUNT_TONE[t.href]} />
           </Link>
         ))}
       </div>
@@ -122,6 +126,7 @@ export function AreaTabs({
             className={tabClass(t.href === active)}
           >
             {t.label}
+            <TabCount n={counts?.[t.href]} tone={TAB_COUNT_TONE[t.href]} />
           </Link>
         ))}
         {overflow.length > 0 && (
@@ -150,6 +155,7 @@ export function AreaTabs({
                       className="flex h-9 cursor-pointer items-center rounded-[10px] px-2.5 text-[14px] text-ink-muted outline-none data-[highlighted]:bg-canvas data-[highlighted]:text-ink"
                     >
                       {t.label}
+                      <TabCount n={counts?.[t.href]} tone={TAB_COUNT_TONE[t.href]} />
                     </Link>
                   </DropdownMenu.Item>
                 ))}
@@ -176,5 +182,20 @@ export function AreaTabs({
         />
       </button>
     </nav>
+  );
+}
+
+function TabCount({ n, tone = 'amber' }: { n?: number; tone?: 'rose' | 'amber' }) {
+  if (!n) return null;
+  return (
+    <span
+      className={clsx(
+        'tabular inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-pill px-1.5 text-[11px] font-semibold leading-none',
+        tone === 'rose' ? 'bg-rose-soft text-rose' : 'bg-amber-soft text-amber',
+      )}
+    >
+      <span className="sr-only">: </span>
+      {n > 99 ? '99+' : n}
+    </span>
   );
 }

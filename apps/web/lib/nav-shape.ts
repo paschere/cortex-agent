@@ -854,6 +854,37 @@ export function areaTabsFor(
   return { area: found.area, tabs, active };
 }
 
+/** Cuántas cosas esperan en cada pestaña con señal barata. Sólo entran las que son > 0. */
+export interface TabCountsInput {
+  approvals?: number;
+  actions?: number;
+  commitments?: number;
+  errands?: number;
+  /** Facturas por cobrar ya vencidas (Cartera y pagos). */
+  overdueReceivables?: number;
+  /** Facturas de proveedor que esperan revisión o aprobación (Por pagar). */
+  payablesToReview?: number;
+}
+
+export function tabCountsFrom(input: TabCountsInput): Record<string, number> {
+  const pairs: Array<[string, number | undefined]> = [
+    ['/approvals', input.approvals],
+    ['/actions', input.actions],
+    ['/commitments', input.commitments],
+    ['/errands', input.errands],
+    ['/payments', input.overdueReceivables],
+    ['/pagar', input.payablesToReview],
+  ];
+  const out: Record<string, number> = {};
+  for (const [href, n] of pairs) if (n && n > 0 && Number.isFinite(n)) out[href] = Math.round(n);
+  return out;
+}
+
+/** La señal de una pestaña pide mirar ya (rosa: vencido) o es una cola (ámbar). */
+export const TAB_COUNT_TONE: Record<string, 'rose' | 'amber'> = {
+  '/payments': 'rose',
+};
+
 // ---------------------------------------------------------------------------
 // El menú de la cuenta
 // ---------------------------------------------------------------------------

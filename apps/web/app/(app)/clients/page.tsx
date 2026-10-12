@@ -1,7 +1,9 @@
 import { ClientsList } from '@/components/clients/ClientsList';
 import { ReviewQueue } from '@/components/clients/ReviewQueue';
 import type { GridView } from '@/components/datagrid/types';
+import { AreaKpiStrip } from '@/components/nav/AreaKpiStrip';
 import { PageHeader } from '@/components/ui/page-header';
+import { clientsKpis } from '@/lib/area-kpis';
 import {
   CLIENTS_ASK_CONTEXT,
   CLIENTS_VIEW_SCOPE,
@@ -84,6 +86,11 @@ export default async function ClientsPage({
         title="Clientes"
         subtitle="Cada empresa con la que trabajas y todo lo de ella: facturas, pagos, correos, reuniones, compromisos y trabajo del equipo."
         icon={<Building2 className="h-5 w-5" aria-hidden />}
+      />
+
+      <AreaKpiStrip
+        kpis={clientsKpis({ rows: list.rows, pending: list.pending, missing: list.missing })}
+        label="Cifras de Clientes"
       />
 
       <nav className="mb-5 flex gap-1 border-b border-border" aria-label="Secciones de clientes">

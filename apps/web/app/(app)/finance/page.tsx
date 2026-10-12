@@ -1,6 +1,8 @@
 import { FinanceDashboard } from '@/components/finance/FinanceDashboard';
 import { statusPill } from '@/components/finance/pieces';
 import type { FinanceLinks } from '@/components/finance/types';
+import { AreaKpiStrip } from '@/components/nav/AreaKpiStrip';
+import { financeKpis } from '@/lib/area-kpis';
 import { readFinanceDashboard } from '@/lib/finance/dashboard';
 import { readDashboardParams } from '@/lib/finance/dashboard-shape';
 import { readFinanceSources } from '@/lib/finance/sources';
@@ -111,8 +113,19 @@ export default async function FinancePage({
     accounting: href('/integrations#programas-contables'),
   };
 
+  const kpis = financeKpis({
+    cash: dashboard.cash.ok ? dashboard.cash.data : null,
+    weeklyClosing: dashboard.forecast.ok
+      ? dashboard.forecast.data.base.weeks.map((w) => ({ start: w.start, closing: w.closing }))
+      : null,
+    due: dashboard.due.ok ? dashboard.due.data : null,
+    pnl: dashboard.pnl.ok ? dashboard.pnl.data : null,
+    nextTax: nextTax ? { title: nextTax.title, dueLabel: spanishDay(nextTax.dueDate) } : null,
+  });
+
   return (
     <FinanceDashboard
+      kpis={<AreaKpiStrip kpis={kpis} hrefOf={href} label="Cifras de Plata" />}
       data={dashboard}
       links={links}
       actions={{

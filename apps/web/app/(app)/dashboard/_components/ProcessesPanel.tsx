@@ -32,11 +32,14 @@ const ICON = {
 export async function ProcessesPanel({
   organizationId,
   userId,
+  items: given,
 }: {
   organizationId: string;
   userId: string;
+  /** Si la página ya los leyó, se reusan en vez de leerlos otra vez. */
+  items?: Awaited<ReturnType<typeof readProcesses>>;
 }) {
-  const items = await readProcesses(getOrgScopedClient(organizationId), userId);
+  const items = given ?? (await readProcesses(getOrgScopedClient(organizationId), userId));
 
   return (
     <Panel className="mb-4 p-5">

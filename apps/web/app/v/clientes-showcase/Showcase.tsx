@@ -4,7 +4,9 @@ import { Client360 } from '@/components/clients/Client360';
 import { ClientsList } from '@/components/clients/ClientsList';
 import { ReviewQueue } from '@/components/clients/ReviewQueue';
 import type { GridColumn, GridRow, GridView } from '@/components/datagrid/types';
+import { AreaKpiStrip } from '@/components/nav/AreaKpiStrip';
 import { PageHeader } from '@/components/ui/page-header';
+import { clientsKpis } from '@/lib/area-kpis';
 import type {
   AccountingConflictView,
   ActionResult,
@@ -91,6 +93,17 @@ export function ClientesFixture({
           title="Clientes"
           subtitle="Cada empresa con la que trabajas y todo lo de ella: facturas, pagos, correos, reuniones, compromisos y trabajo del equipo."
           icon={<Building2 className="h-5 w-5" aria-hidden />}
+        />
+        <AreaKpiStrip
+          label="Cifras de Clientes"
+          kpis={clientsKpis({
+            rows: list.rows.map((r) => ({
+              invoiced12m: (r.values.facturado_12m as number | null) ?? null,
+              outstanding: (r.values.saldo as number | null) ?? null,
+              overdue: (r.values.vencido as number | null) ?? null,
+            })),
+            pending: list.pending,
+          })}
         />
         <nav className="mb-5 flex gap-1 border-b border-border" aria-label="Secciones de clientes">
           {[

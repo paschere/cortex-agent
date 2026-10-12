@@ -2,10 +2,11 @@
 
 import type { DoneView, TodoView } from '@/lib/hoy/view';
 import { chipClass } from '@/lib/status-chip';
+import { clsx } from 'clsx';
 import { Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 
 export type DecideFn = (input: {
   itemId: string;
@@ -35,9 +36,41 @@ export function TodoList({
   more: number;
   moreHref: string | null;
 }) {
+  // Teclado: j/k mueven la selección; a, e y x actúan sobre la seleccionada.
+  const [active, setActive] = useState<number | null>(null);
+  useEffect(() => {
+    if (todos.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+      if (e.key === 'j' || e.key === 'k') {
+        e.preventDefault();
+        setActive((cur) => {
+          if (cur === null) return e.key === 'j' ? 0 : todos.length - 1;
+          return Math.min(todos.length - 1, Math.max(0, cur + (e.key === 'j' ? 1 : -1)));
+        });
+      } else if (e.key === 'Escape') {
+        setActive(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [todos.length]);
+
   return (
     <section aria-label="Para ti, hoy" className="flex flex-col gap-1">
-      <h2 className="title-display mb-2 text-[1.75rem] leading-tight text-ink">Para ti, hoy</h2>
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <h2 className="title-display text-[1.75rem] leading-tight text-ink">Para ti, hoy</h2>
+        {todos.length > 0 && (
+          <p className="hidden items-center gap-2 text-xs text-ink-faint sm:flex" aria-hidden>
+            <Hint k="j / k" text="mover" />
+            {canDecide && <Hint k="a" text="aprobar" />}
+            <Hint k="e" text="editar" />
+            {canDecide && <Hint k="x" text="descartar" />}
+          </p>
+        )}
+      </div>
       {todos.length === 0 && done.length === 0 && (
         <p className="rounded-card border border-dashed border-border px-4 py-6 text-sm text-ink-muted">
           Nada te espera por ahora. Cuando haya algo que decidir, aparece aquí con todo listo.
@@ -45,7 +78,14 @@ export function TodoList({
       )}
       <ul className="flex flex-col">
         {todos.map((t, i) => (
-          <Todo key={t.id} t={t} first={i === 0} canDecide={canDecide} decide={decide} />
+          <Todo
+            key={t.id}
+            t={t}
+            first={i === 0}
+            active={active === i}
+            canDecide={canDecide}
+            decide={decide}
+          />
         ))}
         {done.map((d) => (
           <li
@@ -86,12 +126,24 @@ export function TodoList({
   );
 }
 
+function Hint({ k, text }: { k: string; text: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <kbd className="rounded-sm border border-border bg-surface px-1.5 py-px font-mono text-micro text-ink-muted">
+        {k}
+      </kbd>
+      {text}
+    </span>
+  );
+}
+
 function Todo({
   t,
   first,
+  active,
   canDecide,
   decide,
-}: { t: TodoView; first: boolean; canDecide: boolean; decide: DecideFn }) {
+}: { t: TodoView; first: boolean; active: boolean; canDecide: boolean; decide: DecideFn }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [which, setWhich] = useState<'approve' | 'dismiss' | null>(null);
@@ -111,6 +163,21 @@ function Todo({
   };
   const open = Boolean(t.preview);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `run` se rehace en cada render y sólo lee `t`.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || pending) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+      if (e.key === 'a' && t.decide && canDecide) run('approve');
+      else if (e.key === 'x' && t.decide && canDecide) run('dismiss');
+      else if (e.key === 'e' && t.href) router.push(t.href);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, pending, t, canDecide, router]);
+
   if (note?.ok)
     return (
       <li className="flex items-center gap-3.5 border-t border-border px-4 py-3 first:border-t-0">
@@ -126,11 +193,16 @@ function Todo({
 
   return (
     <li
-      className={
+      ref={(el) => {
+        if (active) el?.scrollIntoView({ block: 'nearest' });
+      }}
+      aria-current={active ? 'true' : undefined}
+      className={clsx(
         open
           ? 'rounded-card bg-surface-2/60 px-4 py-3.5 ring-1 ring-border'
-          : `px-4 py-3.5 ${first ? '' : 'border-t border-border'}`
-      }
+          : `px-4 py-3.5 ${first ? '' : 'border-t border-border'}`,
+        active && 'rounded-card bg-primary-soft/40 ring-2 ring-primary/50',
+      )}
     >
       <div className="flex items-start gap-3.5">
         <span
@@ -144,8 +216,12 @@ function Todo({
               {t.detail && (
                 <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-faint">{t.detail}</p>
               )}
+              {t.ageLabel && <p className="mt-0.5 text-xs text-ink-faint">{t.ageLabel}</p>}
             </div>
-            {t.badge && <span className={chipClass(t.badge.tone)}>{t.badge.label}</span>}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {t.risk && <span className={chipClass(t.risk.tone)}>{t.risk.label}</span>}
+              {t.badge && <span className={chipClass(t.badge.tone)}>{t.badge.label}</span>}
+            </div>
           </div>
 
           {t.preview && (

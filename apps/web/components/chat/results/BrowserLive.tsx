@@ -1,5 +1,6 @@
 'use client';
 
+import { type LiveFixture, hostOf } from '@/lib/browser-live-steps';
 import {
   ArrowLeft,
   ChevronDown,
@@ -8,14 +9,17 @@ import {
   Hand,
   KeyRound,
   Loader2,
+  Lock,
   Maximize2,
   Minimize2,
   MonitorSmartphone,
   RotateCw,
+  Square,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useChatArtifacts, useDesktop } from '../ChatArtifacts';
 import type { ResultViewProps } from './registry';
 
 /**
@@ -113,7 +117,7 @@ interface ControlView {
   title: string;
 }
 
-interface TabRef {
+export interface TabRef {
   sessionId: string;
   checkpointId?: string;
   ask?: string;
@@ -155,6 +159,18 @@ function LiveTab({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void }
   const { sessionId } = tab;
   const [active, setActive] = useState(false);
   const ticketRef = useRef(0);
+  const artifacts = useChatArtifacts();
+  const desktop = useDesktop();
+  // Con el panel «Navegador» abierto sobre esta pestaña, la pantalla vive ahí
+  // y el dock se calla; en el teléfono la entrada es la píldora «Ver navegador».
+  // Con el panel cerrado en escritorio (o sin panel), el dock sigue como siempre.
+  const inPanel = Boolean(
+    artifacts?.panelOpen &&
+      artifacts.tab === 'navegador' &&
+      artifacts.live?.sessionId === sessionId,
+  );
+  const inSheet = Boolean(artifacts && !desktop);
+  const showDock = active && !inPanel && !inSheet;
 
   // Reclamar al montar; ceder cuando otra tarjeta de la misma sesión reclame.
   useEffect(() => {
@@ -171,11 +187,24 @@ function LiveTab({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void }
     <>
       <div className="mt-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-ink-muted">
         <MonitorSmartphone className="mr-1.5 inline h-3.5 w-3.5" />
-        {active
-          ? 'La pestaña está en vivo abajo a la derecha.'
-          : 'Esta pestaña se muestra en su ventana fija, abajo a la derecha.'}
+        {inPanel
+          ? 'La pestaña está en vivo en el panel «Navegador».'
+          : inSheet
+            ? 'La pestaña está en vivo: toca «Ver navegador».'
+            : active
+              ? 'La pestaña está en vivo abajo a la derecha.'
+              : 'Esta pestaña se muestra en su ventana fija, abajo a la derecha.'}
+        {artifacts?.live?.sessionId === sessionId && !inPanel ? (
+          <button
+            type="button"
+            onClick={() => artifacts.openTab('navegador')}
+            className="ml-2 font-semibold text-primary-ink hover:underline"
+          >
+            Abrir en el panel
+          </button>
+        ) : null}
       </div>
-      {active ? <LiveDock tab={tab} onSay={onSay} /> : null}
+      {showDock ? <LiveDock tab={tab} onSay={onSay} /> : null}
     </>
   );
 }
@@ -190,15 +219,43 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
+/** Lo que el panel «Navegador» le pone a la misma pantalla del dock. */
+export interface LivePanelOptions {
+  /** La línea de estado bajo la pantalla («Cortex está escribiendo en el campo NIT…»). */
+  status?: string;
+  /** La pestaña se cerró por «Detener» (o murió). */
+  onStopped?: () => void;
+  /** Una pantalla fija de la maqueta de desarrollo: no abre sesión ni red. */
+  fixture?: LiveFixture;
+}
+
 function LiveDock({
   tab,
   onSay,
   inline = false,
   teaching = false,
-}: { tab: TabRef; onSay?: (text: string) => void; inline?: boolean; teaching?: boolean }) {
+  panelOptions,
+}: {
+  tab: TabRef;
+  onSay?: (text: string) => void;
+  inline?: boolean;
+  teaching?: boolean;
+  panelOptions?: LivePanelOptions;
+}) {
   const { sessionId } = tab;
-  const [hasFrame, setHasFrame] = useState(false);
-  const [control, setControl] = useState<ControlView | null>(null);
+  const fixture = panelOptions?.fixture;
+  const [hasFrame, setHasFrame] = useState(Boolean(fixture));
+  const [control, setControl] = useState<ControlView | null>(
+    fixture
+      ? {
+          driver: 'bot',
+          help: fixture.help ? { reason: fixture.help } : null,
+          secret: null,
+          url: fixture.url,
+          title: fixture.title,
+        }
+      : null,
+  );
   const [gone, setGone] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -246,11 +303,27 @@ function LiveDock({
 
   useEffect(() => () => releaseDock(sessionId), [sessionId]);
 
+  const onStopped = panelOptions?.onStopped;
   const markGone = useCallback(() => {
     goneRef.current = true;
     setGone(true);
     wsRef.current?.close();
-  }, []);
+    onStopped?.();
+  }, [onStopped]);
+
+  // «Detener»: cierra la sesión por el mismo camino que browser.close_page
+  // (el servicio de navegador), y la pantalla dice que ya se cerró.
+  const stop = useCallback(async () => {
+    setBusy(true);
+    try {
+      if (!fixture) {
+        await fetch(`/api/browser/live/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+      }
+      markGone();
+    } finally {
+      setBusy(false);
+    }
+  }, [sessionId, fixture, markGone]);
 
   const paintVersion = useRef(0);
   // Dibuja unos bytes de imagen en el canvas, fuera del ciclo de React.
@@ -282,6 +355,7 @@ function LiveDock({
   // El stream, y su caída limpia al respaldo de fotos.
   // -------------------------------------------------------------------------
   useEffect(() => {
+    if (fixture) return;
     let disposed = false;
     let ws: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout>;
@@ -359,7 +433,7 @@ function LiveDock({
       ws?.close();
       wsRef.current = null;
     };
-  }, [sessionId, paint]);
+  }, [sessionId, paint, fixture]);
 
   // -------------------------------------------------------------------------
   // El poleo. Con stream vivo, solo el estado del volante (barato). Sin él,
@@ -368,6 +442,7 @@ function LiveDock({
   // murió y se dice, no se disimula.
   // -------------------------------------------------------------------------
   useEffect(() => {
+    if (fixture) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -406,7 +481,7 @@ function LiveDock({
       disposed = true;
       if (timer) clearTimeout(timer);
     };
-  }, [sessionId, markGone, paint]);
+  }, [sessionId, markGone, paint, fixture]);
 
   // -------------------------------------------------------------------------
   // Conducir. Coordenadas del contenedor → viewport real; por el socket si
@@ -670,6 +745,10 @@ function LiveDock({
   const setDriver = useCallback(
     async (op: 'take' | 'release') => {
       if (teaching && op === 'release') return;
+      if (fixture) {
+        setControl((c) => (c ? { ...c, driver: op === 'take' ? 'human' : 'bot' } : c));
+        return;
+      }
       setBusy(true);
       try {
         const res = await fetch(`/api/browser/live/${encodeURIComponent(sessionId)}`, {
@@ -690,7 +769,7 @@ function LiveDock({
         setBusy(false);
       }
     },
-    [sessionId, onSay, teaching],
+    [sessionId, onSay, teaching, fixture],
   );
 
   const submitSecret = useCallback(async () => {
@@ -763,7 +842,9 @@ function LiveDock({
   // -------------------------------------------------------------------------
   // Pintar.
   // -------------------------------------------------------------------------
-  const { width, height } = viewportRef.current;
+  const { width, height } = fixture
+    ? { width: fixture.width ?? 1280, height: fixture.height ?? 800 }
+    : viewportRef.current;
   const host = (() => {
     try {
       return control?.url ? new URL(control.url).host : '';
@@ -803,17 +884,21 @@ function LiveDock({
       onWheel={onWheel}
       onPaste={onPaste}
     >
-      <canvas
-        ref={(node) => {
-          canvasRef.current = node;
-          // Repintar al montar: ver lastFrameRef.
-          if (node && lastFrameRef.current) {
-            void paint(lastFrameRef.current.bytes, lastFrameRef.current.mime);
-          }
-        }}
-        className={`h-full w-full object-contain ${hasFrame ? '' : 'hidden'}`}
-        aria-label={control?.title || 'La pestaña de Cortex'}
-      />
+      {fixture ? (
+        <img src={fixture.frame} alt={fixture.title} className="h-full w-full object-contain" />
+      ) : (
+        <canvas
+          ref={(node) => {
+            canvasRef.current = node;
+            // Repintar al montar: ver lastFrameRef.
+            if (node && lastFrameRef.current) {
+              void paint(lastFrameRef.current.bytes, lastFrameRef.current.mime);
+            }
+          }}
+          className={`h-full w-full object-contain ${hasFrame ? '' : 'hidden'}`}
+          aria-label={control?.title || 'La pestaña de Cortex'}
+        />
+      )}
       {!hasFrame ? (
         <div className="flex h-full w-full items-center justify-center text-xs text-white/60">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Abriendo la pantalla…
@@ -1217,6 +1302,105 @@ function LiveDock({
     );
   }
 
+  if (panelOptions) {
+    // El panel «Navegador» del chat: la misma pantalla y los mismos controles
+    // del dock, a lo ancho, con la barra de dirección y la línea de estado.
+    const statusText = gone
+      ? 'La pestaña se cerró.'
+      : driving
+        ? 'Tienes el control: tu mouse y tu teclado van a la página.'
+        : control?.secret
+          ? `Esperando tu dato: ${control.secret.label}`
+          : control?.help
+            ? `Esperando tu ayuda: ${control.help.reason}`
+            : (panelOptions.status ?? 'Cortex tiene la pestaña abierta.');
+    return (
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex items-center gap-1 rounded-pill border border-border bg-surface-2 py-1 pr-3 pl-1.5 text-xs text-ink-muted">
+          {navButtons}
+          <Lock className="ml-1 h-3.5 w-3.5 shrink-0 text-emerald" aria-hidden />
+          <span
+            className="min-w-0 flex-1 truncate font-medium text-ink"
+            title={control?.url || undefined}
+          >
+            {host || hostOf(control?.url ?? '') || 'Abriendo la pestaña…'}
+          </span>
+          {gone ? null : live ? (
+            <span className="flex shrink-0 items-center gap-1 text-emerald">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald" /> en vivo
+            </span>
+          ) : fixture ? (
+            <span className="shrink-0">vista de ejemplo</span>
+          ) : (
+            <span className="flex shrink-0 items-center gap-1">
+              <Eye className="h-3.5 w-3.5" /> foto/s
+            </span>
+          )}
+        </div>
+        {renderScreen(false)}
+        <output
+          className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${
+            needsPerson ? 'bg-amber-soft text-ink' : 'bg-surface-2 text-ink-muted'
+          }`}
+        >
+          {gone ? null : needsPerson ? (
+            <Hand className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : (
+            <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
+          )}
+          <span className="min-w-0 [overflow-wrap:anywhere]">{statusText}</span>
+        </output>
+        {secretBox}
+        {checkpointBox}
+        {resumed ? <p className="text-sm text-ink-muted">{resumed}</p> : null}
+        {!gone ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {driving ? (
+              <button
+                type="button"
+                disabled={busy || teaching}
+                onClick={() => void setDriver('release')}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-white disabled:opacity-50"
+              >
+                <X className="h-3.5 w-3.5" /> Devolver el control
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void setDriver('take')}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-2 disabled:opacity-50"
+              >
+                <Hand className="h-3.5 w-3.5" /> Tomar el control
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-2"
+            >
+              <Maximize2 className="h-3.5 w-3.5" /> Pantalla completa
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void stop()}
+              className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-rose/30 px-3 text-sm font-medium text-rose hover:bg-rose-soft disabled:opacity-50"
+            >
+              <Square className="h-3.5 w-3.5" /> Detener
+            </button>
+          </div>
+        ) : null}
+        <details className="rounded-lg border border-border px-3 text-xs">
+          <summary className="cursor-pointer py-2 font-medium text-ink-muted">
+            Copiar, pegar y leer la página
+          </summary>
+          {browserTools}
+        </details>
+      </div>
+    );
+  }
+
   if (inline) return panel;
 
   // El dock: fijo abajo a la derecha, fuera del río del chat. Dos sesiones se
@@ -1230,6 +1414,15 @@ function LiveDock({
     </div>,
     document.body,
   );
+}
+
+/** La pantalla viva del panel «Navegador»: el mismo dock, puesto a lo ancho. */
+export function BrowserPanelScreen({
+  tab,
+  onSay,
+  options,
+}: { tab: TabRef; onSay?: (text: string) => void; options: LivePanelOptions }) {
+  return <LiveDock key={tab.sessionId} tab={tab} onSay={onSay} panelOptions={options} />;
 }
 
 export function BrowserViewport({
