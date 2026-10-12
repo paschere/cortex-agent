@@ -171,7 +171,7 @@ export function ConfirmationPrompt({
             onClick={handleAllow}
             disabled={status === 'running' || waiting}
             title={waiting ? 'Espera a que Cortex termine este paso' : undefined}
-            className="inline-flex items-center gap-1.5 rounded-pill bg-amber px-4 py-2 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
           >
             {status === 'running' ? (
               <>
@@ -192,7 +192,7 @@ export function ConfirmationPrompt({
             type="button"
             onClick={() => setStatus('cancelled')}
             disabled={status === 'running'}
-            className="rounded-pill px-4 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60 motion-reduce:transition-none"
+            className="rounded-pill bg-surface-2 px-4 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60 motion-reduce:transition-none"
           >
             Descartar
           </button>

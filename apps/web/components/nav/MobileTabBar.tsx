@@ -13,7 +13,7 @@ import { useMobileSidebar } from './MobileSidebarContext';
 /**
  * LA BARRA DE ABAJO DEL TELÉFONO («cuaderno»).
  *
- * Hoy (con su estrella amarilla), Chat, Te espera y Vistas: lo que se abre con
+ * Hoy (con su estrella amarilla), Chat, Aplicaciones y Vistas: lo que se abre con
  * el pulgar varias veces al día. «Más» abre el menú lateral (`Sidebar`, en su
  * diálogo), que trae las secciones y el resto del producto: aquí no se esconde
  * nada que antes estuviera. La pestaña activa va en tinta y en negrita, sin

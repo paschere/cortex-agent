@@ -40,6 +40,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Star,
   Sun,
   Table2,
   Target,
@@ -605,24 +606,528 @@ export function primaryActive(path: string, item: PrimaryItem): boolean {
 // ===========================================================================
 // LA BARRA DE ABAJO DEL TELÉFONO
 // ===========================================================================
-// Hoy, Chat, Te espera y Vistas; «Más» (un botón, no un destino) abre el
-// menú lateral completo, que trae todo lo demás (Aplicaciones incluida).
-// «Te espera» aterriza en la primera cola (la más urgente por reloj) y se
-// enciende en cualquiera de las cuatro.
+// Hoy, Chat, Aplicaciones y Vistas; «Más» (un botón, no un destino) abre el
+// menú lateral completo, que trae todo lo demás. «Te espera» ya no es una
+// pestaña: sus colas viven dentro de Hoy (pestañas del área).
+
+/** Lo que enciende la pestaña «Hoy»: el plan del día y las pantallas que cuelgan de él. */
+const HOY_MATCH = [
+  '/piloto',
+  '/approvals',
+  '/commitments',
+  '/actions',
+  '/actividad',
+  '/notifications',
+  '/dashboard',
+];
 
 export function mobileTabs(modulesOff: readonly ModuleKey[] = []): PrimaryItem[] {
   return visibleItems<PrimaryItem>(
     [
-      { ...PILOT, match: ['/piloto'] },
+      { ...PILOT, match: HOY_MATCH },
       { ...CHAT, match: ['/chat'] },
-      {
-        href: QUEUE_HREF[WAITING_QUEUES[0]],
-        label: WAITING_LABEL,
-        icon: WAITING_ICON,
-        match: WAITING_QUEUES.map((queue) => QUEUE_HREF[queue]),
-      },
+      { ...APPS, match: ['/apps'] },
       { ...VIEWS, match: ['/views'] },
     ],
     modulesOff,
   );
+}
+
+// ===========================================================================
+// LA FORMA «V2»: UNAS DOCE ENTRADAS, ÁREAS CON PESTAÑAS Y UN SOLO MENÚ DE CUENTA
+// ===========================================================================
+// El rail pasa de ~25 filas a unas doce: arriba lo fundamental (Hoy, Chat,
+// Aplicaciones, Vistas, Reportes), «Favoritos» que cada persona fija, «Mi
+// empresa» con cinco áreas, y el menú de la cuenta, que junta lo de configurar.
+// NO SE QUITA NADA: cada pantalla que el rail viejo alcanzaba es ahora
+//   · una PESTAÑA de su área (`AREAS`, que dibuja `AreaTabs` arriba de la página),
+//   · una entrada del menú de la cuenta (`ACCOUNT`), o
+//   · la tarjeta de «Puesta en marcha» / «Todas mis empresas».
+// `nav-shape.test.ts` lo comprueba contra la lista de rutas del rail anterior.
+// Cada ruta tiene UN área dueña (`tabs`); `also` sólo repite una pestaña en otra
+// área (Encargos en Hoy, Estados financieros en Reportes) sin cambiarle el dueño.
+
+export type AreaId =
+  | 'today'
+  | 'chat'
+  | 'finance'
+  | 'clients'
+  | 'operations'
+  | 'team'
+  | 'reports'
+  | 'data';
+export type Tone = 'primary' | 'rose' | 'emerald' | 'amber' | 'sky';
+
+export interface AreaDef {
+  id: AreaId;
+  label: string;
+  letter: string;
+  tone: Tone;
+  /** Las pantallas que SON de esta área. El orden es el de las pestañas. */
+  tabs: NavItem[];
+  /** Pestañas que se repiten aquí pero son de otra área. */
+  also?: NavItem[];
+}
+
+const tab = (
+  href: string,
+  label: string,
+  icon: NavIcon,
+  extra: Partial<NavItem> = {},
+): NavItem => ({
+  href,
+  label,
+  icon,
+  ...extra,
+});
+
+const QUEUE = Object.fromEntries(WAITING_ITEMS.map((item) => [item.href, item])) as Record<
+  string,
+  NavItem
+>;
+const ERRANDS: NavItem = tab('/errands', 'Encargos', Briefcase, { signal: 'errands' });
+const ESTADOS: NavItem = tab('/estados', 'Estados financieros', FileBarChart);
+
+export const AREAS: AreaDef[] = [
+  {
+    id: 'today',
+    label: 'Hoy',
+    letter: '★',
+    tone: 'amber',
+    tabs: [
+      PILOT,
+      QUEUE['/approvals'] as NavItem,
+      QUEUE['/actions'] as NavItem,
+      QUEUE['/commitments'] as NavItem,
+      ACTIVITY,
+      NOTIFICATIONS,
+      tab('/dashboard', 'Inicio', LayoutDashboard),
+      tab('/piloto/panel', 'Panel del piloto', Sun),
+    ],
+    also: [ERRANDS],
+  },
+  {
+    id: 'chat',
+    label: 'Chat',
+    letter: 'C',
+    tone: 'primary',
+    tabs: [
+      tab('/chat', 'Chat', MessageSquare),
+      CALLS,
+      tab('/conversations', 'Conversaciones', History),
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'Plata',
+    letter: '$',
+    tone: 'primary',
+    tabs: [
+      tab('/finance', 'Resumen financiero', Wallet),
+      tab('/payments', 'Cartera y pagos', Wallet),
+      tab('/pagar', 'Por pagar', HandCoins),
+      tab('/impuestos', 'Impuestos', Landmark),
+      tab('/cierre', 'Cierre contable', CalendarCheck),
+      ESTADOS,
+      tab('/presupuesto', 'Presupuesto', Target),
+      tab('/nomina', 'Nómina', Wallet),
+    ],
+  },
+  {
+    id: 'clients',
+    label: 'Clientes y ventas',
+    letter: 'C',
+    tone: 'rose',
+    tabs: [
+      tab('/clients', 'Clientes', Building2),
+      tab('/ventas', 'Ventas', Receipt),
+      tab('/comercial', 'Embudo comercial', Handshake),
+      tab('/prospects', 'Prospectos', Radar),
+      tab('/contratos', 'Contratos', FileSignature),
+    ],
+  },
+  {
+    id: 'operations',
+    label: 'Operación',
+    letter: 'O',
+    tone: 'emerald',
+    tabs: [
+      PROCESSES,
+      tab('/schedules', 'Rutinas', AlarmClock),
+      tab('/activations', 'Activaciones', BadgeCheck),
+      tab('/pipelines', 'Flujos', Workflow),
+      ERRANDS,
+      tab('/proyectos', 'Proyectos', FolderKanban),
+      tab('/flota', 'Flota', Truck),
+      tab('/inventario', 'Inventario y compras', Package),
+      tab('/documentos-vencen', 'Documentos que vencen', CalendarClock),
+      tab('/cumplimiento', 'Cumplimiento', Scale),
+      tab('/sst', 'SG-SST', ShieldCheck),
+      // La etiqueta viene de `browser-shape` para que pantalla, paleta y catálogo no se separen.
+      tab('/browser', MODULE.label, Globe),
+    ],
+  },
+  {
+    id: 'team',
+    label: 'Equipo',
+    letter: 'E',
+    tone: 'amber',
+    tabs: [
+      tab('/team', 'Equipo', UsersRound),
+      tab('/team/yo', 'Mi semana', CalendarCheck),
+      tab('/goals', 'Metas', Target),
+      MANAGEMENT,
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Reportes',
+    letter: 'R',
+    tone: 'sky',
+    tabs: [
+      tab('/reports', 'Informes', FileBarChart),
+      tab('/informe-socios', 'Informe para socios', ScrollText),
+    ],
+    also: [ESTADOS],
+  },
+  {
+    id: 'data',
+    label: 'Datos',
+    letter: 'D',
+    tone: 'sky',
+    tabs: [TRACKERS, BRAIN, FEED],
+  },
+];
+
+/** Las áreas que salen bajo «Mi empresa», en orden. Hoy, Chat y Reportes son puertas de arriba. */
+export const COMPANY_AREAS: AreaId[] = ['finance', 'clients', 'operations', 'team', 'data'];
+
+export function areaById(id: AreaId): AreaDef {
+  const area = AREAS.find((a) => a.id === id);
+  if (!area) throw new Error(`área desconocida: ${id}`);
+  return area;
+}
+
+function under(path: string, href: string): boolean {
+  return path === href || path.startsWith(`${href}/`);
+}
+
+/**
+ * El área DUEÑA de una dirección: la de la pestaña cuyo href es el prefijo más
+ * largo (`/team/yo` gana a `/team`). Una dirección sin dueño no lleva pestañas.
+ */
+export function areaFor(path: string): { area: AreaDef; tab: NavItem } | null {
+  let best: { area: AreaDef; tab: NavItem } | null = null;
+  for (const area of AREAS) {
+    for (const t of area.tabs) {
+      if (under(path, t.href) && (!best || t.href.length > best.tab.href.length)) {
+        best = { area, tab: t };
+      }
+    }
+  }
+  return best;
+}
+
+export interface AreaTabsView {
+  area: AreaDef;
+  /** Las pestañas visibles para esta persona, con el módulo apagado ya fuera. */
+  tabs: NavItem[];
+  /** El href de la pestaña activa (la más específica que cubre la dirección). */
+  active: string | null;
+}
+
+/** Las pestañas que `AreaTabs` dibuja para esta dirección; `null` si no pertenece a ningún área. */
+export function areaTabsFor(
+  path: string,
+  opts: { admin: boolean; modulesOff?: readonly ModuleKey[] },
+): AreaTabsView | null {
+  const found = areaFor(path);
+  if (!found) return null;
+  const off = opts.modulesOff ?? [];
+  // «Chat» y «Hoy» no se dibujan como barra si no hay al menos una hermana.
+  const tabs = visibleItems([...found.area.tabs, ...(found.area.also ?? [])], off).filter(
+    (t) => !t.adminOnly || opts.admin,
+  );
+  const owned = tabs.filter((t) => under(path, t.href));
+  const active =
+    owned.sort((a, b) => b.href.length - a.href.length)[0]?.href ?? found.tab.href ?? null;
+  return { area: found.area, tabs, active };
+}
+
+// ---------------------------------------------------------------------------
+// El menú de la cuenta
+// ---------------------------------------------------------------------------
+
+export interface AccountGroup {
+  id: string;
+  label: string;
+  icon: NavIcon;
+  /** Si el grupo tiene una sola entrada visible, la fila va directo a ella. */
+  items: NavItem[];
+}
+
+/**
+ * «Tu cuenta»: todo lo de configurar en un solo menú. Lo que es sólo de admin
+ * sigue siéndolo (los servidores de /admin lo vuelven a exigir).
+ */
+export const ACCOUNT: AccountGroup[] = [
+  {
+    id: 'settings',
+    label: 'Ajustes de la empresa',
+    icon: Settings,
+    items: [
+      { href: '/settings', label: 'Ajustes', icon: Settings },
+      { href: '/company', label: 'Datos de la empresa', icon: IdCard },
+      { href: '/settings/modulos', label: 'Módulos', icon: LayoutGrid },
+    ],
+  },
+  {
+    id: 'connections',
+    label: 'Conexiones',
+    icon: Plug,
+    items: [
+      { href: '/integrations', label: 'Datos y conexiones', icon: Plug },
+      { href: '/integrations/whatsapp', label: 'WhatsApp', icon: MessageCircle },
+      { href: '/mcp-tokens', label: 'Usar desde Claude o ChatGPT', icon: Plug },
+    ],
+  },
+  {
+    id: 'people',
+    label: 'Personas y permisos',
+    icon: Users,
+    items: [
+      { href: '/admin/users', label: 'Personas', icon: Users, adminOnly: true },
+      { href: '/admin/teams', label: 'Equipos', icon: UsersRound, adminOnly: true },
+      { href: '/admin/mandates', label: 'Sin preguntar', icon: BadgeCheck, adminOnly: true },
+      { href: '/admin/security', label: 'Seguridad', icon: ShieldCheck, adminOnly: true },
+    ],
+  },
+  {
+    id: 'audit',
+    label: 'Qué hizo Cortex · auditoría',
+    icon: History,
+    items: [
+      { href: '/actividad', label: 'Lo que hizo Cortex', icon: History },
+      { href: '/admin/audit', label: 'Auditoría', icon: ScrollText, adminOnly: true },
+    ],
+  },
+  {
+    id: 'plan',
+    label: 'Plan y consumo',
+    icon: Receipt,
+    items: [{ href: '/plan', label: 'Plan y consumo', icon: Receipt }],
+  },
+  {
+    id: 'usage',
+    label: 'Uso',
+    icon: BarChart3,
+    items: [{ href: '/admin/usage', label: 'Uso', icon: BarChart3, adminOnly: true }],
+  },
+  {
+    id: 'help',
+    label: 'Ayuda',
+    icon: LifeBuoy,
+    items: [{ href: '/ayuda', label: 'Ayuda', icon: LifeBuoy }],
+  },
+];
+
+export const ALL_COMPANIES: NavItem = {
+  href: '/overview',
+  label: 'Todas mis empresas',
+  icon: LayoutDashboard,
+};
+
+export function accountMenu(opts: {
+  admin: boolean;
+  founder: boolean;
+  modulesOff?: readonly ModuleKey[];
+}): AccountGroup[] {
+  const off = opts.modulesOff ?? [];
+  return ACCOUNT.map((g) => ({
+    ...g,
+    items: visibleItems(g.items, off).filter((i) => !i.adminOnly || opts.admin),
+  })).filter((g) => g.items.length > 0);
+}
+
+// ---------------------------------------------------------------------------
+// El rail V2, ya resuelto
+// ---------------------------------------------------------------------------
+
+export interface DoorDef extends NavItem {
+  /** Qué direcciones lo encienden (prefijos en frontera de segmento). */
+  match: string[];
+}
+
+export interface AreaRow {
+  area: AreaDef;
+  /** Donde cae el clic: su primera pantalla visible. */
+  href: string;
+  tabs: NavItem[];
+  /** Las pantallas que encienden la fila. */
+  match: string[];
+}
+
+export interface SidebarV2 {
+  /** Hoy, Chat, Aplicaciones, Vistas y Reportes (los que sigan visibles). */
+  doors: DoorDef[];
+  /** «Mi empresa»: sólo las áreas con alguna pantalla visible. */
+  areas: AreaRow[];
+  setup: NavItem | null;
+  account: AccountGroup[];
+  /** «Todas mis empresas», sólo para el fundador. */
+  global: NavItem | null;
+}
+
+function areaRow(area: AreaDef, admin: boolean, off: readonly ModuleKey[]): AreaRow | null {
+  const tabs = visibleItems(area.tabs, off).filter((t) => !t.adminOnly || admin);
+  const first = tabs[0];
+  if (!first) return null;
+  return { area, href: first.href, tabs, match: tabs.map((t) => t.href) };
+}
+
+export function buildSidebar(opts: {
+  admin: boolean;
+  founder: boolean;
+  modulesOff?: readonly ModuleKey[];
+  setupDone?: boolean;
+}): SidebarV2 {
+  const off = opts.modulesOff ?? [];
+  const reports = areaRow(areaById('reports'), opts.admin, off);
+  const doors: DoorDef[] = [
+    { ...PILOT, match: HOY_MATCH },
+    { ...CHAT, match: ['/chat', '/calls', '/conversations'] },
+    { ...APPS, match: ['/apps'] },
+    { ...VIEWS, match: ['/views'] },
+    ...(reports ? [{ ...tab(reports.href, 'Reportes', FileBarChart), match: reports.match }] : []),
+  ];
+  return {
+    doors: visibleItems(doors, off),
+    areas: COMPANY_AREAS.flatMap((id) => areaRow(areaById(id), opts.admin, off) ?? []),
+    setup: opts.setupDone ? null : SETUP,
+    account: accountMenu(opts),
+    global: opts.founder ? ALL_COMPANIES : null,
+  };
+}
+
+/** Cada ruta que el rail V2 alcanza (puertas, pestañas de áreas, cuenta, tarjeta y global). Sin filtrar por rol. */
+export function sidebarDestinations(): string[] {
+  const rail = buildSidebar({ admin: true, founder: true });
+  const set = new Set<string>([
+    ...rail.doors.map((d) => d.href),
+    ...rail.doors.flatMap((d) => d.match),
+    ...AREAS.flatMap((a) => [...a.tabs, ...(a.also ?? [])].map((t) => t.href)),
+    ...rail.account.flatMap((g) => g.items.map((i) => i.href)),
+    ...(rail.setup ? [rail.setup.href] : []),
+    ...(rail.global ? [rail.global.href] : []),
+  ]);
+  return [...set];
+}
+
+// ---------------------------------------------------------------------------
+// Favoritos
+// ---------------------------------------------------------------------------
+
+export const FAV_MAX = 5;
+
+export interface Favorite {
+  href: string;
+  label: string;
+}
+
+export interface Shortcut extends Favorite {
+  kind: 'app' | 'view';
+}
+
+/** La llave de `localStorage`: una por persona y por empresa. */
+export function favoritesKey(userKey: string, organizationId: string): string {
+  return `cortex:favoritos:${userKey}:${organizationId}`;
+}
+
+/**
+ * Lo que se muestra mientras la persona no ha fijado nada: quien administra,
+ * Cartera y su primera app; el resto, sus apps y vistas. Nada de esto se
+ * guarda: en cuanto fija o suelta algo, la lista pasa a ser suya.
+ */
+export function favoriteDefaults(opts: {
+  admin: boolean;
+  founder: boolean;
+  modulesOff?: readonly ModuleKey[];
+  shortcuts?: readonly Shortcut[];
+}): Favorite[] {
+  const shortcuts = opts.shortcuts ?? [];
+  const apps = shortcuts.filter((s) => s.kind === 'app');
+  const views = shortcuts.filter((s) => s.kind === 'view');
+  const picks: Favorite[] = [];
+  if (opts.admin || opts.founder) {
+    picks.push({ href: '/payments', label: 'Cartera' });
+    picks.push(...apps.slice(0, 1));
+    picks.push(...views.slice(0, 1));
+  } else {
+    picks.push(...apps.slice(0, 2), ...views.slice(0, 1));
+  }
+  return pruneFavorites(picks, opts.modulesOff ?? []).slice(0, FAV_MAX);
+}
+
+/** Quita lo que un módulo apagado esconde y lo repetido. */
+export function pruneFavorites(list: readonly Favorite[], off: readonly ModuleKey[]): Favorite[] {
+  const seen = new Set<string>();
+  return list.filter((f) => {
+    if (seen.has(f.href) || !routeVisible(f.href, off)) return false;
+    seen.add(f.href);
+    return true;
+  });
+}
+
+/** Lee lo guardado sin confiar en ello. `null` = nunca se ha tocado (usar los de por defecto). */
+export function parseFavorites(raw: string | null | undefined): Favorite[] | null {
+  if (raw == null) return null;
+  try {
+    const data = JSON.parse(raw) as unknown;
+    if (!Array.isArray(data)) return null;
+    const out: Favorite[] = [];
+    for (const item of data) {
+      if (!item || typeof item !== 'object') continue;
+      const { href, label } = item as Record<string, unknown>;
+      if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//')) continue;
+      if (typeof label !== 'string' || label.trim() === '') continue;
+      if (out.some((f) => f.href === href)) continue;
+      out.push({ href, label: label.trim().slice(0, 60) });
+    }
+    return out.slice(0, FAV_MAX);
+  } catch {
+    return null;
+  }
+}
+
+export function isFavorite(list: readonly Favorite[], href: string): boolean {
+  return list.some((f) => f.href === href);
+}
+
+/** Fija o suelta. Si ya hay `FAV_MAX`, la más antigua cede su sitio. */
+export function toggleFavorite(list: readonly Favorite[], fav: Favorite): Favorite[] {
+  if (isFavorite(list, fav.href)) return list.filter((f) => f.href !== fav.href);
+  return [...list, fav].slice(-FAV_MAX);
+}
+
+const ICON_BY_HREF = new Map<string, NavIcon>();
+for (const item of [
+  ...AREAS.flatMap((a) => [...a.tabs, ...(a.also ?? [])]),
+  ...ACCOUNT.flatMap((g) => g.items),
+  PILOT,
+  CHAT,
+  APPS,
+  VIEWS,
+]) {
+  if (!ICON_BY_HREF.has(item.href)) ICON_BY_HREF.set(item.href, item.icon);
+}
+
+/** El icono de un favorito: el de su pantalla, o el de la familia (apps, vistas, tablas). */
+export function iconForHref(href: string): NavIcon {
+  const exact = ICON_BY_HREF.get(href);
+  if (exact) return exact;
+  if (href.startsWith('/apps/')) return APPS.icon;
+  if (href.startsWith('/views/')) return VIEWS.icon;
+  if (href.startsWith('/trackers/')) return TRACKERS.icon;
+  const owner = areaFor(href);
+  return owner?.tab.icon ?? Star;
 }

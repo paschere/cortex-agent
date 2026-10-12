@@ -73,7 +73,7 @@ export function ChatErrorCard({
             {isLimit ? (
               <Link
                 href="/plan"
-                className="inline-flex items-center rounded-pill bg-amber px-3.5 py-1.5 text-xs font-semibold text-white shadow-card transition-colors duration-150 hover:brightness-95 motion-reduce:transition-none"
+                className="inline-flex items-center rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-card transition-colors duration-150 hover:bg-primary-strong motion-reduce:transition-none"
               >
                 Ver plan y consumo
               </Link>
@@ -82,7 +82,7 @@ export function ChatErrorCard({
                 type="button"
                 onClick={onContinue}
                 disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-pill bg-rose px-3.5 py-1.5 text-xs font-semibold text-white shadow-card transition-colors duration-150 hover:brightness-95 disabled:opacity-60 motion-reduce:transition-none"
+                className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-card transition-colors duration-150 hover:bg-primary-strong disabled:opacity-60 motion-reduce:transition-none"
               >
                 <RotateCw className="h-3 w-3" aria-hidden />
                 Continuar
@@ -93,7 +93,7 @@ export function ChatErrorCard({
                   type="button"
                   onClick={onRetry}
                   disabled={busy}
-                  className="inline-flex items-center gap-1.5 rounded-pill bg-rose px-3.5 py-1.5 text-xs font-semibold text-white shadow-card transition-colors duration-150 hover:brightness-95 disabled:opacity-60 motion-reduce:transition-none"
+                  className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-card transition-colors duration-150 hover:bg-primary-strong disabled:opacity-60 motion-reduce:transition-none"
                 >
                   <RotateCw className="h-3 w-3" aria-hidden />
                   Reintentar
@@ -102,7 +102,7 @@ export function ChatErrorCard({
                   type="button"
                   onClick={onContinue}
                   disabled={busy}
-                  className="rounded-pill border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60 motion-reduce:transition-none"
+                  className="rounded-pill bg-surface-2 px-3.5 py-1.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60 motion-reduce:transition-none"
                 >
                   Continuar
                 </button>

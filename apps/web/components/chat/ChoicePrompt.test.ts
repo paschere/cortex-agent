@@ -25,7 +25,7 @@ describe('la tarjeta de decidir', () => {
   it('siempre deja una salida en texto libre', () => {
     // Tres botones y ninguno es el que quieres es una trampa. El modelo tiene
     // prohibido añadir una opción «otra» justamente porque ésta existe siempre.
-    expect(render(viva)).toContain('Ninguna — te digo yo');
+    expect(render(viva)).toContain('Responder con mis palabras');
   });
 
   it('anuncia a un lector de pantalla que hay algo esperando', () => {
@@ -53,6 +53,6 @@ describe('la tarjeta de decidir', () => {
     expect(html).toContain('¿Cuál de los dos es?');
     // Ni botones ni campo: la respuesta ya está en el hilo, en su burbuja.
     expect(html).not.toContain('<button');
-    expect(html).not.toContain('Ninguna — te digo yo');
+    expect(html).not.toContain('Responder con mis palabras');
   });
 });

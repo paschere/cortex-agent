@@ -1,5 +1,6 @@
 'use client';
 
+import { AreaTabs } from '@/components/nav/AreaTabs';
 import { CommandMenuProvider } from '@/components/nav/CommandMenuContext';
 import { MobileSidebarProvider } from '@/components/nav/MobileSidebarContext';
 import { MobileTabBar } from '@/components/nav/MobileTabBar';
@@ -19,11 +20,11 @@ const ORG = {
 const COUNTS = { approvals: 2, commitments: 1, actions: 0, errands: 3 };
 const NONE = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
 const USER = { name: 'Mateo Ángel', email: 'mateo@transportesandinos.co' };
-const RECENT = [
-  { id: 'a', title: 'Cartera vencida de septiembre' },
-  { id: 'b', title: 'Cotización para Frigoandes' },
-  { id: 'c', title: 'Resumen de la semana' },
+const SHORTCUTS = [
+  { href: '/apps/vuelos', label: 'Vuelos', kind: 'app' as const },
+  { href: '/views/control-en-planta', label: 'Control en planta', kind: 'view' as const },
 ];
+const SIGNALS = { pilot: 3, setup: null, apps: 4, views: 9, shortcuts: SHORTCUTS };
 
 function Frame({ title, width, children }: { title: string; width: number; children: ReactNode }) {
   return (
@@ -45,7 +46,6 @@ const base = {
   modulesOff: [],
   user: USER,
   onExpand: () => {},
-  recentOverride: RECENT,
 };
 
 /** Datos inventados. Ninguna cifra de aquí sale de una base de datos. */
@@ -65,21 +65,21 @@ export function SidebarShowcase({ dark }: { dark: boolean }) {
                   {...base}
                   small={false}
                   counts={COUNTS}
-                  signals={{ pilot: 4, setup: { ready: 3, total: 5 } }}
+                  signals={{ ...SIGNALS, setup: { ready: 3, total: 5 } }}
                   pathOverride="/piloto"
                   onToggleCollapsed={() => {}}
                 />
               </Frame>
               <Frame
-                title="Expandido · «Te espera» abierto (cola activa), sin puesta en marcha"
+                title="Expandido · área Plata activa (Por pagar), sin puesta en marcha"
                 width={264}
               >
                 <SidebarBody
                   {...base}
                   small={false}
                   counts={COUNTS}
-                  signals={{ pilot: 0, setup: null }}
-                  pathOverride="/commitments"
+                  signals={{ ...SIGNALS, pilot: 0 }}
+                  pathOverride="/pagar"
                   onToggleCollapsed={() => {}}
                 />
               </Frame>
@@ -88,7 +88,7 @@ export function SidebarShowcase({ dark }: { dark: boolean }) {
                   {...base}
                   small={false}
                   counts={NONE}
-                  signals={{ pilot: 0, setup: null }}
+                  signals={{ ...SIGNALS, pilot: 0 }}
                   pathOverride="/chat/a"
                   onToggleCollapsed={() => {}}
                 />
@@ -98,7 +98,7 @@ export function SidebarShowcase({ dark }: { dark: boolean }) {
                   {...base}
                   small
                   counts={COUNTS}
-                  signals={{ pilot: 4, setup: { ready: 3, total: 5 } }}
+                  signals={{ ...SIGNALS, setup: { ready: 3, total: 5 } }}
                   pathOverride="/views"
                   onToggleCollapsed={() => {}}
                   pinnedCollapsed
@@ -109,7 +109,7 @@ export function SidebarShowcase({ dark }: { dark: boolean }) {
                   {...base}
                   small={false}
                   counts={COUNTS}
-                  signals={{ pilot: 4, setup: { ready: 3, total: 5 } }}
+                  signals={{ ...SIGNALS, setup: { ready: 3, total: 5 } }}
                   pathOverride="/apps"
                   onNavigate={() => {}}
                 />
@@ -125,6 +125,25 @@ export function SidebarShowcase({ dark }: { dark: boolean }) {
                     <MobileTabBar organizationId="fixture" />
                   </div>
                 </div>
+              </figure>
+              <figure className="w-[880px] max-w-full shrink-0 space-y-6">
+                <figcaption className="text-xs font-semibold text-ink-muted">
+                  Pestañas de área · Plata (Impuestos), Operación (SG-SST, fuera de las seis) y Hoy
+                </figcaption>
+                {['/impuestos', '/sst', '/approvals'].map((path) => (
+                  <div
+                    key={path}
+                    className="overflow-hidden rounded-card border border-border bg-surface px-4 pt-3 md:px-8"
+                  >
+                    <AreaTabs
+                      admin
+                      modulesOff={[]}
+                      userKey="fixture"
+                      organizationId="fixture"
+                      pathOverride={path}
+                    />
+                  </div>
+                ))}
               </figure>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import 'server-only';
 import { bogotaToday, deriveState } from '@cortex/agent-tools';
 import { buildLaunchPlan, launchProgress } from './management/launch-plan';
+import type { Shortcut } from './nav-shape';
 import { getOrgScopedClient } from './supabase/service';
 
 /**
@@ -159,6 +160,12 @@ export interface ShellSignals {
   pilot: number;
   /** Progreso de la puesta en marcha mientras no esté completa; `null` si ya está o no se sabe. */
   setup: SetupProgress | null;
+  /** Aplicaciones que esta persona puede abrir (para el contador de la puerta). */
+  apps?: number;
+  /** Vistas del espacio (para el contador de la puerta). */
+  views?: number;
+  /** Las primeras apps y vistas, para los favoritos por defecto de quien aún no fijó nada. */
+  shortcuts?: Shortcut[];
 }
 
 /** Same window as COOLDOWN_DAYS in agent-tools/src/autopilot/plan.ts (not exported from the barrel). */
@@ -173,7 +180,7 @@ export async function readShellSignals(
   try {
     const db = getOrgScopedClient(organizationId);
     const since = new Date(Date.now() - PILOT_WINDOW_DAYS * 86_400_000).toISOString();
-    const [pilot, setup] = await Promise.all([
+    const [pilot, setup, apps, views] = await Promise.all([
       // Mirrors listOpenAsks (autopilot/store.ts): status 'asked' inside the cooldown window.
       count(() =>
         db
@@ -183,10 +190,73 @@ export async function readShellSignals(
           .gte('created_at', since),
       ),
       isAdmin ? readSetupProgress(organizationId) : Promise.resolve(null),
+      readApps(db, isAdmin),
+      readViews(db),
     ]);
-    return { pilot, setup };
+    return {
+      pilot,
+      setup,
+      apps: apps.total,
+      views: views.total,
+      // Los atajos salen de una lectura sin el permiso de cada persona: sólo
+      // quien administra los recibe, para no mostrarle a nadie el nombre de una
+      // app o vista que no puede abrir. Los demás fijan los suyos.
+      shortcuts: isAdmin ? [...apps.shortcuts, ...views.shortcuts] : [],
+    };
   } catch {
     return NO_SHELL_SIGNALS;
+  }
+}
+
+type Db = ReturnType<typeof getOrgScopedClient>;
+
+/** Apps abiertas (quien no administra sólo ve las publicadas, como /apps) y las dos primeras. */
+async function readApps(db: Db, isAdmin: boolean) {
+  try {
+    let q = db
+      .from('custom_apps')
+      .select('slug,name', { count: 'exact' })
+      .is('archived_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(2);
+    if (!isAdmin) q = q.eq('status', 'published');
+    const { data, count: n, error } = await q;
+    if (error) throw error;
+    return {
+      total: n ?? 0,
+      shortcuts: ((data ?? []) as Array<{ slug: string; name: string }>).map(
+        (a): Shortcut => ({ href: `/apps/${a.slug}`, label: a.name, kind: 'app' }),
+      ),
+    };
+  } catch {
+    return { total: 0, shortcuts: [] as Shortcut[] };
+  }
+}
+
+/** Vistas del espacio (sin pantallas de app, como /views) y las dos primeras. */
+async function readViews(db: Db) {
+  try {
+    const {
+      data,
+      count: n,
+      error,
+    } = await db
+      .from('custom_views')
+      .select('slug,name', { count: 'exact' })
+      .is('archived_at', null)
+      .is('app_id', null)
+      .order('pinned', { ascending: false })
+      .order('updated_at', { ascending: false })
+      .limit(2);
+    if (error) throw error;
+    return {
+      total: n ?? 0,
+      shortcuts: ((data ?? []) as Array<{ slug: string; name: string }>).map(
+        (v): Shortcut => ({ href: `/views/${v.slug}`, label: v.name, kind: 'view' }),
+      ),
+    };
+  } catch {
+    return { total: 0, shortcuts: [] as Shortcut[] };
   }
 }
 

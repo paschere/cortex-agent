@@ -218,6 +218,11 @@ interface MessageListProps {
    */
   waiting?: WaitingNoticeData;
   companyName?: string;
+  /**
+   * Los seguimientos los dibuja otro (una fila de pastillas encima del
+   * compositor), así que la última respuesta no repite los suyos.
+   */
+  followUpsAbove?: boolean;
 }
 
 export function MessageList({
@@ -235,6 +240,7 @@ export function MessageList({
   frames,
   waiting,
   companyName,
+  followUpsAbove,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
@@ -492,6 +498,7 @@ export function MessageList({
                     onAnswer={onAnswer}
                     question={nearestQuestion(messages, i)}
                     storedFollowups={storedFollowups?.[m.id]}
+                    showFollowUps={!followUpsAbove}
                     glanceAt={glances?.[m.id]}
                     screenFrame={askedWith}
                     delegations={noticePlan[m.id]}

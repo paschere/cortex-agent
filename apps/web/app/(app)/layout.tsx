@@ -1,6 +1,7 @@
 import { BillingBanner } from '@/components/billing/BillingBanner';
 import { ConsentGate } from '@/components/legal/ConsentGate';
 import { AppShell } from '@/components/nav/AppShell';
+import { AreaTabs } from '@/components/nav/AreaTabs';
 import { MobileTabBar } from '@/components/nav/MobileTabBar';
 import { Topbar } from '@/components/nav/Topbar';
 import { modulesOffFor } from '@/lib/modules/server';
@@ -27,7 +28,15 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <Topbar email={user.email} />
         <BillingBanner organizationId={user.organization.id} />
         <main className="scroll-slim flex-1 overflow-y-auto print:overflow-visible">
-          <div className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8">{children}</div>
+          <div className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
+            <AreaTabs
+              admin={user.role === 'org_admin'}
+              modulesOff={modulesOff}
+              organizationId={user.organization.id}
+              userKey={user.email}
+            />
+            {children}
+          </div>
         </main>
         <MobileTabBar organizationId={user.organization.id} modulesOff={modulesOff} />
       </div>

@@ -146,37 +146,6 @@ const STEP_MS = 55;
 const CARDS_AT_MS = 120;
 const rise = (delayMs: number) => ({ animationDelay: `${delayMs}ms` });
 
-/**
- * LA PREGUNTA DEL DÍA, EN UNA LÍNEA.
- *
- * Ya no es un catálogo. Una sola frase, escrita no mandada, y el compositor
- * debajo. Si hay algo esperándote, esa frase es la de las colas — no una
- * tarjeta de más encima del titular.
- */
-function SuggestionLine({
-  text,
-  hint,
-  onSuggestion,
-}: {
-  text: string;
-  hint?: string;
-  onSuggestion: (text: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSuggestion(text)}
-      className="group max-w-lg text-pretty text-center"
-      style={rise(80)}
-    >
-      <span className="text-sm leading-snug text-ink-muted underline decoration-border underline-offset-4 transition-colors duration-150 group-hover:text-ink group-hover:decoration-primary/40 motion-reduce:transition-none">
-        {text}
-      </span>
-      {hint ? <span className="mt-1.5 block text-micro text-ink-faint">{hint}</span> : null}
-    </button>
-  );
-}
-
 function FirstStepCard({ step, index }: { step: FirstStep; index: number }) {
   const Icon = icon(step.icon);
   return (
@@ -241,7 +210,6 @@ export function EmptyState({
   const data = openers.data;
   const blank = data?.blank ?? false;
   const cards = data?.openers ?? [];
-  const suggestion = !blank ? cards[0] : undefined;
   const waitingOn = Boolean(waiting && (waiting.total > 0 || waiting.lead));
   const lead = waiting?.lead ?? null;
   const { open, available } = usePanel();
@@ -320,12 +288,23 @@ export function EmptyState({
             <FirstStepCard key={step.id} step={step} index={i} />
           ))}
         </div>
-      ) : waitingOn ? null : suggestion ? (
-        <SuggestionLine
-          text={suggestion.text}
-          hint={suggestion.hint ?? undefined}
-          onSuggestion={onSuggestion}
-        />
+      ) : waitingOn ? null : cards.length > 0 ? (
+        // Sugerencias armadas con TUS datos (lo vencido, lo que vence, lo
+        // último que subiste): tres pastillas, no una frase suelta.
+        <ul className="flex max-w-xl flex-wrap justify-center gap-2" style={rise(80)}>
+          {cards.slice(0, 3).map((card) => (
+            <li key={card.text}>
+              <button
+                type="button"
+                onClick={() => onSuggestion(card.text)}
+                title={card.hint ?? undefined}
+                className="max-w-full rounded-pill border border-border bg-surface px-4 py-2 text-left text-sm leading-snug text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink hover:shadow-card motion-reduce:transform-none motion-reduce:transition-none"
+              >
+                {card.text}
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : openers.isLoading ? (
         <div
           className="h-4 w-48 animate-pulse rounded-pill bg-surface-2 motion-reduce:animate-none"

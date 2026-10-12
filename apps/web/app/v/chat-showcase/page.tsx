@@ -7,7 +7,8 @@ import { ChatShowcase } from './Showcase';
  * /chat pide sesión; aquí se pintan los casos que se salían de la burbuja
  * (URLs de Drive, tabla de ocho columnas, código largo, chips con argumentos
  * largos, el aviso de error). Parámetros: `?modo=oscuro`, `?error=limite`,
- * `?error=ninguno`, `?vacio=1` (chat nuevo).
+ * `?error=ninguno`, `?vacio=1` (chat nuevo), `?panel=1` (panel derecho abierto),
+ * `?arroba=1` (menú de @ abierto).
  */
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,8 @@ export default async function ChatShowcasePage({
       dark={one('modo') === 'oscuro'}
       error={one('error')}
       empty={one('vacio') === '1'}
+      panel={one('panel') === '1'}
+      mention={one('arroba') === '1'}
     />
   );
 }

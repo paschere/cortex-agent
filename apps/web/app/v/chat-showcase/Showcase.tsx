@@ -1,8 +1,18 @@
 'use client';
 
+import {
+  ArtifactPanel,
+  type ChatArtifact,
+  ChatArtifactsProvider,
+} from '@/components/chat/ChatArtifacts';
+import { ChatComposeProvider } from '@/components/chat/ChatCompose';
 import { ChatErrorCard } from '@/components/chat/ChatErrorCard';
+import { FollowUps } from '@/components/chat/FollowUps';
+import { InputBar } from '@/components/chat/InputBar';
 import { MessageList } from '@/components/chat/MessageList';
 import { ThreadAside, ThreadHistory } from '@/components/chat/ThreadHistory';
+import { DeclaredTable } from '@/components/chat/results/DeclaredTable';
+import { TABLE as DECLARED } from '@/components/chat/results/registry';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Message } from 'ai';
 import { useEffect, useState } from 'react';
@@ -88,60 +98,173 @@ const MESSAGES: Message[] = [
         toolCallId: 't2',
         toolName: 'sheets_read_range',
         args: { spreadsheet: SHEET, range: 'Hoja 1!A1:Z500' },
-        result: { __error: `No tengo permiso para leer esa hoja: ${SHEET}` },
+        result: { rows: 38 },
+      },
+      {
+        state: 'result',
+        toolCallId: 't3',
+        toolName: 'payments_list',
+        args: { limit: 4 },
+        result: {
+          guidance: 'Pagos de los últimos 30 días.',
+          payments: [
+            {
+              paidOn: '2026-10-02',
+              client: 'Frigoandes',
+              invoiceNumber: 'FE-2231',
+              amount: 4800000,
+              currency: 'COP',
+              state: 'Conciliado',
+            },
+            {
+              paidOn: '2026-10-05',
+              client: 'Transmar',
+              invoiceNumber: 'FE-2240',
+              amount: 2150000,
+              currency: 'COP',
+              state: 'Por conciliar',
+            },
+          ],
+        },
       },
     ],
   } as Message,
 ];
 
+const MENTION_GROUPS = {
+  groups: [
+    {
+      id: 'clientes',
+      heading: 'Clientes',
+      icon: 'Building2',
+      items: [{ id: 'k1', label: 'Frigoandes', hint: 'Medellín', expands: 'Frigoandes ' }],
+    },
+    {
+      id: 'tablas',
+      heading: 'Tablas',
+      icon: 'Boxes',
+      items: [
+        {
+          id: 'k2',
+          label: 'Frigoandes · pedidos',
+          hint: 'tabla',
+          expands: 'Frigoandes · pedidos ',
+        },
+      ],
+    },
+    {
+      id: 'vistas',
+      heading: 'Vistas',
+      icon: 'BarChart3',
+      items: [
+        { id: 'k3', label: 'Cartera Frigoandes', hint: 'vista', expands: 'Cartera Frigoandes ' },
+      ],
+    },
+  ],
+};
+
 export function ChatShowcase({
   dark,
   error,
   empty = false,
-}: { dark: boolean; error: string | null; empty?: boolean }) {
+  panel = false,
+  mention = false,
+}: { dark: boolean; error: string | null; empty?: boolean; panel?: boolean; mention?: boolean }) {
   const [client] = useState(() => {
     const c = new QueryClient();
     c.setQueryData(['conversations'], THREADS);
+    c.setQueryData(['chat-sources'], {
+      sources: [
+        { id: 's1', label: 'Siigo', tone: 'ok' },
+        { id: 's2', label: 'Correo', tone: 'ok' },
+        { id: 's3', label: 'Drive', tone: 'attention' },
+      ],
+    });
+    c.setQueryData(['chat-mentions', 'Fri'], MENTION_GROUPS);
     return c;
   });
   const [shown, setShown] = useState(error !== 'ninguno');
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   }, [dark]);
+  const initial: ChatArtifact | null = panel
+    ? {
+        id: 't3',
+        title: 'Pagos',
+        kind: 'table',
+        csv: { headers: ['Cliente'], rows: [['Frigoandes']] },
+        render: () => (
+          <DeclaredTable
+            spec={DECLARED.payments_list as never}
+            result={
+              (MESSAGES[1] as never as { toolInvocations: { result: unknown }[] })
+                .toolInvocations[2]?.result
+            }
+          />
+        ),
+      }
+    : null;
   return (
     <QueryClientProvider client={client}>
-      <div className="cortex-workspace flex h-[100dvh] overflow-hidden">
-        <ThreadAside />
-        <div className="cortex-chat flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
-            <span className="text-base font-semibold text-ink">Conversación</span>
-            <ThreadHistory />
-          </header>
-          <MessageList
-            companyName="Distribuciones del Caribe S.A.S."
-            messages={empty ? [] : MESSAGES}
-            isLoading={false}
-            agent={{ slug: 'cortex', name: 'Cortex' } as never}
-            onRegenerate={() => {}}
-            onSuggestion={() => {}}
-            onAnswer={() => {}}
-          />
-          {shown && (
-            <ChatErrorCard
-              message={
-                error === 'limite'
-                  ? 'Usaste todo el consumo incluido este mes. Pasa a un plan mayor para seguir.'
-                  : `Se cortó la conexión mientras respondía. Escríbeme «sigue» y retomo. ${DRIVE}`
-              }
-              isLimit={error === 'limite'}
-              onRetry={() => setShown(false)}
-              onContinue={() => setShown(false)}
-              onDismiss={() => setShown(false)}
-            />
-          )}
-          <div className="h-24 shrink-0 border-t border-border bg-surface" />
-        </div>
-      </div>
+      <ChatArtifactsProvider initial={initial}>
+        <ChatComposeProvider compose={() => {}} ask={() => {}}>
+          <div className="cortex-workspace flex h-[100dvh] gap-2 overflow-hidden bg-canvas p-0 md:gap-3 md:p-2">
+            <ThreadAside />
+            <div className="cortex-chat flex min-w-0 flex-1 flex-col overflow-hidden">
+              <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
+                <span className="font-display text-lg text-ink">Quién me debe y cómo cobro</span>
+                <ThreadHistory />
+              </header>
+              <MessageList
+                companyName="Distribuciones del Caribe S.A.S."
+                messages={empty ? [] : MESSAGES}
+                isLoading={false}
+                agent={{ slug: 'cortex', name: 'Cortex' } as never}
+                onRegenerate={() => {}}
+                onSuggestion={() => {}}
+                onAnswer={() => {}}
+                followUpsAbove
+              />
+              {shown && (
+                <ChatErrorCard
+                  message={
+                    error === 'limite'
+                      ? 'Usaste todo el consumo incluido este mes. Pasa a un plan mayor para seguir.'
+                      : `Se cortó la conexión mientras respondía. Escríbeme «sigue» y retomo. ${DRIVE}`
+                  }
+                  isLimit={error === 'limite'}
+                  onRetry={() => setShown(false)}
+                  onContinue={() => setShown(false)}
+                  onDismiss={() => setShown(false)}
+                />
+              )}
+              {!empty && (
+                <div className="mx-auto w-full max-w-[45rem] shrink-0 px-4 sm:px-6">
+                  <FollowUps
+                    dock
+                    messageId="a1"
+                    ready
+                    stored={['Prepara los de Transmar también', 'Guárdalo como vista']}
+                    onPick={() => {}}
+                  />
+                </div>
+              )}
+              <InputBar
+                onSend={() => {}}
+                disabled={false}
+                agents={[]}
+                agentSlug="cortex"
+                onAgentChange={() => {}}
+                conversationId="demo"
+                scope={[]}
+                onScopeChange={() => {}}
+                {...(mention ? { draft: 'Mándale un correo a @Fri' } : {})}
+              />
+            </div>
+            <ArtifactPanel />
+          </div>
+        </ChatComposeProvider>
+      </ChatArtifactsProvider>
     </QueryClientProvider>
   );
 }

@@ -53,6 +53,7 @@ export function FollowUps({
   ready,
   stored,
   onPick,
+  dock = false,
 }: {
   conversationId?: string;
   /** Keys the fetch, so a regenerated answer gets its own suggestions. */
@@ -66,6 +67,8 @@ export function FollowUps({
    */
   stored?: string[];
   onPick: (question: string) => void;
+  /** Encima del compositor: pastillas redondas, sin el margen de debajo de una respuesta. */
+  dock?: boolean;
 }) {
   const [suggestions, setSuggestions] = useState<string[]>(stored ?? []);
 
@@ -104,7 +107,7 @@ export function FollowUps({
   if (suggestions.length === 0) return null;
 
   return (
-    <nav aria-label="Preguntas de seguimiento" className="mt-2.5">
+    <nav aria-label="Preguntas de seguimiento" className={dock ? 'mb-2.5' : 'mt-2.5'}>
       <ul className="flex flex-wrap gap-1.5">
         {suggestions.map((question) => (
           <li key={question}>

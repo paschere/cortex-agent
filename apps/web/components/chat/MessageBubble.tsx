@@ -2,6 +2,7 @@
 
 import { type AwaitingChoice, isAwaitingChoice } from '@/lib/ask-choice';
 import type { BrainSource } from '@/lib/brain-sources-shape';
+import { artifactMeta } from '@/lib/chat-artifact';
 import {
   type ExercisedMandate,
   type NoticePlanEntry,
@@ -13,6 +14,7 @@ import type { Message, ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
 import { useMemo, useRef, useState } from 'react';
 import { BrainSources, type CiteFocus } from './BrainSources';
+import { ArtifactFrame } from './ChatArtifacts';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChoicePrompt } from './ChoicePrompt';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
@@ -92,6 +94,12 @@ interface MessageBubbleProps {
   exercisedMandates?: ExercisedMandate[];
   canRevokeMandates?: boolean;
   onMandateRevoked?: () => void;
+  /**
+   * Dónde viven los seguimientos. Por defecto, debajo de la última respuesta;
+   * `ChatRoot` los sube a una fila de pastillas encima del compositor y pasa
+   * `false` para que no salgan dos veces.
+   */
+  showFollowUps?: boolean;
 }
 
 type ConfirmationSentinel = {
@@ -233,6 +241,7 @@ export function MessageBubble({
   exercisedMandates,
   canRevokeMandates,
   onMandateRevoked,
+  showFollowUps = true,
 }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
   const progress = useMemo(() => latestProgress(message.annotations), [message.annotations]);
@@ -495,9 +504,8 @@ export function MessageBubble({
                 const resolved = resolveView(inv.toolName, result);
                 if (resolved.as === 'rich') {
                   const View = resolved.View;
-                  cards.push(
+                  const draw = () => (
                     <View
-                      key={inv.toolCallId}
                       result={result}
                       toolCallId={inv.toolCallId}
                       onSettled={onConfirmed}
@@ -505,13 +513,40 @@ export function MessageBubble({
                       // El mismo canal de ChoicePrompt: lo que una tarjeta
                       // diga por la persona entra como mensaje de la persona.
                       onSay={onAnswer}
-                    />,
+                    />
+                  );
+                  // Lo que se puede abrir al lado lleva su fila; el resto
+                  // (confirmaciones, navegador vivo) se queda como estaba.
+                  const meta = artifactMeta(inv.toolName, result);
+                  cards.push(
+                    meta ? (
+                      <ArtifactFrame
+                        key={inv.toolCallId}
+                        artifact={{ id: inv.toolCallId, ...meta, render: draw }}
+                      >
+                        {draw()}
+                      </ArtifactFrame>
+                    ) : (
+                      <div key={inv.toolCallId}>{draw()}</div>
+                    ),
                   );
                   continue;
                 }
                 if (resolved.as === 'table') {
+                  const spec = resolved.spec;
+                  const draw = () => <DeclaredTable spec={spec} result={result} />;
+                  const meta = artifactMeta(inv.toolName, result, spec);
                   cards.push(
-                    <DeclaredTable key={inv.toolCallId} spec={resolved.spec} result={result} />,
+                    meta ? (
+                      <ArtifactFrame
+                        key={inv.toolCallId}
+                        artifact={{ id: inv.toolCallId, ...meta, render: draw }}
+                      >
+                        {draw()}
+                      </ArtifactFrame>
+                    ) : (
+                      <div key={inv.toolCallId}>{draw()}</div>
+                    ),
                   );
                   continue;
                 }
@@ -719,7 +754,7 @@ export function MessageBubble({
 
         {/* Only under the newest answer: a transcript with a strip of
             suggestions after every message is a transcript of suggestions. */}
-        {onRegenerate && onCompose && content && (
+        {showFollowUps && onRegenerate && onCompose && content && (
           <FollowUps
             conversationId={conversationId}
             messageId={message.id}

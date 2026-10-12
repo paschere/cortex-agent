@@ -289,7 +289,7 @@ function ThreadItem({
         className={clsx(
           'flex min-w-0 items-center gap-2 rounded-sm py-2 pl-2.5 pr-9 text-sm transition-colors duration-150 motion-reduce:transition-none',
           active
-            ? 'bg-primary-soft font-medium text-primary-ink'
+            ? 'bg-surface font-semibold text-ink shadow-card ring-1 ring-inset ring-border'
             : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
         )}
       >
@@ -457,7 +457,14 @@ function ThreadList({
             </section>
           ))
         )}
-        <div className="mt-3 px-4">
+        <div className="mt-3 flex flex-col gap-1 px-4">
+          <Link
+            href="/calls"
+            onClick={onNavigate}
+            className="text-xs text-ink-faint underline-offset-2 hover:text-ink hover:underline"
+          >
+            Llamadas en vivo
+          </Link>
           <Link
             href="/conversations"
             onClick={onNavigate}
@@ -480,10 +487,7 @@ export function ThreadAside() {
   const collapsed = useCollapsed();
   if (collapsed) return null;
   return (
-    <aside
-      aria-label="Lista de chats"
-      className="hidden w-72 shrink-0 border-r border-border bg-surface lg:block"
-    >
+    <aside aria-label="Lista de chats" className="hidden w-64 shrink-0 lg:block">
       <ThreadList onCollapse={() => writeLS(KEY_COLLAPSED, '1')} />
     </aside>
   );

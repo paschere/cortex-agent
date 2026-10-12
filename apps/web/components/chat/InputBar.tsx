@@ -35,10 +35,13 @@ import {
   Handshake,
   Layers,
   Mail,
+  Mic,
   Paperclip,
+  Plug,
   Plus,
   Server,
   ShieldCheck,
+  SlidersHorizontal,
   Square,
   Target,
   Telescope,
@@ -49,6 +52,7 @@ import {
   Workflow,
   Wrench,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentTray } from './AttachmentTray';
 import { ScopePicker, ScopeStrip } from './MemoryScope';
@@ -84,6 +88,9 @@ interface InputBarProps {
 }
 
 const CHAR_COUNT_THRESHOLD = 3500;
+
+const plusItem =
+  'flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm text-ink-muted outline-none transition-colors duration-150 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45 data-[highlighted]:bg-primary-soft data-[highlighted]:text-primary-ink motion-reduce:transition-none';
 
 /**
  * `/` COMMANDS AND `@` MENTIONS — and the thing that is deliberately absent.
@@ -275,6 +282,23 @@ export function InputBar({
   // El modo voz manos-libres: una conversación hablada con Cortex, aparte del
   // hilo de texto. Se abre desde la fila de herramientas del compositor.
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const dictRef = useRef<HTMLSpanElement>(null);
+  const [canDictate, setCanDictate] = useState(false);
+
+  // Las fuentes conectadas, en pastillas. Barato y sin bloquear: si la lectura
+  // falla o tarda, la fila simplemente no se dibuja.
+  const sources = useQuery<{ sources: { id: string; label: string; tone?: string }[] }>({
+    queryKey: ['chat-sources'],
+    queryFn: async () => {
+      const res = await fetch('/api/chat/sources', { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) throw new Error('sources');
+      return (await res.json()) as { sources: { id: string; label: string; tone?: string }[] };
+    },
+    staleTime: PALETTE_STALE_MS,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const connected = sources.data?.sources ?? [];
   const registerFilePicker = useCallback(
     (open: () => void) => setOpenFilePicker((prev) => (prev === open ? prev : open)),
     [],
@@ -464,7 +488,8 @@ export function InputBar({
     if (mention) {
       const before = text.slice(0, mention.start);
       const after = text.slice(caret);
-      put(`${before}${item.expands}${after}`, before.length + item.expands.length);
+      const token = `@${item.expands}`;
+      put(`${before}${token}${after}`, before.length + token.length);
       return;
     }
     put(item.expands);
@@ -672,7 +697,7 @@ export function InputBar({
                 dentro. Las dos siguen nombradas, que es lo que las hace
                 descubribles.
               */
-          placeholder="Cuéntame qué necesitas resolver…"
+          placeholder="Escríbele a Cortex… usa @ para nombrar algo"
           disabled={disabled}
           rows={1}
           role="combobox"
@@ -756,35 +781,98 @@ export function InputBar({
                 </DropdownMenu.Root>
               ))}
 
-            {openFilePicker && (
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => openFilePicker()}
-                aria-label="Adjuntar un archivo"
-                title="Adjuntar un archivo"
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-40 motion-reduce:transition-none"
-              >
-                <Paperclip className="h-4 w-4" aria-hidden />
-              </button>
-            )}
-
-            <button
-              type="button"
-              disabled={disabled}
-              aria-expanded={extras || Boolean(screen?.live)}
-              aria-label={extras ? 'Esconder extras' : 'Más: dictar, memoria, mirar pantalla'}
-              onClick={() => setExtras((was) => !was)}
-              className={clsx(
-                'grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors duration-150 motion-reduce:transition-none',
-                extras || screen?.live
-                  ? 'bg-primary-soft text-primary'
-                  : 'text-ink-faint hover:bg-surface-2 hover:text-ink',
-                'disabled:opacity-40',
-              )}
+            <DropdownMenu.Root
+              onOpenChange={(isOpen) => {
+                if (isOpen) setCanDictate(Boolean(dictRef.current?.querySelector('button')));
+              }}
             >
-              <Plus className="h-4 w-4" aria-hidden />
-            </button>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-label="Agregar: archivo, dictado, fuentes"
+                  title="Agregar"
+                  className={clsx(
+                    'grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-muted transition-colors duration-150 hover:bg-border hover:text-ink motion-reduce:transition-none',
+                    (extras || screen?.live) && 'bg-primary-soft text-primary',
+                    'disabled:opacity-40',
+                  )}
+                >
+                  <Plus className="h-4 w-4" aria-hidden />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  side="top"
+                  align="start"
+                  sideOffset={8}
+                  className="z-50 min-w-[230px] rounded-card border border-border bg-surface p-1.5 shadow-pop"
+                >
+                  <DropdownMenu.Item
+                    disabled={!openFilePicker}
+                    onSelect={() => openFilePicker?.()}
+                    className={plusItem}
+                  >
+                    <Paperclip className="h-4 w-4" aria-hidden />
+                    <span className="flex-1">Adjuntar archivo</span>
+                    {!openFilePicker && (
+                      <span className="text-micro text-ink-faint">tras tu primer mensaje</span>
+                    )}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    disabled={!canDictate}
+                    onSelect={() => dictRef.current?.querySelector('button')?.click()}
+                    className={plusItem}
+                  >
+                    <Mic className="h-4 w-4" aria-hidden />
+                    <span className="flex-1">Dictar</span>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item asChild className={plusItem}>
+                    <Link href="/integrations">
+                      <Plug className="h-4 w-4" aria-hidden />
+                      <span className="flex-1">Conectar una fuente</span>
+                    </Link>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                  <DropdownMenu.Item onSelect={() => setExtras((was) => !was)} className={plusItem}>
+                    <SlidersHorizontal className="h-4 w-4" aria-hidden />
+                    <span className="flex-1">
+                      {extras ? 'Esconder memoria y pantalla' : 'Memoria y pantalla'}
+                    </span>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+
+            {connected.length > 0 && (
+              <ul
+                aria-label="Fuentes conectadas"
+                className="hidden min-w-0 items-center gap-1.5 overflow-hidden sm:flex"
+              >
+                {connected.slice(0, 4).map((source) => (
+                  <li
+                    key={source.id}
+                    className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 text-xs text-ink-muted"
+                  >
+                    <span
+                      className={clsx(
+                        'h-1.5 w-1.5 rounded-full',
+                        source.tone === 'error'
+                          ? 'bg-rose'
+                          : source.tone === 'attention'
+                            ? 'bg-amber'
+                            : 'bg-emerald',
+                      )}
+                      aria-hidden
+                    />
+                    {source.label}
+                  </li>
+                ))}
+                {connected.length > 4 && (
+                  <li className="shrink-0 text-xs text-ink-faint">+{connected.length - 4}</li>
+                )}
+              </ul>
+            )}
 
             <button
               type="button"
@@ -798,11 +886,6 @@ export function InputBar({
             {(extras || screen?.live) && (
               <>
                 <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
-                <VoiceDictation
-                  disabled={disabled}
-                  getBaseText={() => textRef.current}
-                  onText={setComposerText}
-                />
                 <TeachFlowLink />
                 {screen && <ScreenViewButton session={screen} disabled={disabled} />}
               </>
@@ -810,6 +893,13 @@ export function InputBar({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <span ref={dictRef} className="contents">
+              <VoiceDictation
+                disabled={disabled}
+                getBaseText={() => textRef.current}
+                onText={setComposerText}
+              />
+            </span>
             {disabled && onStop && (
               <button
                 type="button"

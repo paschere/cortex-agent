@@ -9,59 +9,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { StructuralResult } from './results/StructuralResult';
 
 /**
- * WHAT CORTEX IS DOING, AS A LIST INSTEAD OF A STACK OF CARDS.
- *
- * ===========================================================================
- * THE DENSITY PROBLEM, WHICH IS THE WHOLE DESIGN
- * ===========================================================================
- * The card this replaces was fine for one tool call and wrong for twelve. Each
- * one was a bordered, shadowed, tinted block with its own chevron; a turn that
- * looked up three plates in two registries and then wrote a commitment
- * scrolled the actual answer off the screen behind a wall of chrome. The
- * information in those cards was right. The unit was wrong: a tool call is a
- * LINE ITEM, not a document.
- *
- * So a call is one row, about the height of a line of text, and the visual
- * weight lives on the group rather than on each member — one border around the
- * list, hairlines between rows, no per-row shadow or tint. Twelve calls is
- * then twelve lines, which is a paragraph, not a page.
- *
- * Three further things follow from the same constraint:
- *
- *   COLLAPSE PAST FIVE. A finished turn with more than five steps shows a
- *   summary line — how many, how long — with the rows one click away. Somebody
- *   re-reading a conversation wants the answer; somebody auditing wants the
- *   steps; the second is rarer, so it is the one that costs a click. While the
- *   turn is RUNNING the list is always open, because then the steps ARE the
- *   content — that is the only thing on screen.
- *
- *   ONE COLOUR, AND ONLY FOR FAILURE. Rose on the row that failed, and
- *   nothing on the rest. A dozen green ticks spends the reader's attention on
- *   everything that went right, which is precisely where it is not needed.
- *
- *   ARGUMENTS ON THE ROW, RESULTS BEHIND IT. What was asked fits on a line and
- *   is the part that tells you whether Cortex understood the question. What
- *   came back does not fit and is the part you only want when the answer looks
- *   wrong.
- *
- * ===========================================================================
- * WHERE THE DURATIONS COME FROM
- * ===========================================================================
- * Not from here. `audit_events` already holds one row per tool call with its
- * own `latency_ms`, written by `runTool`; `turn_latencies` already holds the
- * shape of the turn. Both are fetched once the turn is finished — see
- * `/api/chat/turn-metrics` — and matched positionally per tool id.
- *
- * While a call is still running there is no measurement yet, so the row shows a
- * COUNTER, labelled as elapsed time and set in the same monospace as every
- * other piece of evidence. It is not a second measurement competing with the
- * first: it is replaced by the real number the moment that number exists. The
- * alternative was a spinner with no number, and an eighteen-second RUNT lookup
- * behind a silent spinner is the exact dead air this product already learned
- * to fix once.
+ * La línea de «cómo lo hice»: cuántos pasos y cuáles, en palabras.
+ * «3 pasos: Consultar Siigo, Leer el correo y 1 más».
  */
-
-const COLLAPSE_ABOVE = 5;
+export function howSummary(invocations: readonly ToolInvocation[]): string {
+  const names = [...new Set(invocations.map((i) => toolDisplayName(i.toolName)))];
+  const shown = names.slice(0, 2);
+  const extra = names.length - shown.length;
+  const list =
+    shown.length === 2 && extra === 0
+      ? `${shown[0]} y ${shown[1]}`
+      : extra > 0
+        ? `${shown.join(', ')} y ${extra} más`
+        : (shown[0] ?? '');
+  const n = invocations.length;
+  return `${n} ${n === 1 ? 'paso' : 'pasos'}: ${list}`;
+}
 
 export interface TurnMetrics {
   firstVisibleMs: number | null;
@@ -366,13 +329,21 @@ export function TaskRows({
   // hidden behind a disclosure is a failed step nobody sees. `quiet` is the
   // exception: the header Presence is already the live signal, and a list of
   // tool names next to "Pensando…" is two theatres for one wait.
-  const shouldCollapse =
-    (quiet && !!isStreaming) ||
-    (!isStreaming && !running && failures === 0 && invocations.length > COLLAPSE_ABOVE);
+  // Terminado el turno, los pasos son UNA línea —«cómo lo hice»— que se abre
+  // al tocarla. Los fallos no se esconden (arriba, el porqué).
+  const shouldCollapse = (quiet && !!isStreaming) || (!isStreaming && !running && failures === 0);
   const [open, setOpen] = useState(!shouldCollapse);
   useEffect(() => {
     if (!shouldCollapse) setOpen(true);
   }, [shouldCollapse]);
+
+  // Al acabar el turno lo que estaba a la vista se recoge solo.
+  const wasLive = useRef(!!isStreaming || running);
+  useEffect(() => {
+    const live = !!isStreaming || running;
+    if (wasLive.current && !live && failures === 0) setOpen(false);
+    wasLive.current = live;
+  }, [isStreaming, running, failures]);
 
   if (invocations.length === 0) return null;
 
@@ -381,12 +352,10 @@ export function TaskRows({
     ? toolDisplayName(invocations.filter((i) => i.state !== 'result').slice(-1)[0]?.toolName ?? '')
     : null;
 
+  const summary = howSummary(invocations);
+
   return (
-    // SIN SOMBRA, y es un cambio del carril. Los pasos son el aparato de una
-    // respuesta, no la respuesta: una sombra los levanta por encima de la prosa
-    // que están sirviendo. El borde y el fondo bastan para agrupar los
-    // renglones, que es lo único que este contenedor tiene que hacer.
-    <div className="mt-3 overflow-hidden rounded-card border border-border bg-surface">
+    <div className="mt-3">
       {/*
         A screen reader is told what is happening now, in words, and is NOT read
         the whole list every time a row lands — `aria-live` sits on this one
@@ -401,23 +370,21 @@ export function TaskRows({
             : `Cortex terminó ${invocations.length} ${invocations.length === 1 ? 'paso' : 'pasos'}.`}
       </p>
 
-      {(shouldCollapse || !open) && (
+      {shouldCollapse && (
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink-muted transition-colors duration-150 hover:bg-surface-2 motion-reduce:transition-none"
+          className="inline-flex max-w-full items-center gap-2 rounded-pill bg-surface-2 px-3 py-1.5 text-left text-xs text-ink-muted transition-colors duration-150 hover:bg-border hover:text-ink motion-reduce:transition-none"
         >
-          <Check className="h-3 w-3 shrink-0 text-ink-faint" aria-hidden />
-          <span>
-            {invocations.length} {invocations.length === 1 ? 'paso' : 'pasos'}
+          <Check className="h-3 w-3 shrink-0 text-emerald" aria-hidden />
+          <span className="min-w-0 truncate">
+            {summary}
+            {totalLabel ? ` en ${totalLabel}` : ''} · cómo lo hice
           </span>
-          {totalLabel && (
-            <span className="tabular text-ink-faint">· {totalLabel} en herramientas</span>
-          )}
           <ChevronDown
             className={clsx(
-              'ml-auto h-3 w-3 shrink-0 text-ink-faint transition-transform duration-150 motion-reduce:transition-none',
+              'h-3 w-3 shrink-0 text-ink-faint transition-transform duration-150 motion-reduce:transition-none',
               open && 'rotate-180',
             )}
             aria-hidden
@@ -426,16 +393,23 @@ export function TaskRows({
       )}
 
       {open && (
-        <ul className="list-none">
-          {invocations.map((inv) => (
-            <TaskRow
-              key={inv.toolCallId}
-              invocation={inv}
-              durationMs={durations.get(inv.toolCallId)}
-              progress={progress?.get(inv.toolCallId)}
-            />
-          ))}
-        </ul>
+        <div
+          className={clsx(
+            'overflow-hidden rounded-card border border-border bg-surface',
+            shouldCollapse && 'mt-2',
+          )}
+        >
+          <ul className="list-none">
+            {invocations.map((inv) => (
+              <TaskRow
+                key={inv.toolCallId}
+                invocation={inv}
+                durationMs={durations.get(inv.toolCallId)}
+                progress={progress?.get(inv.toolCallId)}
+              />
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

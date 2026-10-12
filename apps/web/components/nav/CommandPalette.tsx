@@ -1,7 +1,7 @@
 'use client';
 
 import { MODULE } from '@/lib/browser-shape';
-import { routeVisible } from '@/lib/nav-shape';
+import { ACCOUNT, ALL_COMPANIES, APPS, AREAS, SETUP, routeVisible } from '@/lib/nav-shape';
 import { workspaceHref } from '@/lib/workspace-context';
 import type { ModuleKey } from '@cortex/agent-tools';
 import type { Role } from '@cortex/core';
@@ -390,6 +390,51 @@ const SECTIONS: Section[] = [
   },
 ];
 
+/**
+ * LO QUE EL RAIL «V2» ALCANZA Y ESTA LISTA NO ESCRIBIÓ A MANO.
+ *
+ * Las pestañas de cada área y las entradas del menú de la cuenta salen de
+ * `lib/nav-shape.ts`; lo que ya está arriba (con su nota y sus palabras clave)
+ * no se repite, y lo demás entra aquí con el nombre del área como nota. Así ⌘K
+ * lista TODO destino del rail, sin que nadie tenga que acordarse de añadirlo.
+ */
+function generatedSections(): Section[] {
+  const known = new Set(SECTIONS.flatMap((s) => s.entries.map((e) => e.href)));
+  const out: Section[] = [];
+  const take = (
+    heading: string,
+    items: Array<{ href: string; label: string }>,
+    note: string,
+    adminOnly?: boolean,
+  ) => {
+    const entries: Entry[] = [];
+    for (const item of items) {
+      if (known.has(item.href)) continue;
+      known.add(item.href);
+      entries.push({
+        href: item.href,
+        label: item.label,
+        note,
+        keywords: `${heading} ${note} ${item.label}`.toLowerCase(),
+      });
+    }
+    if (entries.length > 0) out.push({ heading, entries, adminOnly });
+  };
+  take('Todos los días', [APPS, SETUP, ALL_COMPANIES], 'Puertas del menú');
+  for (const area of AREAS)
+    take(area.label, [...area.tabs, ...(area.also ?? [])], `Pestaña de ${area.label}`);
+  for (const group of ACCOUNT) {
+    const admin = group.items.filter((i) => i.adminOnly);
+    take(
+      'Tu cuenta',
+      group.items.filter((i) => !i.adminOnly),
+      group.label,
+    );
+    take('Tu cuenta (administración)', admin, group.label, true);
+  }
+  return out;
+}
+
 export function CommandPalette({ open, onClose, role, modulesOff = [] }: CommandPaletteProps) {
   const router = useRouter();
   if (!open) return null;
@@ -397,7 +442,8 @@ export function CommandPalette({ open, onClose, role, modulesOff = [] }: Command
   // The admin screens are server-gated (app/(app)/admin/layout.tsx returns
   // notFound for anyone else), so this is not a permission check — it is there
   // so the palette does not offer five destinations that answer with a 404.
-  const sections = SECTIONS.filter((s) => !s.adminOnly || role === 'org_admin')
+  const sections = [...SECTIONS, ...generatedSections()]
+    .filter((s) => !s.adminOnly || role === 'org_admin')
     .map((s) => ({ ...s, entries: s.entries.filter((e) => routeVisible(e.href, modulesOff)) }))
     .filter((s) => s.entries.length > 0);
 

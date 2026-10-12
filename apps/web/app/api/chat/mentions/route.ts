@@ -29,6 +29,8 @@ export const dynamic = 'force-dynamic';
  *                 pregunta es sobre ESE contrato y no sobre los contratos.
  *   ESPACIOS    — una tajada entera del cerebro, cuando la pregunta es «qué
  *                 sabemos aquí adentro».
+ *   TABLAS, VISTAS Y APLICACIONES — lo que la persona armó con Cortex: «@Cartera»
+ *                 señala la tabla o la vista de la que habla, por su nombre.
  *   PLACAS      — un vehículo de la flota. Una placa es un nombre propio que
  *                 nadie se sabe de memoria y que se teclea mal la mitad de las
  *                 veces; ofrecerla es evitar una consulta al RUNT con la placa
@@ -240,6 +242,77 @@ async function readVehicles(db: SupabaseClient, userId: string, raw: string): Pr
   };
 }
 
+async function readTrackers(db: SupabaseClient, pattern: string): Promise<Section> {
+  const head = { id: 'tablas', heading: 'Tablas', icon: 'Boxes' };
+  const { data, error } = await db
+    .from('trackers')
+    .select('id, name, description')
+    .ilike('name', pattern)
+    .order('name')
+    .limit(PER_KIND);
+  if (error) {
+    console.error('[chat/mentions] trackers read failed:', error);
+    return failed(head, 'No pude leer las tablas.');
+  }
+  return {
+    ...head,
+    items: (data ?? []).map((row) => ({
+      id: row.id as string,
+      label: row.name as string,
+      hint: ((row.description as string | null) ?? '').slice(0, 60) || 'tabla',
+      expands: `${row.name as string} `,
+    })),
+  };
+}
+
+async function readViews(db: SupabaseClient, pattern: string): Promise<Section> {
+  const head = { id: 'vistas', heading: 'Vistas', icon: 'BarChart3' };
+  const { data, error } = await db
+    .from('custom_views')
+    .select('id, name, description')
+    .ilike('name', pattern)
+    .is('archived_at', null)
+    .order('name')
+    .limit(PER_KIND);
+  if (error) {
+    console.error('[chat/mentions] custom_views read failed:', error);
+    return failed(head, 'No pude leer las vistas.');
+  }
+  return {
+    ...head,
+    items: (data ?? []).map((row) => ({
+      id: row.id as string,
+      label: row.name as string,
+      hint: ((row.description as string | null) ?? '').slice(0, 60) || 'vista',
+      expands: `${row.name as string} `,
+    })),
+  };
+}
+
+async function readApps(db: SupabaseClient, pattern: string): Promise<Section> {
+  const head = { id: 'aplicaciones', heading: 'Aplicaciones', icon: 'Workflow' };
+  const { data, error } = await db
+    .from('custom_apps')
+    .select('id, name, description')
+    .ilike('name', pattern)
+    .is('archived_at', null)
+    .order('name')
+    .limit(PER_KIND);
+  if (error) {
+    console.error('[chat/mentions] custom_apps read failed:', error);
+    return failed(head, 'No pude leer las aplicaciones.');
+  }
+  return {
+    ...head,
+    items: (data ?? []).map((row) => ({
+      id: row.id as string,
+      label: row.name as string,
+      hint: ((row.description as string | null) ?? '').slice(0, 60) || 'aplicación',
+      expands: `${row.name as string} `,
+    })),
+  };
+}
+
 export async function GET(req: NextRequest): Promise<NextResponse<PaletteResponse>> {
   const raw = (req.nextUrl.searchParams.get('q') ?? '').trim();
   const user = await requireSession();
@@ -253,6 +326,9 @@ export async function GET(req: NextRequest): Promise<NextResponse<PaletteRespons
 
   const sections = await Promise.all([
     readClients(db, pattern),
+    readTrackers(db, pattern),
+    readViews(db, pattern),
+    readApps(db, pattern),
     readContacts(db, pattern),
     readDocuments(db, pattern),
     readSpaces(db, user.id, raw),

@@ -2,7 +2,7 @@
 import { HelpButton } from '@/components/help/HelpPanel';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { CortexSignature } from '@/components/ui/cortex-signature';
-import { buildRail } from '@/lib/nav-shape';
+import { ACCOUNT, areaFor, buildRail } from '@/lib/nav-shape';
 import { ChevronRight, Search } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useCommandMenu } from './CommandMenuContext';
@@ -20,10 +20,12 @@ export function Topbar({ email }: { email?: string }) {
     ...rail.rest.flatMap((s) => s.items),
     ...rail.company.items,
     ...rail.footer,
+    ...ACCOUNT.flatMap((g) => g.items),
   ];
-  const current = items
-    .filter((i) => path === i.href || path.startsWith(`${i.href}/`))
-    .sort((a, b) => b.href.length - a.href.length)[0];
+  const current =
+    items
+      .filter((i) => path === i.href || path.startsWith(`${i.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0] ?? areaFor(path)?.tab;
   return (
     <header className="workspace-topbar sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 print:hidden md:px-8">
       {/* En el teléfono la marca ocupa el sitio de la hamburguesa: el menú
