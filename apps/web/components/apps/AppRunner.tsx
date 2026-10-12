@@ -114,6 +114,13 @@ export interface AppRunnerProps {
    * turno, texto). Null/ausente = no comparte (app apagada o rol sin permiso).
    */
   location?: LocationStatus | null;
+  /**
+   * Vista previa de un borrador (dentro del chat): las pantallas se cambian aquí
+   * mismo, sin navegar, y el contenido lo pinta `screenContent`. Nada de sesión,
+   * ubicación ni avisos del teléfono.
+   */
+  preview?: { onSelect: (slug: string) => void };
+  screenContent?: React.ReactNode;
 }
 
 function AppMark({
@@ -196,9 +203,11 @@ export function AppRunner({
   look,
   emptyHints = [],
   location = null,
+  preview,
+  screenContent,
 }: AppRunnerProps) {
   const router = useRouter();
-  const como = readOnly ? previewQuery(role.key, previewAttributes) : '';
+  const como = readOnly && !preview ? previewQuery(role.key, previewAttributes) : '';
   const base = basePath ?? `/apps/${app.slug}`;
   const hrefFor = (slug: string) => `${base}/${slug}${como}`;
   const editHref = `/apps/${app.slug}/edit`;
@@ -238,7 +247,7 @@ export function AppRunner({
 
   const accountActions = (
     <div className="flex flex-col items-start gap-3">
-      {!readOnly && <LocationMenu />}
+      {!readOnly && !preview && <LocationMenu />}
       {session && <InstallButton />}
       {session?.external && (
         <KioskMenu
@@ -256,7 +265,21 @@ export function AppRunner({
     <LocationProvider appId={app.id} initial={readOnly ? null : location}>
       <AppToastProvider>
         <AppThemeScope />
-        <div className="app-frame" style={look ? { fontFamily: look.font } : undefined}>
+        <div
+          className="app-frame"
+          style={look ? { fontFamily: look.font } : undefined}
+          onClickCapture={
+            preview
+              ? (e) => {
+                  const a = (e.target as HTMLElement).closest('a[href]');
+                  const href = a?.getAttribute('href') ?? '';
+                  if (!a || !href.startsWith(`${base}/`)) return;
+                  e.preventDefault();
+                  preview.onSelect(href.slice(base.length + 1).split(/[?#]/)[0] ?? '');
+                }
+              : undefined
+          }
+        >
           <BrandScope className="md:flex md:gap-6">
             <aside className="view-no-print hidden w-60 shrink-0 md:block">
               <div className="sticky top-4 flex flex-col gap-4">
@@ -354,7 +377,7 @@ export function AppRunner({
                 />
               )}
               {session && <OfflineBanner computedAt={computedAt} />}
-              {readOnly && (
+              {readOnly && !preview && (
                 <output className="view-no-print mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-amber/40 bg-amber-soft px-4 py-3 text-sm font-semibold text-ink">
                   <span>Viendo como {role.name}. Nada se guarda.</span>
                   <Link
@@ -367,13 +390,15 @@ export function AppRunner({
               )}
               {/* Una pantalla distinta es otro lienzo: sin estado de la anterior, y entra suave. */}
               <div key={`${app.slug}:${current}:${role.key}`} className="app-screen">
-                {!readOnly && buttons.length > 0 && (
+                {!readOnly && !preview && buttons.length > 0 && (
                   <div className="view-no-print mb-3 flex flex-col items-start gap-2">
                     <AppButtons appId={app.id} screen={current} buttons={buttons} />
                   </div>
                 )}
-                {!readOnly && !home && <PushToggle appId={app.id} />}
-                {home ? (
+                {!readOnly && !preview && !home && <PushToggle appId={app.id} />}
+                {preview && screenContent ? (
+                  screenContent
+                ) : home ? (
                   <AppHome
                     home={home}
                     base={base}

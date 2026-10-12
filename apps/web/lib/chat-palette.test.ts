@@ -341,6 +341,10 @@ describe('TOOL_PHRASE contra el registro real', () => {
       'browser.ask_person',
       'browser.request_secret',
       'browser.close_page',
+      // El plan por adelantado lo escribe el modelo para sí y para la pantalla;
+      // nadie pide «arma un plan» desde el menú /.
+      'cortex.plan',
+      'cortex.plan_update',
     ]);
     const missing = listTools()
       .map((tool) => tool.id)

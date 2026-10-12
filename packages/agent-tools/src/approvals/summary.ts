@@ -352,6 +352,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   apps_list: 'Ver las aplicaciones',
   apps_design: 'Diseñar una aplicación (borrador)',
   apps_create: 'Crear una aplicación',
+  apps_apply_draft: 'Crear la aplicación completa del borrador',
+  trackers_set_flow: 'Darle un flujo por estados a una tabla',
   apps_get: 'Abrir una aplicación',
   apps_update: 'Cambiar una aplicación',
   apps_publish: 'Publicar una aplicación',
@@ -384,6 +386,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   reports_run: 'Volver a correr el informe',
   reports_recipes: 'Ver los informes a la medida guardados',
   errands_start: 'Encargarle el trabajo a Cortex',
+  tasks_start_background: 'Seguir en segundo plano',
   errands_status: 'Ver en qué va el encargo',
   errands_answer: 'Contestarle al encargo',
   pipeline_create: 'Guardar un procedimiento',
@@ -403,6 +406,9 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   cortex_remember: 'Recordar esto tuyo',
   cortex_forget: 'Olvidar eso que recordaba',
   cortex_process: 'Procesar el texto aparte',
+  cortex_plan: 'Armar el plan de la tarea',
+  cortex_plan_update: 'Actualizar el plan de la tarea',
+  research_parallel: 'Investigar en paralelo',
   security_review_action: 'Consultar si esto pasa el filtro',
   security_recent_events: 'Ver lo que marcó la seguridad',
   inbox_overview: 'Ver qué está esperando por ti',
@@ -604,6 +610,27 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       return `Fijar la meta «${input.label || input.metricKey}» — objetivo ${input.targetValue}, ${
         input.cadence === 'week' ? 'semanal' : 'mensual'
       }`;
+    case 'apps_apply_draft': {
+      // La lista de lo que se va a crear: es lo único que aprueba quien dice que sí.
+      const names = (v: unknown, key: string) =>
+        Array.isArray(v)
+          ? v
+              .map((x) =>
+                x && typeof x === 'object' ? String((x as Record<string, unknown>)[key] ?? '') : '',
+              )
+              .filter(Boolean)
+          : [];
+      const tables = names(input.tables, 'name');
+      const screens = names(input.screens, 'title');
+      const roles = names(input.roles, 'name');
+      return `Crear la aplicación «${String(input.name ?? '')}» de una vez${tables.length ? ` — tablas nuevas: ${tables.join(', ')}` : ''}; pantallas: ${screens.join(', ') || 'ninguna'}; roles: ${roles.join(', ') || 'ninguno'}. Queda en borrador, sin publicar; si algo falla se deshace todo`;
+    }
+    case 'trackers_set_flow':
+      return `${input.remove ? 'Quitar el flujo de' : 'Darle un flujo por estados a'} la tabla «${String(input.slug ?? '')}»${Array.isArray(input.states) && input.states.length ? `: ${input.states.map(String).join(' → ')}` : ''} — el servidor rechaza cualquier otro salto de estado`;
+    case 'tasks_start_background':
+      return `Seguir en segundo plano: «${String(input.title ?? input.request ?? '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 140)}» — corre en el servidor, puedes cerrar la pestaña, y te aviso al terminar`;
     default:
       return `Ejecutar: ${pendingToolLabel(toolId)}`;
   }

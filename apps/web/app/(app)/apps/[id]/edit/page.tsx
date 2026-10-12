@@ -174,6 +174,10 @@ export default async function EditAppPage({
           ...(f.options ? { options: f.options } : {}),
         })),
         actions: actionsByTracker[t.slug] ?? [],
+        flow: (() => {
+          const f = t.fields.find((x) => x.type === 'select' && x.flow);
+          return f?.flow ? { field: f.key, def: f.flow } : null;
+        })(),
       })),
     // Una tabla usada que no es propia (plataforma/Feed) no sale en la matriz con campos,
     // pero sí con su nombre: el permiso se da por clave.

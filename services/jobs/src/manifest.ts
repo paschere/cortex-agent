@@ -181,6 +181,13 @@ export const JOBS: JobSpec[] = [
   { name: 'autopilot/remind', retryLimit: 1, concurrency: 5 },
   // «Tu día» de una empresa: una corrida por empresa y día (la campana lleva clave por día).
   { name: 'briefing/workspace', retryLimit: 1, concurrency: 3 },
+  // Tareas en segundo plano (0222). `tasks/run` es UNA tanda de una tarea (cabe en una
+  // llamada de la app); una tarea larga se re-encola a sí misma, por eso sin clave única
+  // (pg-boss descartaría el re-encolado desde el trabajo activo) ni reintentos (reintentar
+  // un turno del agente es pagarlo dos veces). El barrido recoge tandas muertas y respuestas
+  // a acciones paradas. Ver apps/web/inngest/functions/background-task.ts.
+  { name: 'tasks/run', retryLimit: 0, concurrency: 3 },
+  { name: 'tasks/sweep', cron: '*/5 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'dev/task.intake', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.queued', retryLimit: 0, concurrency: 2, singletonKeyFrom: 'taskId' },
   { name: 'dev/task.status', retryLimit: 1, concurrency: 5 },

@@ -82,6 +82,10 @@ export const NOTIFICATION_KINDS = [
    * persona y día, escrito por reglas. Puede traer botones. Ver la 0220.
    */
   'briefing',
+  /** Una tarea en segundo plano terminó, te necesita o falló. Ver la 0222. */
+  'task_finished',
+  'task_needs_you',
+  'task_failed',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -96,6 +100,7 @@ export const NOTIFICATION_SOURCES = [
   'errand',
   'action',
   'report',
+  'task',
 ] as const;
 export type NotificationSource = (typeof NOTIFICATION_SOURCES)[number];
 
@@ -130,6 +135,9 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   approval_waiting: 'warning',
   work_overdue: 'warning',
   briefing: 'info',
+  task_finished: 'good',
+  task_needs_you: 'warning',
+  task_failed: 'bad',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -153,6 +161,9 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   approval_waiting: 'Aprobaciones',
   work_overdue: 'Trabajo',
   briefing: 'Tu día',
+  task_finished: 'Tarea',
+  task_needs_you: 'Tarea',
+  task_failed: 'Tarea',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */

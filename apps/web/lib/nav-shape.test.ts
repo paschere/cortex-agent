@@ -420,7 +420,11 @@ describe('el rail V2', () => {
       'Aplicaciones',
       'Vistas',
       'Reportes',
+      'Cerebro',
     ]);
+    expect(rail.doors[5]?.href).toBe('/kb');
+    // Y sigue siendo pestaña de «Datos»: una puerta más, ningún dueño menos.
+    expect(rail.areas.find((a) => a.area.id === 'data')?.tabs.map((t) => t.href)).toContain('/kb');
     expect(rail.areas.map((a) => a.area.label)).toEqual([
       'Plata',
       'Clientes y ventas',

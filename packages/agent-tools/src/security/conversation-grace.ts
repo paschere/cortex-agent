@@ -59,18 +59,25 @@ export async function hasConversationGrace(
     const since = new Date(Date.now() - opts.graceMs).toISOString();
     const { data, error } = await db
       .from('audit_events')
-      .select('id')
+      .select('id,metadata')
       .eq('conversation_id', opts.conversationId)
       .eq('user_id', opts.userId)
       .eq('tool_id', opts.toolId)
       .eq('status', 'ok')
       .gte('created_at', since)
-      .limit(1);
+      .limit(20);
     if (error) {
       logger.warn({ err: error.message, toolId: opts.toolId }, 'conversation grace lookup failed');
       return false;
     }
-    return Boolean(data && data.length > 0);
+    // Un uso de la concesión de PLAN no es una aprobación humana de esta
+    // herramienta: no puede encadenar una ventana de conversación.
+    return Boolean(
+      data &&
+        (data as Array<{ metadata?: { reason?: string } | null }>).some(
+          (r) => r.metadata?.reason !== 'plan_grant',
+        ),
+    );
   } catch (err) {
     logger.warn({ err: (err as Error).message }, 'conversation grace lookup threw');
     return false;

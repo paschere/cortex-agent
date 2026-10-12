@@ -15,6 +15,7 @@ import { ArrowDownAZ, ArrowUpAZ, LayoutGrid, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFlashClass } from '../flash-context';
 import { RowActions } from '../view-writes';
+import { CardFlow } from './FlowStepper';
 import { useRecordOpener } from './RecordDrawer';
 import { RichValue } from './RichValue';
 import { Card, EmptyState, StatusChip, TONE_BAR, useViewTheme } from './theme';
@@ -369,6 +370,15 @@ export function CardsBlock({ block }: { block: Cards }) {
                             </div>
                           ))}
                         </dl>
+                      )}
+                      {card.flow && block.flowField && (
+                        <CardFlow
+                          flow={card.flow}
+                          field={block.flowField}
+                          blockId={block.id}
+                          rowId={card.id}
+                          onOpen={open ? () => open(card.id) : undefined}
+                        />
                       )}
                       {block.actions.length > 0 && (
                         <div className="relative z-10 mt-auto pt-3">

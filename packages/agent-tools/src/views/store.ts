@@ -14,6 +14,13 @@ import { moduleByKey } from '../modules/catalog';
 import { enabledModules, moduleOffMessage } from '../modules/store';
 import { appBaseUrl } from '../reports/store';
 import { applyDuplicateRule, duplicateMessage, getDuplicateRule } from '../trackers/duplicates';
+import { flowOf } from '../trackers/flow';
+import {
+  ANONYMOUS_ACTOR,
+  UNSCOPED_ACTOR,
+  currentFlowActor,
+  guardFlowWrite,
+} from '../trackers/flow-guard';
 import { rowLabel } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, listTrackers, prepareValues } from '../trackers/store';
 import { type ViewRow, type ViewSource, blockWriteFields } from './compute';
@@ -1255,6 +1262,16 @@ export async function submitViewForm(
         : new Set(trackersOf(view.spec)),
   });
 
+  // Flujo por estados: la fila nueva nace en el primer estado.
+  Object.assign(
+    values,
+    guardFlowWrite(
+      tracker,
+      null,
+      values,
+      currentFlowActor(input.submittedBy ? UNSCOPED_ACTOR : ANONYMOUS_ACTOR),
+    ),
+  );
   const byApp = input.submittedByKind === 'app_user';
   const { data: row, error } = await db
     .from('tracker_rows')
@@ -1578,6 +1595,16 @@ async function patchRow(
         input.actor && input.actorKind !== 'app_user' ? undefined : new Set(trackersOf(view.spec)),
     },
   );
+  // Flujo por estados: el salto de estado se juzga aquí, con el rol de quien escribe.
+  Object.assign(
+    values,
+    guardFlowWrite(
+      input.tracker,
+      before,
+      values,
+      currentFlowActor(input.actor ? UNSCOPED_ACTOR : ANONYMOUS_ACTOR),
+    ),
+  );
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   for (const k of keys)
     if (before[k] !== values[k]) changes[k] = { from: before[k] ?? null, to: values[k] ?? null };
@@ -1671,9 +1698,19 @@ export async function editViewRow(
   // arrastra y los campos que la ficha deja editar (`recordEditable`). La
   // misma función que el cálculo usa para decir qué se edita en pantalla.
   const allowed = new Set(blockWriteFields(block));
-  if (!allowed.size) throw new ValidationError('Este bloque no se edita.');
+  if (!allowed.size && block.type !== 'detail' && block.type !== 'cards')
+    throw new ValidationError('Este bloque no se edita.');
   if (!input.actor) await assertPublicBudget(db, view.id);
   const tracker = await trackerForBlock(db, block.tracker);
+  // Flujo por estados: el detalle y las tarjetas dejan pasar de estado (con lo que ese
+  // estado pide); el servidor juzga el salto y el rol en `patchRow`.
+  const flow = flowOf(tracker.fields);
+  if (flow && (block.type === 'detail' || block.type === 'cards')) {
+    allowed.add(flow.field.key);
+    for (const reqs of Object.values(flow.flow.requirements))
+      for (const r of reqs) allowed.add(r.field);
+  }
+  if (!allowed.size) throw new ValidationError('Este bloque no se edita.');
   const { label, duplicate } = await patchRow(db, view, {
     blockId: block.id,
     tracker,

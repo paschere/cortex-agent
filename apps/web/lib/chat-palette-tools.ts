@@ -124,6 +124,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'cortex.process': 'Resume y sácale los datos a este texto: ',
   'cortex.remember': 'Recuerda de aquí en adelante que ',
 
+  'research.parallel': 'Investiga en paralelo, uno por uno, estos elementos: ',
+
   'documents.confirm': 'Confirma lo que leíste del documento ',
   'documents.confirm_expiration': 'Confirma la fecha de vencimiento que leíste de ',
   'documents.correction_stats': '¿Qué campos de los documentos toca corregir siempre?',

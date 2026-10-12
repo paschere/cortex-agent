@@ -320,6 +320,28 @@ export function watchModel() {
 }
 
 /**
+ * El modelo de cada sub-ejecución de `research.parallel` (investigación en
+ * paralelo). Una pieza es una búsqueda corta con herramientas de LECTURA y una
+ * ficha de campos al final, repetida hasta 50 veces: el volumen es de otro
+ * orden que un turno de chat, así que por defecto va el modelo rápido (Haiku
+ * 5.5, `FAST_MODEL`, con `thinking` apagado). `standard` es el mismo modelo del resto de
+ * las llamadas auxiliares, para cuando el criterio de cada pieza importa más
+ * que el costo.
+ */
+export type ResearchTier = 'fast' | 'standard';
+
+/**
+ * El modelo rápido de la familia 5: lo usa la investigación en paralelo, donde
+ * corren hasta 50 piezas cortas con herramientas. Es de la familia 5, así que
+ * va por `quietProvider` (thinking `disabled`), no por el de Haiku 4.5.
+ */
+export const FAST_MODEL = 'claude-haiku-5-5';
+
+export function researchModel(tier: ResearchTier = 'fast') {
+  return tier === 'standard' ? quietProvider(UTILITY_MODEL) : quietProvider(FAST_MODEL);
+}
+
+/**
  * Agent rows written before the migration to Claude still carry Gemini model
  * ids. Map them instead of failing the request — an agent that predates the
  * switch should keep answering, not 404 against a provider we no longer use.

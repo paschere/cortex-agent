@@ -368,7 +368,7 @@ function Block({
     case 'map':
       return <MapBlock block={block} target={target} />;
     case 'detail':
-      return <DetailBlock block={block} />;
+      return <DetailBlock block={block} target={target} />;
     case 'progress':
       return <ProgressBlock block={block} />;
     case 'media':

@@ -70,7 +70,37 @@ const DATA = {
   kiosk: { enabled: false, idleMinutes: 2, devices: [] },
   attributeValues: {},
   directory: [],
-  trackers: [],
+  trackers: [
+    {
+      slug: 'envios',
+      name: 'Envíos',
+      fields: [
+        { key: 'nombre', label: 'Nombre', type: 'text' },
+        {
+          key: 'estado',
+          label: 'Estado',
+          type: 'select',
+          options: ['Recibido', 'En bodega', 'Despachado', 'Entregado'],
+        },
+        { key: 'foto', label: 'Foto de entrega', type: 'file' },
+        { key: 'nota', label: 'Nota', type: 'longtext' },
+      ],
+      actions: [],
+      flow: {
+        field: 'estado',
+        def: {
+          states: ['Recibido', 'En bodega', 'Despachado', 'Entregado'],
+          transitions: [
+            { from: 'Recibido', to: 'En bodega', roles: [] },
+            { from: 'En bodega', to: 'Despachado', roles: ['supervisor'] },
+            { from: 'Despachado', to: 'Entregado', roles: [] },
+          ],
+          requirements: { Entregado: [{ kind: 'photo', field: 'foto' }] },
+          notify: { Despachado: { roles: ['gerencia'], message: '{{nombre}} salió de bodega' } },
+        },
+      },
+    },
+  ],
   unknownTrackers: [],
   brand: {},
   companyBrand: { name: 'Merflex', primary: '#1e3a8a', secondary: null, logoUrl: null },
@@ -79,11 +109,16 @@ const DATA = {
   screenFilters: {},
 } as unknown as AppEditorData;
 
-export default function AppEditorShowcasePage() {
+export default async function AppEditorShowcasePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   if (process.env.NODE_ENV === 'production') notFound();
+  const { tab } = await searchParams;
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <AppEditor data={DATA} />
+      <AppEditor data={DATA} initialTab={tab} />
     </div>
   );
 }

@@ -25,6 +25,7 @@ import { SessionClipboard, readPageContent } from './page-content';
 import { ProfileManager } from './profiles';
 import { replay } from './replay';
 import { Screencast } from './screencast';
+import { ShotStore, captureThumb } from './shots';
 import { LOCATOR_INSTALL_SCRIPT, snapshotPage } from './snapshot';
 import { assertNavigable } from './target';
 import { TeachingRecorder } from './teaching';
@@ -58,6 +59,8 @@ export class BrowserWorker {
   /** El computador del tenant (profiles.ts). Null = la feature está apagada. */
   private profiles: ProfileManager | null = null;
   private readonly profileClaims = new Set<string>();
+  /** Las fotos chicas de cada paso (shots.ts). Sólo ids viajan fuera de aquí. */
+  private readonly shots = new ShotStore();
   private readonly profileRevisions = new Map<string, number>();
 
   private claimProfile(profile: { key: string; revision: number }): void {
@@ -594,7 +597,7 @@ export class BrowserWorker {
     startUrl: string,
     owner?: string,
     profile?: { key: string; revision: number },
-  ): Promise<{ sessionId: string; snapshot: PageSnapshot }> {
+  ): Promise<{ sessionId: string; snapshot: PageSnapshot; shotId?: string }> {
     // Antes de gastar un contexto: a donde no se va, no se va ni un byte.
     assertNavigable(startUrl);
 
@@ -656,7 +659,8 @@ export class BrowserWorker {
         owner,
         ...(profile ? { profileOwner: profile.key } : {}),
       });
-      return { sessionId, snapshot: await snapshotPage(page) };
+      const shotId = await this.shotOf(sessionId, owner, page);
+      return { sessionId, snapshot: await snapshotPage(page), ...(shotId ? { shotId } : {}) };
     } catch (error) {
       if (profile) {
         this.profileClaims.delete(profile.key);
@@ -677,6 +681,7 @@ export class BrowserWorker {
     error?: string;
     matchedTarget: string | null;
     snapshot: PageSnapshot;
+    shotId?: string;
   }> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new UnknownSession();
@@ -727,25 +732,59 @@ export class BrowserWorker {
         } else throw new Error(`unknown action ${action}`);
       }
       await page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => undefined);
-      return { ok: true, matchedTarget, snapshot: await snapshotPage(page) };
+      const shotId = await this.shotOf(sessionId, session.owner, page);
+      return {
+        ok: true,
+        matchedTarget,
+        snapshot: await snapshotPage(page),
+        ...(shotId ? { shotId } : {}),
+      };
     } catch (err) {
       // A failed action does not end the session: a reasoning agent is expected
       // to misfire and try something else, and tearing the page down would make
       // the baseline look worse than it is.
+      const shotId = await this.shotOf(sessionId, session.owner, page);
       return {
         ok: false,
         error: (err as Error).message,
         matchedTarget,
         snapshot: await snapshotPage(page),
+        ...(shotId ? { shotId } : {}),
       };
     }
   }
 
-  async readSession(sessionId: string, owner?: string): Promise<PageSnapshot> {
+  async readSession(
+    sessionId: string,
+    owner?: string,
+    withShot = false,
+  ): Promise<PageSnapshot & { shotId?: string }> {
     // El bot mirando sí toca: es el paso «mira» de su bucle mirar-actuar, y
     // barrerle la pestaña entre dos pasos sería castigarlo por pensar.
     const session = this.sessionOf(sessionId, owner);
-    return snapshotPage(session.page);
+    const snapshot = await snapshotPage(session.page);
+    // La foto sólo cuando la pide quien mira para LEER (`?shot=1`): el `read`
+    // interno que `browser.act` hace antes de cada gesto no la necesita.
+    const shotId = withShot ? await this.shotOf(sessionId, session.owner, session.page) : null;
+    return shotId ? { ...snapshot, shotId } : snapshot;
+  }
+
+  /** Guarda una foto chica de la pestaña y devuelve su id; `null` si no se pudo. */
+  private async shotOf(
+    sessionId: string,
+    owner: string | undefined,
+    page: Page,
+  ): Promise<string | null> {
+    const jpeg = await captureThumb(page, {
+      width: this.config.viewportWidth,
+      height: this.config.viewportHeight,
+    });
+    return jpeg ? this.shots.put(owner, sessionId, jpeg) : null;
+  }
+
+  /** Los bytes de una foto, sólo para el dueño de la pestaña. Sobrevive al cierre de la pestaña. */
+  getShot(sessionId: string, shotId: string, owner?: string): Buffer | null {
+    return this.shots.get(owner, sessionId, shotId);
   }
 
   async closeSession(sessionId: string): Promise<void> {

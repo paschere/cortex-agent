@@ -1,14 +1,10 @@
 import { ChatRoot } from '@/components/chat/ChatRoot';
+import { toBanner } from '@/lib/background-tasks/banner';
+import { TASK_COLUMNS } from '@/lib/background-tasks/repository';
 import { type BrainSource, parseBrainSources } from '@/lib/brain-sources-shape';
-import {
-  capServeParts,
-  overlayToolResults,
-  parseStoredParts,
-  toolInvocationsOf,
-} from '@/lib/message-parts';
+import { toChatMessages } from '@/lib/conversation-messages';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { toToolInvocations } from '@/lib/tool-invocations';
 import { readWaitingNotice } from '@/lib/waiting';
 import { listVisibleSpaces, loadOverrides } from '@cortex/agent-tools';
 import { listAgents } from '@cortex/agents';
@@ -85,59 +81,10 @@ export default async function ResumeChatPage({
     );
   }
 
-  // Map DB rows to AI SDK Message shape; skip 'tool' role (internal)
-  const initialMessages: Message[] = (msgs ?? [])
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => {
-      /**
-       * LA CRONOLOGÍA GUARDADA, SERVIDA RECORTADA.
-       *
-       * Con `parts` (migración 0110) la respuesta se dibuja EXACTAMENTE como
-       * en vivo: cada llamada en su punto del timeline y el razonamiento en su
-       * ReasoningTrail — es la ruta que `segmentsOf` en MessageBubble prefiere.
-       * Se sirve pasada por `capServeParts` (~20 KB por invocación, ver
-       * lib/message-parts.ts): el transcript entero viaja en el payload RSC, y
-       * lo que se guarda completo no tiene por qué viajar completo para
-       * pintarse.
-       *
-       * Las invocaciones planas (`toolInvocations`) salen de LAS MISMAS parts
-       * recortadas, no de `tool_results` sin tope — servir los dos sería mandar
-       * cada resultado dos veces y una de ellas gigante. Sin parts (mensajes de
-       * antes de la migración, o de usuario) se cae al fallback de siempre.
-       */
-      const storedParts = m.role === 'assistant' ? parseStoredParts(m.parts) : undefined;
-      const currentParts = storedParts
-        ? overlayToolResults(storedParts, m.tool_results)
-        : undefined;
-      const servedParts = currentParts ? capServeParts(currentParts) : undefined;
-      const partInvocations = servedParts ? toolInvocationsOf(servedParts) : undefined;
-      const toolInvocations =
-        partInvocations && partInvocations.length > 0
-          ? partInvocations
-          : toToolInvocations(m.tool_calls, m.tool_results);
-      /**
-       * LA HORA VIAJA CON EL MENSAJE, y hasta hoy no viajaba.
-       *
-       * `created_at` estaba en el `select` desde siempre y se tiraba aquí. La
-       * consecuencia no era sólo que la transcripción no tuviera hora: es que
-       * `MessageActions` construye la procedencia de una cita con
-       * `message.createdAt ?? Date.now()`, así que copiar con su fuente una
-       * frase de hace tres semanas la fechaba HOY. Un producto cuya promesa es
-       * que puedes citar esto dentro de dos semanas no puede inventarse la
-       * fecha de la cita.
-       *
-       * Una línea, ninguna consulta nueva.
-       */
-      const createdAt = m.created_at ? new Date(m.created_at as string) : null;
-      return {
-        id: m.id as string,
-        role: m.role as 'user' | 'assistant',
-        content: (m.content as string) ?? '',
-        ...(toolInvocations ? { toolInvocations } : {}),
-        ...(servedParts ? { parts: servedParts } : {}),
-        ...(createdAt && !Number.isNaN(createdAt.getTime()) ? { createdAt } : {}),
-      };
-    });
+  // Map DB rows to AI SDK Message shape; skip 'tool' role (internal). La regla
+  // (parts recortadas, hora con el mensaje…) vive en lib/conversation-messages.ts:
+  // la comparte la ruta que el chat consulta mientras una tarea en segundo plano escribe.
+  const initialMessages: Message[] = toChatMessages(msgs ?? []);
 
   const convAgents = conv.agents as { slug: string } | { slug: string }[] | null;
   const convAgentSlug = Array.isArray(convAgents) ? convAgents[0]?.slug : convAgents?.slug;
@@ -216,6 +163,17 @@ export default async function ResumeChatPage({
    */
   const waiting = await readWaitingNotice(user.organization.id, user.id);
 
+  // La tarea en segundo plano de esta conversación, si sigue viva (0222): al reabrirla desde
+  // otro aparato el chat la retoma y se ve avanzar a Cortex.
+  const { data: liveTask } = await db
+    .from('background_tasks')
+    .select(TASK_COLUMNS)
+    .eq('conversation_id', conversationId)
+    .in('status', ['queued', 'working', 'needs_you'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const overrides = await loadOverrides(db, conversationId).catch(() => null);
   const scopedIds = overrides?.spaceIds ?? null;
   const initialScope =
@@ -235,6 +193,7 @@ export default async function ResumeChatPage({
       {...(conv.title ? { title: conv.title as string } : {})}
       initialScope={initialScope}
       waiting={waiting}
+      {...(liveTask ? { initialTask: toBanner(liveTask as Record<string, unknown>) } : {})}
       {...(storedFollowups ? { initialFollowups: storedFollowups } : {})}
       {...(Object.keys(initialGlances).length > 0 ? { initialGlances } : {})}
       {...(Object.keys(initialBrainSources).length > 0 ? { initialBrainSources } : {})}

@@ -159,7 +159,12 @@ export function confirmationFollowUp(toolId: string, result: unknown): string {
  * (aquí mismo y en BrowserLive.tsx), así que el prefijo es estable por
  * construcción. Si alguna cambia allá, cámbiala aquí.
  */
-const CONTROL_MESSAGE_STEMS = ['Aprobé y ', 'Ya terminé en la página', 'Ya escribí «'] as const;
+const CONTROL_MESSAGE_STEMS = [
+  'Aprobé y ',
+  'Aprobé el plan',
+  'Ya terminé en la página',
+  'Ya escribí «',
+] as const;
 
 export function isControlHandoffMessage(message: string): boolean {
   const trimmed = message.trim();

@@ -230,6 +230,14 @@ export const RICH: Record<string, ResultView> = {
   trackers_query: dynamic(() =>
     import('./TrackerTable').then((m) => m.TrackerTable as unknown as ResultView),
   ),
+  // Investigación en paralelo: columnas declaradas por quien la pidió.
+  research_parallel: dynamic(() =>
+    import('./ResearchTable').then((m) => m.ResearchTable as unknown as ResultView),
+  ),
+  // El borrador de una app: resumen en el chat, vista previa funcionando al lado.
+  apps_design: dynamic(() =>
+    import('./AppDraftResult').then((m) => m.AppDraftResult as unknown as ResultView),
+  ),
 };
 
 /**
@@ -257,6 +265,8 @@ const RICH_NEEDS: Record<string, (result: unknown) => boolean> = {
     field(r, 'found') === true && typeof field(field(r, 'report'), 'id') === 'string',
   trackers_query: (r) => typeof field(field(r, 'tracker'), 'slug') === 'string',
   trackers_list: (r) => Array.isArray(field(r, 'trackers')),
+  research_parallel: (r) => Array.isArray(field(r, 'rows')) && Array.isArray(field(r, 'columns')),
+  apps_design: (r) => isPlainObject(field(r, 'draft')),
   kb_propose_memory: (r) => typeof field(r, 'statement') === 'string',
   actions_propose: (r) => {
     const action = field(r, 'action');

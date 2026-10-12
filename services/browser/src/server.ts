@@ -516,10 +516,29 @@ async function handle(
       return;
     }
 
+    // La foto chica de un paso (shots.ts). Binaria, privada y cacheable: el id
+    // no se repite jamás, así que `immutable` es verdad.
+    const shotMatch = /^\/session\/([A-Za-z0-9_]+)\/shot\/([A-Za-z0-9_-]{6,32})$/.exec(path);
+    if (req.method === 'GET' && shotMatch?.[1] && shotMatch[2]) {
+      const jpeg = worker.getShot(shotMatch[1], shotMatch[2], owner);
+      if (!jpeg) {
+        json(res, 404, { error: 'Esa foto ya no está.' });
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'image/jpeg',
+        'content-length': jpeg.length,
+        'cache-control': 'private, max-age=21600, immutable',
+      });
+      res.end(jpeg);
+      return;
+    }
+
     const sessionMatch = /^\/session\/([A-Za-z0-9_]+)$/.exec(path);
     if (sessionMatch?.[1]) {
       if (req.method === 'GET') {
-        json(res, 200, await worker.readSession(sessionMatch[1], owner));
+        const wantShot = url.searchParams.get('shot') === '1';
+        json(res, 200, await worker.readSession(sessionMatch[1], owner, wantShot));
         return;
       }
       if (req.method === 'DELETE') {

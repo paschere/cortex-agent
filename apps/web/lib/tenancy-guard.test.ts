@@ -231,6 +231,10 @@ const ALLOWED = new Map<string, string>([
     'Same as the direct-message route: a mention in a group carries a phone number, and resolving it to a Cortex directory row is what determines the workspace. The result is checked against the workspace the bridge claims before any tool is offered.',
   ],
   [
+    'lib/background-tasks/sweep.ts',
+    'Cron. "Which background tasks anywhere in the install are stuck" spans every workspace and there is no session behind a cron; the raw handle runs one SELECT of ids and every read and write after it goes through a handle pinned to the task\'s own workspace.',
+  ],
+  [
     'inngest/functions/errand-sweep.ts',
     'Cron. "Which errands anywhere in the install need a look, and which monitors are due" spans every workspace and there is no session behind a cron; the raw handle runs two SELECTs and every write goes through a handle pinned to the errand\'s own workspace.',
   ],

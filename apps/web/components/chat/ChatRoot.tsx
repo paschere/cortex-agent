@@ -1,6 +1,7 @@
 'use client';
 
 import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
+import type { TaskBanner } from '@/lib/background-tasks/banner';
 import type { BrainSource } from '@/lib/brain-sources-shape';
 import { type ChatErrorKind, classifyClientChatError } from '@/lib/chat-error';
 import { type ScreenFrame, rememberFrame } from '@/lib/screen-marks';
@@ -14,6 +15,7 @@ import { Menu } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
+import { BackgroundBanner } from './BackgroundBanner';
 import { ArtifactPanel, ChatArtifactsProvider, ComputerPill } from './ChatArtifacts';
 import { ChatComposeProvider } from './ChatCompose';
 import { ChatErrorCard } from './ChatErrorCard';
@@ -23,6 +25,7 @@ import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { Presence } from './Presence';
 import { useScreenView } from './ScreenView';
+import { useBackgroundTask } from './useBackgroundTask';
 import { ThreadAside, ThreadHistory } from './ThreadHistory';
 import { WaitingNotice } from './WaitingNotice';
 
@@ -90,6 +93,8 @@ interface ChatRootProps {
    * que se lee. Ausente en un chat nuevo, que todavía no es «de» nada.
    */
   title?: string;
+  /** La tarea en segundo plano viva de esta conversación, si la hay (0222). */
+  initialTask?: TaskBanner | null;
 }
 
 export function ChatRoot({
@@ -105,10 +110,13 @@ export function ChatRoot({
   waiting,
   companyName,
   title,
+  initialTask,
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const [draft, setDraft] = useState(initialDraft ?? '');
+  /** «En segundo plano» encendido en el compositor: el próximo mensaje corre como tarea. */
+  const [backgroundMode, setBackgroundMode] = useState(false);
   const [blocked, setBlocked] = useState<{
     message: string;
     isLimit: boolean;
@@ -308,6 +316,21 @@ export function ChatRoot({
   });
 
   /**
+   * LA TAREA EN SEGUNDO PLANO (0222). Corre en el servidor; este hook sólo la
+   * observa y arranca. Mientras trabaja, el hilo se relee solo (se ve avanzar a
+   * Cortex y «la computadora» del panel) y el compositor queda en espera.
+   */
+  const bg = useBackgroundTask({
+    conversationId,
+    initialTask: initialTask ?? null,
+    chatBusy: isLoading,
+    messages,
+    setMessages: (updater) => setMessages(updater),
+    onConversation: setConversationId,
+  });
+  const working = isLoading || bg.running;
+
+  /**
    * Los dos cabos de la vigilancia, atados al `useChat` que ya existe.
    *
    * Van en un efecto y no en el cuerpo del render porque escribir un ref durante
@@ -363,10 +386,29 @@ export function ChatRoot({
           }),
         );
       }
+      if (backgroundMode && !bg.live) {
+        // El servidor guarda el mensaje; aquí se pinta ya, y la relectura lo reemplaza.
+        setMessages((previous) => [
+          ...previous,
+          { id, role: 'user', content: text, createdAt: new Date() },
+        ]);
+        setBackgroundMode(false);
+        void bg.start(text, 'new');
+        return;
+      }
       void append({ id, role: 'user', content: text });
     },
-    [append, screen],
+    [append, screen, backgroundMode, bg, setMessages],
   );
+
+  // «Seguir en segundo plano» a mitad de un turno largo: se suelta la conexión (lo hecho
+  // ya está guardado paso a paso) y el servidor sigue desde ahí.
+  const handleSendToBackground = useCallback(() => {
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (!lastUser || !conversationId) return;
+    stop();
+    void bg.start(lastUser.content, 'continue');
+  }, [messages, conversationId, stop, bg]);
 
   // ⌘K used to be registered here, which is why it only worked on /chat. The
   // palette is now mounted by the shell (nav/CommandMenuContext) so every
@@ -446,7 +488,7 @@ export function ChatRoot({
   );
 
   return (
-    <ChatArtifactsProvider>
+    <ChatArtifactsProvider {...(conversationId ? { conversationId } : {})}>
       <ChatComposeProvider compose={setDraft} ask={handleSend}>
         {/* La lista de chats a la izquierda sobre el papel, la conversación en su
         hoja blanca, y a la derecha —sólo si se abre algo— «lo que Cortex armó». */}
@@ -462,7 +504,7 @@ export function ChatRoot({
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
+              <Presence size="sm" state={working ? 'thinking' : 'resting'} />
               <ConversationHeader
                 conversationId={conversationId}
                 title={headerTitle}
@@ -494,7 +536,7 @@ export function ChatRoot({
       */}
             <MessageList
               messages={messages}
-              isLoading={isLoading}
+              isLoading={working}
               conversationId={conversationId}
               agent={activeAgent}
               onConfirmed={reload}
@@ -529,7 +571,7 @@ export function ChatRoot({
             )}
 
             {/* Los seguimientos, como pastillas justo encima de donde se escribe. */}
-            {lastAnswer && !blocked && !isLoading && (
+            {lastAnswer && !blocked && !working && !bg.live && (
               <div className="mx-auto w-full max-w-[45rem] shrink-0 px-4 sm:px-6">
                 <FollowUps
                   dock
@@ -542,9 +584,23 @@ export function ChatRoot({
               </div>
             )}
 
+            <BackgroundBanner
+              task={bg.task}
+              starting={bg.starting}
+              error={bg.error}
+              onCancel={() => void bg.cancel()}
+              onDismiss={bg.dismiss}
+              onDecided={() => void bg.refresh()}
+            />
+
             <InputBar
               onSend={handleSend}
-              onStop={stop}
+              onStop={bg.running ? () => void bg.cancel() : stop}
+              background={backgroundMode}
+              onBackgroundChange={setBackgroundMode}
+              {...(isLoading && !bg.running && conversationId
+                ? { onSendToBackground: handleSendToBackground }
+                : {})}
               voiceHistory={messages
                 .filter((message) => message.role === 'user' || message.role === 'assistant')
                 .slice(-10)
@@ -552,7 +608,7 @@ export function ChatRoot({
                   role: message.role === 'user' ? 'you' : 'cortex',
                   text: message.content.slice(0, 2000),
                 }))}
-              disabled={isLoading}
+              disabled={working}
               conversationId={conversationId}
               agents={agents}
               agentSlug={agentSlug}

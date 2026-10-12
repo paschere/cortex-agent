@@ -3,11 +3,13 @@
 import { type BrowserStep, isBrowserTool } from '@/lib/browser-live-steps';
 import { buildActivityRows } from '@/lib/chat-turn';
 import { previewOf } from '@/lib/computer-view';
+import { planFromInvocations, planProgress } from '@/lib/plan-state';
 import { clsx } from 'clsx';
 import { AlertCircle, Check, Globe, Hand, Loader2, Monitor, Play } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatArtifacts } from './ChatArtifacts';
 import { useChatCompose } from './ChatCompose';
+import { PlanSteps } from './PlanCard';
 import { BrowserPanelScreen } from './results/BrowserLive';
 
 /**
@@ -51,9 +53,10 @@ function StatusIcon({ status }: { status: PlanItem['status'] }) {
 }
 
 /**
- * El plan de la tarea, como la lista de Manus: lo que Cortex va haciendo en
- * este turno, sacado de sus llamadas a medida que llegan (no hay una
- * herramienta de plan: no se inventan pasos futuros). Lo hecho se pliega.
+ * El plan de la tarea, como la lista de Manus. Si Cortex lo declaró por
+ * adelantado (`cortex.plan`), se dibuja ese, con los pasos que faltan en gris;
+ * si no, el de siempre: lo que va haciendo en este turno, sacado de sus
+ * llamadas a medida que llegan (sin inventar pasos futuros). Lo hecho se pliega.
  */
 export function PlanChecklist() {
   const api = useChatArtifacts();
@@ -85,6 +88,24 @@ export function PlanChecklist() {
     });
     return out;
   }, [invocations]);
+  const declared = useMemo(() => planFromInvocations(invocations), [invocations]);
+  if (declared) {
+    const { done, total } = planProgress(declared);
+    return (
+      <section
+        aria-label="Plan de la tarea"
+        className="rounded-card border border-border bg-surface-2/50 px-3 py-2"
+      >
+        <h3 className="flex items-center justify-between gap-2 text-xs font-semibold tracking-wide text-ink-faint uppercase">
+          <span className="min-w-0 truncate">Plan · {declared.title}</span>
+          <span className="tabular shrink-0 font-normal tracking-normal normal-case">
+            {done} de {total} hechos
+          </span>
+        </h3>
+        <PlanSteps plan={declared} />
+      </section>
+    );
+  }
   if (items.length === 0) return null;
   const firstOpen = items.findIndex((it) => it.status !== 'ok');
   const foldUntil = firstOpen === -1 ? Math.max(0, items.length - 2) : Math.max(0, firstOpen - 1);
@@ -205,20 +226,52 @@ export function ComputerFrame() {
   );
 }
 
+/**
+ * Una foto chica de un paso. Si no carga (la pestaña se fue y el servicio ya la
+ * soltó, o se reinició) no deja un icono roto: se comporta como «sin foto».
+ */
+function StepShot({
+  src,
+  alt,
+  className,
+  fallback,
+}: { src: string; alt: string; className: string; fallback?: React.ReactNode }) {
+  const [failed, setFailed] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: otra foto, otra oportunidad.
+  useEffect(() => setFailed(false), [src]);
+  if (failed) return <>{fallback ?? null}</>;
+  return (
+    // biome-ignore lint/performance/noImgElement: ruta propia con cookie; next/image no aporta.
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+      className={className}
+    />
+  );
+}
+
+const NO_SHOT = (
+  <div className="grid min-h-40 place-items-center rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-ink-muted">
+    Este paso no dejó una foto de la pantalla.
+  </div>
+);
+
 /** La repetición: el cuadro de un paso pasado, con su foto si la hubo o su tarjeta. */
 function ReplayFrame({ step }: { step: BrowserStep }) {
   return (
     <div className="flex flex-col gap-2 rounded-card border border-border bg-surface-2 p-3">
       {step.thumb ? (
-        <img
+        <StepShot
           src={step.thumb}
           alt={step.sentence}
           className="w-full rounded-lg border border-border object-contain"
+          fallback={NO_SHOT}
         />
       ) : (
-        <div className="grid min-h-40 place-items-center rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-ink-muted">
-          Este paso no dejó una foto de la pantalla.
-        </div>
+        NO_SHOT
       )}
       <p
         className={clsx(
@@ -280,10 +333,9 @@ export function StepTimeline({
                   {s.sentence}
                 </p>
                 {s.thumb && (
-                  <img
+                  <StepShot
                     src={s.thumb}
                     alt=""
-                    loading="lazy"
                     className="mt-1.5 h-16 w-28 rounded-md border border-border object-cover object-top"
                   />
                 )}

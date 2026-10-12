@@ -1,3 +1,4 @@
+import { buildFlowView, flowOf, transitionHistory } from '../trackers/flow';
 import { displayTrackerValue, parseFileValue } from '../trackers/schema';
 import {
   type ComputeOptions,
@@ -407,6 +408,21 @@ export function buildDetail(
     );
   }
 
+  const flowInfo = flowOf(tracker.fields);
+  const flow = flowInfo
+    ? {
+        ...buildFlowView({
+          ...flowInfo,
+          fields: tracker.fields,
+          current: K.rawValue(row, flowInfo.field.key) as string | undefined,
+          values: row.values,
+          actor: opts.flowActor ?? { roles: [], admin: false, unscoped: !opts.viewer },
+          writable: opts.writable && !readOnly,
+        }),
+        history: transitionHistory(selected.history?.events ?? [], flowInfo.field.key).slice(0, 30),
+      }
+    : null;
+
   return {
     ...base,
     state: 'ready',
@@ -432,6 +448,7 @@ export function buildDetail(
     related,
     actions: K.actionsFor(opts, block.actions, tracker, [row]),
     timeline,
+    ...(flow ? { flow } : {}),
   };
 }
 

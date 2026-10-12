@@ -27,11 +27,21 @@ const GOOGLE_LINK =
 const TABULAR_WORDS =
   /\b(?:hojas?|pesta(?:ñ|n)as?|carpetas?|tablas?|aplicaci(?:ó|o)n(?:es)?|vistas?|spreadsheets?|sheets?|google drive|drive)\b/i;
 
+const BREADTH_WORDS =
+  /\b(?:compar(?:a|ar|e|emos)|investiga(?:r|ci(?:ó|o)n)?|revisa(?:r)?|resume|resumir|busca(?:r)?|analiza(?:r)?)\b[^.\n]{0,80}\b(?:\d{2,3}|cada|todos? los|todas las|estos|estas|decenas|docenas|varios|varias|muchos|muchas)\b|\b(?:uno por uno|una por una|en paralelo|investigaci(?:ó|o)n amplia|wide research)\b/i;
+
 export const INTENT_RULES: readonly IntentRule[] = [
   {
     name: 'google-links',
     test: GOOGLE_LINK,
     families: ['feed', 'trackers', 'gdrive', 'gsheets', 'apps', 'views'],
+  },
+  {
+    // Amplitud: la misma pregunta sobre muchos elementos. «compara 30
+    // proveedores», «revisa cada factura», «investiga estos 15 productos».
+    name: 'breadth-research',
+    test: BREADTH_WORDS,
+    families: ['research'],
   },
   {
     name: 'tabular-words',

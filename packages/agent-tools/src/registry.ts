@@ -4,8 +4,8 @@ import {
   SecurityBlockedError,
   ValidationError,
 } from '@cortex/core';
-import { hashInput, writeAuditEvent } from './audit.js';
 import { buildAuditDetail, captureBefore } from './audit-detail.js';
+import { hashInput, writeAuditEvent } from './audit.js';
 import { ModuleDisabledError, disabledModuleForTool } from './modules/store.js';
 import { consumeToken } from './rate-limit.js';
 import { SAFE_ACTION_CATALOG } from './safe-actions/catalog.js';
@@ -43,6 +43,7 @@ import {
 import { recordMandateUse } from './security/mandate-store.js';
 import { explainDelegation, typedAmount } from './security/mandate.js';
 import { mandatoryHumanConfirmation } from './security/mandatory-confirmation.js';
+import { type PlanGrantUse, usePlanGrant } from './security/plan-grant.js';
 import { toolErrorMessage } from './tool-error.js';
 import type { AnyTool, ToolContext, ToolDef } from './types.js';
 
@@ -324,10 +325,24 @@ export async function runTool<I, O>(
   // A high-risk call is gated even when the tool itself never declared
   // requiresConfirmation — the risk lives in the data and the destination,
   // not in the tool definition.
-  if (
-    (evaluation.decision === 'confirm' || mandatoryHumanConfirmation(tool.id)) &&
-    !opts.confirmed
-  ) {
+  //
+  // LA CONCESIÓN DE PLAN (security/plan-grant.ts) puede levantar esta pregunta
+  // —y la propia de la herramienta, más abajo— sólo si la persona aprobó un plan
+  // que nombra ESTA herramienta, en esta conversación, y el riesgo real es
+  // bajo/medio. Nunca para lo no delegable. Se pide aquí, tras el bloqueo.
+  let planGrantUse: PlanGrantUse | null = null;
+  const askPlanGrant = async (): Promise<PlanGrantUse | null> =>
+    usePlanGrant(ctx.db, {
+      conversationId: ctx.conversationId,
+      userId: ctx.userId,
+      agentId: ctx.agentId,
+      toolId: tool.id,
+      riskLevel: evaluation.classification.riskLevel,
+    });
+  const gatedBySecurity =
+    (evaluation.decision === 'confirm' || mandatoryHumanConfirmation(tool.id)) && !opts.confirmed;
+  if (gatedBySecurity && !mandatoryHumanConfirmation(tool.id)) planGrantUse = await askPlanGrant();
+  if (gatedBySecurity && !planGrantUse) {
     await Promise.all([
       writeSecurityEvent({ ...securityEventBase, decision: 'confirm_required' }),
       writeAuditEvent({
@@ -347,23 +362,28 @@ export async function runTool<I, O>(
 
   // Anything above low risk that is going to proceed still leaves an incident
   // row, so the audit UI can show what the guardrails saw and let through.
-  if (isIncident(evaluation)) {
+  if (isIncident(evaluation) || planGrantUse) {
     await writeSecurityEvent({
       ...securityEventBase,
-      decision: evaluation.mandate
-        ? 'delegated'
-        : opts.confirmed && evaluation.decision === 'confirm'
-          ? 'confirmed'
-          : 'flagged',
+      decision:
+        evaluation.mandate || planGrantUse
+          ? 'delegated'
+          : opts.confirmed && evaluation.decision === 'confirm'
+            ? 'confirmed'
+            : 'flagged',
     });
   }
 
   // Decision recorded on every row written from here on: a gated call that the
   // user approved is 'confirmed', everything else keeps its natural decision
   // ('delegated' incluido, que lo pone riskAuditFields al ver la concesión).
-  const riskFinal = riskAuditFields(
+  let riskFinal = riskAuditFields(
     evaluation,
-    opts.confirmed && evaluation.decision === 'confirm' ? 'confirmed' : undefined,
+    planGrantUse
+      ? 'delegated'
+      : opts.confirmed && evaluation.decision === 'confirm'
+        ? 'confirmed'
+        : undefined,
   );
 
   // ---------------------------------------------------------------------------
@@ -414,6 +434,15 @@ export async function runTool<I, O>(
   // vuelve a decidir nada por su cuenta: las dos puertas, un solo veredicto.
   let viaConversationGrace = false;
   if (tool.requiresConfirmation && !opts.confirmed && !evaluation.mandate) {
+    if (!planGrantUse && !mandatoryHumanConfirmation(tool.id)) {
+      planGrantUse = await askPlanGrant();
+      if (planGrantUse) {
+        riskFinal = riskAuditFields(evaluation, 'delegated');
+        await writeSecurityEvent({ ...securityEventBase, decision: 'delegated' });
+      }
+    }
+  }
+  if (tool.requiresConfirmation && !opts.confirmed && !evaluation.mandate && !planGrantUse) {
     // La memoria corta del sí: una confirmación de esta misma herramienta, en
     // esta misma conversación y dentro de su ventana, vale para esta llamada.
     // Solo afloja ESTA puerta — la de seguridad ya pasó, sin consultarla.
@@ -515,7 +544,11 @@ export async function runTool<I, O>(
         },
       }
     : {};
-  const graceMeta = viaConversationGrace ? { reason: 'conversation_grace' } : {};
+  const graceMeta = planGrantUse
+    ? { reason: 'plan_grant', planGrantId: planGrantUse.grantId }
+    : viaConversationGrace
+      ? { reason: 'conversation_grace' }
+      : {};
 
   // ---------------------------------------------------------------------------
   // AUDIT-BEFORE-ACT (portado de OpenBot). Para una llamada con efectos, la
@@ -540,7 +573,9 @@ export async function runTool<I, O>(
       input,
       status: 'attempted',
       latencyMs: Math.round(performance.now() - t0),
-      ...(viaConversationGrace || guard ? { metadata: { ...graceMeta, ...idempotencyMeta } } : {}),
+      ...(viaConversationGrace || planGrantUse || guard
+        ? { metadata: { ...graceMeta, ...idempotencyMeta } }
+        : {}),
       ...riskFinal,
     });
   }
@@ -662,7 +697,7 @@ export async function runTool<I, O>(
     latencyMs: Math.round(performance.now() - t0),
     // Que la auditoría diga cuando un sí heredado abrió la puerta: es la
     // diferencia entre «confirmó» y «se lo habías confirmado hace un rato».
-    ...(viaConversationGrace || guard || verification || auditDetail
+    ...(viaConversationGrace || planGrantUse || guard || verification || auditDetail
       ? {
           metadata: {
             ...graceMeta,

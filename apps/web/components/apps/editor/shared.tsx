@@ -102,6 +102,8 @@ export interface EditorTracker {
   fields: Array<{ key: string; label: string; type: string; options?: string[] }>;
   /** Los botones de fila que las pantallas declaran sobre esta tabla. */
   actions: Array<{ id: string; label: string }>;
+  /** El flujo por estados de la tabla (campo + definición), o null si no tiene. */
+  flow?: { field: string; def: unknown } | null;
 }
 
 export interface AppEditorData {

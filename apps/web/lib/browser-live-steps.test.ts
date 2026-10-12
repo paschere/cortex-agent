@@ -103,6 +103,20 @@ describe('summarizeBrowserStep', () => {
     expect(bad?.thumb).toBeNull();
   });
 
+  it('la foto chica llega como ruta propia (open, act y read) y no se acepta otro origen raro', () => {
+    const path = '/api/browser/live/s_ab12/shot/Zk3_-aBcD0eF';
+    for (const tool of ['browser_open_page', 'browser_act', 'browser_read_page']) {
+      const step = summarizeBrowserStep(
+        inv(tool, { action: 'click' }, { ok: true, thumbnail: path }),
+      );
+      expect(step?.thumb).toBe(path);
+    }
+    const bad = summarizeBrowserStep(
+      inv('browser_act', { action: 'click' }, { ok: true, thumbnail: 'ftp://x/y.jpg' }),
+    );
+    expect(bad?.thumb).toBeNull();
+  });
+
   it('esperar el OK de abrir no cuenta como hecho', () => {
     const s = summarizeBrowserStep(
       inv('browser_open_page', { url: 'https://dian.gov.co' }, { __requires_confirmation: true }),

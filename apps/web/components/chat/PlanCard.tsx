@@ -1,0 +1,95 @@
+'use client';
+
+import { type PlanState, type PlanStatus, planProgress } from '@/lib/plan-state';
+import { clsx } from 'clsx';
+import { AlertCircle, Check, ChevronDown, ListChecks, Loader2, Minus } from 'lucide-react';
+
+/**
+ * EL PLAN POR ADELANTADO, DIBUJADO.
+ *
+ * Una sola pieza para los dos sitios: la tarjeta plegable dentro de la
+ * conversación y la sección «Plan» del panel de la computadora de Cortex. El
+ * estado sale de `lib/plan-state.ts`; aquí sólo se pinta, con los pasos que
+ * faltan todavía en gris.
+ */
+
+export function PlanStatusIcon({ status }: { status: PlanStatus }) {
+  return (
+    <span aria-hidden className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center">
+      {status === 'done' ? (
+        <Check className="h-4 w-4 text-emerald" />
+      ) : status === 'failed' ? (
+        <AlertCircle className="h-4 w-4 text-rose" />
+      ) : status === 'in_progress' ? (
+        <Loader2 className="h-4 w-4 animate-spin text-primary motion-reduce:animate-none" />
+      ) : status === 'skipped' ? (
+        <Minus className="h-4 w-4 text-ink-faint" />
+      ) : (
+        <span className="h-3.5 w-3.5 rounded-full border border-border-strong" />
+      )}
+    </span>
+  );
+}
+
+const STATUS_WORD: Record<PlanStatus, string> = {
+  pending: 'pendiente',
+  in_progress: 'en curso',
+  done: 'hecho',
+  failed: 'falló',
+  skipped: 'omitido',
+};
+
+export function PlanSteps({ plan }: { plan: PlanState }) {
+  return (
+    <ol className="flex flex-col">
+      {plan.steps.map((s) => (
+        <li key={s.id} className="flex items-start gap-2.5 py-1.5">
+          <PlanStatusIcon status={s.status} />
+          <div className="min-w-0 flex-1">
+            <p
+              className={clsx(
+                'text-sm leading-snug [overflow-wrap:anywhere]',
+                s.status === 'failed'
+                  ? 'font-medium text-rose'
+                  : s.status === 'pending' || s.status === 'skipped'
+                    ? 'text-ink-faint'
+                    : 'text-ink',
+                s.status === 'skipped' && 'line-through',
+              )}
+            >
+              <span className="sr-only">{STATUS_WORD[s.status]}: </span>
+              {s.label}
+            </p>
+            {s.note && <p className="text-xs text-ink-muted [overflow-wrap:anywhere]">{s.note}</p>}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** La tarjeta del chat: título, «2 de 5» y la lista plegable (abierta mientras falte algo). */
+export function PlanCard({ plan }: { plan: PlanState }) {
+  const { done, total, finished } = planProgress(plan);
+  return (
+    <details
+      open={!finished}
+      className="group rounded-card border border-border bg-surface shadow-card"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 [&::-webkit-details-marker]:hidden">
+        <ListChecks className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{plan.title}</span>
+        <span className="tabular shrink-0 text-xs text-ink-faint">
+          {done} de {total}
+        </span>
+        <ChevronDown
+          className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-open:rotate-180"
+          aria-hidden
+        />
+      </summary>
+      <div className="border-t border-border px-3.5 py-1.5">
+        <PlanSteps plan={plan} />
+      </div>
+    </details>
+  );
+}

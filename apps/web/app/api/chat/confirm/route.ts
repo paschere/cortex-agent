@@ -1,5 +1,7 @@
+import { REVERSIBLE_TOOLS, undoPlanFor } from '@/lib/activity/undo';
 import { buildToolContext } from '@/lib/agent';
 import { confirmationResults, pendingConfirmationIndex } from '@/lib/confirmation-claim';
+import { sameShape } from '@/lib/confirmation-edit';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
@@ -12,13 +14,20 @@ const Body = z.object({
   toolId: z.string(),
   input: z.unknown(),
   toolCallId: z.string().optional(),
+  /**
+   * La entrada CORREGIDA por la persona en la tarjeta. `input` sigue siendo la
+   * propuesta original (es lo que identifica la tarjeta pendiente); lo que se
+   * ejecuta es esto, si pasa dos controles: misma forma que la propuesta y el
+   * esquema de la herramienta.
+   */
+  editedInput: z.unknown().optional(),
 });
 
 export async function POST(req: NextRequest) {
   const user = await requireSession();
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Solicitud inválida.' }, { status: 400 });
-  const { conversationId, toolId, input, toolCallId } = parsed.data;
+  const { conversationId, toolId, input, toolCallId, editedInput } = parsed.data;
   const db = getOrgScopedClient(user.organization.id);
   const { data: conv, error: convError } = await db
     .from('conversations')
@@ -30,6 +39,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Conversación no disponible.' }, { status: 404 });
   const toolDef = getTool(toolId);
   if (!toolDef) return NextResponse.json({ error: 'Herramienta no disponible.' }, { status: 404 });
+  let execInput: unknown = input;
+  if (editedInput !== undefined) {
+    if (!sameShape(input, editedInput))
+      return NextResponse.json(
+        {
+          error: 'Esa edición cambia la estructura de la acción. Pídele a Cortex que la reformule.',
+        },
+        { status: 400 },
+      );
+    const schema = (toolDef as { inputSchema?: { safeParse: (v: unknown) => unknown } })
+      .inputSchema;
+    const check = schema?.safeParse(editedInput) as
+      | { success: true; data: unknown }
+      | {
+          success: false;
+          error: { issues: Array<{ path: Array<string | number>; message: string }> };
+        }
+      | undefined;
+    if (!check)
+      return NextResponse.json({ error: 'Esta acción no se puede editar.' }, { status: 400 });
+    if (!check.success) {
+      const first = check.error.issues[0];
+      return NextResponse.json(
+        {
+          error: `El valor editado no es válido${first ? `: ${first.path.join('.')} — ${first.message}` : '.'}`,
+        },
+        { status: 400 },
+      );
+    }
+    execInput = editedInput;
+  }
   const { data: agent, error: agentError } = await db
     .from('agents')
     .select('allowed_tool_ids')
@@ -133,7 +173,7 @@ export async function POST(req: NextRequest) {
       agentId: conv.agent_id as string,
       conversationId,
     });
-    output = await runTool(toolDef, input, ctx, { confirmed: true });
+    output = await runTool(toolDef, execInput, ctx, { confirmed: true });
   } catch (error) {
     failed = true;
     output = {
@@ -154,7 +194,9 @@ export async function POST(req: NextRequest) {
       .single();
     if (!latest || !Array.isArray(latest.tool_results)) break;
     const next = latest.tool_results.map((entry: Record<string, unknown>, i: number) =>
-      i === index ? { ...entry, result: output } : entry,
+      i === index
+        ? { ...entry, result: output, ...(editedInput !== undefined ? { editedInput } : {}) }
+        : entry,
     );
     const { data: saved } = await db
       .from('messages')
@@ -165,7 +207,39 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (saved) break;
   }
-  return failed
-    ? NextResponse.json({ error: (output as { message: string }).message }, { status: 500 })
-    : NextResponse.json({ result: output });
+  if (failed)
+    return NextResponse.json({ error: (output as { message: string }).message }, { status: 500 });
+  return NextResponse.json({
+    result: output,
+    ...(editedInput !== undefined ? { edited: true } : {}),
+    ...(await undoableEventId(db, { toolId, userId: user.id, conversationId })),
+  });
+}
+
+/**
+ * El id de la fila de auditoría de lo que se acaba de ejecutar, SOLO si tiene
+ * inversa (lib/activity/undo.ts): es lo que enciende «Deshacer» en la tarjeta.
+ * Un fallo aquí nunca estorba la aprobación.
+ */
+async function undoableEventId(
+  db: ReturnType<typeof getOrgScopedClient>,
+  args: { toolId: string; userId: string; conversationId: string },
+): Promise<{ undoEventId?: string }> {
+  if (!(REVERSIBLE_TOOLS as readonly string[]).includes(args.toolId)) return {};
+  try {
+    const { data } = await db
+      .from('audit_events')
+      .select('id,tool_id,status,metadata')
+      .eq('tool_id', args.toolId)
+      .eq('user_id', args.userId)
+      .eq('conversation_id', args.conversationId)
+      .eq('status', 'ok')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const row = Array.isArray(data) ? data[0] : null;
+    if (row && undoPlanFor(row)) return { undoEventId: row.id as string };
+  } catch {
+    /* sin Deshacer; la aprobación ya salió */
+  }
+  return {};
 }

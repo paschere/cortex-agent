@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ session: vi.fn(), from: vi.fn(), run: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  session: vi.fn(),
+  from: vi.fn(),
+  run: vi.fn(),
+  tool: vi.fn(() => ({}) as unknown),
+}));
 vi.mock('@/lib/session', () => ({ requireSession: mocks.session }));
 vi.mock('@/lib/agent', () => ({ buildToolContext: () => ({}) }));
 vi.mock('@/lib/supabase/service', () => ({ getOrgScopedClient: () => ({ from: mocks.from }) }));
@@ -8,7 +13,7 @@ vi.mock('@/lib/tool-access', () => ({
   isToolDenied: () => false,
 }));
 vi.mock('@cortex/agent-tools', () => ({
-  getTool: () => ({}),
+  getTool: () => mocks.tool(),
   toolIdAllowed: () => true,
   runTool: mocks.run,
 }));
@@ -26,6 +31,7 @@ const parts = [
 ];
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.tool.mockReturnValue({});
   stored = [];
   loseClaim = false;
   mocks.session.mockResolvedValue({ id: 'user', organization: { id: 'company' } });
@@ -132,5 +138,66 @@ describe('confirmation of a legacy multi-step response', () => {
     loseClaim = true;
     expect((await POST(request() as never)).status).toBe(409);
     expect(mocks.run).not.toHaveBeenCalled();
+  });
+
+  describe('editing before approving', () => {
+    const edited = (value: unknown) =>
+      new Request('https://cortex.test/api/chat/confirm', {
+        method: 'POST',
+        body: JSON.stringify({
+          conversationId: '00000000-0000-4000-8000-000000000001',
+          toolId: 'meetings.join',
+          toolCallId: 'call-1',
+          input,
+          editedInput: value,
+        }),
+      });
+    const withSchema = (ok: boolean) =>
+      mocks.tool.mockReturnValue({
+        inputSchema: {
+          safeParse: (v: unknown) =>
+            ok
+              ? { success: true, data: v }
+              : {
+                  success: false,
+                  error: { issues: [{ path: ['meetUrl'], message: 'URL no válida' }] },
+                },
+        },
+      });
+
+    it('runs the edited values, not the proposal, when shape and schema pass', async () => {
+      withSchema(true);
+      const next = { meetUrl: 'https://meet.google.com/xyz-xyz-xyz' };
+      const res = await POST(edited(next) as never);
+      expect(res.status).toBe(200);
+      expect(mocks.run).toHaveBeenCalledWith(expect.anything(), next, expect.anything(), {
+        confirmed: true,
+      });
+      expect((await res.json()).edited).toBe(true);
+    });
+
+    it('refuses an edit that adds fields or changes types', async () => {
+      withSchema(true);
+      expect((await POST(edited({ ...input, to: 'x@y.co' }) as never)).status).toBe(400);
+      expect((await POST(edited({ meetUrl: 3 }) as never)).status).toBe(400);
+      expect(mocks.run).not.toHaveBeenCalled();
+    });
+
+    it('refuses an edit the tool schema rejects, without claiming the card', async () => {
+      withSchema(false);
+      const res = await POST(edited({ meetUrl: 'no' }) as never);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toContain('URL no válida');
+      expect(mocks.run).not.toHaveBeenCalled();
+      // La tarjeta sigue pendiente: aprobar tal cual todavía funciona.
+      mocks.tool.mockReturnValue({});
+      expect((await POST(request() as never)).status).toBe(200);
+    });
+
+    it('refuses to edit a tool that exposes no schema', async () => {
+      const res = await POST(edited({ meetUrl: 'https://meet.google.com/a-b-c' }) as never);
+      expect(res.status).toBe(400);
+      expect(mocks.run).not.toHaveBeenCalled();
+    });
   });
 });

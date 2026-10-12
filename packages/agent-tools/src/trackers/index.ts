@@ -6,7 +6,9 @@
  */
 
 import './tools';
+import './flow-tools';
 
+export { trackersSetFlow } from './flow-tools';
 export {
   trackersDefine,
   trackersList,
@@ -25,6 +27,42 @@ export {
   validateDuplicateRule,
 } from './duplicates';
 export type { DuplicateRule } from './duplicates';
+
+export {
+  FLOW_REQUIREMENT_KINDS,
+  FLOW_REQUIREMENT_LABEL,
+  buildFlowView,
+  checkTransition,
+  describeFlow,
+  flowAutomationDrafts,
+  flowOf,
+  flowProblems,
+  flowSchema,
+  isFilled,
+  linearTransitions,
+  normalizeFlow,
+  missingRequirements,
+  transitionAllowed,
+  transitionHistory,
+} from './flow';
+export {
+  ANONYMOUS_ACTOR,
+  UNSCOPED_ACTOR,
+  currentFlowActor,
+  guardFlowWrite,
+  withFlowActor,
+} from './flow-guard';
+export type {
+  ComputedFlow,
+  Flow as StateFlow,
+  FlowActor,
+  FlowCheck,
+  FlowHistoryEntry,
+  FlowNextMove,
+  FlowRequirement,
+  FlowStep,
+  FlowTransition,
+} from './flow';
 
 export {
   FIELD_FORMATS,

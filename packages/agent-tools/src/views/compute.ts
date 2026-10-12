@@ -1,3 +1,4 @@
+import type { ComputedFlow, FlowActor, FlowHistoryEntry } from '../trackers/flow';
 import { type TrackerField, displayTrackerValue, parseLocation } from '../trackers/schema';
 import { computeCards } from './cards';
 import { type EmbedProvider, embedSrc, httpsUrl, safeHref } from './embeds';
@@ -369,7 +370,15 @@ export interface ComputedCards {
     group: string | null;
     sort: Array<string | number | null>;
     alert?: boolean;
+    /** Avance en el flujo por estados: posición, total y siguiente(s) salto(s). */
+    flow?: {
+      index: number;
+      total: number;
+      next: Array<{ to: string; allowed: boolean; needs: boolean }>;
+    };
   }>;
+  /** El campo que lleva el flujo (los saltos de tarjeta escriben en él). */
+  flowField?: string;
   /** Los chips que se pintan (los que el spec pidió y se pueden resolver). */
   chips: Array<'status' | 'today' | 'week' | 'mine'>;
   statusOptions: Array<{ label: string; tone: Tone }>;
@@ -435,6 +444,8 @@ export interface ComputedRecordDetail {
   }>;
   actions: ComputedAction[];
   timeline: ComputedTimelineEntry[] | null;
+  /** El flujo por estados de la tabla (avance, botones según el rol, historia de saltos). */
+  flow?: (ComputedFlow & { history: FlowHistoryEntry[] }) | null;
 }
 
 export type GoalStatus = 'good' | 'warn' | 'bad';
@@ -1037,6 +1048,12 @@ export interface ComputeOptions {
   details?: Map<string, string>;
   /** id de botón → su rótulo, para nombrar «usó el botón X» en la línea de tiempo. */
   actionLabels?: Map<string, string>;
+  /**
+   * Quién mira, para el flujo por estados: los botones de «pasar a…» salen sólo
+   * para los saltos que su rol puede hacer. Sin esto (vista del equipo, enlace
+   * público) se pintan los saltos sin rol y los demás quedan apagados.
+   */
+  flowActor?: FlowActor;
 }
 
 /** Si el campo se pinta con algo más que texto (foto, mapa). */

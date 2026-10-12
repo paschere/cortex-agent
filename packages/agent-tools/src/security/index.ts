@@ -111,3 +111,17 @@ export {
   MANDATE_USES_TABLE,
 } from './mandate-store';
 export type { MandateUse } from './mandate-store';
+
+// La concesión de plan (aprobar un plan de varios pasos una sola vez). Ver plan-grant.ts.
+export {
+  PLAN_GRANT_MAX_CALLS,
+  PLAN_GRANT_TTL_MS,
+  createPlanGrant,
+  findActivePlanGrant,
+  neverUnderPlanGrant,
+  planGrantCovers,
+  resolvePlanGrant,
+  revokePlanGrant,
+  splitPlanTools,
+} from './plan-grant';
+export type { PlanGrant, PlanToolSplit } from './plan-grant';

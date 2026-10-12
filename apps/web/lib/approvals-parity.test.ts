@@ -51,6 +51,19 @@ describe('el catálogo de nombres es el mismo a los dos lados', () => {
  * quede ninguna fuera cuando alguien añada una.
  */
 const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
+  {
+    toolId: 'apps.apply_draft',
+    input: {
+      name: 'Control de envíos',
+      tables: [{ name: 'Envíos' }],
+      screens: [{ title: 'Registrar' }, { title: 'Tablero' }],
+      roles: [{ name: 'Operario' }, { name: 'Supervisor' }],
+    },
+  },
+  {
+    toolId: 'trackers.set_flow',
+    input: { slug: 'envios', states: ['Recibido', 'En bodega', 'Entregado'] },
+  },
   { toolId: 'hubspot.update_deal', input: { dealstage: 'Negociación', amount: 12_400_000 } },
   { toolId: 'hubspot_update_deal', input: {} },
   { toolId: 'hubspot.create_deal', input: { dealname: 'Coltrans', dealstage: 'Propuesta' } },

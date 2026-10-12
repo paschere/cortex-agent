@@ -1,3 +1,4 @@
+import { type FlowActor, buildFlowView, flowOf } from '../trackers/flow';
 import { weekDays } from './agenda';
 import {
   type ComputeOptions,
@@ -63,6 +64,8 @@ export function computeCards(
     return t === 'date' || t === 'builtin_date';
   };
 
+  const flowInfo = flowOf(tracker.fields);
+  const actor: FlowActor = opts.flowActor ?? { roles: [], admin: false, unscoped: !opts.viewer };
   const cards = sorted.map((r) => {
     const status = block.statusField ? K.rawValue(r, block.statusField) : undefined;
     const at = status === undefined ? -1 : statusOptions.indexOf(String(status));
@@ -87,8 +90,35 @@ export function computeCards(
       status:
         status === undefined
           ? null
-          : { label: String(status), tone: at >= 0 ? K.toneAt(at, statusOptions) : ('primary' as const) },
+          : {
+              label: String(status),
+              tone: at >= 0 ? K.toneAt(at, statusOptions) : ('primary' as const),
+            },
       data: block.dataFields.map((k) => K.detailOf(tracker, r, k)).filter((d) => d.value !== '—'),
+      ...(flowInfo && opts.writable
+        ? (() => {
+            const v = buildFlowView({
+              ...flowInfo,
+              fields: tracker.fields,
+              current: K.rawValue(r, flowInfo.field.key) as string | undefined,
+              values: r.values,
+              actor,
+              writable: true,
+            });
+            const index = v.steps.findIndex((st) => st.status === 'current');
+            return {
+              flow: {
+                index,
+                total: v.steps.length,
+                next: v.next.map((n) => ({
+                  to: n.to,
+                  allowed: n.allowed,
+                  needs: n.requires.some((q) => !q.filled),
+                })),
+              },
+            };
+          })()
+        : {}),
       day: typeof date === 'string' ? K.dayOf(date) : null,
       mine: isMine(r),
       group: group === '—' ? 'Sin dato' : group,
@@ -126,6 +156,7 @@ export function computeCards(
     week: { from: week[0] ?? today, to: week[6] ?? today },
     total: rows.length,
     cards,
+    ...(flowInfo && opts.writable ? { flowField: flowInfo.field.key } : {}),
     chips,
     statusOptions: statusOptions.map((label, i) => ({ label, tone: K.toneAt(i, statusOptions) })),
     searchable: block.searchable,

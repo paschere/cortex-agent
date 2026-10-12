@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { flowProblems, flowSchema, normalizeFlow } from './flow';
 import {
   FIELD_FORMATS,
   PATTERN_MAX,
@@ -110,6 +111,7 @@ export function normalizeFieldInput<T>(raw: T): T {
     for (const k of keys) delete f[k];
   };
   if (type !== 'file') drop('accept', 'multiple');
+  if (type !== 'select') drop('flow');
   if (type !== 'text') drop('scan', 'format');
   if (type !== 'relation') drop('tracker');
   if (!textual) drop('pattern', 'minLength', 'maxLength');
@@ -163,6 +165,8 @@ export const trackerFieldSchema = z
       .optional(),
     /** text: se llena con el escáner de código de barras/QR. */
     scan: z.boolean().optional(),
+    /** select: el flujo por estados (ver `flow.ts`). */
+    flow: flowSchema.optional(),
   })
   .superRefine((field, ctx) => {
     const bad = (message: string, path: string) =>
@@ -234,6 +238,25 @@ export const trackerFieldsSchema = z
       }
       seen.add(field.key);
     }
+    // Flujo por estados: un solo campo con flujo, y coherente con las demás columnas.
+    const flowFields = fields.filter((f) => f.flow);
+    if (flowFields.length > 1)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Una tabla admite un solo campo con flujo.',
+        path: [fields.indexOf(flowFields[1] as (typeof fields)[number]), 'flow'],
+      });
+    for (const f of flowFields)
+      for (const message of flowProblems(
+        f,
+        normalizeFlow(f.flow as NonNullable<typeof f.flow>),
+        fields,
+      ))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message,
+          path: [fields.indexOf(f), 'flow'],
+        });
     // showIf: apunta a un campo que existe y no forma ciclos (a→b→a), porque un
     // ciclo dejaría los dos ocultos para siempre.
     const dep = new Map<string, string>();

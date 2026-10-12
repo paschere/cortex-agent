@@ -4,6 +4,7 @@ import { createHttpTransport } from './client';
 import { choosePageControl } from './jev-repair';
 import { forbiddenTargetReason } from './live-target';
 import { browserActorKey, defaultBrowserProfile, getBrowserProfile, profileRef } from './profiles';
+import { shotUrl } from './shot-ref';
 import type { PageSnapshot, SnapshotEntry, Target } from './types';
 
 /**
@@ -172,6 +173,8 @@ export const browserOpenPage = registerTool({
   outputSchema: z.object({
     sessionId: z.string(),
     page: viewSchema,
+    /** Ruta de la foto chica del paso (shot-ref.ts); la pantalla la carga, el modelo no la necesita. */
+    thumbnail: z.string().optional(),
     guidance: z.string(),
   }),
   // Una vez por RATO, no por pestaña: la persona aprueba «voy a entrar a X a
@@ -197,9 +200,11 @@ export const browserOpenPage = registerTool({
       profileRef(profile),
     );
     if (!opened.ok) throw new Error(opened.reason);
+    const thumbnail = shotUrl(opened.data.sessionId, opened.data.shotId);
     return {
       sessionId: opened.data.sessionId,
       page: viewOf(opened.data.snapshot),
+      ...(thumbnail ? { thumbnail } : {}),
       guidance:
         'La persona está viendo esta pestaña en vivo en el chat. Actúa con browser.act usando la ref Y el name del elemento. ' +
         'Si aparece un captcha, un 2FA o cualquier paso que necesite manos humanas, usa browser.ask_person y DETENTE. ' +
@@ -265,6 +270,8 @@ export const browserAct = registerTool({
     ok: z.boolean(),
     message: z.string(),
     page: viewSchema.optional(),
+    /** Ruta de la foto chica del paso (shot-ref.ts); la pantalla la carga, el modelo no la necesita. */
+    thumbnail: z.string().optional(),
   }),
   rateLimit: { perMinute: 40 },
   handler: async (input, ctx) => {
@@ -310,8 +317,10 @@ export const browserAct = registerTool({
       owner,
     });
     if (!acted.ok) return { ok: false, message: acted.reason };
+    const thumbnail = shotUrl(input.sessionId, acted.data.shotId);
     return {
       ok: acted.data.ok,
+      ...(thumbnail ? { thumbnail } : {}),
       message: acted.data.ok
         ? `Hecho${acted.data.matchedTarget ? ` sobre ${acted.data.matchedTarget}` : ''}.`
         : `No se pudo: ${acted.data.error ?? 'sin detalle'}. La página de ahora viene abajo; decide con ella.`,
@@ -356,6 +365,8 @@ export const browserReadPage = registerTool({
   }),
   outputSchema: z.object({
     page: viewSchema,
+    /** Ruta de la foto chica del paso (shot-ref.ts); la pantalla la carga, el modelo no la necesita. */
+    thumbnail: z.string().optional(),
     controlSuggestion: z
       .object({
         status: z.enum(['matched', 'uncertain', 'unavailable']),
@@ -389,8 +400,10 @@ export const browserReadPage = registerTool({
     const fresh = await transport.read(
       input.sessionId,
       browserActorKey(ctx.organizationId, ctx.userId),
+      { shot: true },
     );
     if (!fresh.ok) throw new Error(fresh.reason);
+    const thumbnail = shotUrl(input.sessionId, fresh.data.shotId);
     const content = await transport.content?.(
       input.sessionId,
       browserActorKey(ctx.organizationId, ctx.userId),
@@ -422,6 +435,7 @@ export const browserReadPage = registerTool({
       : undefined;
     return {
       page: viewOf(fresh.data, 'full', input.elementOffset ?? 0),
+      ...(thumbnail ? { thumbnail } : {}),
       ...(input.findControl
         ? {
             controlSuggestion: suggestion

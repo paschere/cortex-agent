@@ -999,7 +999,7 @@ export interface AreaRow {
 }
 
 export interface SidebarV2 {
-  /** Hoy, Chat, Aplicaciones, Vistas y Reportes (los que sigan visibles). */
+  /** Hoy, Chat, Aplicaciones, Vistas, Reportes y Cerebro (los que sigan visibles). */
   doors: DoorDef[];
   /** «Mi empresa»: sólo las áreas con alguna pantalla visible. */
   areas: AreaRow[];
@@ -1030,6 +1030,9 @@ export function buildSidebar(opts: {
     { ...APPS, match: ['/apps'] },
     { ...VIEWS, match: ['/views'] },
     ...(reports ? [{ ...tab(reports.href, 'Reportes', FileBarChart), match: reports.match }] : []),
+    // Cerebro: el archivo de la empresa es de primera, no una pestaña escondida.
+    // Sigue siendo también la pestaña de «Datos»: aquí sólo gana una puerta.
+    { ...BRAIN, match: ['/kb'] },
   ];
   return {
     doors: visibleItems(doors, off),

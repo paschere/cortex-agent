@@ -30,6 +30,8 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
+import type { TaskFile } from '@/lib/background-tasks/files';
+import { FilesPanel } from '../tareas/FilesPanel';
 import { useChatCompose } from './ChatCompose';
 import type { TurnMetrics } from './TaskRows';
 import { ActivityTab, SourcesTab, useTurnRows } from './TurnPanel';
@@ -58,7 +60,7 @@ export interface ChatArtifact extends ArtifactMeta {
   render: () => ReactNode;
 }
 
-export type PanelTab = 'navegador' | 'resultado' | 'fuentes' | 'actividad';
+export type PanelTab = 'navegador' | 'resultado' | 'fuentes' | 'actividad' | 'archivos';
 
 /** Lo que el último turno leyó y ejecutó, para las pestañas «Fuentes» y «Actividad». */
 export interface TurnInsight {
@@ -89,6 +91,10 @@ interface ArtifactsApi {
   openStep: (id: string) => void;
   /** La pestaña se cerró (Detener, o murió): los pasos quedan. */
   stopLive: () => void;
+  /** La conversación, para listar «Archivos» (todo lo producido durante ella). */
+  conversationId: string | undefined;
+  /** Archivos de muestra (pantallas de prueba): si vienen, la pestaña no consulta nada. */
+  filesFixture: TaskFile[] | undefined;
 }
 
 const ArtifactsContext = createContext<ArtifactsApi | null>(null);
@@ -100,8 +106,12 @@ export function ChatArtifactsProvider({
   initialTurn = null,
   initialLive = null,
   initialSteps = [],
+  conversationId,
+  initialFiles,
 }: {
   children: ReactNode;
+  conversationId?: string;
+  initialFiles?: TaskFile[];
   initial?: ChatArtifact | null;
   initialTab?: PanelTab;
   initialTurn?: TurnInsight | null;
@@ -203,6 +213,8 @@ export function ChatArtifactsProvider({
       focusStep,
       openStep,
       stopLive,
+      conversationId,
+      filesFixture: initialFiles,
     }),
     [
       current,
@@ -218,6 +230,8 @@ export function ChatArtifactsProvider({
       focusStep,
       openStep,
       stopLive,
+      conversationId,
+      initialFiles,
     ],
   );
   return <ArtifactsContext.Provider value={value}>{children}</ArtifactsContext.Provider>;
@@ -293,6 +307,7 @@ const TAB_LABEL: Record<PanelTab, string> = {
   resultado: 'Resultado',
   fuentes: 'Fuentes',
   actividad: 'Actividad',
+  archivos: 'Archivos',
 };
 
 function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean }) {
@@ -309,10 +324,11 @@ function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean })
     resultado: null,
     fuentes: rows.sources.length,
     actividad: rows.activity.length,
+    archivos: api?.filesFixture?.length ?? null,
   };
   const tabs: PanelTab[] = showComputer
-    ? ['navegador', 'resultado', 'fuentes', 'actividad']
-    : ['resultado', 'fuentes', 'actividad'];
+    ? ['navegador', 'resultado', 'fuentes', 'actividad', 'archivos']
+    : ['resultado', 'fuentes', 'actividad', 'archivos'];
   return (
     <>
       <div className="flex min-h-[3.5rem] shrink-0 items-center gap-2 border-b border-border px-4">
@@ -338,7 +354,7 @@ function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean })
       <div
         role="tablist"
         aria-label="Panel del turno"
-        className="flex shrink-0 gap-1 border-b border-border px-3 pt-2"
+        className="scroll-slim flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 pt-2"
       >
         {tabs.map((t) => (
           <button
@@ -350,7 +366,7 @@ function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean })
             aria-controls="panel-tabpanel"
             onClick={() => api?.openTab(t)}
             className={clsx(
-              '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-[0.8125rem] font-semibold transition-colors duration-150 motion-reduce:transition-none',
+              '-mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-[0.8125rem] font-semibold transition-colors duration-150 motion-reduce:transition-none',
               tab === t
                 ? 'border-primary text-ink'
                 : 'border-transparent text-ink-faint hover:text-ink',
@@ -381,6 +397,14 @@ function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean })
           ))}
         {tab === 'navegador' && <BrowserTabPanel />}
         {tab === 'fuentes' && <SourcesTab rows={rows.sources} />}
+        {tab === 'archivos' && (
+          <FilesPanel
+            {...(api?.conversationId ? { conversationId: api.conversationId } : {})}
+            {...(api?.filesFixture ? { initialFiles: api.filesFixture } : {})}
+            compose={compose ? (text) => compose.compose(text) : null}
+            {...(api?.turn?.working ? { refreshMs: 8000 } : {})}
+          />
+        )}
         {tab === 'actividad' && (
           <ActivityTab
             rows={rows.activity}

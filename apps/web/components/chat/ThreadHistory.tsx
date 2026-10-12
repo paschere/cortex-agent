@@ -459,6 +459,13 @@ function ThreadList({
         )}
         <div className="mt-3 flex flex-col gap-1 px-4">
           <Link
+            href="/tareas"
+            onClick={onNavigate}
+            className="text-xs font-semibold text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+          >
+            Tareas en segundo plano
+          </Link>
+          <Link
             href="/calls"
             onClick={onNavigate}
             className="text-xs text-ink-faint underline-offset-2 hover:text-ink hover:underline"

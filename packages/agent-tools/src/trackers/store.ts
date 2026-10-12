@@ -8,6 +8,8 @@ import {
   getDuplicateRule,
   validateDuplicateRule,
 } from './duplicates';
+import { flowOf } from './flow';
+import { guardFlowWrite } from './flow-guard';
 import {
   TEXT_MAX,
   type TrackerField,
@@ -385,6 +387,23 @@ export async function upsertRow(
     lenient: input.lenient,
     only: input.only,
   });
+  // Flujo por estados: el salto tiene que existir, el rol poder y los requisitos cumplirse.
+  if (flowOf(input.tracker.fields)) {
+    let prior: Record<string, unknown> | null = null;
+    if (input.rowId) {
+      const { data: cur } = await db
+        .from('tracker_rows')
+        .select('values')
+        .eq('id', input.rowId)
+        .eq('tracker_id', input.tracker.id)
+        .maybeSingle();
+      prior = ((cur as { values?: Record<string, unknown> } | null)?.values ?? {}) as Record<
+        string,
+        unknown
+      >;
+    }
+    Object.assign(values, guardFlowWrite(input.tracker, prior, values));
+  }
   const label = rowLabel(input.tracker.fields, values, input.label);
   // Automatizaciones (0210): una consulta indexada y recordada; sin reglas que
   // miren esta tabla, no se lee nada más.

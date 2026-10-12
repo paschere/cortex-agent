@@ -28,6 +28,7 @@ import {
   Building2,
   CalendarDays,
   Car,
+  Check,
   ChevronDown,
   FileText,
   GitBranch,
@@ -85,6 +86,14 @@ interface InputBarProps {
    * the request body. The composer only draws its control and its live strip.
    */
   screen?: ScreenViewSession;
+  /**
+   * «En segundo plano» (0222): lo que se envíe corre como una tarea en el servidor,
+   * sin depender de esta pestaña. `onBackgroundChange` ausente esconde la opción.
+   */
+  background?: boolean;
+  onBackgroundChange?: (next: boolean) => void;
+  /** «Seguir en segundo plano» mientras un turno largo corre: lo detiene aquí y lo continúa en el servidor. */
+  onSendToBackground?: () => void;
 }
 
 const CHAR_COUNT_THRESHOLD = 3500;
@@ -260,6 +269,9 @@ export function InputBar({
   scope,
   onScopeChange,
   screen,
+  background,
+  onBackgroundChange,
+  onSendToBackground,
 }: InputBarProps) {
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
@@ -834,6 +846,16 @@ export function InputBar({
                       <span className="flex-1">Conectar una fuente</span>
                     </Link>
                   </DropdownMenu.Item>
+                  {onBackgroundChange && (
+                    <DropdownMenu.Item
+                      onSelect={() => onBackgroundChange(!background)}
+                      className={plusItem}
+                    >
+                      <Layers className="h-4 w-4" aria-hidden />
+                      <span className="flex-1">En segundo plano</span>
+                      {background && <Check className="h-4 w-4 text-primary" aria-hidden />}
+                    </DropdownMenu.Item>
+                  )}
                   <DropdownMenu.Separator className="my-1 h-px bg-border" />
                   <DropdownMenu.Item onSelect={() => setExtras((was) => !was)} className={plusItem}>
                     <SlidersHorizontal className="h-4 w-4" aria-hidden />
@@ -844,6 +866,18 @@ export function InputBar({
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
+
+            {background && onBackgroundChange && (
+              <button
+                type="button"
+                onClick={() => onBackgroundChange(false)}
+                title="Quitar «en segundo plano»"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-ink transition-colors duration-150 hover:bg-border motion-reduce:transition-none"
+              >
+                <Layers className="h-3.5 w-3.5" aria-hidden />
+                En segundo plano
+              </button>
+            )}
 
             {connected.length > 0 && (
               <ul
@@ -901,6 +935,16 @@ export function InputBar({
                 onText={setComposerText}
               />
             </span>
+            {disabled && onSendToBackground && (
+              <button
+                type="button"
+                onClick={onSendToBackground}
+                className="inline-flex items-center gap-1.5 rounded-pill bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary-ink transition-colors duration-150 hover:bg-border motion-reduce:transition-none"
+              >
+                <Layers className="h-3.5 w-3.5" aria-hidden />
+                Seguir en segundo plano
+              </button>
+            )}
             {disabled && onStop && (
               <button
                 type="button"

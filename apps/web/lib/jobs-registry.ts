@@ -33,6 +33,7 @@ import {
 } from '@/inngest/functions/actions-sweep';
 import { appAutomationDispatchJob, appAutomationRunJob } from '@/inngest/functions/app-automations';
 import { appLocationSweepJob } from '@/inngest/functions/app-location';
+import { taskRunJob, taskSweepJob } from '@/inngest/functions/background-task';
 import {
   autopilotDispatchJob,
   autopilotRemindJob,
@@ -175,6 +176,9 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'autopilot/workspace': autopilotWorkspaceJob,
   'autopilot/remind': autopilotRemindJob,
   'briefing/workspace': briefingWorkspaceJob,
+  // Tareas en segundo plano (0222): una tanda por trabajo, y el barrido de atascadas.
+  'tasks/run': taskRunJob,
+  'tasks/sweep': taskSweepJob,
   'dev/task.intake': devTaskIntakeJob,
   'dev/task.queued': devTaskRunJob,
   'dev/task.status': devTaskStatusJob,

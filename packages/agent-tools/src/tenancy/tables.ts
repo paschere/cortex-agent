@@ -314,6 +314,10 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // token through the service client, outside the scoped handle, because a link
   // clicked from WhatsApp carries no session to scope by.
   reports: tenant(),
+  // Tareas en segundo plano (migración 0222): un pedido del chat que corre en el
+  // worker. Tenant, y propia de quien la pidió (la pantalla filtra por dueño salvo
+  // administradores, igual que /actividad).
+  background_tasks: tenant(),
   // Una pregunta guardada: qué bloques componen un informe a la medida y con
   // qué parámetros (migración 0107). Tenant, y no `derived` sobre nada, porque
   // no cuelga de ninguna fila padre — y porque una receta filtrada de menos no

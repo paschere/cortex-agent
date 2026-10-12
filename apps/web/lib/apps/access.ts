@@ -9,6 +9,7 @@ import {
   type AppViewer,
   type CustomViewRow,
   canCreateIn,
+  editAccessFor,
   resolveAppAccess,
   screenFor,
   viewerFromSession,
@@ -181,6 +182,13 @@ export function formGate(
 ): NextResponse | null {
   if (opened.access.role.admin) return null;
   const block = view.spec.blocks.find((b) => b.id === blockId);
+  // Flujo por estados: quien edita la tabla sube la foto o firma que pide un estado.
+  if (
+    block &&
+    (block.type === 'detail' || block.type === 'cards') &&
+    editAccessFor(opened.access.role, block.tracker) !== 'none'
+  )
+    return null;
   if (!block || block.type !== 'form')
     return NextResponse.json(
       { error: 'Ese formulario no está en esta pantalla.' },

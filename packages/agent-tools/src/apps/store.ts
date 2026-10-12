@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import type { FlowActor } from '../trackers/flow';
+import { withFlowActor } from '../trackers/flow-guard';
 import { TRACKER_COLUMNS, type TrackerRow } from '../trackers/store';
 import { type ComputedView, type ViewSource, computeView } from '../views/compute';
 import { loadRecordContext } from '../views/record-history';
@@ -940,6 +942,7 @@ export async function readScreen(
     audience: access.role.admin ? 'team' : 'public',
     filters: options.filters ?? {},
     viewer: { id: access.user.id, kind: access.user.external ? 'app_user' : 'member' },
+    flowActor: flowActorOf(access),
     record,
     location: {
       enabled: access.app.location.enabled,
@@ -1070,6 +1073,11 @@ function assertFields(access: AppAccess, slug: string, keys: string[]) {
     );
 }
 
+/** El actor del flujo por estados: el rol de la app de quien escribe (un admin salta cualquier rol). */
+function flowActorOf(access: AppAccess): FlowActor {
+  return { roles: [access.role.key], admin: access.role.admin, unscoped: false };
+}
+
 /** Enviar un formulario de una pantalla: el rol tiene que poder crear en esa tabla. */
 export async function submitAppForm(
   db: SupabaseClient,
@@ -1102,16 +1110,18 @@ export async function submitAppForm(
     forced = { [scope.field]: scope.value };
   }
   await assertExternalBudget(db, access, 'submit');
-  return submitViewForm(db, view, {
-    blockId: input.blockId,
-    values,
-    forced,
-    fillDefaults: true,
-    submittedBy: access.user.id,
-    submittedByKind: actorKindOf(access),
-    viewer: access.user.name,
-    clientId: input.clientId,
-  });
+  return withFlowActor(flowActorOf(access), () =>
+    submitViewForm(db, view, {
+      blockId: input.blockId,
+      values,
+      forced,
+      fillDefaults: true,
+      submittedBy: access.user.id,
+      submittedByKind: actorKindOf(access),
+      viewer: access.user.name,
+      clientId: input.clientId,
+    }),
+  );
 }
 
 /** Corregir lo enviado (dentro de la ventana): quien pudo crear puede corregir lo suyo. */
@@ -1127,11 +1137,13 @@ export async function editAppSubmission(
   await assertRowVisible(db, access, slug, input.rowId);
   assertFields(access, slug, Object.keys(input.values));
   await assertExternalBudget(db, access, 'write');
-  return editViewSubmission(db, view, {
-    ...input,
-    actor: access.user.id,
-    actorKind: actorKindOf(access),
-  });
+  return withFlowActor(flowActorOf(access), () =>
+    editViewSubmission(db, view, {
+      ...input,
+      actor: access.user.id,
+      actorKind: actorKindOf(access),
+    }),
+  );
 }
 
 /** Editar una celda, mover una tarjeta o cambiar un campo desde la ficha. */
@@ -1149,7 +1161,9 @@ export async function editAppRow(
     throw new ValidationError('Sólo puedes editar lo que registraste tú.');
   assertFields(access, slug, Object.keys(input.patch));
   await assertExternalBudget(db, access, 'write');
-  return editViewRow(db, view, { ...input, actor: access.user.id, actorKind: actorKindOf(access) });
+  return withFlowActor(flowActorOf(access), () =>
+    editViewRow(db, view, { ...input, actor: access.user.id, actorKind: actorKindOf(access) }),
+  );
 }
 
 /** Un botón de fila, incluidos Aprobar y Rechazar: el rol lo tiene que tener. */
@@ -1180,14 +1194,16 @@ export async function runAppAction(
     await assertRowVisible(db, access, slug, input.rowId);
     await assertExternalBudget(db, access, 'write');
     const person = await resolveAssignee(db, access, input.person, wanted.roles);
-    return runViewAction(db, view, {
-      blockId: input.blockId,
-      actionId: input.actionId,
-      rowId: input.rowId,
-      person: { id: person.id, name: person.name },
-      actor: access.user.id,
-      actorKind: actorKindOf(access),
-    });
+    return withFlowActor(flowActorOf(access), () =>
+      runViewAction(db, view, {
+        blockId: input.blockId,
+        actionId: input.actionId,
+        rowId: input.rowId,
+        person: { id: person.id, name: person.name },
+        actor: access.user.id,
+        actorKind: actorKindOf(access),
+      }),
+    );
   }
   if (!canRunAction(access.role, slug, input.actionId)) {
     const approval = input.actionId === APPROVE_ACTION_ID || input.actionId === REJECT_ACTION_ID;
@@ -1199,14 +1215,16 @@ export async function runAppAction(
   }
   await assertRowVisible(db, access, slug, input.rowId);
   await assertExternalBudget(db, access, 'write');
-  return runViewAction(db, view, {
-    blockId: input.blockId,
-    actionId: input.actionId,
-    rowId: input.rowId,
-    reason: input.reason,
-    actor: access.user.id,
-    actorKind: actorKindOf(access),
-  });
+  return withFlowActor(flowActorOf(access), () =>
+    runViewAction(db, view, {
+      blockId: input.blockId,
+      actionId: input.actionId,
+      rowId: input.rowId,
+      reason: input.reason,
+      actor: access.user.id,
+      actorKind: actorKindOf(access),
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------

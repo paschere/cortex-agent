@@ -1,5 +1,5 @@
-import type { ProfileRef } from './profiles';
 import type { Logger } from '@cortex/core';
+import type { ProfileRef } from './profiles';
 import type { PageSnapshot, ReplayResponse, Step, Target } from './types';
 
 /**
@@ -74,6 +74,8 @@ export interface ActResult {
   error?: string;
   matchedTarget: string | null;
   snapshot: PageSnapshot;
+  /** Id de la foto chica del paso (el servicio guarda los bytes; ver `shotUrl`). */
+  shotId?: string;
 }
 
 /** El estado del volante, como lo cuenta el servicio. */
@@ -113,10 +115,14 @@ export interface BrowserTransport {
     startUrl: string,
     owner?: string,
     profile?: ProfileRef,
-  ): Promise<TransportResult<{ sessionId: string; snapshot: PageSnapshot }>>;
+  ): Promise<TransportResult<{ sessionId: string; snapshot: PageSnapshot; shotId?: string }>>;
   act(call: ActCall): Promise<TransportResult<ActResult>>;
   /** La página como está ahora, sin actuar sobre ella. */
-  read(sessionId: string, owner?: string): Promise<TransportResult<PageSnapshot>>;
+  read(
+    sessionId: string,
+    owner?: string,
+    opts?: { shot?: boolean },
+  ): Promise<TransportResult<PageSnapshot & { shotId?: string }>>;
   /** El volante: pedir ayuda, y leer quién conduce. Tomar/soltar es de la UI. */
   control(
     sessionId: string,
@@ -240,7 +246,7 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
         c.owner,
       ),
     openSession: (startUrl, owner, profile) =>
-      call<{ sessionId: string; snapshot: PageSnapshot }>(
+      call<{ sessionId: string; snapshot: PageSnapshot; shotId?: string }>(
         '/session',
         'POST',
         { startUrl, owner, profile },
@@ -263,9 +269,9 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
         30000,
         owner,
       ),
-    read: (sessionId, owner) =>
-      call<PageSnapshot>(
-        `/session/${encodeURIComponent(sessionId)}`,
+    read: (sessionId, owner, opts) =>
+      call<PageSnapshot & { shotId?: string }>(
+        `/session/${encodeURIComponent(sessionId)}${opts?.shot ? '?shot=1' : ''}`,
         'GET',
         undefined,
         30_000,

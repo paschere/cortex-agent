@@ -37,6 +37,21 @@ describe('chat-artifact', () => {
     expect(t?.csv?.rows).toEqual([['Ana']]);
   });
 
+  it('la investigación en paralelo se abre al lado con su CSV (columnas del resultado + fuentes)', () => {
+    const meta = artifactMeta('research.parallel', {
+      goal: 'Comparar proveedores',
+      columns: [
+        { key: 'label', label: 'Elemento' },
+        { key: 'values.precio', label: 'Precio' },
+      ],
+      rows: [{ label: 'Acme', values: { precio: 1200 }, sources: 'https://acme.co' }],
+    });
+    expect(meta?.kind).toBe('table');
+    expect(meta?.title).toBe('Comparar proveedores');
+    expect(meta?.csv?.headers).toEqual(['Elemento', 'Precio', 'Fuentes']);
+    expect(meta?.csv?.rows).toEqual([['Acme', '1200', 'https://acme.co']]);
+  });
+
   it('da nombres de archivo seguros', () => {
     expect(csvFileName('¿Quién me debe? Ñandú')).toBe('quien-me-debe-nandu.csv');
     expect(csvFileName('###')).toBe('cortex.csv');

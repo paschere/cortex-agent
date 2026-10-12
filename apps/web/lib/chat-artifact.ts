@@ -71,6 +71,7 @@ export function csvFileName(title: string): string {
 const PANELABLE: ReadonlySet<string> = new Set([
   'trackers_query',
   'trackers_list',
+  'research_parallel',
   'reports_chart',
   'reports_generate',
   'reports_open',
@@ -81,6 +82,7 @@ const PANELABLE: ReadonlySet<string> = new Set([
   'commitments_due_soon',
   'goals_list',
   'inbox_overview',
+  'apps_design',
 ]);
 
 function trackerCsv(result: unknown): ArtifactCsv | undefined {
@@ -96,6 +98,24 @@ function trackerCsv(result: unknown): ArtifactCsv | undefined {
   return {
     headers: cols.map((c) => c.label),
     rows: rows.map((row) => cols.map((c) => csvCell(field(field(row, 'values'), c.key)))),
+  };
+}
+
+/** research.parallel: las columnas y filas del propio resultado (más las fuentes, que la rejilla no muestra). */
+function researchCsv(result: unknown): ArtifactCsv | undefined {
+  const columns = field(result, 'columns');
+  const rows = field(result, 'rows');
+  if (!Array.isArray(columns) || !Array.isArray(rows) || columns.length === 0) return undefined;
+  const cols = columns.flatMap((c) => {
+    const key = text(field(c, 'key'));
+    return key ? [{ key, label: text(field(c, 'label')) ?? key }] : [];
+  });
+  return {
+    headers: [...cols.map((c) => c.label), 'Fuentes'],
+    rows: rows.map((row) => [
+      ...cols.map((c) => csvCell(dig(row as GridRow, c.key))),
+      csvCell(field(row, 'sources')),
+    ]),
   };
 }
 
@@ -138,6 +158,14 @@ export function artifactMeta(
         ...(csv ? { csv } : {}),
       };
     }
+    case 'research_parallel': {
+      const csv = researchCsv(result);
+      return {
+        title: text(field(result, 'goal')) ?? 'Investigación en paralelo',
+        kind: 'table',
+        ...(csv ? { csv } : {}),
+      };
+    }
     case 'reports_chart':
       return { title: text(field(result, 'heading')) ?? 'Gráfico', kind: 'chart' };
     case 'reports_generate':
@@ -150,6 +178,8 @@ export function artifactMeta(
       const company = text(field(field(result, 'company'), 'name'));
       return { title: company ? `Propuesta para ${company}` : 'Propuesta', kind: 'proposal' };
     }
+    case 'apps_design':
+      return { title: 'Vista previa de la app', kind: 'summary' };
     default:
       return { title: toolDisplayName(toolName), kind: 'summary' };
   }

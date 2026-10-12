@@ -161,6 +161,22 @@ export interface ToolContext {
    * lance: un fallo al avisar no puede tumbar el trabajo.
    */
   onProgress?: (line: string) => void;
+  /**
+   * Milisegundos que le quedan al turno de chat antes del corte duro
+   * (lib/turn-budget.ts). OPCIONAL: sólo la ata la ruta del chat. Una
+   * herramienta que reparte trabajo (research.parallel) la usa para dejar de
+   * EMPEZAR piezas a tiempo y devolver lo hecho con «faltan N».
+   */
+  turnMsLeft?: () => number;
+  /**
+   * Los ids de herramienta que ESTE turno le concede al agente que llama (su
+   * concesión, menos las denegaciones del equipo, los módulos apagados y las
+   * silenciadas), tal como los resuelve la ruta del chat. Lo pone el servidor,
+   * nunca el modelo. `research.parallel` la usa para que sus piezas no lean
+   * con una herramienta que el agente no tiene. Ausente = no se sabe qué está
+   * concedido, y entonces las piezas no reciben ninguna herramienta (falla cerrado).
+   */
+  grantedToolIds?: readonly string[];
   signal?: AbortSignal;
   withSpan?: <T>(
     name: string,

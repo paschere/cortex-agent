@@ -125,6 +125,14 @@ export function HoyDashboard({ view, decide }: { view: HoyView; decide: DecideFn
 
       {view.activity && view.activity.length > 0 && <ActivityTable rows={view.activity} />}
 
+      <p className="text-xs text-ink-faint">
+        Lo que le pediste a Cortex en segundo plano está en{' '}
+        <Link href="/tareas" className="font-semibold text-primary-ink hover:underline">
+          Tareas
+        </Link>
+        .
+      </p>
+
       {view.closing && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-5 text-sm text-ink-muted">
           <span className="font-display text-base">{view.closing.text}</span>

@@ -8,6 +8,8 @@ import {
   type NoticePlanEntry,
   matchExercised,
 } from '@/lib/mandates/delegation';
+import { planNeedsApproval } from '@/lib/plan-approval';
+import { isPlanTool, planFromInvocations } from '@/lib/plan-state';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import { latestProgress } from '@/lib/tool-progress';
 import type { Message, ToolInvocation } from 'ai';
@@ -17,10 +19,12 @@ import { BrainSources, type CiteFocus } from './BrainSources';
 import { ArtifactFrame } from './ChatArtifacts';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChoicePrompt } from './ChoicePrompt';
-import { ConfirmationPrompt } from './ConfirmationPrompt';
+import { ConfirmationGroup } from './ConfirmationGroup';
 import { DelegatedNotice } from './DelegatedNotice';
 import { FollowUps } from './FollowUps';
 import { MessageActions } from './MessageActions';
+import { PlanApprovalCard } from './PlanApprovalCard';
+import { PlanCard } from './PlanCard';
 import { Presence } from './Presence';
 import { ReasoningTrail } from './ReasoningTrail';
 import { GlanceNote } from './ScreenView';
@@ -272,6 +276,20 @@ export function MessageBubble({
   const confirmationData = confirmationInvocation
     ? (confirmationInvocation as unknown as { result: ConfirmationSentinel }).result
     : null;
+  // Todas las tarjetas pendientes del mensaje (la barra «Aprobar las N» las agrupa).
+  const confirmationItems = (toolInvocations ?? []).flatMap((inv) => {
+    const result = inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
+    return isConfirmationSentinel(result)
+      ? [{ toolCallId: inv.toolCallId, toolId: result.toolId, input: result.input }]
+      : [];
+  });
+  // «Por qué lo propongo»: lo primero que Cortex dijo en este mensaje, sin markdown.
+  const proposalWhy = (() => {
+    const text = (content ?? '').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim();
+    if (!text || isStreaming) return undefined;
+    const first = text.split(/(?<=[.!?:])\s/)[0] ?? text;
+    return first.length > 240 ? `${first.slice(0, 237)}…` : first;
+  })();
 
   /**
    * La pregunta con opciones, si este mensaje trae una.
@@ -491,6 +509,14 @@ export function MessageBubble({
            * CUÁL lo dice `results/registry.tsx`, y nadie más aquí — este
            * archivo sigue sin conocer el nombre de ninguna herramienta.
            */
+          const plan = planFromInvocations(
+            (toolInvocations ?? []).map((i) => ({
+              toolCallId: i.toolCallId,
+              toolName: i.toolName,
+              state: i.state,
+              result: (i as { result?: unknown }).result,
+            })),
+          );
           const split = (invs: ToolInvocation[]) => {
             const cards: React.ReactNode[] = [];
             const steps: ToolInvocation[] = [];
@@ -498,6 +524,9 @@ export function MessageBubble({
               // La pregunta no es un paso: su renglón diría «Preguntarte»
               // justo encima de la pregunta. Única duplicación literal posible.
               if (inv === choiceInvocation) continue;
+              // El plan no es un paso ni una tarjeta de salida: es una sola
+              // lista de chequeo viva, que se dibuja arriba (ver `plan`).
+              if (isPlanTool(inv.toolName)) continue;
               const result =
                 inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
               if (result !== undefined) {
@@ -636,6 +665,21 @@ export function MessageBubble({
 
           return (
             <>
+              {plan && (
+                <div className="mb-2">
+                  <PlanCard plan={plan} />
+                  {planNeedsApproval(plan) && conversationId && !isUser && (
+                    <div className="mt-2">
+                      <PlanApprovalCard
+                        conversationId={conversationId}
+                        plan={plan}
+                        waiting={!!isStreaming}
+                        {...(onAnswer ? { onSay: onAnswer } : {})}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
               <div ref={bodyRef}>{body}</div>
               {/*
                 Tres tarjetas es un turno bien contestado; siete es una pared,
@@ -695,14 +739,13 @@ export function MessageBubble({
 
         {confirmationData && conversationId && (
           <div className="mt-2">
-            <ConfirmationPrompt
+            <ConfirmationGroup
               conversationId={conversationId}
-              toolId={confirmationData.toolId}
-              input={confirmationData.input}
-              toolCallId={confirmationInvocation?.toolCallId}
+              items={confirmationItems}
               onConfirmed={onConfirmed}
               onSay={onAnswer}
               waiting={!!isStreaming}
+              why={proposalWhy}
             />
           </div>
         )}

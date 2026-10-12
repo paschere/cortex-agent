@@ -3,12 +3,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { isCompanyManager } from '../directory/store';
 import { registerTool } from '../index';
+import { trackerFieldsSchema, trackerSlugSchema } from '../trackers/schema';
 import { getTrackerBySlug } from '../trackers/store';
 import { internalSourcesOf } from '../views/sources';
 import {
   APPROVE_ACTION_ID,
+  type CatalogTracker,
   REJECT_ACTION_ID,
   type ViewSpec,
+  checkSpecAgainst,
   slugify,
   trackersOf,
   viewSpecSchema,
@@ -64,6 +67,15 @@ const screenDraft = z.object({
   spec: viewSpecSchema,
 });
 
+/** Una tabla que el borrador crea junto con la app (si no existe ya). */
+export const tableDraftSchema = z.object({
+  slug: trackerSlugSchema,
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(500).default(''),
+  fields: trackerFieldsSchema,
+});
+export type TableDraft = z.infer<typeof tableDraftSchema>;
+
 export const appDraftSchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(500).default(''),
@@ -71,6 +83,8 @@ export const appDraftSchema = z.object({
   roles: z.array(roleInputSchema).min(1).max(MAX_APP_ROLES),
   screens: z.array(screenDraft).min(1).max(MAX_APP_SCREENS),
   homeScreen: z.string().trim().max(48).optional(),
+  /** Tablas nuevas que se crean con la app; una que ya existe se usa tal cual, sin tocarla. */
+  tables: z.array(tableDraftSchema).max(8).default([]),
 });
 export type AppDraft = z.infer<typeof appDraftSchema>;
 
@@ -104,7 +118,13 @@ async function loadFields(
   db: SupabaseClient,
   slugs: string[],
   willCreate: Map<string, string[]>,
-): Promise<{ found: Map<string, Set<string>>; missing: Set<string>; pending: Set<string> }> {
+): Promise<{
+  found: Map<string, Set<string>>;
+  missing: Set<string>;
+  pending: Set<string>;
+  catalog: Map<string, CatalogTracker>;
+}> {
+  const catalog = new Map<string, CatalogTracker>();
   const found = new Map<string, Set<string>>();
   const missing = new Set<string>();
   const pending = new Set<string>();
@@ -113,13 +133,15 @@ async function loadFields(
     // las comprueba `validateSpec` contra su catálogo.
     if (slug.includes('.')) continue;
     const tracker = await getTrackerBySlug(db, slug);
-    if (tracker) found.set(slug, new Set(tracker.fields.map((f) => f.key)));
-    else if (willCreate.has(slug)) {
+    if (tracker) {
+      found.set(slug, new Set(tracker.fields.map((f) => f.key)));
+      catalog.set(slug, { slug, name: tracker.name, fields: tracker.fields });
+    } else if (willCreate.has(slug)) {
       found.set(slug, new Set(willCreate.get(slug)));
       pending.add(slug);
     } else missing.add(slug);
   }
-  return { found, missing, pending };
+  return { found, missing, pending, catalog };
 }
 
 function blockLabel(spec: ViewSpec): string {
@@ -215,18 +237,51 @@ export async function reviewAppDraft(
 
   // Cada pantalla contra las tablas reales. La de una tabla que falta lleva la regla de siempre.
   const allTables = [...new Set(screens.flatMap((s) => trackersOf(s.spec)))];
+  // Las tablas que el borrador crea junto con la app: las que ya existen se usan tal cual.
+  const willCreate = new Map(options.willCreate ?? []);
+  const draftTables = new Map<string, (typeof parsed.data.tables)[number]>();
+  for (const t of parsed.data.tables) {
+    if (draftTables.has(t.slug))
+      problems.push(`La tabla «${t.slug}» está repetida en el borrador.`);
+    draftTables.set(t.slug, t);
+    const existing = await getTrackerBySlug(db, t.slug);
+    if (existing) {
+      const have = new Set(existing.fields.map((f) => f.key));
+      const lacking = t.fields.filter((f) => !have.has(f.key)).map((f) => f.key);
+      warnings.push(
+        `La tabla «${t.slug}» ya existe y se usa como está${lacking.length ? ` (no tiene ${lacking.map((k) => `«${k}»`).join(', ')}: agrégalos aparte con trackers.define)` : ''}.`,
+      );
+    } else
+      willCreate.set(
+        t.slug,
+        t.fields.map((f) => f.key),
+      );
+  }
   const {
     found: tableFields,
     missing,
     pending,
-  } = await loadFields(db, allTables, options.willCreate ?? new Map());
+    catalog,
+  } = await loadFields(db, allTables, willCreate);
+  const pendingCatalog: CatalogTracker[] = [...pending].flatMap((slug) => {
+    const t = draftTables.get(slug);
+    return t ? [{ slug, name: t.name, fields: t.fields }] : [];
+  });
   if (missing.size)
     problems.push(
       `No existe la tabla ${[...missing].map((m) => `«${m}»`).join(', ')}. Si los datos están en una hoja de cálculo o una carpeta de Drive, primero propón la tabla con trackers.propose_from_source o trackers.propose_from_drive_folder (o trackers.define) y espera el visto bueno; después vuelve a diseñar la app sobre ella.`,
     );
   for (const s of screens) {
-    // Una tabla que falta ya se reportó; una que la plantilla creará no se puede comprobar aún.
-    if (trackersOf(s.spec).some((t) => missing.has(t) || pending.has(t))) continue;
+    // Una tabla que falta ya se reportó. Una que el borrador crea se comprueba contra su propia definición.
+    const usedTables = trackersOf(s.spec);
+    if (usedTables.some((t) => missing.has(t))) continue;
+    if (usedTables.some((t) => pending.has(t))) {
+      const known = [...catalog.values(), ...pendingCatalog];
+      if (usedTables.every((t) => known.some((k) => k.slug === t)))
+        for (const p of checkSpecAgainst(s.spec, known).slice(0, 6))
+          problems.push(`Pantalla «${s.title}»: ${p}`);
+      continue;
+    }
     try {
       await validateSpec(db, s.spec, { viewerId: options.viewerId });
     } catch (err) {
@@ -240,6 +295,21 @@ export async function reviewAppDraft(
         `La pantalla «${s.title}» usa información interna (${internal.map((i) => `«${i.name}»`).join(', ')}): quien no es del equipo no puede verla en una app.`,
       );
   }
+
+  // Los flujos por estado de las tablas nuevas nombran roles de ESTA app.
+  for (const t of parsed.data.tables)
+    for (const f of t.fields) {
+      if (!f.flow) continue;
+      const named = new Set([
+        ...(f.flow.transitions ?? []).flatMap((x) => x.roles ?? []),
+        ...Object.values(f.flow.notify ?? {}).flatMap((n) => n.roles),
+      ]);
+      for (const r of named)
+        if (!roleKeys.has(r) && r !== 'administrador')
+          warnings.push(
+            `El flujo de «${t.slug}» nombra el rol «${r}», que esta app no define: ese salto no lo podrá hacer nadie salvo quien administra.`,
+          );
+    }
 
   // Los permisos contra las tablas y los campos que de verdad existen.
   for (const r of parsed.data.roles) {
@@ -312,6 +382,7 @@ export async function reviewAppDraft(
       spec: s.spec,
     })),
     ...(homeScreen ? { homeScreen } : {}),
+    tables: parsed.data.tables,
   };
   const automations = [...(options.automations ?? []), ...deduceAutomations(draft)].filter(
     (a, i, all) => all.findIndex((b) => b.name === a.name) === i,
@@ -441,6 +512,15 @@ function summarize(draft: AppDraft, warnings: string[], automations: AutomationI
     `**${draft.icon ?? '📱'} ${draft.name}** — borrador (nada se ha guardado).`,
   ];
   if (draft.description) lines.push(draft.description);
+  if (draft.tables.length) {
+    lines.push('', '**Tablas que se crean**');
+    for (const t of draft.tables) {
+      const flow = t.fields.find((f) => f.flow)?.flow;
+      lines.push(
+        `- **${t.name}** (\`${t.slug}\`): ${t.fields.map((f) => f.label).join(', ')}${flow ? `. Flujo: ${flow.states.join(' → ')}` : ''}`,
+      );
+    }
+  }
   lines.push('', '**Quién entra y qué ve**');
   for (const r of draft.roles) {
     const tables = Object.entries(r.permissions.tables).map(([t, p]) => {
@@ -506,6 +586,13 @@ ${SPEC_GRAMMAR}`,
       roles: z.array(z.unknown()).max(MAX_APP_ROLES).optional(),
       screens: z.array(z.unknown()).max(MAX_APP_SCREENS).optional(),
       homeScreen: z.string().trim().max(48).optional(),
+      tables: z
+        .array(z.unknown())
+        .max(8)
+        .optional()
+        .describe(
+          'New tables the app needs, created WITH the app on approval: [{slug, name, description, fields}] (same fields grammar as trackers.define; a select field may carry a `flow` of states). A table that already exists is used as is.',
+        ),
       automations: z
         .array(automationIdea)
         .max(8)
@@ -550,6 +637,7 @@ ${SPEC_GRAMMAR}`,
             spec: s.spec,
           })),
           homeScreen: template.homeScreen,
+          tables: input.tables ?? [],
         }
       : {
           name: input.name,
@@ -558,6 +646,7 @@ ${SPEC_GRAMMAR}`,
           roles: input.roles,
           screens: input.screens,
           homeScreen: input.homeScreen,
+          tables: input.tables ?? [],
         };
     // La plantilla trae sus propias tablas: si la empresa aún no las tiene, las crea apps.create.
     const review = await reviewAppDraft(ctx.db, raw, {

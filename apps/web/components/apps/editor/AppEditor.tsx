@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { AppearanceTab } from './AppearanceTab';
 import { AutomationsTab } from './AutomationsTab';
+import { FlowsTab } from './FlowsTab';
 import { HomeTab } from './HomeTab';
 import { IconPicker } from './IconPicker';
 import { MembersTab } from './MembersTab';
@@ -44,12 +45,22 @@ export type { AppEditorData } from './shared';
  * pantalla lee una fuente interna—; el texto del rechazo se muestra tal cual.
  */
 
-type Tab = 'screens' | 'look' | 'home' | 'roles' | 'members' | 'users' | 'automations' | 'preview';
+type Tab =
+  | 'screens'
+  | 'look'
+  | 'home'
+  | 'roles'
+  | 'flows'
+  | 'members'
+  | 'users'
+  | 'automations'
+  | 'preview';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'screens', label: 'Pantallas' },
   { id: 'home', label: 'Inicio' },
   { id: 'look', label: 'Apariencia' },
   { id: 'roles', label: 'Roles y permisos' },
+  { id: 'flows', label: 'Flujos' },
   { id: 'members', label: 'Miembros' },
   { id: 'users', label: 'Usuarios' },
   { id: 'automations', label: 'Automatizaciones' },
@@ -63,10 +74,12 @@ function autosize(el: HTMLTextAreaElement | null) {
   el.style.height = `${el.scrollHeight}px`;
 }
 
-export function AppEditor({ data }: { data: AppEditorData }) {
+export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTab?: string }) {
   const { app } = data;
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('screens');
+  const [tab, setTab] = useState<Tab>(
+    TABS.some((t) => t.id === initialTab) ? (initialTab as Tab) : 'screens',
+  );
   const [deleting, setDeleting] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -310,6 +323,7 @@ export function AppEditor({ data }: { data: AppEditorData }) {
       {tab === 'home' && <HomeTab data={data} />}
       {tab === 'look' && <AppearanceTab data={data} />}
       {tab === 'roles' && <RolesTab data={data} />}
+      {tab === 'flows' && <FlowsTab data={data} />}
       {tab === 'members' && <MembersTab data={data} />}
       {tab === 'users' && <UsersTab data={data} />}
       {tab === 'automations' && <AutomationsTab data={data} />}

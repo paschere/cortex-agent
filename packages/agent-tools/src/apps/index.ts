@@ -7,6 +7,7 @@
 
 import './tools';
 import './design';
+import './draft';
 import './automations/tools';
 
 export {
@@ -33,3 +34,17 @@ export * from './appearance';
 export * from './screen-extras';
 export { appsDesign, reviewAppDraft, appDraftSchema } from './design';
 export type { AppDraft, DraftReview, AutomationIdea } from './design';
+export {
+  appsApplyDraft,
+  applyAppDraft,
+  buildAppPreview,
+  describePlan,
+  planCreations,
+  runWithRollback,
+  StepFailed,
+} from './draft';
+export type { AppPreview, PlanStep, PreviewMeta, PreviewScreen, Undoable } from './draft';
+export { sampleRows, PREVIEW_USER_ID } from './sample-data';
+export type { SampleRow } from './sample-data';
+export { tableDraftSchema } from './design';
+export type { TableDraft } from './design';

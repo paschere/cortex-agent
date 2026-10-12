@@ -54,10 +54,14 @@ const config = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         ],
       },
+      {
+        // La «Vista previa de la app» del chat se abre en un iframe del mismo origen.
+        // Va después de la regla general: el último valor de la misma cabecera manda.
+        source: '/v/app-preview',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+      },
     ];
   },
 };
 
-export default process.env.SENTRY_DSN
-  ? withSentryConfig(config, { silent: true })
-  : config;
+export default process.env.SENTRY_DSN ? withSentryConfig(config, { silent: true }) : config;

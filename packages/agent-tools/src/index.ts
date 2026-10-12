@@ -173,6 +173,10 @@ export * from './meetings';
 // reply as a person inside one the client opened. See ./whatsapp/index.ts.
 export * from './whatsapp';
 export * from './cortex';
+// Investigación en paralelo (`research.parallel`): una sub-ejecución de SOLO LECTURA por elemento.
+export { researchParallel } from './research';
+// Tareas en segundo plano (0222): Cortex propone seguir fuera del chat. Motor en apps/web/lib/background-tasks.
+export * from './tasks';
 export * from './memory';
 export * from './security';
 // Acciones seguras de repetir (0168): idempotencia + verificación. Sin tools.

@@ -2,7 +2,7 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { mintBlobToken } from '@/lib/blob-token';
 import { countRecentFilesDirect, putFileDirect } from '@/lib/files-db';
-import { type CustomViewRow, consumeToken } from '@cortex/agent-tools';
+import { type CustomViewRow, consumeToken, flowOf } from '@cortex/agent-tools';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
@@ -60,6 +60,27 @@ export async function storeViewUpload(
 ): Promise<UploadedFile> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   let fields: UploadFieldDef[] = [];
+  // Flujo por estados: el detalle y las tarjetas reciben la foto o la firma que pide un estado.
+  if (block?.type === 'detail' || block?.type === 'cards') {
+    const { data, error } = await db
+      .from('trackers')
+      .select('fields')
+      .eq('slug', block.tracker)
+      .maybeSingle();
+    if (error) throw error;
+    const flow = flowOf(
+      ((data as { fields?: Parameters<typeof flowOf>[0] } | null)?.fields ?? []) as NonNullable<
+        Parameters<typeof flowOf>[0]
+      >,
+    );
+    const asked = new Set(
+      Object.values(flow?.flow.requirements ?? {}).flatMap((reqs) =>
+        reqs.filter((r) => r.kind === 'photo' || r.kind === 'signature').map((r) => r.field),
+      ),
+    );
+    if (!asked.has(input.field)) throw new ValidationError('Ese campo no recibe archivos.');
+    return storeChecked(db, view, input, opts, 'image');
+  }
   if (block?.type === 'form') {
     const { data, error } = await db
       .from('trackers')
@@ -72,7 +93,17 @@ export async function storeViewUpload(
   }
   const target = checkUploadTarget(block as never, fields, input.field);
   if (!target.ok) throw new ValidationError(target.error);
-  const check = checkUpload(input.file, target.accept);
+  return storeChecked(db, view, input, opts, target.accept);
+}
+
+async function storeChecked(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: { blockId: string; field: string; file: File },
+  opts: { publicLink: boolean },
+  accept: 'image' | 'any',
+): Promise<UploadedFile> {
+  const check = checkUpload(input.file, accept);
   if (!check.ok) throw new ValidationError(check.error);
 
   const orgId = view.organization_id;

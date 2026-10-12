@@ -1,4 +1,5 @@
 import { decideApproval, runApprovedAction } from '@/lib/approvals/decide';
+import { recordApprovalDecision } from '@/lib/background-tasks/resume';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -149,11 +150,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (parsed.data.action === 'decline') {
+    // Si la acción la dejó parada una tarea en segundo plano, la tarea se entera (y sigue sola).
+    await recordApprovalDecision({
+      organizationId: user.organization.id,
+      approvalId: idParsed.data,
+      decision: 'declined',
+    });
     return NextResponse.json({ ok: true, declined: true });
   }
 
   const run = await runApprovedAction(outcome.action, {
     allowRepeat: parsed.data.allowRepeat === true,
+  });
+  await recordApprovalDecision({
+    organizationId: user.organization.id,
+    approvalId: idParsed.data,
+    decision: 'approved',
+    ok: run.ok,
+    ...(run.ok ? {} : { note: run.message.slice(0, 200) }),
   });
   if (!run.ok) {
     // The approval stays spent on purpose — see the note in decide.ts. Retrying

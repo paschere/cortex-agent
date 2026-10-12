@@ -483,7 +483,10 @@ export function SidebarBody({
 
   /** Un área de «Mi empresa»: su letra en pastel; abre su primera pantalla. */
   function areaRowEl(row: AreaRow) {
-    const active = areaFor(path)?.area.id === row.area.id;
+    // Si una puerta de arriba ya enciende esta dirección (Cerebro, que también es
+    // pestaña de «Datos»), el área no se enciende con ella: una sola fila activa.
+    const active =
+      areaFor(path)?.area.id === row.area.id && !rail.doors.some((d) => primaryActive(path, d));
     const item: NavItem = { href: row.href, label: row.area.label, icon: iconForHref(row.href) };
     return link(item, {
       active,

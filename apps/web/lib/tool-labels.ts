@@ -491,6 +491,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   apps_list: { label: 'Ver las aplicaciones', icon: 'LayoutGrid' },
   apps_design: { label: 'Diseñar una aplicación (borrador)', icon: 'LayoutGrid' },
   apps_create: { label: 'Crear una aplicación', icon: 'LayoutGrid' },
+  apps_apply_draft: { label: 'Crear la aplicación completa del borrador', icon: 'LayoutGrid' },
+  trackers_set_flow: { label: 'Darle un flujo por estados a una tabla', icon: 'ListChecks' },
   apps_get: { label: 'Abrir una aplicación', icon: 'LayoutGrid' },
   apps_update: { label: 'Cambiar una aplicación', icon: 'LayoutGrid' },
   apps_publish: { label: 'Publicar una aplicación', icon: 'LayoutGrid' },
@@ -527,6 +529,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
 
   // Encargos: trabajo que Cortex se lleva y hace solo durante minutos u horas.
   errands_start: { label: 'Encargarle el trabajo a Cortex', icon: 'Rocket' },
+  tasks_start_background: { label: 'Seguir en segundo plano', icon: 'Rocket' },
   errands_status: { label: 'Ver en qué va el encargo', icon: 'Hourglass' },
   errands_answer: { label: 'Contestarle al encargo', icon: 'Reply' },
 
@@ -555,6 +558,9 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   cortex_remember: { label: 'Recordar esto tuyo', icon: 'Brain' },
   cortex_forget: { label: 'Olvidar eso que recordaba', icon: 'Eraser' },
   cortex_process: { label: 'Procesar el texto aparte', icon: 'Cpu' },
+  cortex_plan: { label: 'Armar el plan de la tarea', icon: 'ListChecks' },
+  cortex_plan_update: { label: 'Actualizar el plan de la tarea', icon: 'ListChecks' },
+  research_parallel: { label: 'Investigar en paralelo', icon: 'Layers' },
 
   // Seguridad. `approvals_list` está arriba: es la cola, no el registro.
   security_review_action: { label: 'Consultar si esto pasa el filtro', icon: 'Shield' },
@@ -795,6 +801,23 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       return `Fijar la meta «${input.label || input.metricKey}» — objetivo ${input.targetValue}, ${
         input.cadence === 'week' ? 'semanal' : 'mensual'
       }`;
+    case 'apps_apply_draft': {
+      // La lista de lo que se va a crear: es lo único que aprueba quien dice que sí.
+      const names = (v: unknown, key: string) =>
+        Array.isArray(v)
+          ? v
+              .map((x) =>
+                x && typeof x === 'object' ? String((x as Record<string, unknown>)[key] ?? '') : '',
+              )
+              .filter(Boolean)
+          : [];
+      const tables = names(input.tables, 'name');
+      const screens = names(input.screens, 'title');
+      const roles = names(input.roles, 'name');
+      return `Crear la aplicación «${String(input.name ?? '')}» de una vez${tables.length ? ` — tablas nuevas: ${tables.join(', ')}` : ''}; pantallas: ${screens.join(', ') || 'ninguna'}; roles: ${roles.join(', ') || 'ninguno'}. Queda en borrador, sin publicar; si algo falla se deshace todo`;
+    }
+    case 'trackers_set_flow':
+      return `${input.remove ? 'Quitar el flujo de' : 'Darle un flujo por estados a'} la tabla «${String(input.slug ?? '')}»${Array.isArray(input.states) && input.states.length ? `: ${input.states.map(String).join(' → ')}` : ''} — el servidor rechaza cualquier otro salto de estado`;
     default:
       return `Ejecutar: ${toolLabel(toolId).label}`;
   }

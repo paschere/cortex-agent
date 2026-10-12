@@ -17,6 +17,20 @@ describe('reglas de intención', () => {
     for (const w of ['la pestaña Ventas', 'esta carpeta', 'crea una aplicación', 'una vista'])
       expect(intentFamilies(w)).toContain('trackers');
   });
+  it('las tareas de amplitud traen la investigación en paralelo', () => {
+    for (const w of [
+      'compara 30 proveedores y dime precio y entrega',
+      'revisa cada factura de la carpeta',
+      'investiga estos 15 productos',
+      'resume todos los contratos',
+      'hazlo uno por uno en paralelo',
+    ])
+      expect(intentFamilies(w), w).toContain('research');
+  });
+  it('una pregunta puntual no la trae', () => {
+    expect(intentFamilies('compara este contrato con el anterior')).not.toContain('research');
+    expect(intentFamilies('¿cuánto vendimos ayer?')).not.toContain('research');
+  });
   it('una frase sin relación no fuerza nada', () => {
     expect(intentFamilies('¿qué hora es en Bogotá?')).toEqual([]);
   });

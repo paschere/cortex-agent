@@ -16,8 +16,10 @@ import {
   Zap,
 } from 'lucide-react';
 import { useState } from 'react';
+import type { SubmitTarget } from '../ViewCanvas';
 import { FileValue } from '../inputs/FileValue';
 import { EditableValue, RowActions } from '../view-writes';
+import { FlowHistory, FlowPanel } from './FlowStepper';
 import { RichValue } from './RichValue';
 import { useRecordNav } from './record-nav';
 import { Card, EmptyState, StatusChip, formatWhen, useViewTheme } from './theme';
@@ -124,7 +126,7 @@ function CopyLink() {
   );
 }
 
-export function DetailBlock({ block }: { block: Detail }) {
+export function DetailBlock({ block, target }: { block: Detail; target?: SubmitTarget }) {
   const nav = useRecordNav();
   const { density } = useViewTheme();
   const [tab, setTab] = useState<'data' | 'media' | 'related' | 'history'>('data');
@@ -210,6 +212,17 @@ export function DetailBlock({ block }: { block: Detail }) {
             )}
           </p>
         </div>
+        {block.flow && (
+          <div className="space-y-3 border-t border-border bg-surface px-4 py-4 sm:px-6">
+            <FlowPanel
+              flow={block.flow}
+              blockId={block.id}
+              rowId={rowId}
+              target={target ?? { kind: 'preview' }}
+            />
+            <FlowHistory history={block.flow.history} />
+          </div>
+        )}
         {block.actions.length > 0 && (
           <div className="border-t border-border bg-surface px-4 py-3 sm:px-6">
             <RowActions

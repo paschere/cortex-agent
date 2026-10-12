@@ -36,7 +36,9 @@ import {
   LEARNING_BLOCK,
   LIVE_BROWSING_BLOCK,
   LIVE_MEETING_BLOCK,
+  PLAN_BLOCK,
   REFUSAL_BLOCK,
+  RESEARCH_BLOCK,
   buildSystemPrompt,
 } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
@@ -884,6 +886,10 @@ export async function POST(req: NextRequest) {
   // Ejecuta una herramienta del registro con todas las garantías de `runTool`
   // (confirmación, políticas, auditoría). Lo usan la declaración directa y el
   // despachador `use_tool` de la red de seguridad.
+  const grantedToolIds = dropMuted(allCandidates)
+    .filter((c) => c.kind === 'registry')
+    .map((c) => c.id);
+
   const execRegistry = async (
     t: AnyTool,
     args: unknown,
@@ -906,6 +912,11 @@ export async function POST(req: NextRequest) {
           ...scopedCtx,
           signal,
           onProgress: progress.push,
+          // Cuánto le queda al turno: las herramientas que reparten trabajo
+          // (research.parallel) paran de empezar piezas antes del corte duro.
+          turnMsLeft: () => budget.msUntilHard(),
+          // Lo que el agente tiene concedido este turno (sus permisos, ya filtrados).
+          grantedToolIds,
         });
       } catch (err) {
         if (err instanceof ConfirmationRequiredError) {
@@ -1212,7 +1223,7 @@ export async function POST(req: NextRequest) {
   // exactamente su longitud. El de reuniones faltaba desde que se añadió.
   recorder.part(
     'instructions',
-    `${agent.systemPrompt}\n\n${LIVE_BROWSING_BLOCK}\n\n${LIVE_MEETING_BLOCK}\n\n${REFUSAL_BLOCK}\n\n${FOLLOW_THROUGH_BLOCK}\n\n${LEARNING_BLOCK}`,
+    `${agent.systemPrompt}\n\n${LIVE_BROWSING_BLOCK}\n\n${LIVE_MEETING_BLOCK}\n\n${REFUSAL_BLOCK}\n\n${FOLLOW_THROUGH_BLOCK}\n\n${LEARNING_BLOCK}\n\n${PLAN_BLOCK}\n\n${RESEARCH_BLOCK}`,
   );
   recorder.part('memory', memoryBlock);
   // Su propia etiqueta y no sumado a 'memory': lo escribe un admin una vez y lo
