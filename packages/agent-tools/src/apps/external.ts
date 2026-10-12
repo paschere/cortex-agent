@@ -20,6 +20,8 @@ import {
   getApp,
   listRoles,
   listScreens,
+  loadPublishedSnapshot,
+  withPublishedVersion,
 } from './store';
 
 /**
@@ -604,7 +606,11 @@ export async function resolveExternalSession(
   const user = await mustGetUser(db, app.id, session.app_user_id).catch(() => null);
   if (!user || user.status !== 'active') return null;
   const roles = await listRoles(db, app.id);
-  if (!roles.some((r) => r.key === user.role_key)) return null;
+  if (!roles.some((r) => r.key === user.role_key)) {
+    // El borrador pudo quitar el rol: mientras la versión publicada lo tenga, sigue entrando (0225).
+    const published = await loadPublishedSnapshot(db, app.id);
+    if (!published?.snapshot.roles.some((r) => r.key === user.role_key)) return null;
+  }
 
   if (session.device_id) {
     // SESIÓN DE KIOSCO (0211): vive sólo mientras su dispositivo siga autorizado
@@ -709,14 +715,20 @@ export async function externalAppAccess(
 ): Promise<AppAccess | null> {
   if (app.status !== 'published' || user.status !== 'active') return null;
   const role = (await listRoles(db, app.id)).find((r) => r.key === user.role_key);
-  if (!role) return null;
+  // Un rol que el borrador ya quitó puede seguir en la versión publicada (0225).
+  if (!role && !(await loadPublishedSnapshot(db, app.id))) return null;
   const screens = (await listScreens(db, app.id)).filter((s) => s.view_id);
-  return {
+  return withPublishedVersion(db, {
     app,
     screens,
-    role: { key: role.key, name: role.name, permissions: role.permissions, admin: false },
+    role: {
+      key: user.role_key,
+      name: role?.name ?? user.role_key,
+      permissions: role?.permissions ?? { tables: {}, export: false },
+      admin: false,
+    },
     user: { id: user.id, name: user.name, attributes: user.attributes, external: true },
-  };
+  });
 }
 
 /** Para la ruta: la app de la empresa (con su handle) por id, vista como un miembro la vería. */

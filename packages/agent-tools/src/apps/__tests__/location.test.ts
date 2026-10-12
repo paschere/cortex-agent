@@ -5,6 +5,7 @@ import { computeView } from '../../views/compute';
 import { findWriteBlock } from '../../views/spec';
 import { externalAppAccess } from '../external';
 import type { ExternalUserRow } from '../external';
+import { applyGeofences } from '../geofence-run';
 import {
   acceptLocationConsent,
   closeStaleShifts,
@@ -27,6 +28,7 @@ import {
   personRef,
 } from '../location-shape';
 import { USER_ID_ATTRIBUTE, canViewLocations, rowAccessFor } from '../permissions';
+import { RowConflictError, editAppRow } from '../store';
 import {
   type AppAccess,
   type AppViewer,
@@ -917,5 +919,239 @@ describe('contrato: spec y texto', () => {
     expect(parsePersonRef('m:no-es-uuid')).toBeNull();
     expect(parsePersonRef(`x:${MARIO}`)).toBeNull();
     expect(parsePersonRef(null)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Geocercas (0224)
+// ---------------------------------------------------------------------------
+
+const BODEGA = { lat: 4.7, lng: -74.05 };
+const metersNorth = (m: number) => ({ lat: BODEGA.lat + m / 111_195, lng: BODEGA.lng });
+
+/** El mundo con dos lugares: la bodega (llega y sale; avisa a coordinadores) y un cliente (sólo llega). */
+function placesWorld() {
+  const w = world();
+  const row = w.fake.tables.custom_apps?.find((a) => a.id === 'app-campo');
+  if (row)
+    row.location = {
+      enabled: true,
+      retentionDays: 30,
+      geofences: [
+        {
+          id: 'bodega',
+          name: 'Bodega Norte',
+          ...BODEGA,
+          radiusM: 100,
+          on: 'both',
+          notify: { roles: ['coordinador'], admins: false },
+        },
+        {
+          id: 'cliente',
+          name: 'Cliente Éxito',
+          lat: 4.8,
+          lng: -74.0,
+          radiusM: 100,
+          on: 'enter',
+          notify: { roles: [], admins: true },
+        },
+      ],
+    };
+  w.fake.tables.custom_app_geofence_state = [];
+  w.fake.tables.custom_app_geofence_events = [];
+  return w;
+}
+
+function recorder() {
+  const sent: Array<{ to: string[]; title: string; dedupeKey: string }> = [];
+  return {
+    sent,
+    notifier: {
+      notifyMembers: async (
+        _db: unknown,
+        to: string[],
+        note: { title: string; dedupeKey: string },
+      ) => {
+        sent.push({ to, title: note.title, dedupeKey: note.dedupeKey });
+        return to.length;
+      },
+    },
+  };
+}
+
+describe('geocercas: llegó / salió', () => {
+  it('al entrar registra «llegó», avisa al rol y no a quien llegó', async () => {
+    const { db, fake } = placesWorld();
+    const mario = await member(db, MARIO);
+    const { sent, notifier } = recorder();
+    await acceptLocationConsent(db, mario, T0);
+    await startShift(db, mario, T0);
+    const out = await recordPosition(db, mario, { ...metersNorth(40), accuracy: 10 }, T0, {
+      notifier,
+    });
+    expect(out).toMatchObject({ saved: true, geofence: [{ geofenceId: 'bodega', kind: 'enter' }] });
+    expect(fake.tables.custom_app_geofence_events).toHaveLength(1);
+    expect(fake.tables.custom_app_geofence_events?.[0]).toMatchObject({
+      geofence_name: 'Bodega Norte',
+      subject_id: MARIO,
+      kind: 'enter',
+    });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toEqual([LUCIA]);
+    expect(sent[0]?.title).toBe(`${MARIO} llegó a Bodega Norte`);
+  });
+
+  it('seguir adentro, o rebotar en el borde, no repite el aviso; alejarse de verdad registra «salió»', async () => {
+    const { db, fake } = placesWorld();
+    const mario = await member(db, MARIO);
+    const { sent, notifier } = recorder();
+    await acceptLocationConsent(db, mario, T0);
+    await startShift(db, mario, T0);
+    await recordPosition(db, mario, { ...metersNorth(40), accuracy: 10 }, at(0), { notifier });
+    // 110 m: ya salió del radio de entrada (100) pero no del de salida (125).
+    await recordPosition(db, mario, { ...metersNorth(110), accuracy: 10 }, at(20), { notifier });
+    await recordPosition(db, mario, { ...metersNorth(30), accuracy: 10 }, at(40), { notifier });
+    expect(fake.tables.custom_app_geofence_events).toHaveLength(1);
+    await recordPosition(db, mario, { ...metersNorth(400), accuracy: 10 }, at(60), { notifier });
+    expect(fake.tables.custom_app_geofence_events?.map((e) => e.kind)).toEqual(['enter', 'leave']);
+    expect(sent).toHaveLength(2);
+    // Un lugar «sólo llega» no registra la salida.
+    await recordPosition(db, mario, { lat: 4.8, lng: -74.0, accuracy: 10 }, at(80), { notifier });
+    await recordPosition(db, mario, { lat: 4.9, lng: -74.0, accuracy: 10 }, at(100), { notifier });
+    const clientes = fake.tables.custom_app_geofence_events?.filter(
+      (e) => e.geofence_id === 'cliente',
+    );
+    expect(clientes?.map((e) => e.kind)).toEqual(['enter']);
+  });
+
+  it('dos posiciones a la vez dejan UN solo «llegó» y UN aviso', async () => {
+    const { db, fake } = placesWorld();
+    const mario = await member(db, MARIO);
+    const { sent, notifier } = recorder();
+    // Ya se había visto afuera (el estado existe): el cambio se reclama con una condición en la base.
+    fake.tables.custom_app_geofence_state = ['bodega', 'cliente'].map((geofence_id) => ({
+      id: `st-${geofence_id}`,
+      organization_id: ORG,
+      app_id: 'app-campo',
+      geofence_id,
+      subject_kind: 'member',
+      subject_id: MARIO,
+      inside: false,
+      since: T0.toISOString(),
+    }));
+    const fix = { ...metersNorth(10), accuracyM: 8 };
+    await Promise.all([
+      applyGeofences(db, mario, fix, notifier, T0),
+      applyGeofences(db, mario, fix, notifier, T0),
+    ]);
+    expect(fake.tables.custom_app_geofence_events).toHaveLength(1);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('terminar el turno borra el estado: al empezar otro adentro vuelve a «llegar»', async () => {
+    const { db, fake } = placesWorld();
+    const mario = await member(db, MARIO);
+    await acceptLocationConsent(db, mario, T0);
+    await startShift(db, mario, T0);
+    await recordPosition(db, mario, { ...metersNorth(10), accuracy: 8 }, at(0));
+    // Un estado por lugar: adentro de la bodega, afuera del cliente.
+    expect(fake.tables.custom_app_geofence_state?.map((r) => r.inside).sort()).toEqual([
+      false,
+      true,
+    ]);
+    await endShift(db, mario, at(30));
+    expect(fake.tables.custom_app_geofence_state).toHaveLength(0);
+    await startShift(db, mario, at(3600));
+    await recordPosition(db, mario, { ...metersNorth(10), accuracy: 8 }, at(3600));
+    expect(fake.tables.custom_app_geofence_events?.map((e) => e.kind)).toEqual(['enter', 'enter']);
+  });
+
+  it('sin turno no se evalúa nada; sin lugares tampoco', async () => {
+    const { db, fake } = placesWorld();
+    const mario = await member(db, MARIO);
+    await acceptLocationConsent(db, mario, T0);
+    await recordPosition(db, mario, { ...metersNorth(10), accuracy: 8 }, T0);
+    expect(fake.tables.custom_app_geofence_events).toHaveLength(0);
+    const plain = world();
+    const m2 = await member(plain.db, MARIO);
+    expect(await applyGeofences(plain.db, m2, { ...BODEGA, accuracyM: 5 })).toEqual([]);
+  });
+
+  it('el mapa dice en qué lugar está cada quien', async () => {
+    const { db } = placesWorld();
+    const mario = await member(db, MARIO);
+    const lucia = await member(db, LUCIA);
+    await acceptLocationConsent(db, mario, T0);
+    await startShift(db, mario, T0);
+    await recordPosition(db, mario, { ...metersNorth(10), accuracy: 8 }, T0);
+    const people = await listLivePeople(db, lucia, {}, at(30));
+    expect(people.find((p) => p.name === 'mario' || p.ref.endsWith(MARIO))?.place).toBe(
+      'Bodega Norte',
+    );
+  });
+
+  it('los eventos viejos se borran con la retención', async () => {
+    const { db, fake } = placesWorld();
+    fake.tables.custom_app_geofence_events = [
+      { id: 'e1', organization_id: ORG, app_id: 'app-campo', at: '2026-01-01T00:00:00Z' },
+      { id: 'e2', organization_id: ORG, app_id: 'app-campo', at: '2026-10-08T00:00:00Z' },
+    ];
+    await purgeLocationHistory(db, 'app-campo', 30, T0);
+    expect(fake.tables.custom_app_geofence_events?.map((e) => e.id)).toEqual(['e2']);
+  });
+});
+
+describe('edición sin señal: conflicto', () => {
+  async function setup() {
+    const w = world();
+    const lucia = await member(w.db, LUCIA);
+    const screen = lucia.screens.find((s) => s.slug === 'tareas') ?? lucia.screens[1];
+    if (!screen) throw new Error('sin pantalla');
+    const { view } = await readScreen(w.db, lucia, screen);
+    const block = view.spec.blocks.find((b) => b.id === 'todas');
+    return { ...w, lucia, view, blockId: block?.id ?? 'todas' };
+  }
+
+  it('si el valor que la persona vio ya no es el de ahora, no escribe y dice los dos', async () => {
+    const { db, lucia, view, blockId, fake } = await setup();
+    await expect(
+      editAppRow(db, lucia, view, {
+        blockId,
+        rowId: 'tk-ext',
+        patch: { estado: 'Hecha' },
+        expect: { estado: 'Anulada' },
+      }),
+    ).rejects.toMatchObject({ conflicts: [{ field: 'estado', theirs: 'Pendiente' }] });
+    expect(fake.tables.tracker_rows?.find((r) => r.id === 'tk-ext')?.values).toMatchObject({
+      estado: 'Pendiente',
+    });
+    await expect(
+      editAppRow(db, lucia, view, {
+        blockId,
+        rowId: 'tk-ext',
+        patch: { estado: 'Hecha' },
+        expect: { estado: 'Anulada' },
+      }),
+    ).rejects.toBeInstanceOf(RowConflictError);
+  });
+
+  it('si el valor coincide (o ya vale lo que quería), se escribe como siempre', async () => {
+    const { db, lucia, view, blockId, fake } = await setup();
+    await editAppRow(db, lucia, view, {
+      blockId,
+      rowId: 'tk-ext',
+      patch: { estado: 'En curso' },
+      expect: { estado: 'Pendiente' },
+    });
+    expect(fake.tables.tracker_rows?.find((r) => r.id === 'tk-ext')?.values).toMatchObject({
+      estado: 'En curso',
+    });
+    // Alguien más ya lo dejó en lo mismo que quería poner: no hay nada que pelear.
+    await editAppRow(db, lucia, view, {
+      blockId,
+      rowId: 'tk-ext',
+      patch: { estado: 'En curso' },
+      expect: { estado: 'Pendiente' },
+    });
   });
 });

@@ -54,6 +54,8 @@ describe.skipIf(!enabled)('measuring the suite against the live API', () => {
         `Medición lista: ${fixture.usage.tokens} tokens, USD ${fixture.usage.usd.toFixed(6)}.`,
       );
     },
-    45 * 60_000,
+    // Con el plan gratuito de Voyage (3 por minuto) y cada vez más herramientas
+    // que medir, 45 minutos ya no alcanzaban. Medir es raro y nadie lo espera.
+    240 * 60_000,
   );
 });

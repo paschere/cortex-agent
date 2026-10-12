@@ -7,14 +7,19 @@ import { previewQuery } from '@/lib/apps/preview-query';
 import {
   HOME_NAV,
   appCanExport,
+  computePortal,
+  computeTablero,
   emptyHintsFor,
   isHomeRoute,
+  isPortalRoute,
   loadHome,
   locationStatus,
   navScreens,
   readScreen,
+  recordAppEvent,
   screenButtons,
   screenFor,
+  tableroForRoute,
 } from '@cortex/agent-tools';
 import { notFound } from 'next/navigation';
 
@@ -45,8 +50,18 @@ export default async function AppScreenPage({
   const { actor, db, access, readOnly, viewer } = opened;
   // «Inicio» (0215) no es una vista guardada: son las tarjetas de este rol.
   const isHome = isHomeRoute(access, ref);
-  const screen = isHome ? null : screenFor(access, ref);
-  if (!isHome && !screen) notFound();
+  // Tablero (0225) y portal de clientes: pantallas sintéticas, calculadas con el rol de quien mira.
+  const tableroDef = isHome ? null : tableroForRoute(access, ref);
+  const isPortal = !isHome && !tableroDef && isPortalRoute(access, ref);
+  const synthetic = isHome || Boolean(tableroDef) || isPortal;
+  const screen = synthetic ? null : screenFor(access, ref);
+  if (!synthetic && !screen) notFound();
+  if (!readOnly) void recordAppEvent(db, access, { kind: 'screen_open', screen: ref });
+  const basePath = `/apps/${access.app.slug}`;
+  const [tablero, portal] = await Promise.all([
+    tableroDef ? computeTablero(db, access, tableroDef, { basePath }) : null,
+    isPortal ? computePortal(db, access, { basePath }) : null,
+  ]);
   const [read, home, brand, buttons, location] = await Promise.all([
     screen ? readScreen(db, access, screen, { readOnly, fila: query.fila, detail: query.d }) : null,
     isHome ? loadHome(db, access) : null,
@@ -64,7 +79,7 @@ export default async function AppScreenPage({
         look={{ font: fontStack(brand.font), iconUrl: brand.iconUrl }}
         emptyHints={emptyHints}
         screens={navScreens(access)}
-        current={screen?.slug ?? HOME_NAV.slug}
+        current={screen?.slug ?? (synthetic && !isHome ? ref : HOME_NAV.slug)}
         role={{ key: role.key, name: role.name }}
         readOnly={readOnly}
         previewAttributes={readOnly ? access.user.attributes : undefined}
@@ -72,15 +87,18 @@ export default async function AppScreenPage({
         canManage={viewer.companyAdmin}
         computed={read?.computed}
         home={home ?? undefined}
+        tablero={tablero ?? undefined}
+        portal={portal ?? undefined}
         target={screen ? { kind: 'custom_app', appId: app.slug, screen: screen.slug } : undefined}
         dataUrl={
           screen
             ? `/api/apps/${app.slug}/screens/${screen.slug}/data${readOnly ? previewQuery(role.key, access.user.attributes) : ''}`
             : undefined
         }
-        title={screen?.title ?? HOME_NAV.title}
+        title={screen?.title ?? tableroDef?.title ?? (isPortal ? 'Mi portal' : HOME_NAV.title)}
         buttons={buttons}
         location={location?.canShare ? location : null}
+        viewer={{ key: access.user.id, name: access.user.name }}
       />
     </ViewBrandProvider>
   );

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GEOFENCE_MAX, geofenceSchema } from './geofence';
 
 /**
  * UBICACIÓN DEL EQUIPO: LAS REGLAS PURAS (migración 0216).
@@ -44,13 +45,30 @@ export const locationSettingsSchema = z.object({
     .min(MIN_RETENTION_DAYS)
     .max(MAX_RETENTION_DAYS)
     .default(DEFAULT_RETENTION_DAYS),
+  /** Lugares con radio (0224). Ver `geofence.ts`. */
+  geofences: z.array(geofenceSchema).max(GEOFENCE_MAX).default([]),
 });
 export type AppLocationSettings = z.infer<typeof locationSettingsSchema>;
 
 /** Lo que dice la base; lo que no cumple el contrato queda apagado. */
 export function parseLocationSettings(raw: unknown): AppLocationSettings {
   const parsed = locationSettingsSchema.safeParse(raw ?? {});
-  return parsed.success ? parsed.data : { enabled: false, retentionDays: DEFAULT_RETENTION_DAYS };
+  if (parsed.success) return parsed.data;
+  // Un lugar mal escrito no apaga la función entera: se descartan los lugares.
+  const base = z
+    .object({
+      enabled: z.boolean().default(false),
+      retentionDays: z
+        .number()
+        .int()
+        .min(MIN_RETENTION_DAYS)
+        .max(MAX_RETENTION_DAYS)
+        .default(DEFAULT_RETENTION_DAYS),
+    })
+    .safeParse(raw ?? {});
+  return base.success
+    ? { ...base.data, geofences: [] }
+    : { enabled: false, retentionDays: DEFAULT_RETENTION_DAYS, geofences: [] };
 }
 
 /** Un cambio parcial (chat y editor): sólo lo que viene. */
@@ -58,6 +76,7 @@ export const locationSettingsPatchSchema = z
   .object({
     enabled: z.boolean().optional(),
     retentionDays: z.number().int().min(MIN_RETENTION_DAYS).max(MAX_RETENTION_DAYS).optional(),
+    geofences: z.array(geofenceSchema).max(GEOFENCE_MAX).optional(),
   })
   .strict();
 

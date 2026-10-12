@@ -10,6 +10,7 @@ import { clsx } from 'clsx';
 import { MapPin, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { GeofencesPanel } from './GeofencesPanel';
 import {
   type AppEditorData,
   BTN_DANGER,
@@ -477,6 +478,7 @@ export function RolesTab({ data }: { data: AppEditorData }) {
         onSaveRoles={save}
         pending={pending}
       />
+      <GeofencesPanel app={app} roles={roles} />
 
       {/* 2. Rol × pantalla */}
       {saved.length > 0 && screens.length > 0 && (

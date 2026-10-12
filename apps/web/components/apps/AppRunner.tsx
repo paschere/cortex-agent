@@ -5,7 +5,14 @@ import type { SubmitTarget } from '@/components/views/ViewCanvas';
 import { BrandScope } from '@/components/views/blocks/brand';
 import { headerHidden, splitTabs } from '@/lib/apps/app-nav';
 import { previewQuery } from '@/lib/apps/preview-query';
-import type { ComputedHome, ComputedView, LocationStatus } from '@cortex/agent-tools';
+import { rememberScreen } from '@/lib/apps/screen-store';
+import type {
+  ComputedHome,
+  ComputedPortal,
+  ComputedTablero,
+  ComputedView,
+  LocationStatus,
+} from '@cortex/agent-tools';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import { Ellipsis, Info, Pencil, Plus, X } from 'lucide-react';
@@ -13,20 +20,16 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { type AppButton, AppButtons, PushToggle } from './AppAutomationBar';
+import { AppCaptureLayer } from './AppCaptureLayer';
 import { Glyph } from './AppGlyph';
 import { AppHome } from './AppHome';
-import {
-  AppWorker,
-  InstallButton,
-  KioskIdleGuard,
-  KioskMenu,
-  OfflineBanner,
-  SignOutMenu,
-} from './AppSession';
+import { AppWorker, InstallButton, KioskIdleGuard, KioskMenu, SignOutMenu } from './AppSession';
 import { AppThemeScope, AppThemeToggle } from './AppTheme';
 import { AppToastProvider } from './AppToast';
 import { LocationMenu, LocationProvider } from './LocationShare';
+import { PortalHome } from './PortalHome';
 import { PullToRefresh } from './PullToRefresh';
+import { TableroView } from './TableroView';
 import './app-runner.css';
 
 /**
@@ -83,6 +86,10 @@ export interface AppRunnerProps {
   dataUrl?: string;
   /** Las tarjetas ya calculadas para este rol (pantalla «Inicio»). */
   home?: ComputedHome;
+  /** Un tablero ya calculado para este rol (pantalla `tab_<id>`, 0225). */
+  tablero?: ComputedTablero;
+  /** El portal de un cliente ya calculado (pantalla `portal`, 0225). */
+  portal?: ComputedPortal;
   title: string;
   /**
    * Para la entrada de afuera (/a/<id>, 0209): la base de las direcciones y quién
@@ -121,6 +128,12 @@ export interface AppRunnerProps {
    */
   preview?: { onSelect: (slug: string) => void };
   screenContent?: React.ReactNode;
+  /**
+   * Quién usa la app (miembro de Cortex): su id y nombre, para la captura sin
+   * señal (cola, copia de pantallas, marca de agua). Un usuario externo ya
+   * viene en `session`.
+   */
+  viewer?: { key: string; name: string } | null;
 }
 
 function AppMark({
@@ -195,6 +208,8 @@ export function AppRunner({
   target,
   dataUrl,
   home,
+  tablero,
+  portal,
   title,
   basePath,
   session = null,
@@ -205,6 +220,7 @@ export function AppRunner({
   location = null,
   preview,
   screenContent,
+  viewer = null,
 }: AppRunnerProps) {
   const router = useRouter();
   const como = readOnly && !preview ? previewQuery(role.key, previewAttributes) : '';
@@ -213,8 +229,20 @@ export function AppRunner({
   const editHref = `/apps/${app.slug}/edit`;
   const { tabs, more, moreActive } = splitTabs(screens, current);
   const standalone = Boolean(basePath);
-  const computedAt = computed?.computedAt ?? home?.computedAt ?? new Date().toISOString();
+  const computedAt =
+    computed?.computedAt ??
+    home?.computedAt ??
+    tablero?.computedAt ??
+    portal?.computedAt ??
+    new Date().toISOString();
   const [sheet, setSheet] = useState(false);
+  // Captura sin señal (cola, copia de pantallas, marca de agua): sólo con quien escribe de verdad.
+  const captureWho =
+    readOnly || preview
+      ? null
+      : (viewer ?? (session ? { key: session.userKey, name: session.name } : null));
+  const appKey =
+    target?.kind === 'custom_app' ? target.appId : session?.external ? app.id : app.slug;
 
   // La cabecera compacta se esconde al bajar y vuelve al subir.
   const [hidden, setHidden] = useState(false);
@@ -376,7 +404,6 @@ export function AppRunner({
                   homeSlug={session.homeSlug ?? null}
                 />
               )}
-              {session && <OfflineBanner computedAt={computedAt} />}
               {readOnly && !preview && (
                 <output className="view-no-print mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-amber/40 bg-amber-soft px-4 py-3 text-sm font-semibold text-ink">
                   <span>Viendo como {role.name}. Nada se guarda.</span>
@@ -389,70 +416,96 @@ export function AppRunner({
                 </output>
               )}
               {/* Una pantalla distinta es otro lienzo: sin estado de la anterior, y entra suave. */}
-              <div key={`${app.slug}:${current}:${role.key}`} className="app-screen">
-                {!readOnly && !preview && buttons.length > 0 && (
-                  <div className="view-no-print mb-3 flex flex-col items-start gap-2">
-                    <AppButtons appId={app.id} screen={current} buttons={buttons} />
-                  </div>
-                )}
-                {!readOnly && !preview && !home && <PushToggle appId={app.id} />}
-                {preview && screenContent ? (
-                  screenContent
-                ) : home ? (
-                  <AppHome
-                    home={home}
-                    base={base}
-                    como={como}
-                    appName={app.name}
-                    roleName={role.name}
-                  />
-                ) : (
-                  computed &&
-                  target && (
-                    <>
-                      {emptyHints.length > 0 && (
-                        <ul className="view-no-print mb-3 space-y-2">
-                          {emptyHints.map((h) => (
-                            <li
-                              key={h.blockId}
-                              className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-border-strong bg-surface px-4 py-3"
-                            >
-                              <span className="flex min-w-0 items-center gap-2 text-sm text-ink-muted">
-                                <Info className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
-                                <span>
-                                  Aún no hay registros en{' '}
-                                  <span className="font-semibold text-ink">{h.title}</span>.
-                                  {!h.screen &&
-                                    !readOnly &&
-                                    ' Registra el primero con el formulario.'}
+              <AppCaptureLayer
+                appKey={appKey}
+                appName={app.name}
+                external={Boolean(session?.external)}
+                who={captureWho}
+                base={base}
+                current={current}
+                computedAt={computedAt}
+                canExport={canExport}
+              >
+                <div key={`${app.slug}:${current}:${role.key}`} className="app-screen">
+                  {!readOnly && !preview && buttons.length > 0 && (
+                    <div className="view-no-print mb-3 flex flex-col items-start gap-2">
+                      <AppButtons appId={app.id} screen={current} buttons={buttons} />
+                    </div>
+                  )}
+                  {!readOnly && !preview && !home && !tablero && !portal && (
+                    <PushToggle appId={app.id} />
+                  )}
+                  {preview && screenContent ? (
+                    screenContent
+                  ) : home ? (
+                    <AppHome
+                      home={home}
+                      base={base}
+                      como={como}
+                      appName={app.name}
+                      roleName={role.name}
+                    />
+                  ) : tablero ? (
+                    <TableroView tablero={tablero} />
+                  ) : portal ? (
+                    <PortalHome portal={portal} />
+                  ) : (
+                    computed &&
+                    target && (
+                      <>
+                        {emptyHints.length > 0 && (
+                          <ul className="view-no-print mb-3 space-y-2">
+                            {emptyHints.map((h) => (
+                              <li
+                                key={h.blockId}
+                                className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-border-strong bg-surface px-4 py-3"
+                              >
+                                <span className="flex min-w-0 items-center gap-2 text-sm text-ink-muted">
+                                  <Info className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+                                  <span>
+                                    Aún no hay registros en{' '}
+                                    <span className="font-semibold text-ink">{h.title}</span>.
+                                    {!h.screen &&
+                                      !readOnly &&
+                                      ' Registra el primero con el formulario.'}
+                                  </span>
                                 </span>
-                              </span>
-                              {h.screen && !readOnly && (
-                                <Link
-                                  href={hrefFor(h.screen)}
-                                  className="app-press inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-primary-soft px-4 text-xs font-semibold text-primary-ink hover:bg-primary-soft/70"
-                                >
-                                  <Plus className="h-3.5 w-3.5" aria-hidden />
-                                  {h.screenTitle ? `Registrar en ${h.screenTitle}` : 'Registrar'}
-                                </Link>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <LiveViewCanvas
-                        initial={computed}
-                        target={target}
-                        dataUrl={dataUrl ?? null}
-                        heading={{ title }}
-                        showBrand={false}
-                        canExport={canExport}
-                        readOnly={readOnly}
-                      />
-                    </>
-                  )
-                )}
-              </div>
+                                {h.screen && !readOnly && (
+                                  <Link
+                                    href={hrefFor(h.screen)}
+                                    className="app-press inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-primary-soft px-4 text-xs font-semibold text-primary-ink hover:bg-primary-soft/70"
+                                  >
+                                    <Plus className="h-3.5 w-3.5" aria-hidden />
+                                    {h.screenTitle ? `Registrar en ${h.screenTitle}` : 'Registrar'}
+                                  </Link>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <LiveViewCanvas
+                          initial={computed}
+                          target={target}
+                          dataUrl={dataUrl ?? null}
+                          heading={{ title }}
+                          showBrand={false}
+                          canExport={canExport}
+                          readOnly={readOnly}
+                          onView={
+                            captureWho
+                              ? (view) =>
+                                  void rememberScreen(
+                                    { appKey, userKey: captureWho.key, screen: current, title },
+                                    view,
+                                  )
+                              : undefined
+                          }
+                        />
+                      </>
+                    )
+                  )}
+                </div>
+              </AppCaptureLayer>
             </main>
 
             {standalone && <PullToRefresh onRefresh={refresh} />}

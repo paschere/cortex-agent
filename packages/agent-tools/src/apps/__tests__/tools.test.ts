@@ -8,6 +8,7 @@ import {
   appsAssignMembers,
   appsCreate,
   appsDelete,
+  appsGeofences,
   appsGet,
   appsInviteUsers,
   appsPublish,
@@ -292,6 +293,68 @@ describe('apps.publish', () => {
     expect(fake.tables.custom_apps?.[0]?.status).toBe('published');
     await appsPublish.handler({ app: 'planta', publish: false }, ctx(ADMIN));
     expect(fake.tables.custom_apps?.[0]?.status).toBe('draft');
+  });
+});
+
+describe('apps.geofences', () => {
+  it('agrega, cambia y quita lugares; sólo owner/admin; pide confirmación', async () => {
+    const { ctx, fake } = world();
+    expect(appsGeofences.requiresConfirmation).toBe(true);
+    await expect(
+      appsGeofences.handler(
+        { app: 'planta', add: [{ name: 'Bodega Norte', lat: 4.7, lng: -74.05 }] },
+        ctx(OPERARIO),
+      ),
+    ).rejects.toThrow();
+    const out = await appsGeofences.handler(
+      {
+        app: 'planta',
+        add: [
+          { name: 'Bodega Norte', lat: 4.7, lng: -74.05, radiusM: 200, notifyAdmins: true },
+          { name: 'Bodega Norte', lat: 4.8, lng: -74.0 },
+        ],
+      },
+      ctx(ADMIN),
+    );
+    // Dos con el mismo nombre no chocan: el segundo recibe otro id.
+    expect(out.geofences.map((g) => g.id)).toEqual(['bodega_norte', 'bodega_norte_2']);
+    expect(out.geofences[0]).toMatchObject({ radiusM: 200, notifyAdmins: true, on: 'both' });
+    const stored = fake.tables.custom_apps?.[0]?.location as { geofences: unknown[] };
+    expect(stored.geofences).toHaveLength(2);
+
+    const changed = await appsGeofences.handler(
+      {
+        app: 'planta',
+        update: [{ id: 'bodega_norte', radiusM: 90, on: 'enter' }],
+        remove: ['bodega_norte_2'],
+      },
+      ctx(ADMIN),
+    );
+    expect(changed.geofences).toHaveLength(1);
+    expect(changed.geofences[0]).toMatchObject({ radiusM: 90, on: 'enter' });
+    expect(changed.markdown).toMatch(/apagada/);
+  });
+
+  it('rechaza un rol que no existe, un lugar que no existe y coordenadas imposibles', async () => {
+    const { ctx } = world();
+    await expect(
+      appsGeofences.handler(
+        {
+          app: 'planta',
+          add: [{ name: 'X lugar', lat: 4.7, lng: -74.05, notifyRoles: ['fantasma'] }],
+        },
+        ctx(ADMIN),
+      ),
+    ).rejects.toThrow(/fantasma/);
+    await expect(
+      appsGeofences.handler({ app: 'planta', remove: ['nada'] }, ctx(ADMIN)),
+    ).rejects.toThrow(/No hay un lugar/);
+    expect(
+      appsGeofences.inputSchema.safeParse({
+        app: 'planta',
+        add: [{ name: 'Lejos', lat: 120, lng: 0 }],
+      }).success,
+    ).toBe(false);
   });
 });
 

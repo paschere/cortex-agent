@@ -3,6 +3,8 @@ import { renderBriefingEmail } from '@/lib/email-templates/briefing';
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { notificationExists, notify } from '@/lib/notifications/notify';
+import { briefingOff, loadPreferences } from '@/lib/notifications/preferences';
+import { resolveChannels } from '@/lib/notifications/preferences-shape';
 import { pushToPeople } from '@/lib/notifications/push';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
@@ -40,7 +42,7 @@ import { logger } from '@cortex/core';
  *   3. correo, SÓLO si el push no le llegó: un resumen por dos canales a la vez
  *      es el ruido que enseña a no abrirlos. El correo lleva un enlace, nunca
  *      una acción.
- *   4. WhatsApp: TODO. No existe hoy un envío de Cortex a una PERSONA del equipo
+ *   4. WhatsApp: TODO (el canal existe en las preferencias como «próximamente»). No existe hoy un envío de Cortex a una PERSONA del equipo
  *      (sólo a grupos permitidos —whatsapp/group-send— y respuestas a clientes);
  *      cuando exista, con el permiso «Permitir mensajes de Cortex» de la
  *      empresa, se engancha aquí. No se inventa un remitente.
@@ -101,7 +103,13 @@ export const briefingWorkspaceJob: JobHandler = async ({ event, step }) => {
     const now = new Date();
     const data = await loadBriefingData(db, { today, now });
     const meta = await listWorkPeopleMeta(db).catch(() => new Map());
-    const tally = { people: 0, sent: 0, email: 0, push: 0, skipped: 0 };
+    const tally = { people: 0, sent: 0, email: 0, push: 0, skipped: 0, optedOut: 0 };
+    // Preferencias de cada persona (0223), leídas una vez. «Tu día» apagado
+    // del todo: ni se arma. Sin fila, el comportamiento de siempre.
+    const prefs = await loadPreferences(
+      db,
+      data.people.slice(0, MAX_PEOPLE).map((p) => p.id),
+    );
 
     for (const person of data.people.slice(0, MAX_PEOPLE)) {
       tally.people += 1;
@@ -110,6 +118,11 @@ export const briefingWorkspaceJob: JobHandler = async ({ event, step }) => {
         tally.skipped += 1;
         continue;
       }
+      if (briefingOff(prefs.get(person.id))) {
+        tally.optedOut += 1;
+        continue;
+      }
+      const channels = resolveChannels(prefs.get(person.id), 'briefing', now);
       const manager = await isCompanyManager(db, person.id);
       const briefing = buildBriefing(briefingInputFor(data, person, manager));
       if (!briefing.send) {
@@ -117,24 +130,28 @@ export const briefingWorkspaceJob: JobHandler = async ({ event, step }) => {
         continue;
       }
       const dedupeKey = `briefing:${person.id}:${today}`;
-      // ¿Ya se mandó hoy? Entonces ni campana, ni push, ni correo.
-      if (await notificationExists(db, person.id, dedupeKey)) {
+      // ¿Ya se mandó hoy? Entonces ni campana, ni push, ni correo. (Sin
+      // campana, la fila no existe y el repaso de un reintento puede repetir el
+      // celular: la etiqueta del push es la misma y el sistema lo reemplaza.)
+      if (channels.bell && (await notificationExists(db, person.id, dedupeKey))) {
         tally.skipped += 1;
         continue;
       }
       const href =
         manager && briefing.actions.length ? '/piloto' : manager ? '/overview' : '/commitments';
-      const id = await notify(db, {
-        userId: person.id,
-        kind: 'briefing',
-        tone: briefing.tone,
-        title: briefing.title,
-        body: briefing.body,
-        href,
-        actions: briefing.actions,
-        dedupeKey,
-      });
-      if (!id) continue;
+      if (channels.bell) {
+        const id = await notify(db, {
+          userId: person.id,
+          kind: 'briefing',
+          tone: briefing.tone,
+          title: briefing.title,
+          body: briefing.body,
+          href,
+          actions: briefing.actions,
+          dedupeKey,
+        });
+        if (!id) continue;
+      }
       tally.sent += 1;
 
       const pushed = await pushToPeople(db, [person.id], {
@@ -142,6 +159,7 @@ export const briefingWorkspaceJob: JobHandler = async ({ event, step }) => {
         body: briefing.bullets[0],
         url: '/notifications',
         tag: dedupeKey,
+        kind: 'briefing',
       }).catch((err) => {
         logger.warn({ err, organizationId }, 'briefing: el push no salió');
         return [] as string[];
@@ -150,7 +168,7 @@ export const briefingWorkspaceJob: JobHandler = async ({ event, step }) => {
         tally.push += 1;
         continue;
       }
-      if (person.email.includes('@')) {
+      if (channels.email && person.email.includes('@')) {
         const mail = renderBriefingEmail({
           title: briefing.title,
           bullets: briefing.bullets,

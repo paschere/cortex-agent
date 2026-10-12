@@ -1,5 +1,6 @@
 'use client';
 
+import type { TaskFile } from '@/lib/background-tasks/files';
 import type { BrainSource } from '@/lib/brain-sources-shape';
 import {
   type BrowserStep,
@@ -15,6 +16,9 @@ import {
   toCsv,
 } from '@/lib/chat-artifact';
 import type { TurnInvocation } from '@/lib/chat-turn';
+import { downloadBytes } from '@/lib/xlsx/download';
+import { inferSheet } from '@/lib/xlsx/infer';
+import { buildXlsx, xlsxFileName } from '@/lib/xlsx/write';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import { BookmarkPlus, Download, Globe, MessageSquareText, PanelRightOpen, X } from 'lucide-react';
@@ -30,7 +34,6 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import type { TaskFile } from '@/lib/background-tasks/files';
 import { FilesPanel } from '../tareas/FilesPanel';
 import { useChatCompose } from './ChatCompose';
 import type { TurnMetrics } from './TaskRows';
@@ -286,6 +289,14 @@ export function useDesktop(): boolean {
   );
 }
 
+function downloadXlsx(artifact: ChatArtifact) {
+  if (!artifact.csv) return;
+  downloadBytes(
+    xlsxFileName(artifact.title),
+    buildXlsx(inferSheet(artifact.title, artifact.csv.headers, artifact.csv.rows)),
+  );
+}
+
 function downloadCsv(artifact: ChatArtifact) {
   if (!artifact.csv) return;
   const blob = new Blob([toCsv(artifact.csv)], { type: 'text/csv;charset=utf-8' });
@@ -425,10 +436,15 @@ function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean })
             Guardar como vista
           </button>
           {artifact.csv && (
-            <button type="button" onClick={() => downloadCsv(artifact)} className={secondary}>
-              <Download className="h-3.5 w-3.5" aria-hidden />
-              Descargar (Excel/CSV)
-            </button>
+            <>
+              <button type="button" onClick={() => downloadXlsx(artifact)} className={secondary}>
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                Descargar Excel
+              </button>
+              <button type="button" onClick={() => downloadCsv(artifact)} className={secondary}>
+                CSV
+              </button>
+            </>
           )}
           <button
             type="button"

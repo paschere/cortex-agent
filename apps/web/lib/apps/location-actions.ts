@@ -2,6 +2,7 @@
 
 import { openApp } from '@/lib/apps/access';
 import { notifyAssigned } from '@/lib/apps/assign-notify';
+import { buildAutomationDeps } from '@/lib/apps/automation-deps';
 import { createLimiter } from '@/lib/apps/rate-limit';
 import {
   type AssignablePerson,
@@ -144,7 +145,10 @@ export async function pingLocationAction(
       return { ok: true, saved: false, reason: 'rate' };
     const parsed = pingSchema.safeParse(raw);
     if (!parsed.success) return { ok: true, saved: false, reason: 'invalid' };
-    const out = await recordPosition(db, access, parsed.data);
+    // Los lugares con radio (0224) avisan por campana y push con las mismas piezas de las automatizaciones.
+    const out = await recordPosition(db, access, parsed.data, new Date(), {
+      notifier: buildAutomationDeps(),
+    });
     return out.saved ? { ok: true, saved: true } : { ok: true, saved: false, reason: out.reason };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo enviar tu posición.') };
@@ -156,7 +160,13 @@ export async function livePeopleAction(
   appRef: string,
   screenRef: string,
   blockId: string,
-): Promise<Result<{ people: LiveTeamPerson[]; at: string }>> {
+): Promise<
+  Result<{
+    people: LiveTeamPerson[];
+    at: string;
+    places: Array<{ id: string; name: string; lat: number; lng: number; radiusM: number }>;
+  }>
+> {
   try {
     const { db, access } = await open(appRef);
     const screen = screenFor(access, screenRef);
@@ -166,7 +176,14 @@ export async function livePeopleAction(
     if (!block || block.type !== 'map' || !block.people)
       throw new NotFoundError('Ese mapa no muestra personas.');
     const people = await listLivePeople(db, access, { roles: block.peopleRoles });
-    return { ok: true, people, at: new Date().toISOString() };
+    const places = access.app.location.geofences.map((g) => ({
+      id: g.id,
+      name: g.name,
+      lat: g.lat,
+      lng: g.lng,
+      radiusM: g.radiusM,
+    }));
+    return { ok: true, people, at: new Date().toISOString(), places };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo leer dónde está el equipo.') };
   }

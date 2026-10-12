@@ -1,6 +1,13 @@
 import { ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  type GeofenceEvent,
+  type GeofenceNotifier,
+  applyGeofences,
+  clearGeofenceState,
+  insideNow,
+} from './geofence-run';
+import {
   type ConsentText,
   HIDE_AFTER_SECONDS,
   LOCATION_TEXT_VERSION,
@@ -212,6 +219,7 @@ export async function revokeLocation(
     .eq('app_id', access.app.id)
     .eq('subject_kind', actor.kind)
     .eq('subject_id', actor.id);
+  await clearGeofenceState(db, access.app.id, actor.kind, actor.id);
 }
 
 /** Iniciar turno: exige consentimiento vigente. */
@@ -253,10 +261,12 @@ export async function endShift(
     .eq('app_id', access.app.id)
     .eq('subject_kind', actor.kind)
     .eq('subject_id', actor.id);
+  // Quien termina el turno dentro de un lugar vuelve a «llegar» al empezar el siguiente.
+  await clearGeofenceState(db, access.app.id, actor.kind, actor.id);
 }
 
 export type PositionOutcome =
-  | { saved: true }
+  | { saved: true; geofence?: GeofenceEvent[] }
   | { saved: false; reason: 'rate' | 'invalid' | 'inactive' };
 
 /**
@@ -271,6 +281,7 @@ export async function recordPosition(
   access: AppAccess,
   raw: RawPosition,
   now: Date = new Date(),
+  opts: { notifier?: GeofenceNotifier } = {},
 ): Promise<PositionOutcome> {
   if (!access.app.location.enabled || !canShareLocation(access.role))
     return { saved: false, reason: 'inactive' };
@@ -285,7 +296,15 @@ export async function recordPosition(
     return { saved: false, reason: 'inactive' };
   const position = parsePosition(raw);
   if (!position) return { saved: false, reason: 'invalid' };
-  return writePosition(db, access, actor, position, now);
+  const out = await writePosition(db, access, actor, position, now);
+  if (!out.saved || !access.app.location.geofences.length) return out;
+  // Los lugares (0224): un fallo aquí nunca cuesta la posición ya guardada.
+  try {
+    const geofence = await applyGeofences(db, access, position, opts.notifier, now);
+    return geofence.length ? { saved: true, geofence } : out;
+  } catch {
+    return out;
+  }
 }
 
 interface LiveRow {
@@ -378,6 +397,8 @@ export interface LiveTeamPerson {
   ageSeconds: number;
   /** Más de cinco minutos sin posición nueva: se pinta apagado («sin señal»). */
   stale: boolean;
+  /** Nombre del lugar (geocerca) donde está ahora, si está dentro de uno. */
+  place?: string;
   onShift: true;
   shiftSince: string | null;
   self: boolean;
@@ -490,6 +511,18 @@ export async function listLivePeople(
   );
   const self = actorOf(access);
   const wantedRoles = filter.roles?.length ? new Set(filter.roles) : null;
+  // Dónde está cada quien (0224): el nombre del primer lugar donde está adentro.
+  const placeOf = new Map<string, string>();
+  if (access.app.location.geofences.length) {
+    const names = new Map(access.app.location.geofences.map((g) => [g.id, g.name]));
+    try {
+      for (const r of await insideNow(db, appId)) {
+        const key = `${r.kind}:${r.id}`;
+        const name = names.get(r.geofenceId);
+        if (name && !placeOf.has(key)) placeOf.set(key, name);
+      }
+    } catch {}
+  }
   const out: LiveTeamPerson[] = [];
   for (const l of live) {
     let name: string | undefined;
@@ -525,6 +558,9 @@ export async function listLivePeople(
       recordedAt: l.recorded_at,
       ageSeconds: age,
       stale: age > STALE_AFTER_SECONDS,
+      ...(placeOf.has(`${l.subject_kind}:${l.subject_id}`)
+        ? { place: placeOf.get(`${l.subject_kind}:${l.subject_id}`) as string }
+        : {}),
       onShift: true,
       shiftSince: shift.get(`${l.subject_kind}:${l.subject_id}`) ?? null,
       self: isSelf,
@@ -635,6 +671,10 @@ export async function purgeLocationHistory(
   now: Date = new Date(),
 ): Promise<number> {
   const cutoff = retentionCutoff(retentionDays, now).toISOString();
+  // Los cruces de lugares (0224) se guardan lo mismo que el rastro.
+  try {
+    await db.from('custom_app_geofence_events').delete().eq('app_id', appId).lt('at', cutoff);
+  } catch {}
   const { data, error } = await db
     .from('custom_app_location_history')
     .delete()
@@ -664,13 +704,15 @@ export async function closeStaleShifts(
     .lt('shift_started_at', limit)
     .select('subject_kind, subject_id');
   if (error) throw error;
-  for (const s of (data ?? []) as Array<{ subject_kind: string; subject_id: string }>)
+  for (const s of (data ?? []) as Array<{ subject_kind: string; subject_id: string }>) {
     await db
       .from('custom_app_locations')
       .delete()
       .eq('app_id', appId)
       .eq('subject_kind', s.subject_kind)
       .eq('subject_id', s.subject_id);
+    await clearGeofenceState(db, appId, s.subject_kind as PersonKind, s.subject_id);
+  }
   // Las posiciones que quedaron sin turno abierto (por una revocación a medias o un cierre manual).
   const { data: open } = await db
     .from('custom_app_location_consents')

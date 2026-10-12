@@ -3,6 +3,7 @@
 import { openApp } from '@/lib/apps/access';
 import { bellForSubmission, notifyViewActivity } from '@/lib/views/activity';
 import {
+  RowConflictError,
   SubmissionLimitError,
   editAppRow,
   editAppSubmission,
@@ -98,15 +99,22 @@ export async function editAppRowAction(
   blockId: string,
   rowId: string,
   patch: Record<string, string>,
-): Promise<Result<{ message: string }>> {
+  /** Sólo una edición que estuvo en la cola sin señal: lo que la persona vio de cada campo. */
+  expect?: Record<string, string>,
+): Promise<
+  | Result<{ message: string }>
+  | { ok: false; error: string; conflict: Array<{ field: string; theirs: string }> }
+> {
   try {
     const { db, access, view } = await open(appRef, screenRef);
-    const res = await editAppRow(db, access, view, { blockId, rowId, patch });
+    const res = await editAppRow(db, access, view, { blockId, rowId, patch, expect });
     return {
       ok: true,
       message: `Guardado en «${res.label}».${res.duplicate ? ` ${res.duplicate}` : ''}`,
     };
   } catch (err) {
+    if (err instanceof RowConflictError)
+      return { ok: false, error: err.message, conflict: err.conflicts };
     return { ok: false, error: describe(err, 'No se pudo guardar el cambio.') };
   }
 }

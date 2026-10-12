@@ -30,6 +30,9 @@ import {
   normalizeView,
   visibleColumns,
 } from '@/lib/datagrid/view';
+import { gridToSheet } from '@/lib/datagrid/xlsx';
+import { downloadBytes } from '@/lib/xlsx/download';
+import { buildXlsx, xlsxFileName } from '@/lib/xlsx/write';
 import { clsx } from 'clsx';
 import {
   ArrowUpDown,
@@ -624,7 +627,7 @@ export function DataGrid(props: DataGridProps) {
 
   // --- Exportar ------------------------------------------------------------------------
   const [exporting, setExporting] = useState(false);
-  const exportCsv = async (only?: GridRow[]) => {
+  const exportCsv = async (only?: GridRow[], format: 'xlsx' | 'csv' = 'csv') => {
     let list = only ?? result.rows;
     if (!only && serverMode && onQuery && rows.length < serverTotal) {
       setExporting(true);
@@ -643,10 +646,13 @@ export function DataGrid(props: DataGridProps) {
       }
       setExporting(false);
     }
-    download(
-      csvFileName(props.exportName ?? noun.many, bogotaDay(new Date())),
-      toCsv(list, shownColumns),
-    );
+    const day = bogotaDay(new Date());
+    const base = props.exportName ?? noun.many;
+    if (format === 'xlsx') {
+      downloadBytes(xlsxFileName(base, day), buildXlsx(gridToSheet(base, list, shownColumns)));
+    } else {
+      download(csvFileName(base, day), toCsv(list, shownColumns));
+    }
     push(
       'ok',
       `${formatNumber(list.length, 0)} ${list.length === 1 ? noun.one : noun.many} exportad${words.o}${list.length === 1 ? '' : 's'}.`,
@@ -1011,16 +1017,27 @@ export function DataGrid(props: DataGridProps) {
             </button>
           ) : null}
           {!mobile ? (
-            <button
-              type="button"
-              onClick={() => void exportCsv()}
-              disabled={exporting || !result.rows.length}
-              className={toolbarButton}
-              title="Exportar lo que ves a CSV (Excel)"
-            >
-              <Download className="h-4 w-4" aria-hidden />
-              {exporting ? 'Exportando…' : 'Exportar'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => void exportCsv(undefined, 'xlsx')}
+                disabled={exporting || !result.rows.length}
+                className={toolbarButton}
+                title="Exportar lo que ves a Excel (.xlsx)"
+              >
+                <Download className="h-4 w-4" aria-hidden />
+                {exporting ? 'Exportando…' : 'Excel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void exportCsv()}
+                disabled={exporting || !result.rows.length}
+                className={toolbarButton}
+                title="Exportar lo que ves a CSV"
+              >
+                CSV
+              </button>
+            </>
           ) : null}
           {askHref && !mobile ? (
             <Link href={askHref} className={toolbarButton}>
@@ -1128,11 +1145,11 @@ export function DataGrid(props: DataGridProps) {
           ) : null}
           <button
             type="button"
-            onClick={() => void exportCsv(selectedRows)}
+            onClick={() => void exportCsv(selectedRows, 'xlsx')}
             className={ghostButton}
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
-            Exportar
+            Exportar a Excel
           </button>
           {onDelete ? (
             <button
@@ -1220,9 +1237,16 @@ export function DataGrid(props: DataGridProps) {
             <LayoutPanel columns={columns} view={view} setView={setView} />
             {hasViews ? viewsPanel(() => setSheetOpen(false)) : null}
             <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-              <button type="button" onClick={() => void exportCsv()} className={toolbarButton}>
+              <button
+                type="button"
+                onClick={() => void exportCsv(undefined, 'xlsx')}
+                className={toolbarButton}
+              >
                 <Download className="h-4 w-4" aria-hidden />
-                Exportar
+                Excel
+              </button>
+              <button type="button" onClick={() => void exportCsv()} className={toolbarButton}>
+                CSV
               </button>
               {askHref ? (
                 <Link href={askHref} className={toolbarButton}>

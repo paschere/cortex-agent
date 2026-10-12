@@ -25,7 +25,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { useEffect, useId, useState, useTransition } from 'react';
+import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import { DictateRecord, type Dictated } from '../DictateRecord';
 import type { SubmitTarget } from '../ViewCanvas';
 import { VoiceFormAssistant } from '../VoiceFormAssistant';
@@ -157,7 +157,20 @@ export function FormBlock({
         Object.fromEntries(Object.entries(values).map(([k, v]) => [k, forValidation(v)])),
       ),
     );
+  // Uso (0225): la primera vez que alguien escribe se avisa «empezó», con la misma
+  // referencia que luego lleva el envío. Sin contenido; si falla, no pasa nada.
+  const usageRef = useRef<string | null>(null);
   const setValue = (key: string, next: string) => {
+    if (!usageRef.current && target.kind === 'custom_app') {
+      usageRef.current = newClientId();
+      const base = target.external ? '/api/apps/public' : '/api/apps';
+      void fetch(`${base}/${target.appId}/screens/${target.screen}/event`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ block: block.id, ref: usageRef.current }),
+        keepalive: true,
+      }).catch(() => undefined);
+    }
     setValues((v) => ({ ...v, [key]: next }));
     setErrors((e) => {
       if (!(key in e)) return e;
@@ -245,7 +258,9 @@ export function FormBlock({
     }
 
     start(async () => {
-      await submitRecord(buildPayload(false), newClientId());
+      const ref = usageRef.current ?? newClientId();
+      usageRef.current = null;
+      await submitRecord(buildPayload(false), ref);
     });
   };
 
@@ -264,7 +279,8 @@ export function FormBlock({
       finish({ message, duplicate: null, offline: true, rowId: null });
       return { ok: true, offline: true, message, duplicate: null };
     };
-    const canQueue = target.kind === 'app' || target.kind === 'public';
+    const canQueue =
+      target.kind === 'app' || target.kind === 'public' || target.kind === 'custom_app';
     // Sin señal (o con fotos sin subir y sin señal): directo a la cola.
     if (canQueue && !navigator.onLine) return keepLocal();
     let outgoing = payload;
@@ -504,6 +520,8 @@ export function FormBlock({
               </option>
             ))}
           </select>
+        ) : f.type === 'longtext' && f.scan ? (
+          <ScanInput {...shared} />
         ) : f.type === 'longtext' ? (
           <textarea
             {...common}

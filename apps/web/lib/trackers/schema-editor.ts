@@ -48,7 +48,7 @@ export const typeHas = {
   length: (t: FieldType) => TEXTUAL.has(t),
   format: (t: FieldType) => t === 'text',
   pattern: (t: FieldType) => TEXTUAL.has(t),
-  scan: (t: FieldType) => t === 'text',
+  scan: (t: FieldType) => t === 'text' || t === 'longtext',
   file: (t: FieldType) => t === 'file',
   relation: (t: FieldType) => t === 'relation',
   unique: (t: FieldType) => t !== 'file',
@@ -80,9 +80,12 @@ function prune(field: TrackerField, type: FieldType): TrackerField {
   if (!typeHas.format(type)) next.format = undefined;
   if (!typeHas.pattern(type)) next.pattern = undefined;
   if (!typeHas.scan(type)) next.scan = undefined;
+  if (type !== 'longtext' || !next.scan) next.scanMode = undefined;
   if (!typeHas.file(type)) {
     next.accept = undefined;
     next.multiple = undefined;
+    next.evidence = undefined;
+    next.watermark = undefined;
   }
   if (!typeHas.relation(type)) next.tracker = undefined;
   if (!typeHas.unique(type)) next.unique = undefined;

@@ -1,5 +1,6 @@
 import 'server-only';
 import { buildToolContext } from '@/lib/agent';
+import { idsOf } from '@/lib/granted-tools';
 import { enqueueJob } from '@/lib/jobs';
 import type { StepLike } from '@/lib/message-parts';
 import { sanitizeHistory } from '@/lib/strip-empty-messages';
@@ -420,11 +421,14 @@ async function runClaimed(db: SupabaseClient, task: TaskRecord): Promise<Segment
     };
   };
 
+  // Lo concedido a esta tarea: el mismo filtrado que el chat (agente, equipos,
+  // módulos), para que research.parallel reparta piezas con los permisos justos.
+  const grantedToolIds = idsOf(candidates);
   let toolSteps = 0;
   const exec = (t: AnyTool, args: unknown, abortSignal: AbortSignal | undefined) =>
     runWithinBudget(budget, t.id, abortSignal, async (signal) => {
       try {
-        return await runTool(t, args, { ...ctx, signal });
+        return await runTool(t, args, { ...ctx, signal, grantedToolIds });
       } catch (err) {
         if (err instanceof ConfirmationRequiredError) {
           return (await stage(t, err.input)) as unknown as never;

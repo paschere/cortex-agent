@@ -58,6 +58,8 @@ export interface HoyView {
   /** Cuántas más hay que no caben aquí. */
   todosMore: number;
   todosMoreHref: string | null;
+  /** Cuántas cosas pospuso esta persona y siguen escondidas. */
+  snoozed?: number;
   canDecide: boolean;
   done: DoneView[];
   due: null | {

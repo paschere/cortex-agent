@@ -1,5 +1,6 @@
 'use client';
 
+import { clearCaptureData } from '@/lib/apps/capture-clear';
 import { signOutAppAction, signOutEverywhereAction } from '@/lib/apps/external-actions';
 import { changeMyPinAction, enrollThisDeviceAction } from '@/lib/apps/kiosk-actions';
 import { agoLabel, precacheUrlsOf } from '@/lib/apps/offline-cache';
@@ -165,6 +166,8 @@ export function SignOutMenu({ appId, kiosk = false }: { appId: string; kiosk?: b
     start(async () => {
       // Primero se le avisa al worker: la copia de esta persona no se queda en el teléfono.
       navigator.serviceWorker?.controller?.postMessage({ type: 'signout' });
+      // La cola, las fotos pendientes y las copias de pantallas se van con la sesión (avisa si queda algo sin enviar).
+      if (!(await clearCaptureData({ ask: !kiosk }))) return;
       await (everywhere ? signOutEverywhereAction(appId) : signOutAppAction(appId));
       window.location.assign(`/a/${appId}`);
     });
@@ -208,6 +211,7 @@ export function KioskIdleGuard({ appId, idleMinutes }: { appId: string; idleMinu
       if (closing) return;
       closing = true;
       navigator.serviceWorker?.controller?.postMessage({ type: 'signout' });
+      await clearCaptureData();
       await signOutAppAction(appId).catch(() => null);
       window.location.assign(`/a/${appId}`);
     };

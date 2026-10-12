@@ -11,6 +11,7 @@ export function HoyFixture({ view, dark }: { view: HoyView; dark: boolean }) {
         <HoyDashboard
           view={view}
           decide={async () => ({ ok: true, note: 'Hecho (de mentira: nada se guardó).' })}
+          snooze={async () => ({ ok: true, note: 'Pospuesto (de mentira: nada se guardó).' })}
         />
       </div>
     </div>

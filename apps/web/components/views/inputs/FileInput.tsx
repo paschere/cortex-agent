@@ -1,6 +1,13 @@
 'use client';
 
 import { appApiBase } from '@/lib/apps/api-base';
+import {
+  type Evidence,
+  buildEvidence,
+  formatStamp,
+  watermarkLines,
+  withEvidence,
+} from '@/lib/capture/evidence';
 import { compressImage } from '@/lib/views/compress-image';
 import { isPendingUrl, previewUrl, stashBlob } from '@/lib/views/offline-files';
 import {
@@ -16,6 +23,7 @@ import { clsx } from 'clsx';
 import { Camera, FileText, ImageIcon, Loader2, Paperclip, X } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import type { SubmitTarget } from '../ViewCanvas';
+import { useCaptureWho } from './capture-context';
 
 /**
  * El campo `file` de un formulario de vista. Fotos: «Tomar foto» (cámara
@@ -37,6 +45,33 @@ export interface FileInputProps {
   disabled?: boolean;
   /** Modo operario: botones de 56 px. */
   large?: boolean;
+  /**
+   * Foto con evidencia: sólo cámara (no galería), y cada foto guarda cuándo y,
+   * si la persona lo permite, dónde se tomó. Sin permiso de GPS la foto se
+   * toma igual, con sólo la hora.
+   */
+  evidence?: boolean;
+  /** Con evidencia: además se graban fecha, lugar y quién en la imagen. */
+  watermark?: boolean;
+}
+
+/** La posición de ahora, o null si no hay permiso, señal o tiempo (4 s): la foto no espera al GPS. */
+function currentFix(): Promise<GeolocationPosition['coords'] | null> {
+  return new Promise((resolve) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return resolve(null);
+    const timer = window.setTimeout(() => resolve(null), 4500);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        window.clearTimeout(timer);
+        resolve(p.coords);
+      },
+      () => {
+        window.clearTimeout(timer);
+        resolve(null);
+      },
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 4000 },
+    );
+  });
 }
 
 /** La subida falló por falta de red (no porque el servidor la rechazara). */
@@ -96,8 +131,13 @@ export function FileInput({
   field,
   disabled,
   large,
+  evidence = false,
+  watermark = false,
 }: FileInputProps) {
   const id = useId();
+  const who = useCaptureWho();
+  // El GPS se pide al tocar «Tomar foto», para que ya esté cuando la cámara se cierre.
+  const fixRef = useRef<Promise<GeolocationPosition['coords'] | null> | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const pickRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<{ name: string; pct: number }[]>([]);
@@ -118,7 +158,21 @@ export function FileInput({
         setError(pre.error);
         continue;
       }
-      const file = original.type.startsWith('image/') ? await compressImage(original) : original;
+      let ev: Evidence | null = null;
+      let marks: string[] | undefined;
+      if (evidence && original.type.startsWith('image/')) {
+        const fix = (await fixRef.current) ?? null;
+        fixRef.current = null;
+        ev = buildEvidence(
+          new Date(),
+          fix ? { latitude: fix.latitude, longitude: fix.longitude, accuracy: fix.accuracy } : null,
+        );
+        if (watermark)
+          marks = watermarkLines({ evidence: ev, user: who.userName, place: who.appName });
+      }
+      const file = original.type.startsWith('image/')
+        ? await compressImage(original, { watermark: marks })
+        : original;
       const check = checkUpload(file, accept);
       if (!check.ok) {
         setError(check.error);
@@ -128,7 +182,7 @@ export function FileInput({
       setBusy((b) => [...b, slot]);
       // Sin señal: la foto se guarda en el teléfono y sube al enviar el registro.
       const saveHere = async () => {
-        const kept = await stashBlob(file as File);
+        const kept = await stashBlob(file as File, ev);
         current = multiple ? [...current, kept] : [kept];
         onChange(serializeFileValue(current, multiple));
       };
@@ -145,7 +199,8 @@ export function FileInput({
           slot.pct = pct;
           setBusy((b) => [...b]);
         });
-        current = multiple ? [...current, done] : [done];
+        const stamped = withEvidence(done, ev);
+        current = multiple ? [...current, stamped] : [stamped];
         onChange(serializeFileValue(current, multiple));
       } catch (e) {
         if (e instanceof OfflineUploadError) await saveHere();
@@ -181,20 +236,25 @@ export function FileInput({
                 type="button"
                 className={btn}
                 disabled={off}
-                onClick={() => cameraRef.current?.click()}
+                onClick={() => {
+                  if (evidence) fixRef.current = currentFix();
+                  cameraRef.current?.click();
+                }}
               >
                 <Camera className="h-5 w-5" aria-hidden />
                 Tomar foto
               </button>
-              <button
-                type="button"
-                className={btn}
-                disabled={off}
-                onClick={() => pickRef.current?.click()}
-              >
-                <ImageIcon className="h-5 w-5" aria-hidden />
-                Elegir de la galería
-              </button>
+              {!evidence && (
+                <button
+                  type="button"
+                  className={btn}
+                  disabled={off}
+                  onClick={() => pickRef.current?.click()}
+                >
+                  <ImageIcon className="h-5 w-5" aria-hidden />
+                  Elegir de la galería
+                </button>
+              )}
             </>
           ) : (
             <button
@@ -262,6 +322,12 @@ export function FileInput({
               {isPendingUrl(f.url) && (
                 <span className="mt-1 block max-w-[5rem] text-micro leading-tight text-amber">
                   Se sube al enviar
+                </span>
+              )}
+              {f.takenAt && (
+                <span className="mt-1 block max-w-[5rem] text-micro leading-tight text-ink-muted">
+                  {formatStamp(f.takenAt).slice(-5)}
+                  {f.lat !== undefined ? ' · con GPS' : ' · sin GPS'}
                 </span>
               )}
             </li>

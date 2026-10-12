@@ -1,6 +1,14 @@
-import { previewAttributesOf, requireScreen } from '@/lib/apps/access';
+import { previewAttributesOf, requireApp } from '@/lib/apps/access';
 import { previewQuery } from '@/lib/apps/preview-query';
-import { HOME_SLUG, homeEnabled } from '@cortex/agent-tools';
+import {
+  HOME_SLUG,
+  PORTAL_SLUG,
+  homeEnabled,
+  portalActive,
+  screenFor,
+  tableroNav,
+} from '@cortex/agent-tools';
+import { notFound } from 'next/navigation';
 import { redirect } from 'next/navigation';
 
 /**
@@ -19,12 +27,19 @@ export default async function AppIndexPage({
   searchParams: Promise<{ como?: string; atr?: string | string[] }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const { access, screen } = await requireScreen(id, null, {
+  const { access } = await requireApp(id, {
     as: query.como,
     attributes: previewAttributesOf(query.atr),
   });
+  const screen = screenFor(access, null);
   const como = query.como ? previewQuery(query.como, access.user.attributes) : '';
   // Con «Inicio» encendido (0215), la app abre ahí.
-  const first = homeEnabled(access.app.home) ? HOME_SLUG : screen.slug;
+  // Un cliente del portal y las apps de sólo tableros (0225) abren en su pantalla sintética.
+  const first = portalActive(access)
+    ? PORTAL_SLUG
+    : homeEnabled(access.app.home)
+      ? HOME_SLUG
+      : (screen?.slug ?? tableroNav(access)[0]?.slug);
+  if (!first) notFound();
   redirect(`/apps/${access.app.slug}/${first}${como}`);
 }

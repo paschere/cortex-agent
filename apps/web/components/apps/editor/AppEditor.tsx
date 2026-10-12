@@ -12,12 +12,17 @@ import { useState, useTransition } from 'react';
 import { AppearanceTab } from './AppearanceTab';
 import { AutomationsTab } from './AutomationsTab';
 import { FlowsTab } from './FlowsTab';
+import { HistoryTab } from './HistoryTab';
 import { HomeTab } from './HomeTab';
 import { IconPicker } from './IconPicker';
 import { MembersTab } from './MembersTab';
+import { PortalTab } from './PortalTab';
 import { PreviewTab } from './PreviewTab';
+import { PublishBar } from './PublishBar';
 import { RolesTab } from './RolesTab';
 import { ScreensTab } from './ScreensTab';
+import { TablerosTab } from './TablerosTab';
+import { UsageTab } from './UsageTab';
 import { UsersTab } from './UsersTab';
 import {
   type AppEditorData,
@@ -54,6 +59,10 @@ type Tab =
   | 'members'
   | 'users'
   | 'automations'
+  | 'dashboards'
+  | 'portal'
+  | 'history'
+  | 'usage'
   | 'preview';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'screens', label: 'Pantallas' },
@@ -64,6 +73,10 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'members', label: 'Miembros' },
   { id: 'users', label: 'Usuarios' },
   { id: 'automations', label: 'Automatizaciones' },
+  { id: 'dashboards', label: 'Tableros' },
+  { id: 'portal', label: 'Portal' },
+  { id: 'history', label: 'Historial' },
+  { id: 'usage', label: 'Uso' },
   { id: 'preview', label: 'Ver como…' },
 ];
 
@@ -110,6 +123,8 @@ export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTa
     roles: data.roles.length,
     members: data.members.length,
     users: data.appUsers.length,
+    dashboards: data.dashboards?.length,
+    history: data.versions?.length,
   };
   const published = app.status === 'published';
 
@@ -204,20 +219,7 @@ export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTa
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() =>
-                run(() =>
-                  updateAppAction(app.id, {
-                    status: published ? 'draft' : 'published',
-                  }),
-                )
-              }
-              className={BTN_SECONDARY}
-            >
-              {published ? 'Despublicar' : 'Publicar'}
-            </button>
+            <PublishBar data={data} />
             <Link href={`/apps/${app.slug}`} className={BTN_PRIMARY}>
               <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Abrir la app
             </Link>
@@ -327,6 +329,10 @@ export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTa
       {tab === 'members' && <MembersTab data={data} />}
       {tab === 'users' && <UsersTab data={data} />}
       {tab === 'automations' && <AutomationsTab data={data} />}
+      {tab === 'dashboards' && <TablerosTab data={data} />}
+      {tab === 'portal' && <PortalTab data={data} />}
+      {tab === 'history' && <HistoryTab data={data} />}
+      {tab === 'usage' && <UsageTab data={data} />}
       {tab === 'preview' && <PreviewTab data={data} />}
     </div>
   );

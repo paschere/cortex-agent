@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SubmitTarget } from '../ViewCanvas';
 import { FileInput as RealFileInput } from '../inputs/FileInput';
 import { ScanInput as RealScanInput } from '../inputs/ScanInput';
+import { SignatureInput } from '../inputs/SignatureInput';
 
 /**
  * Los inputs de los campos «grandes» de un formulario: ubicación, relación,
@@ -313,6 +314,20 @@ export function FileInput({
   blockId,
   className,
 }: FieldInputProps) {
+  // Firma dibujada: un lienzo, no cámara ni galería.
+  if (field.accept === 'signature')
+    return (
+      <div onBlur={onBlur}>
+        <SignatureInput
+          value={value}
+          onChange={onChange}
+          target={target}
+          blockId={blockId}
+          field={field.key}
+          large={className.includes('h-14')}
+        />
+      </div>
+    );
   return (
     <div onBlur={onBlur}>
       <RealFileInput
@@ -324,6 +339,8 @@ export function FileInput({
         blockId={blockId}
         field={field.key}
         large={className.includes('h-14')}
+        evidence={field.evidence}
+        watermark={field.watermark}
       />
     </div>
   );
@@ -350,6 +367,8 @@ export function ScanInput({
       describedBy={describedBy}
       inputClassName={className}
       placeholder={field.placeholder ?? 'Escribe o escanea el código'}
+      continuous={field.scanMode === 'continuous'}
+      multiline={field.type === 'longtext'}
     />
   );
 }

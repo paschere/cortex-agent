@@ -9,10 +9,21 @@
  * Safari) o la compresión no gana nada, se devuelve el archivo original.
  */
 
+import { watermarkLayout } from '@/lib/capture/evidence';
+
 const MAX_SIDE = 1920;
 const QUALITY = 0.8;
 
-export async function compressImage(file: File): Promise<File> {
+/**
+ * Con `watermark` (las líneas de lib/capture/evidence.ts) se graba una banda
+ * oscura abajo con fecha, lugar y quién. Se dibuja DESPUÉS de reducir, así el
+ * texto mide lo mismo en cualquier foto; y con marca siempre se vuelve a codificar
+ * (aunque no se gane peso), porque la marca ES el cambio.
+ */
+export async function compressImage(
+  file: File,
+  opts: { watermark?: string[] } = {},
+): Promise<File> {
   if (typeof document === 'undefined' || !file.type.startsWith('image/')) return file;
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -29,13 +40,27 @@ export async function compressImage(file: File): Promise<File> {
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close?.();
+    const marked = Boolean(opts.watermark?.length);
+    if (marked) drawWatermark(ctx, w, h, opts.watermark as string[]);
     const blob = await new Promise<Blob | null>((res) =>
       canvas.toBlob((b) => res(b), 'image/jpeg', QUALITY),
     );
-    if (!blob || (blob.size >= file.size && scale === 1)) return file;
+    if (!blob || (!marked && blob.size >= file.size && scale === 1)) return file;
     const name = `${file.name.replace(/\.[^.]+$/, '') || 'foto'}.jpg`;
     return new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() });
   } catch {
     return file;
   }
+}
+
+function drawWatermark(ctx: CanvasRenderingContext2D, w: number, h: number, lines: string[]) {
+  const { font, pad, lineHeight, band } = watermarkLayout(w, h, lines.length);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(0, h - band, w, band);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `600 ${font}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  ctx.textBaseline = 'top';
+  lines.forEach((line, i) => {
+    ctx.fillText(line, pad, h - band + pad + i * lineHeight, w - pad * 2);
+  });
 }

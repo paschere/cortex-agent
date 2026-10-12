@@ -2,6 +2,7 @@ import { sendEmail } from '@/lib/email';
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { notify } from '@/lib/notifications/notify';
+import { emailAllowedUsers } from '@/lib/notifications/preferences';
 import {
   type CrossedInvoice,
   money,
@@ -229,10 +230,15 @@ export const receivablesWatchWorkspaceJob: JobHandler = async ({ event, step }) 
       risk,
     });
 
-    const to = [...emails.values()];
+    // Preferencias (0223): a quien apagó el correo de «Cobros» no se le manda.
+    const mailOk = await emailAllowedUsers(db, [...emails.keys()], 'receivables_overdue');
+    const to = [...emails].filter(([id]) => mailOk.has(id)).map(([, address]) => address);
     const outcome = to.length
       ? await sendEmail({ to, subject: mail.subject, text: mail.text, html: mail.html })
-      : { sent: false, reason: 'sin correos' };
+      : emails.size > 0
+        ? // Todos apagaron el correo: no es un fallo, no hay nada que reintentar.
+          { sent: true as const, reason: undefined }
+        : { sent: false, reason: 'sin correos' };
 
     // La campana va siempre, haya salido el correo o no: es el otro canal.
     const top = crossed[0];

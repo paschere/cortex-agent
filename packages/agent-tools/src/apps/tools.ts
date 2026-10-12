@@ -6,9 +6,13 @@ import { registerTool } from '../index';
 import { internalSourcesOf } from '../views/sources';
 import { viewSpecSchema } from '../views/spec';
 import { updateView, validateSpec } from '../views/store';
+import { viewCatalog } from '../views/store';
 import { SPEC_GRAMMAR } from '../views/tools';
+import { savePortal, saveTableros } from './app-extras';
 import { appBrandPatchSchema, appHomeSchema, mergeBrand } from './appearance';
+import { portalPatchSchema } from './client-portal';
 import { inviteAppUser, listAppUsers } from './external';
+import { GEOFENCE_MAX, geofenceIdFor, geofenceProblems, geofenceSchema } from './geofence';
 import { APP_ICON_NAMES, normalizeAppIcon } from './icon-names';
 import { installAppTemplate } from './install';
 import { locationSettingsPatchSchema } from './location-shape';
@@ -35,7 +39,16 @@ import {
   updateApp,
   updateScreen,
 } from './store';
+import { describeTableros, suggestTableros, tableroSchema } from './tablero';
 import { APP_TEMPLATES, type AppTemplate } from './templates';
+import { formatDuration, loadUsage } from './usage';
+import {
+  draftStatus,
+  listVersions,
+  publishVersion,
+  restoreVersion,
+  unpublishApp,
+} from './versions';
 
 /**
  * Aplicaciones desde el chat (migración 0208): listar y crear.
@@ -314,11 +327,16 @@ const APPEARANCE_GRAMMAR = `APPEARANCE (field "brand", optional): the app's OWN 
 LOCATION (field "location", optional, partial {enabled?, retentionDays? 1-365, default 30}): "Compartir ubicación del equipo", OFF by default. When on, people whose role has location.share can share where they are while the app is open and they are "on shift"; each person accepts a clear consent text once (stored with date and text version) and can withdraw any time (their position and trail are deleted); the position trail is deleted automatically after retentionDays. Only roles with location.view see people on a "map" block (people:true); a public link never shows people. Turning it off deletes every stored position. Colombian data-protection law (Ley 1581): never turn it on without telling the owner what it shares.
 HOME (field "home", optional): replaces the whole "Inicio" screen: { enabled, greeting (name + date), cards: [<=8] }. Each card has id, roles (role keys that see it; [] = all) and one of: { kind:"counter", source:<table slug>, filters:[...same filter grammar as view blocks; value "{hoy}", "{ayer}" or "{manana}" = that date], text:"Hoy llegan {n} vuelos", zeroText?:"Aún no hay vuelos hoy", screen?:<screen slug it opens>, tone? } | { kind:"pending", same fields as counter, shows the first 3 rows; openFilterId/openFilterValue open the target screen already filtered by one of its filter-bar items } | { kind:"shortcut", label:"Registrar atención", hint?, screen:<screen slug>, icon? }. Counts respect each role's row scope; a card over a table the role cannot read is hidden. "inicio" is a reserved screen slug. enabled:true makes Inicio the first screen.`;
 
+const DASHBOARD_GRAMMAR = `DASHBOARDS (field "dashboards", optional; or suggestDashboards:true): screen kind "Tablero", computed with the viewer's role and row scope (a widget over a table the role cannot read disappears). [{id (a-z0-9_), title, roles:[role keys; [] = all], widgets:[<=12]}]. Widget kinds, each with id, title, width?:"full"|"half"|"third", screen? (slug it opens), source (table slug), filters?:[view filter grammar; "{hoy}" tokens ok], mine?:{by:"creator"}|{by:"field",field}: { kind:"kpi", aggregate:"count"|"sum"|"avg"|"min"|"max", field?, format?:"number"|"money"|"percent", period:"day"|"week"|"month"|"all" (compare with previous period + sparkline; "all" = no period), dateField?, goodWhen:"up"|"down", goal?, tone? } | { kind:"chart", aggregate:"count"|"sum", field?, dateField?, noun?, ... interactive: ranges, compare, zoom, drill-down to the records } | { kind:"status", field:<select field> } (segments by state) | { kind:"ranking", groupBy, aggregate, field?, limit<=10 } | { kind:"pending", dateField? (overdue first), subtitleField?, limit<=10, emptyText? }. Money is shown in full pesos. Changes land in the DRAFT; apps.publish publishes.`;
+const PORTAL_GRAMMAR = `PORTAL (field "portal", partial patch, null removes a section): client portal = a role (roleKey, default "cliente") whose users are EXTERNAL users each linked to ONE client via attribute $user.<attribute> (default "cliente"). { enabled, roleKey, attribute, title?, welcome?, shipments?:{source,clientField,columns?,statusField?,screen?}, invoices?:{source,clientField,amountField?,dueField?,statusField?,paidValues?,payUrlField?}, documents?:{source,clientField,fileField,labelField?}, upload?:{source,clientField,fileField,noteField?,kindField?} }. The role, the "Subir soporte" screen and the staff notification are created automatically. "Pagar" shows ONLY for invoices whose payUrlField holds an https payment link; with no such field there is no pay button. Invite clients with apps.invite_users (roleKey + attributes {"cliente":"<name exactly as in the table>"}). Changes land in the DRAFT.`;
+
 export const appsUpdate = registerTool({
   id: 'apps.update',
   description: `Change an existing application (get its slugs first with apps.get): rename it, change its description/icon/home screen, its own appearance (colors, short name, font, welcome text) and its "Inicio" cards screen, add, edit, remove or reorder screens, and replace its set of roles with their permissions. Every piece is validated exactly like the visual editor: screen specs against the real tables (same grammar as views.create / views.update), roles against the permission contract. Removing a role also removes the Cortex members and keeps NO external users on it (change their role first). Removing a screen archives its view (data in the tables is untouched). Does NOT publish (apps.publish) nor assign people (apps.assign_members / apps.invite_users). If the app is published, a screen cannot read internal sources (Feed, personal, platform-internal). Requires confirmation; company owners/admins only.
 ${PERMISSIONS_GRAMMAR}
 ${APPEARANCE_GRAMMAR}
+${DASHBOARD_GRAMMAR}
+${PORTAL_GRAMMAR}
 ${SPEC_GRAMMAR}`,
   inputSchema: z
     .object({
@@ -326,6 +344,18 @@ ${SPEC_GRAMMAR}`,
       brand: appBrandPatchSchema.optional(),
       home: appHomeSchema.optional(),
       location: locationSettingsPatchSchema.optional(),
+      dashboards: z
+        .array(tableroSchema)
+        .max(6)
+        .optional()
+        .describe('COMPLETE list of dashboards (screen kind "Tablero"). See DASHBOARDS.'),
+      suggestDashboards: z
+        .boolean()
+        .optional()
+        .describe(
+          'true = replace dashboards with one suggested per role (operario / supervisor / gerencia).',
+        ),
+      portal: portalPatchSchema.partial().optional().describe('Client portal patch. See PORTAL.'),
       name: z.string().trim().min(1).max(80).optional(),
       description: z.string().trim().max(500).optional(),
       icon: z.string().trim().max(400).optional(),
@@ -353,6 +383,9 @@ ${SPEC_GRAMMAR}`,
         v.brand !== undefined ||
         v.home !== undefined ||
         v.location !== undefined ||
+        v.dashboards !== undefined ||
+        v.suggestDashboards ||
+        v.portal !== undefined ||
         v.addScreens?.length ||
         v.updateScreens?.length ||
         v.removeScreens?.length ||
@@ -453,6 +486,40 @@ ${SPEC_GRAMMAR}`,
       await reorderScreens(ctx.db, app.id, ids);
       changes.push('orden de pantallas');
     }
+    if (input.dashboards || input.suggestDashboards) {
+      let list = input.dashboards;
+      if (!list) {
+        const screens = await listScreens(ctx.db, app.id);
+        const views = await screenViews(ctx.db, screens);
+        const used = new Map<string, number>();
+        for (const v of views.values())
+          for (const b of v.spec.blocks)
+            if ('tracker' in b) used.set(b.tracker, (used.get(b.tracker) ?? 0) + 1);
+        const catalog = await viewCatalog(ctx.db, {});
+        const ordered = [...used.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .flatMap(([slug]) => catalog.filter((c) => c.slug === slug));
+        list = suggestTableros({
+          trackers: ordered,
+          roles: await listRoles(ctx.db, app.id),
+          screen: screens[0]?.slug,
+        });
+        if (!list.length)
+          throw new ValidationError(
+            'No encontré una tabla propia en las pantallas para sugerir tableros.',
+          );
+      }
+      const saved = await saveTableros(ctx.db, app, list, ctx.userId);
+      app = saved.app;
+      changes.push(`tableros: ${describeTableros(saved.tableros).join(' · ')}`);
+    }
+    if (input.portal) {
+      const saved = await savePortal(ctx.db, app, input.portal as never, ctx.userId);
+      app = saved.app;
+      changes.push(
+        `portal de clientes ${saved.portal.enabled ? 'encendido' : 'apagado'} (${saved.notes.join('; ') || 'sin cambios de estructura'})`,
+      );
+    }
     const home = input.home ? appHomeSchema.parse(input.home) : undefined;
     if (home) {
       // Las tarjetas se comprueban contra lo que existe: una pantalla o una tabla
@@ -501,7 +568,165 @@ ${SPEC_GRAMMAR}`,
     return {
       app: summary,
       changes,
-      markdown: `Listo, cambié **${app.name}**: ${changes.join('; ')}. ${app.status === 'published' ? 'Sigue publicada.' : 'Está en borrador: publícala con apps.publish.'}`,
+      markdown: `Listo, cambié **${app.name}**: ${changes.join('; ')}. ${app.status === 'published' ? 'Los cambios quedan en el BORRADOR: los usuarios siguen viendo la versión publicada hasta que la publiques con apps.publish.' : 'Está en borrador: publícala con apps.publish.'}`,
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// apps.geofences
+// ---------------------------------------------------------------------------
+
+export const appsGeofences = registerTool({
+  id: 'apps.geofences',
+  description: `Define the NAMED PLACES with a radius («Bodega Norte», «Cliente Éxito Calle 80») of an application and what happens when people on shift ENTER or LEAVE them: the arrival is recorded («Ana llegó a Bodega Norte»), shown on the team map and the roles chosen are notified. Needs the app's location sharing on (apps.update location.enabled) and people on shift who accepted to share. Operations (all in one call): add [{name, lat, lng, radiusM 30-5000 default 150, on "enter"|"leave"|"both" default both, notifyRoles: [role keys], notifyAdmins: boolean, message?: "{{persona}} llegó a {{lugar}}"}], update [{id, ...same fields}], remove [ids], and list:true to only read. Coordinates must be real (ask for the address or have the person pick the point on the map in the app editor, "Lugares"); never invent them. Evaluation has hysteresis: leaving needs about 25% more than the radius, so standing at the edge does not fire alerts. Does NOT push to phones by itself outside shifts. Requires confirmation; company owners/admins only.`,
+  inputSchema: z.object({
+    app: z.string().trim().min(1).max(80).describe('App id or slug.'),
+    list: z.boolean().optional().describe('true = only list the current places.'),
+    add: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(60),
+          lat: z.number().finite().min(-90).max(90),
+          lng: z.number().finite().min(-180).max(180),
+          radiusM: z.number().int().min(30).max(5000).optional(),
+          on: z.enum(['enter', 'leave', 'both']).optional(),
+          notifyRoles: z.array(roleKeySchema).max(8).optional(),
+          notifyAdmins: z.boolean().optional(),
+          message: z.string().trim().min(1).max(200).optional(),
+        }),
+      )
+      .max(10)
+      .optional(),
+    update: z
+      .array(
+        z.object({
+          id: z.string().trim().min(1).max(40),
+          name: z.string().trim().min(1).max(60).optional(),
+          lat: z.number().finite().min(-90).max(90).optional(),
+          lng: z.number().finite().min(-180).max(180).optional(),
+          radiusM: z.number().int().min(30).max(5000).optional(),
+          on: z.enum(['enter', 'leave', 'both']).optional(),
+          notifyRoles: z.array(roleKeySchema).max(8).optional(),
+          notifyAdmins: z.boolean().optional(),
+          message: z.string().trim().min(1).max(200).nullable().optional(),
+        }),
+      )
+      .max(GEOFENCE_MAX)
+      .optional(),
+    remove: z.array(z.string().trim().min(1).max(40)).max(GEOFENCE_MAX).optional(),
+  }),
+  outputSchema: z.object({
+    geofences: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        lat: z.number(),
+        lng: z.number(),
+        radiusM: z.number(),
+        on: z.string(),
+        notifyRoles: z.array(z.string()),
+        notifyAdmins: z.boolean(),
+      }),
+    ),
+    changes: z.array(z.string()),
+    markdown: z.string(),
+  }),
+  // Leer no cambia nada, pero la herramienta se aprueba como una sola; el chat muestra la tarjeta.
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    let app = await mustGetApp(ctx.db, input.app);
+    const current = app.location.geofences;
+    const changes: string[] = [];
+    let next = [...current];
+    for (const id of input.remove ?? []) {
+      const hit = next.find((g) => g.id === id);
+      if (!hit) throw new NotFoundError(`No hay un lugar «${id}» en esta app.`);
+      next = next.filter((g) => g.id !== id);
+      changes.push(`lugar quitado: ${hit.name}`);
+    }
+    for (const patch of input.update ?? []) {
+      const at = next.findIndex((g) => g.id === patch.id);
+      if (at < 0) throw new NotFoundError(`No hay un lugar «${patch.id}» en esta app.`);
+      const old = next[at] as (typeof next)[number];
+      next[at] = geofenceSchema.parse({
+        ...old,
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.lat !== undefined ? { lat: patch.lat } : {}),
+        ...(patch.lng !== undefined ? { lng: patch.lng } : {}),
+        ...(patch.radiusM !== undefined ? { radiusM: patch.radiusM } : {}),
+        ...(patch.on !== undefined ? { on: patch.on } : {}),
+        notify: {
+          roles: patch.notifyRoles ?? old.notify.roles,
+          admins: patch.notifyAdmins ?? old.notify.admins,
+        },
+        message: patch.message === null ? undefined : (patch.message ?? old.message),
+      });
+      changes.push(`lugar cambiado: ${(next[at] as (typeof next)[number]).name}`);
+    }
+    for (const add of input.add ?? []) {
+      const place = geofenceSchema.parse({
+        id: geofenceIdFor(
+          add.name,
+          next.map((g) => g.id),
+        ),
+        name: add.name,
+        lat: add.lat,
+        lng: add.lng,
+        radiusM: add.radiusM,
+        on: add.on,
+        notify: { roles: add.notifyRoles ?? [], admins: add.notifyAdmins ?? false },
+        message: add.message,
+      });
+      next.push(place);
+      changes.push(`lugar nuevo: ${place.name} (${place.radiusM} m)`);
+    }
+    if (next.length > GEOFENCE_MAX)
+      throw new ValidationError(`Una app admite hasta ${GEOFENCE_MAX} lugares.`);
+    const problems = geofenceProblems(next);
+    if (problems.length) throw new ValidationError(problems.join(' '));
+    // Los roles a avisar tienen que existir en la app.
+    const roles = new Set((await listRoles(ctx.db, app.id)).map((r) => r.key));
+    for (const g of next)
+      for (const r of g.notify.roles)
+        if (!roles.has(r)) throw new ValidationError(`El rol «${r}» no existe en esta app.`);
+    if (changes.length) {
+      app = await updateApp(ctx.db, app.id, {
+        location: { geofences: next },
+        userId: ctx.userId,
+      });
+    }
+    const list = app.location.geofences;
+    const lines = list.map(
+      (g) =>
+        `- **${g.name}** · ${g.radiusM} m · ${g.on === 'both' ? 'llega y sale' : g.on === 'enter' ? 'al llegar' : 'al salir'}${
+          g.notify.roles.length || g.notify.admins
+            ? ` · avisa a ${[...g.notify.roles, ...(g.notify.admins ? ['administradores'] : [])].join(', ')}`
+            : ''
+        }`,
+    );
+    const warn = app.location.enabled
+      ? ''
+      : '\n\nOjo: la ubicación del equipo está apagada en esta app; los lugares no se evalúan hasta encenderla (apps.update location.enabled).';
+    return {
+      geofences: list.map((g) => ({
+        id: g.id,
+        name: g.name,
+        lat: g.lat,
+        lng: g.lng,
+        radiusM: g.radiusM,
+        on: g.on,
+        notifyRoles: g.notify.roles,
+        notifyAdmins: g.notify.admins,
+      })),
+      changes,
+      markdown: `${
+        changes.length
+          ? `Listo en **${app.name}**: ${changes.join('; ')}.`
+          : `Lugares de **${app.name}**.`
+      }${lines.length ? `\n\n${lines.join('\n')}` : '\n\nTodavía no hay lugares.'}${warn}`,
     };
   },
 });
@@ -513,28 +738,121 @@ ${SPEC_GRAMMAR}`,
 export const appsPublish = registerTool({
   id: 'apps.publish',
   description:
-    'Publish an application (so its members and invited external users can enter) or unpublish it back to draft. Publishing is refused, with the list, if any screen reads an internal source (Feed, personal, platform-internal): an app opens screens to people outside the team. Requires confirmation; company owners/admins only.',
+    'Publish the DRAFT of an application as a new numbered version (what its members and invited external users see), or unpublish it back to draft. Changes made with apps.update, the editor or templates stay in the draft until this runs; people using the app keep seeing the last published version meanwhile. Optional note describes the version. Publishing is refused, with the list, if any screen reads an internal source (Feed, personal, platform-internal). Requires confirmation; company owners/admins only.',
   inputSchema: z.object({
     app: z.string().trim().min(1).max(80).describe('App id or slug.'),
     publish: z.boolean().default(true).describe('false = unpublish (back to draft).'),
+    note: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .describe('What this version changes, in a sentence.'),
   }),
-  outputSchema: z.object({ app: summarySchema, markdown: z.string() }),
+  outputSchema: z.object({
+    app: summarySchema,
+    version: z.number().int().nullable(),
+    changes: z.array(z.string()),
+    markdown: z.string(),
+  }),
   requiresConfirmation: true,
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     await requireAppAdmin(ctx);
     const current = await mustGetApp(ctx.db, input.app);
-    const publish = input.publish !== false;
-    const app = await updateApp(ctx.db, current.id, {
-      status: publish ? 'published' : 'draft',
-      userId: ctx.userId,
-    });
+    if (input.publish === false) {
+      const app = await unpublishApp(ctx.db, current.id, ctx.userId);
+      return {
+        app: appSummary(app, await listScreens(ctx.db, app.id)),
+        version: null,
+        changes: [],
+        markdown: `**${app.name}** volvió a borrador: nadie más que quien administra puede abrirla. Las versiones se conservan.`,
+      };
+    }
+    const res = await publishVersion(ctx.db, current.id, { userId: ctx.userId, note: input.note });
+    const changes = res.changes.map((c) => c.text);
     return {
-      app: appSummary(app, await listScreens(ctx.db, app.id)),
-      markdown: publish
-        ? `**${app.name}** está publicada. Entrada para usuarios externos: /a/${app.id}; los miembros entran por ${`/apps/${app.slug}`}.`
-        : `**${app.name}** volvió a borrador: nadie más que quien administra puede abrirla.`,
+      app: appSummary(res.app, await listScreens(ctx.db, res.app.id)),
+      version: res.number,
+      changes,
+      markdown: res.created
+        ? `**${res.app.name}** publicada como versión ${res.number}${changes.length ? `: ${changes.slice(0, 5).join('; ')}` : ''}. Entrada para usuarios externos: /a/${res.app.id}; los miembros entran por /apps/${res.app.slug}.`
+        : `**${res.app.name}** no tenía cambios sin publicar: sigue en la versión ${res.number}.`,
     };
+  },
+});
+
+export const appsVersions = registerTool({
+  id: 'apps.versions',
+  description:
+    'List the published versions of an application with a summary of what each changed, whether the draft has unpublished changes, or restore a version (the DRAFT goes back to what that version said; with publish:true it is also published as a new version). Restoring never deletes roles that have people. Restore requires confirmation; company owners/admins only.',
+  inputSchema: z.object({
+    app: z.string().trim().min(1).max(80).describe('App id or slug.'),
+    restore: z.number().int().min(1).optional().describe('Version number to go back to.'),
+    publish: z.boolean().default(false).describe('With restore: also publish the restored draft.'),
+  }),
+  outputSchema: z.object({ markdown: z.string() }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    const app = await mustGetApp(ctx.db, input.app);
+    if (input.restore) {
+      const res = await restoreVersion(ctx.db, app.id, input.restore, {
+        userId: ctx.userId,
+        publish: input.publish,
+      });
+      return {
+        markdown: `Devolví **${res.app.name}** a la versión ${input.restore}${res.published ? ` y la publiqué como versión ${res.published.number}` : ' (queda en borrador; publícala con apps.publish)'}.${res.skipped.length ? ` No pude devolver: ${res.skipped.join(' · ')}` : ''}`,
+      };
+    }
+    const [versions, status] = await Promise.all([
+      listVersions(ctx.db, app.id, 15),
+      draftStatus(ctx.db, app),
+    ]);
+    const lines = versions.map(
+      (v) =>
+        `- v${v.number}${v.current ? ' (publicada)' : ''} · ${v.createdAt.slice(0, 10)} · ${v.note || v.summary}`,
+    );
+    return {
+      markdown: `**${app.name}**: ${status.hasChanges ? `borrador con cambios sin publicar (${status.summary})` : 'el borrador coincide con lo publicado'}.\n${lines.join('\n') || 'Aún no hay versiones publicadas.'}`,
+    };
+  },
+});
+
+export const appsUsage = registerTool({
+  id: 'apps.usage',
+  description:
+    'Usage of an application over the last 30 days: active users (7 and 30 days, per role), records created per day, most used screens, median time to complete a form and drop-offs (forms started but never sent) when tracked. Read-only; company owners/admins only.',
+  inputSchema: z.object({ app: z.string().trim().min(1).max(80).describe('App id or slug.') }),
+  outputSchema: z.object({ markdown: z.string() }),
+  rateLimit: { perMinute: 20 },
+  handler: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    const app = await mustGetApp(ctx.db, input.app);
+    const u = await loadUsage(ctx.db, app);
+    if (!u.hasData)
+      return { markdown: `**${app.name}** todavía no tiene uso en los últimos 30 días.` };
+    const parts = [
+      `Activos: ${u.active.d7} en 7 días, ${u.active.d30} en 30.`,
+      `Registros creados en 30 días: ${u.created.total}.`,
+      u.topScreens.length
+        ? `Pantallas más usadas: ${u.topScreens
+            .slice(0, 4)
+            .map((s) => `${s.title} (${s.opens})`)
+            .join(', ')}.`
+        : '',
+      u.medianSeconds !== null
+        ? `Tiempo mediano para completar un formulario: ${formatDuration(u.medianSeconds)} (${u.measured} medidos).`
+        : '',
+      u.dropoffs
+        ? `Formularios empezados y no enviados: ${u.dropoffs.abandoned} de ${u.dropoffs.started}.`
+        : '',
+      u.byRole.length
+        ? `Por rol: ${u.byRole.map((r) => `${r.name} ${r.active30}`).join(', ')}.`
+        : '',
+    ].filter(Boolean);
+    return { markdown: `**${app.name}**: ${parts.join(' ')}` };
   },
 });
 

@@ -2,12 +2,14 @@ import { buildToolContext } from '@/lib/agent';
 import { sendEmail } from '@/lib/email';
 import { renderRoutineResultEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
+import { idsOf } from '@/lib/granted-tools';
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { readRoutineAuthority } from '@/lib/management/routine-authority';
 import { noteRoutineRun } from '@/lib/notifications/producers';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildCompanyFactsBlock } from '@/lib/system-prompt';
+import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { chatModel } from '@cortex/agent-tools';
 import {
@@ -193,6 +195,13 @@ async function executeAgentJob(job: JobRow, idempotencyScope: string): Promise<E
     toolAllowedByModules(t.id, modulesOn),
   );
 
+  // Una rutina corre con los permisos de su dueño: se le descuentan también los
+  // patrones que sus equipos deniegan (misma lista que el chat).
+  const deniedForRoutine = await deniedToolPatterns(ctx.db, job.user_id);
+  const grantedToolIds = idsOf(
+    allowed.filter((t) => deniedForRoutine.length === 0 || !isToolDenied(t.id, deniedForRoutine)),
+  );
+
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
     allowed.map((t) => [
       t.id.replaceAll('.', '_'),
@@ -205,7 +214,12 @@ async function executeAgentJob(job: JobRow, idempotencyScope: string): Promise<E
             return await runTool(
               t,
               args,
-              { ...ctx, signal: abortSignal, scopedMandatesOnly: authority.scopedMandatesOnly },
+              {
+                ...ctx,
+                signal: abortSignal,
+                scopedMandatesOnly: authority.scopedMandatesOnly,
+                grantedToolIds,
+              },
               { confirmed: authority.confirmed },
             );
           } catch (err) {

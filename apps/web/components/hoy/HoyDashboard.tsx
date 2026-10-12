@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ActivityTable } from './ActivityTable';
 import { HoyHero } from './HoyHero';
 import { OpsRow } from './OpsRow';
-import { type DecideFn, TodoList } from './TodoList';
+import { type DecideFn, type SnoozeFn, TodoList } from './TodoList';
 
 /**
  * «HOY»: UN CUADERNO CON LOS NÚMEROS ADENTRO.
@@ -17,7 +17,11 @@ import { type DecideFn, TodoList } from './TodoList';
  * el saludo, los pendientes y lo hecho. Se pinta igual en /piloto y en
  * /v/hoy-showcase.
  */
-export function HoyDashboard({ view, decide }: { view: HoyView; decide: DecideFn }) {
+export function HoyDashboard({
+  view,
+  decide,
+  snooze,
+}: { view: HoyView; decide: DecideFn; snooze?: SnoozeFn }) {
   return (
     <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-10 pb-16 pt-2 sm:pt-6">
       <header className="flex flex-col gap-3">
@@ -57,6 +61,8 @@ export function HoyDashboard({ view, decide }: { view: HoyView; decide: DecideFn
         done={view.done}
         canDecide={view.canDecide}
         decide={decide}
+        snooze={snooze}
+        snoozed={view.snoozed ?? 0}
         more={view.todosMore}
         moreHref={view.todosMoreHref}
       />

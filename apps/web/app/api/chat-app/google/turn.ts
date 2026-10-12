@@ -2,6 +2,7 @@ import { buildToolContext } from '@/lib/agent';
 import { sendApprovalRequestEmail } from '@/lib/approval-email';
 import { confirmationReason } from '@/lib/confirmation-notes';
 import { toChatText } from '@/lib/google-chat';
+import { idsOf } from '@/lib/granted-tools';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
@@ -423,6 +424,8 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
     // the person was already allowed.
     .filter((t) => (req.toolFilter ? req.toolFilter(t.id) : true));
 
+  const grantedToolIds = idsOf(granted);
+
   // ...then narrowed by meaning, the same way and by the same function as the
   // web chat. A Chat message is the shortest input any surface gets ("@cortex
   // qué pasó con Acme?"), which is exactly the case the selector is tuned for:
@@ -465,7 +468,11 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
           }
 
           try {
-            const out = await runTool(t, args, { ...ctx, signal: abortSignal });
+            const out = await runTool(t, args, {
+              ...ctx,
+              signal: abortSignal,
+              grantedToolIds,
+            });
             // `runTool` attaches `_security` to any call the enforcement layer
             // treats as an incident. That verdict is the authoritative one —
             // it saw the real policy and the trailing-hour frequency signal —

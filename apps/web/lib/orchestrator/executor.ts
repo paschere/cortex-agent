@@ -582,7 +582,11 @@ async function executeTask(args: {
             args: preview(input, TOOL_ARGS_PREVIEW),
           });
           try {
-            const result = await runTool(t, input, { ...ctx, signal: abortSignal });
+            const result = await runTool(t, input, {
+              ...ctx,
+              signal: abortSignal,
+              grantedToolIds: tools.map((x) => x.id),
+            });
             await emit(db, runId, task.id, 'tool_result', {
               taskId: task.id,
               callId,

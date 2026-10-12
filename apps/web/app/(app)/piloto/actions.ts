@@ -3,6 +3,8 @@
 import type { AutopilotSettingsInput } from '@/components/autopilot/types';
 import { buildPlanView } from '@/lib/autopilot/screen';
 import { autopilotDryRun, decideAutopilotItem } from '@/lib/autopilot/server';
+import { isSnoozeChoice, snoozeWhenLabel } from '@/lib/hoy/snooze';
+import { snoozeItem } from '@/lib/hoy/snooze-store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { qualifiedToolLabel } from '@/lib/tool-taxonomy';
@@ -98,5 +100,34 @@ export async function decideAutopilot(input: {
   } catch (err) {
     logger.error('autopilot: no se pudo decidir', { err });
     return { ok: false, note: message(err, 'No pude hacerlo. Intenta de nuevo.') };
+  }
+}
+
+/**
+ * POSPONER una cosa de «Para ti, hoy» (0223): «Mañana» o «La otra semana».
+ * Sólo toca lo de quien llama (el id sale de la sesión); la cosa reaparece sola
+ * a las 7:00 de Bogotá del día en que vence.
+ */
+export async function snoozeTodo(input: {
+  key: string;
+  choice: string;
+  title?: string;
+}): Promise<{ ok: boolean; note: string }> {
+  const user = await requireSession();
+  const key = typeof input.key === 'string' ? input.key.trim() : '';
+  if (!key || key.length > 300 || !isSnoozeChoice(input.choice))
+    return { ok: false, note: 'No entendí qué posponer.' };
+  try {
+    await snoozeItem(getOrgScopedClient(user.organization.id), {
+      userId: user.id,
+      itemKey: key,
+      title: input.title ?? null,
+      choice: input.choice,
+    });
+    revalidatePath('/piloto');
+    return { ok: true, note: `Pospuesto: vuelve ${snoozeWhenLabel(input.choice)}.` };
+  } catch (err) {
+    logger.warn({ err }, 'hoy: no se pudo posponer');
+    return { ok: false, note: message(err, 'No se pudo posponer. Intenta de nuevo.') };
   }
 }

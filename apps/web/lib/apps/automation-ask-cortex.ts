@@ -1,8 +1,10 @@
 import 'server-only';
 import { buildToolContext } from '@/lib/agent';
 import { sendApprovalRequestEmail } from '@/lib/approval-email';
+import { idsOf } from '@/lib/granted-tools';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildCompanyFactsBlock } from '@/lib/system-prompt';
+import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
 import {
   type AskCortexArgs,
@@ -151,6 +153,18 @@ export async function askCortexForAutomation(
     (t) => !FORBIDDEN.test(t.id) && toolAllowedByModules(t.id, modulesOn),
   );
 
+  // Lo concedido a la regla: sus herramientas menos lo que los equipos de quien
+  // la pidió deniegan (mismo filtro que el chat). Falla cerrado si no se sabe.
+  let grantedToolIds: string[] | undefined;
+  try {
+    const deniedForRequester = await deniedToolPatterns(ctx.db, args.requesterId, {
+      failClosed: true,
+    });
+    grantedToolIds = idsOf(allowed.filter((t) => !isToolDenied(t.id, deniedForRequester)));
+  } catch {
+    grantedToolIds = undefined; // no se sabe: research.parallel no recibe herramientas
+  }
+
   let staged = 0;
   const waited: { info: WaitInfo | null } = { info: null };
   const stop = new AbortController();
@@ -266,7 +280,7 @@ export async function askCortexForAutomation(
             const out = await runTool(
               t,
               input,
-              { ...ctx, signal: abortSignal },
+              { ...ctx, signal: abortSignal, grantedToolIds },
               { confirmed: verdict === 'declared' },
             );
             // El portal pidió una persona (código, captcha, sesión vencida): se

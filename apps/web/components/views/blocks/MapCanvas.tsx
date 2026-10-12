@@ -3,7 +3,15 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useMemo } from 'react';
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import {
+  Circle,
+  MapContainer,
+  Marker,
+  TileLayer,
+  Tooltip,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet';
 
 /**
  * EL MAPA DE LEAFLET (sólo en el navegador: se carga con `next/dynamic` y sin
@@ -32,6 +40,16 @@ export interface MapPin {
   dim?: boolean;
   selected?: boolean;
   label: string;
+}
+
+/** Un lugar con radio (geocerca): se pinta como un círculo con su nombre. */
+export interface MapCircle {
+  key: string;
+  lat: number;
+  lng: number;
+  radiusM: number;
+  label: string;
+  selected?: boolean;
 }
 
 /** Bogotá, cuando no hay nada que mostrar todavía. */
@@ -99,8 +117,11 @@ export default function MapCanvas({
   picking,
   onSelect,
   onPick,
+  circles = [],
 }: {
   pins: MapPin[];
+  /** Lugares con radio (0224), debajo de los marcadores. */
+  circles?: MapCircle[];
   /** Cambia cuando hay que reencuadrar («Centrar», los primeros puntos). */
   fitKey: number;
   /** El lugar elegido tocando el mapa (al asignar una tarea). */
@@ -135,6 +156,25 @@ export default function MapCanvas({
       <KeepSize />
       <FitTo pins={pins} fitKey={fitKey} />
       {picking && <Picker onPick={onPick} />}
+      {circles.map((c) => (
+        <Circle
+          key={c.key}
+          center={[c.lat, c.lng]}
+          radius={c.radiusM}
+          interactive={false}
+          pathOptions={{
+            color: 'rgb(var(--primary))',
+            weight: c.selected ? 3 : 2,
+            dashArray: '6 6',
+            fillColor: 'rgb(var(--primary))',
+            fillOpacity: c.selected ? 0.22 : 0.1,
+          }}
+        >
+          <Tooltip direction="top" permanent={c.selected}>
+            {c.label}
+          </Tooltip>
+        </Circle>
+      ))}
       {pins.map((p) => (
         <Marker
           key={p.key}

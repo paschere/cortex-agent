@@ -3,7 +3,7 @@ import { readHoy } from '@/lib/hoy/read';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { bogotaToday } from '@cortex/agent-tools';
-import { decideAutopilot } from './actions';
+import { decideAutopilot, snoozeTodo } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,5 +29,5 @@ export default async function HoyPage() {
     isAdmin: user.role === 'org_admin',
     today: bogotaToday(),
   });
-  return <HoyDashboard view={view} decide={decideAutopilot} />;
+  return <HoyDashboard view={view} decide={decideAutopilot} snooze={snoozeTodo} />;
 }

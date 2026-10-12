@@ -117,6 +117,11 @@ export interface UploadedFile {
   name: string;
   mime: string;
   size: number;
+  /** Evidencia de una foto o firma (campo con `evidence`): cuándo y dónde se tomó. */
+  takenAt?: string;
+  lat?: number;
+  lng?: number;
+  accuracy?: number;
 }
 
 /** Nombre de archivo mostrable: sin rutas ni caracteres de control, tope de largo. */
@@ -143,14 +148,19 @@ export function parseFileValue(value: string | null | undefined): UploadedFile[]
       if (!it || typeof it !== 'object') return [];
       const o = it as Record<string, unknown>;
       if (typeof o.url !== 'string' || !o.url) return [];
-      return [
-        {
-          url: o.url,
-          name: typeof o.name === 'string' && o.name ? o.name : 'archivo',
-          mime: typeof o.mime === 'string' ? o.mime : '',
-          size: typeof o.size === 'number' ? o.size : 0,
-        },
-      ];
+      const file: UploadedFile = {
+        url: o.url,
+        name: typeof o.name === 'string' && o.name ? o.name : 'archivo',
+        mime: typeof o.mime === 'string' ? o.mime : '',
+        size: typeof o.size === 'number' ? o.size : 0,
+      };
+      if (typeof o.takenAt === 'string') file.takenAt = o.takenAt;
+      if (typeof o.lat === 'number' && typeof o.lng === 'number') {
+        file.lat = o.lat;
+        file.lng = o.lng;
+        if (typeof o.accuracy === 'number') file.accuracy = o.accuracy;
+      }
+      return [file];
     });
   } catch {
     return [];

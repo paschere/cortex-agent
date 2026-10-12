@@ -8,7 +8,8 @@ import { AppRunner } from '@/components/apps/AppRunner';
 import { HomeSkeleton, ScreenSkeleton } from '@/components/apps/AppSkeleton';
 import { KioskScreen } from '@/components/apps/KioskScreen';
 import { ViewBrandProvider } from '@/components/views/blocks/brand';
-import type { ComputedHome } from '@cortex/agent-tools';
+import type { ComputedHome, ComputedPortal, ComputedTablero } from '@cortex/agent-tools';
+import { CaptureFixture } from './CaptureFixture';
 
 const SCREENS = [
   { slug: 'inicio', title: 'Inicio', icon: 'Home' },
@@ -114,15 +115,27 @@ const BRANDS = {
 };
 
 export function AppsFixture({
+  tablero = null,
+  tableroRole = null,
+  portal = null,
   marca,
   pantallas,
   vacio,
   vista,
+  sinSenal = null,
+  plegada = false,
 }: {
+  tablero?: ComputedTablero | null;
+  tableroRole?: 'operario' | 'supervisor' | 'gerencia' | null;
+  portal?: ComputedPortal | null;
   marca: 'amarillo' | 'verde' | null;
   pantallas: 3 | 8;
   vacio: boolean;
   vista: string | null;
+  /** `?vista=captura&sin=0`: la barra con señal (enviando). */
+  sinSenal?: string | null;
+  /** `?vista=captura&cerrada=1`: la barra plegada. */
+  plegada?: boolean;
 }) {
   const colors = marca ? BRANDS[marca] : { primary: null, secondary: null };
   const brand = { name: 'Control en planta', logoUrl: null, ...colors };
@@ -170,6 +183,7 @@ export function AppsFixture({
             <ScreenSkeleton />
           </div>
         )}
+        {vista === 'captura' && <CaptureFixture online={sinSenal !== '0'} closed={plegada} />}
         {vista === 'desconectado' && (
           <div className="mx-auto flex max-w-sm flex-col items-center gap-3 px-4 py-16 text-center">
             <AppIllustration kind="offline" />
@@ -188,14 +202,32 @@ export function AppsFixture({
         <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6">
           <AppRunner
             app={{ id: 'demo', slug: 'demo', name: 'Control en planta', icon: '🚚' }}
-            screens={SCREENS.slice(0, pantallas)}
-            current="inicio"
-            role={{ key: 'operario', name: 'Operario' }}
+            screens={
+              portal
+                ? [
+                    { slug: 'portal', title: 'Mi portal', icon: 'Home' },
+                    { slug: 'subir_soporte', title: 'Subir soporte', icon: 'Upload' },
+                  ]
+                : tablero
+                  ? [
+                      { slug: 'tab_demo', title: tablero.title, icon: 'BarChart3' },
+                      ...SCREENS.slice(1, pantallas),
+                    ]
+                  : SCREENS.slice(0, pantallas)
+            }
+            current={tablero ? 'tab_demo' : portal ? 'portal' : 'inicio'}
+            role={
+              portal
+                ? { key: 'cliente', name: 'Cliente' }
+                : { key: tableroRole ?? 'operario', name: tableroRole ?? 'Operario' }
+            }
             readOnly={false}
             canExport={false}
             canManage={false}
-            home={vacio ? { ...HOME, cards: [] } : HOME}
-            title="Inicio"
+            home={tablero || portal ? undefined : vacio ? { ...HOME, cards: [] } : HOME}
+            tablero={tablero ?? undefined}
+            portal={portal ?? undefined}
+            title={tablero ? tablero.title : portal ? portal.title : 'Inicio'}
             basePath="/a/demo"
           />
         </div>

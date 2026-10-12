@@ -17,6 +17,8 @@ import {
   installAppTemplate,
   locationSettingsPatchSchema,
   mustGetApp,
+  publishVersion,
+  recentGeofenceEvents,
   removeMember,
   removeScreen,
   reorderScreens,
@@ -127,7 +129,13 @@ export async function updateAppAction(
   try {
     const input = updateInput.parse(raw);
     const { user, db } = await admin();
-    const app = await updateApp(db, appId, { ...input, userId: user.id });
+    // Publicar siempre saca una versión (0225): el estado «publicada» no se cambia a pelo.
+    const { status, ...rest } = input;
+    let app = Object.keys(rest).length
+      ? await updateApp(db, appId, { ...rest, userId: user.id })
+      : await mustGetApp(db, appId);
+    if (status === 'published') app = (await publishVersion(db, appId, { userId: user.id })).app;
+    else if (status === 'draft') app = await updateApp(db, appId, { status, userId: user.id });
     touched(app);
     return { ok: true, status: app.status };
   } catch (err) {
@@ -143,7 +151,7 @@ export async function updateAppAction(
 export async function saveLocationSettingsAction(
   appId: string,
   raw: unknown,
-): Promise<AppActionResult<{ enabled: boolean; retentionDays: number }>> {
+): Promise<AppActionResult<{ enabled: boolean; retentionDays: number; geofences: unknown[] }>> {
   try {
     const patch = locationSettingsPatchSchema.parse(raw);
     const { user, db } = await admin();
@@ -152,6 +160,36 @@ export async function saveLocationSettingsAction(
     return { ok: true, ...app.location };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo guardar la ubicación del equipo.') };
+  }
+}
+
+/** Los últimos cruces de lugares (llegó / salió) de la app, para quien la administra. */
+export async function geofenceEventsAction(appId: string): Promise<
+  AppActionResult<{
+    events: Array<{
+      id: string;
+      name: string;
+      person: string;
+      kind: 'enter' | 'leave';
+      at: string;
+    }>;
+  }>
+> {
+  try {
+    const { db } = await admin();
+    const events = await recentGeofenceEvents(db, appId, 15);
+    return {
+      ok: true,
+      events: events.map((e) => ({
+        id: e.id,
+        name: e.name,
+        person: e.person,
+        kind: e.kind,
+        at: e.at,
+      })),
+    };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo leer los últimos cruces.') };
   }
 }
 

@@ -9,16 +9,21 @@ import {
   HOME_NAV,
   appCanExport,
   canEnrollKiosk,
+  computePortal,
+  computeTablero,
   emptyHintsFor,
   entrySlug,
   getKioskSettings,
   isHomeRoute,
+  isPortalRoute,
   loadHome,
   locationStatus,
   navScreens,
   readScreen,
+  recordAppEvent,
   screenButtons,
   screenFor,
+  tableroForRoute,
 } from '@cortex/agent-tools';
 import { notFound, redirect } from 'next/navigation';
 
@@ -48,8 +53,18 @@ export default async function ExternalScreenPage({
   if (!opened) redirect(`/a/${ext.app.id}`);
   // «Inicio» (0215) no es una vista guardada: son las tarjetas de este rol.
   const isHome = isHomeRoute(opened.access, screenRef);
-  const screen = isHome ? null : screenFor(opened.access, screenRef);
-  if (!isHome && !screen) notFound();
+  // Tablero (0225) y portal de clientes: pantallas sintéticas, calculadas con el rol de quien mira.
+  const tableroDef = isHome ? null : tableroForRoute(opened.access, screenRef);
+  const isPortal = !isHome && !tableroDef && isPortalRoute(opened.access, screenRef);
+  const synthetic = isHome || Boolean(tableroDef) || isPortal;
+  const screen = synthetic ? null : screenFor(opened.access, screenRef);
+  if (!synthetic && !screen) notFound();
+  void recordAppEvent(opened.db, opened.access, { kind: 'screen_open', screen: screenRef });
+  const basePath = `/a/${ext.app.id}`;
+  const [tablero, portal] = await Promise.all([
+    tableroDef ? computeTablero(opened.db, opened.access, tableroDef, { basePath }) : null,
+    isPortal ? computePortal(opened.db, opened.access, { basePath }) : null,
+  ]);
   const { db, access, external, actor, kiosk } = opened;
   const [read, home, brand, kioskSettings, buttons, location] = await Promise.all([
     screen ? readScreen(db, access, screen, { fila: query.fila, detail: query.d }) : null,
@@ -71,20 +86,22 @@ export default async function ExternalScreenPage({
             look={{ font: fontStack(brand.font), iconUrl: brand.iconUrl }}
             emptyHints={emptyHints}
             screens={navScreens(access)}
-            current={screen?.slug ?? HOME_NAV.slug}
+            current={screen?.slug ?? (synthetic && !isHome ? screenRef : HOME_NAV.slug)}
             role={{ key: role.key, name: role.name }}
             readOnly={false}
             canExport={appCanExport(access)}
             canManage={false}
             computed={read?.computed}
             home={home ?? undefined}
+            tablero={tablero ?? undefined}
+            portal={portal ?? undefined}
             target={
               screen
                 ? { kind: 'custom_app', appId: app.id, screen: screen.slug, external }
                 : undefined
             }
             dataUrl={screen ? `/api/apps/public/${app.id}/screens/${screen.slug}/data` : undefined}
-            title={screen?.title ?? HOME_NAV.title}
+            title={screen?.title ?? tableroDef?.title ?? (isPortal ? 'Mi portal' : HOME_NAV.title)}
             basePath={`/a/${app.id}`}
             buttons={buttons}
             location={location.canShare ? location : null}

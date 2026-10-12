@@ -2,6 +2,7 @@
 
 import { usePanel } from '@/components/panel/PanelHost';
 import { CortexSignature } from '@/components/ui/cortex-signature';
+import { clearCaptureData } from '@/lib/apps/capture-clear';
 import { authClient } from '@/lib/auth-client';
 import {
   type AreaRow,
@@ -281,6 +282,8 @@ export function SidebarBody({
   }
 
   async function signOut() {
+    // Lo guardado en este teléfono (cola sin señal, copias de pantallas) no sobrevive a la sesión.
+    if (!(await clearCaptureData({ ask: true }))) return;
     setSigningOut(true);
     setSignOutError(null);
     try {

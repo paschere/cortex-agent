@@ -318,6 +318,10 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // worker. Tenant, y propia de quien la pidió (la pantalla filtra por dueño salvo
   // administradores, igual que /actividad).
   background_tasks: tenant(),
+  // Preferencias de avisos por persona y cosas de Hoy pospuestas (migración
+  // 0223). Tenant; cada fila es de una persona y la pantalla sólo toca las suyas.
+  notification_preferences: tenant(),
+  hoy_snoozes: tenant(),
   // Una pregunta guardada: qué bloques componen un informe a la medida y con
   // qué parámetros (migración 0107). Tenant, y no `derived` sobre nada, porque
   // no cuelga de ninguna fila padre — y porque una receta filtrada de menos no
@@ -576,6 +580,14 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   custom_app_location_consents: tenant(),
   custom_app_locations: tenant(),
   custom_app_location_history: tenant(),
+  // 0224: geocercas — dónde está cada persona respecto de cada lugar y los cruces (llegó/salió).
+  custom_app_geofence_state: tenant(),
+  custom_app_geofence_events: tenant(),
+  // 0225: versiones publicadas de una app (foto de pantallas, roles, tableros, portal) y
+  // su uso (abrir pantalla, empezar y enviar un formulario). Tenant: una foto trae los permisos
+  // por rol y los specs de la empresa, y el uso dice quién entra a qué.
+  app_versions: tenant(),
+  custom_app_events: tenant(),
   // 0178: las vistas guardadas del visualizador de datos (filtros, orden,
   // columnas) por alcance — una tabla de la empresa, la lista de clientes.
   // Tenant: el nombre y los filtros de una vista dicen qué mira una empresa

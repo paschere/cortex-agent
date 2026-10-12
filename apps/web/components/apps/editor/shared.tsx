@@ -1,6 +1,14 @@
 'use client';
 
-import type { AppBrand, AppHome, AppPermissions } from '@cortex/agent-tools';
+import type {
+  AppBrand,
+  AppHome,
+  AppPermissions,
+  ClientPortal,
+  Tablero,
+  UsageStats,
+  VersionSummary,
+} from '@cortex/agent-tools';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import {
@@ -36,7 +44,21 @@ export interface EditorApp {
   status: 'draft' | 'published';
   homeScreen: string | null;
   /** Compartir ubicación del equipo (0216). */
-  location: { enabled: boolean; retentionDays: number };
+  location: {
+    enabled: boolean;
+    retentionDays: number;
+    /** Lugares con radio (0224). */
+    geofences?: Array<{
+      id: string;
+      name: string;
+      lat: number;
+      lng: number;
+      radiusM: number;
+      on: 'enter' | 'leave' | 'both';
+      notify: { roles: string[]; admins: boolean };
+      message?: string;
+    }>;
+  };
 }
 
 export interface EditorScreen {
@@ -139,6 +161,24 @@ export interface AppEditorData {
   homeTrackers: EditorTracker[];
   /** Por pantalla (slug), los filtros de su barra: una tarjeta puede abrirla ya filtrada. */
   screenFilters: Record<string, Array<{ id: string; label: string }>>;
+  /** Tableros por rol (0225). */
+  dashboards?: Tablero[];
+  /** Portal de clientes (0225). */
+  portal?: ClientPortal;
+  /** Versiones publicadas (0225), la más nueva primero. */
+  versions?: VersionSummary[];
+  /** Borrador frente a lo publicado (0225). */
+  draft?: EditorDraft;
+  /** Uso de los últimos 30 días (0225); null si no se pudo leer. */
+  usage?: UsageStats | null;
+}
+
+export interface EditorDraft {
+  publishedNumber: number | null;
+  publishedAt: string | null;
+  hasChanges: boolean;
+  summary: string;
+  changes: Array<{ kind: 'added' | 'removed' | 'changed'; text: string }>;
 }
 
 /** Los atributos que un rol necesita (`$user.x` en sus filtros de fila), en el mismo orden en que aparecen. */

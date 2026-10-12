@@ -163,6 +163,7 @@ export function useFormQueue({
         for (const q of result.queue) if (q.key === key) await putItem(q);
         for (const id of result.sent) await removeItem(id);
         setItems(result.queue.filter((q) => q.key === key));
+        window.dispatchEvent(new Event('cortex:outbox-changed'));
       } finally {
         busy.current = false;
       }
@@ -195,6 +196,8 @@ export function useFormQueue({
       const item = queueItem({ clientId, key, blockId, values, now: Date.now() });
       await putItem(item);
       setItems((cur) => enqueue(cur, item));
+      // El buzón de la app (lib/apps/app-outbox.ts) se entera para mostrarlo y enviarlo en orden.
+      window.dispatchEvent(new Event('cortex:outbox-changed'));
       return clientId;
     },
     [blockId],

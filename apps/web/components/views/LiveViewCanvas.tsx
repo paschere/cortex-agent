@@ -95,6 +95,7 @@ export function LiveViewCanvas({
   showBrand = true,
   canExport = true,
   readOnly = false,
+  onView,
 }: {
   initial: ComputedView;
   target: SubmitTarget;
@@ -113,6 +114,8 @@ export function LiveViewCanvas({
   canExport?: boolean;
   /** «Ver como…»: nada se escribe, pero los datos siguen refrescándose. */
   readOnly?: boolean;
+  /** Cada vez que llega un cálculo nuevo (incluido el inicial): la app guarda su copia sin señal. */
+  onView?: (view: ComputedView) => void;
 }) {
   const brand = useViewBrand();
   const scope = useBrandScope();
@@ -138,6 +141,13 @@ export function LiveViewCanvas({
   const prints = useRef<Map<string, string> | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
   const inFlight = useRef(false);
+
+  // La copia para verla sin señal (sólo lo que llegó del servidor; nunca nada fabricado aquí).
+  const onViewRef = useRef(onView);
+  onViewRef.current = onView;
+  useEffect(() => {
+    onViewRef.current?.(view);
+  }, [view]);
 
   const hasAlerts = view.alerts.length > 0;
   const wantsDesktop = view.alerts.some((a) => a.desktop);

@@ -648,6 +648,9 @@ export type ComputedFormField = Pick<
   | 'multiple'
   | 'tracker'
   | 'scan'
+  | 'scanMode'
+  | 'evidence'
+  | 'watermark'
 > & { required: boolean; options: string[] };
 
 export interface ComputedView {
@@ -2000,6 +2003,9 @@ const FORM_FIELD_EXTRAS = [
   'multiple',
   'tracker',
   'scan',
+  'scanMode',
+  'evidence',
+  'watermark',
 ] as const;
 
 // ---------------------------------------------------------------------------

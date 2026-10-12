@@ -35,6 +35,8 @@ import {
 } from '../views/store';
 import type { ViewFilterState } from '../views/view-filters';
 import { type AppBrand, type AppHome, parseBrand, parseHome } from './appearance';
+import { type ClientPortal, parsePortal } from './client-portal';
+import { pruneGeofenceState } from './geofence-run';
 import { normalizeAppIcon } from './icon-names';
 import {
   type AppLocationSettings,
@@ -64,6 +66,9 @@ import {
   rowScopeFor,
   rowVisible,
 } from './permissions';
+import { type Tablero, parseTableros } from './tablero';
+import { recordAppEvent } from './usage';
+import { type Snapshot, overlayAccess, parseSnapshot } from './versions-shape';
 
 /**
  * Lectura y escritura de las aplicaciones (migración 0208).
@@ -92,7 +97,7 @@ import {
  */
 
 export const APP_COLUMNS =
-  'id, organization_id, slug, name, description, icon, theme, brand, home, location, home_screen, status, version, created_by, updated_by, created_at, updated_at, archived_at';
+  'id, organization_id, slug, name, description, icon, theme, brand, home, dashboards, portal, location, home_screen, status, version, created_by, updated_by, created_at, updated_at, archived_at';
 const SCREEN_COLUMNS =
   'id, app_id, view_id, slug, title, icon, position, roles, created_at, updated_at';
 const ROLE_COLUMNS = 'id, app_id, key, name, description, permissions, position';
@@ -125,6 +130,10 @@ export interface CustomAppRow {
   brand: AppBrand;
   /** Pantalla «Inicio» con tarjetas (0215); null = la app no tiene. */
   home: AppHome | null;
+  /** Tableros por rol (0225); lista vacía = la app no tiene. */
+  dashboards: Tablero[];
+  /** Portal de clientes (0225); apagado por defecto. */
+  portal: ClientPortal;
   /** Compartir ubicación del equipo (0216); apagado por defecto. */
   location: AppLocationSettings;
   home_screen: string | null;
@@ -146,6 +155,13 @@ export interface AppScreenRow {
   icon: string;
   position: number;
   roles: string[];
+  /**
+   * Sólo en lo que ven los USUARIOS de una app con versión publicada (0225):
+   * el spec de la pantalla tal como estaba al publicar. Si viene, manda sobre
+   * la vista viva (que es el borrador). `screenView` lo aplica.
+   */
+  frozenSpec?: ViewSpec;
+  frozenName?: string;
 }
 
 export interface AppRoleRow {
@@ -179,6 +195,8 @@ export function adaptApp(row: Record<string, unknown>): CustomAppRow {
     theme: theme.success ? theme.data : {},
     brand: parseBrand(row.brand),
     home: parseHome(row.home),
+    dashboards: parseTableros(row.dashboards),
+    portal: parsePortal(row.portal),
     location: parseLocationSettings(row.location),
     home_screen: typeof row.home_screen === 'string' ? row.home_screen : null,
   };
@@ -320,8 +338,12 @@ export async function updateApp(
     theme?: AppTheme;
     brand?: AppBrand;
     home?: AppHome | null;
+    /** Los tableros por rol (0225): la lista completa. */
+    dashboards?: Tablero[];
+    /** El portal de clientes (0225), ya combinado con el anterior. */
+    portal?: ClientPortal;
     /** Cambio parcial de «Compartir ubicación del equipo». */
-    location?: z.infer<typeof locationSettingsPatchSchema>;
+    location?: z.input<typeof locationSettingsPatchSchema>;
     homeScreen?: string | null;
     status?: AppStatus;
     userId: string;
@@ -339,6 +361,8 @@ export async function updateApp(
   if (input.theme !== undefined) patch.theme = input.theme;
   if (input.brand !== undefined) patch.brand = input.brand;
   if (input.home !== undefined) patch.home = input.home ?? {};
+  if (input.dashboards !== undefined) patch.dashboards = input.dashboards;
+  if (input.portal !== undefined) patch.portal = input.portal;
   if (input.location !== undefined)
     patch.location = parseLocationSettings({ ...current.location, ...input.location });
   if (input.homeScreen !== undefined) patch.home_screen = input.homeScreen;
@@ -355,10 +379,13 @@ export async function updateApp(
     .select(APP_COLUMNS)
     .single();
   if (error) throw error;
+  // Un lugar que se quitó de la lista ya no tiene estado que recordar (0224).
+  if (input.location?.geofences) await pruneGeofenceState(db, current.id, input.location.geofences);
   // Apagar «Compartir ubicación» borra lo que había: nadie sigue «en turno» ni
   // queda una posición guardada de una función que ya no existe.
   if (input.location?.enabled === false && current.location.enabled) {
     await db.from('custom_app_locations').delete().eq('app_id', current.id);
+    await pruneGeofenceState(db, current.id, []);
     await db
       .from('custom_app_location_consents')
       .update({ on_shift: false, shift_ended_at: new Date().toISOString() })
@@ -497,17 +524,20 @@ function adaptView(row: Record<string, unknown>): CustomViewRow {
  * rutas fijas (manifest, íconos, sw.js) llevan punto o guion y el patrón de
  * slug ya las excluye.
  */
-export const RESERVED_SCREEN_SLUGS = new Set(['kiosco', 'inicio']);
+export const RESERVED_SCREEN_SLUGS = new Set(['kiosco', 'inicio', 'portal', 'tablero']);
+/** Los tableros (0225) viven en rutas `tab_<id>`: ninguna pantalla puede empezar así. */
+export const isReservedScreenSlug = (slug: string) =>
+  RESERVED_SCREEN_SLUGS.has(slug) || slug.startsWith('tab_');
 
 const screenSlugSchema = z
   .string()
   .trim()
   .regex(APP_SLUG_RE)
-  .refine((s) => !RESERVED_SCREEN_SLUGS.has(s), 'Ese nombre de pantalla está reservado.');
+  .refine((s) => !isReservedScreenSlug(s), 'Ese nombre de pantalla está reservado.');
 
 async function freeScreenSlug(db: SupabaseClient, appId: string, wanted: string): Promise<string> {
   const raw = APP_SLUG_RE.test(wanted) ? wanted : slugify(wanted);
-  const base = RESERVED_SCREEN_SLUGS.has(raw) ? `${raw}_pantalla` : raw;
+  const base = isReservedScreenSlug(raw) ? `${raw}_pantalla` : raw;
   const existing = new Set((await listScreens(db, appId)).map((s) => s.slug));
   if (!existing.has(base)) return base;
   for (let i = 2; i < 50; i++) {
@@ -761,6 +791,7 @@ export async function eraseLocationOf(
     'custom_app_locations',
     'custom_app_location_history',
     'custom_app_location_consents',
+    'custom_app_geofence_state',
   ])
     await db.from(table).delete().eq('app_id', appId).eq('subject_kind', kind).eq('subject_id', id);
 }
@@ -840,13 +871,59 @@ export async function resolveAppAccess(
   const member = (await listMembers(db, app.id)).find((m) => m.user_id === viewer.id);
   if (!member) return null;
   const role = (await listRoles(db, app.id)).find((r) => r.key === member.role_key);
-  if (!role) return null;
-  return {
+  // Un rol que ya no está en el borrador puede seguir en la versión publicada.
+  if (!role && !(await loadPublishedSnapshot(db, app.id))) return null;
+  const access: AppAccess = {
     app,
     screens,
-    role: { key: role.key, name: role.name, permissions: role.permissions, admin: false },
+    role: {
+      key: member.role_key,
+      name: role?.name ?? member.role_key,
+      permissions: role?.permissions ?? { tables: {}, export: false },
+      admin: false,
+    },
     user: { id: viewer.id, name: viewer.name, attributes: member.attributes },
   };
+  return withPublishedVersion(db, access);
+}
+
+// ---------------------------------------------------------------------------
+// Versión publicada (0225)
+// ---------------------------------------------------------------------------
+
+/** La última versión publicada de la app, o null si nunca se publicó una (apps anteriores a 0225). */
+export async function loadPublishedSnapshot(
+  db: SupabaseClient,
+  appId: string,
+): Promise<{ number: number; snapshot: Snapshot } | null> {
+  const { data, error } = await db
+    .from('app_versions')
+    .select('number, spec')
+    .eq('app_id', appId)
+    .order('number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  // La tabla puede no existir todavía en un despliegue sin la migración: la app se comporta como antes.
+  if (error) return null;
+  if (!data) return null;
+  const row = data as { number: number; spec: unknown };
+  const snapshot = parseSnapshot(row.spec);
+  return snapshot ? { number: row.number, snapshot } : null;
+}
+
+/**
+ * Lo que ve quien USA la app: la versión publicada pintada sobre el acceso
+ * vivo. Sin versión (apps anteriores) o para el administrador, el acceso tal
+ * cual. null si el rol de la persona no existe en la versión publicada.
+ */
+export async function withPublishedVersion(
+  db: SupabaseClient,
+  access: AppAccess | null,
+): Promise<AppAccess | null> {
+  if (!access || access.role.admin) return access;
+  const published = await loadPublishedSnapshot(db, access.app.id);
+  if (!published) return access;
+  return overlayAccess(access, published.snapshot);
 }
 
 /** Las pantallas que este rol ve, en el orden del menú. */
@@ -874,6 +951,32 @@ export function screenFor(access: AppAccess, ref: string | null | undefined): Ap
 export async function screenView(db: SupabaseClient, screen: AppScreenRow): Promise<CustomViewRow> {
   const views = await screenViews(db, [screen]);
   const view = views.get(screen.view_id);
+  // Con versión publicada (0225) el spec es el de la foto, aunque la vista viva
+  // (el borrador) haya cambiado o ya no exista.
+  if (screen.frozenSpec) {
+    const now = new Date().toISOString();
+    return {
+      ...(view ?? {
+        id: screen.view_id,
+        slug: screen.slug,
+        description: '',
+        version: 0,
+        visibility: 'workspace',
+        share_token: null,
+        share_expires_at: null,
+        share_views: 0,
+        pinned: false,
+        app_id: screen.app_id,
+        created_by: null,
+        updated_by: null,
+        created_at: now,
+        updated_at: now,
+        archived_at: null,
+      }),
+      name: screen.frozenName || view?.name || screen.title,
+      spec: screen.frozenSpec,
+    } as CustomViewRow;
+  }
   if (!view) throw new NotFoundError('Esa pantalla ya no existe.');
   return view;
 }
@@ -1110,7 +1213,7 @@ export async function submitAppForm(
     forced = { [scope.field]: scope.value };
   }
   await assertExternalBudget(db, access, 'submit');
-  return withFlowActor(flowActorOf(access), () =>
+  const sent = await withFlowActor(flowActorOf(access), () =>
     submitViewForm(db, view, {
       blockId: input.blockId,
       values,
@@ -1122,6 +1225,14 @@ export async function submitAppForm(
       clientId: input.clientId,
     }),
   );
+  // Uso (0225): el envío, con el mismo `ref` del «empezó». Medir nunca tumba el envío.
+  await recordAppEvent(db, access, {
+    kind: 'form_submit',
+    screen: access.screens.find((s) => s.view_id === view.id)?.slug ?? null,
+    blockId: input.blockId,
+    ref: input.clientId ?? null,
+  });
+  return sent;
 }
 
 /** Corregir lo enviado (dentro de la ventana): quien pudo crear puede corregir lo suyo. */
@@ -1147,11 +1258,38 @@ export async function editAppSubmission(
 }
 
 /** Editar una celda, mover una tarjeta o cambiar un campo desde la ficha. */
+/**
+ * El registro cambió desde que la persona lo vio (una edición hecha sin señal
+ * que llega tarde). Lleva, por campo, lo que había y lo que hay ahora; la app del
+ * teléfono lo muestra para decidir. Hereda de ValidationError: para quien no lo
+ * espera es un rechazo con mensaje.
+ */
+export class RowConflictError extends ValidationError {
+  constructor(public readonly conflicts: Array<{ field: string; theirs: string }>) {
+    super('Este registro cambió mientras tanto. Revisa antes de aplicar tu cambio.');
+    this.name = 'RowConflictError';
+  }
+}
+
+/** Lo que había en cada campo, como el texto con que se compara una edición pendiente. */
+export function sameValue(a: unknown, b: unknown): boolean {
+  return String(a ?? '').trim() === String(b ?? '').trim();
+}
+
 export async function editAppRow(
   db: SupabaseClient,
   access: AppAccess,
   view: CustomViewRow,
-  input: { blockId: string; rowId: string; patch: Record<string, unknown> },
+  input: {
+    blockId: string;
+    rowId: string;
+    patch: Record<string, unknown>;
+    /**
+     * Lo que la persona VIO de cada campo al editar (sólo una edición que estuvo en
+     * la cola sin señal lo trae). Si ya no coincide, no se escribe: conflicto.
+     */
+    expect?: Record<string, string>;
+  },
 ) {
   const slug = trackerOfBlock(view, input.blockId);
   const edit = editAccessFor(access.role, slug);
@@ -1160,9 +1298,18 @@ export async function editAppRow(
   if (edit === 'own' && !isOwnRow(access.user, row))
     throw new ValidationError('Sólo puedes editar lo que registraste tú.');
   assertFields(access, slug, Object.keys(input.patch));
+  if (input.expect) {
+    const conflicts = Object.entries(input.expect)
+      .filter(([k, was]) => k in input.patch && !sameValue(row.values[k], was))
+      // Si ya vale lo que la persona quería poner, no hay nada que pelear.
+      .filter(([k]) => !sameValue(row.values[k], input.patch[k]))
+      .map(([field]) => ({ field, theirs: String(row.values[field] ?? '') }));
+    if (conflicts.length) throw new RowConflictError(conflicts);
+  }
   await assertExternalBudget(db, access, 'write');
+  const { expect: _expect, ...rest } = input;
   return withFlowActor(flowActorOf(access), () =>
-    editViewRow(db, view, { ...input, actor: access.user.id, actorKind: actorKindOf(access) }),
+    editViewRow(db, view, { ...rest, actor: access.user.id, actorKind: actorKindOf(access) }),
   );
 }
 

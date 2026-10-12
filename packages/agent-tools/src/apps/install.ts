@@ -8,6 +8,7 @@ import {
   saveRoles,
   updateApp,
 } from './store';
+import { suggestTableros, tablerosSchema } from './tablero';
 import type { AppTemplate } from './templates';
 
 /**
@@ -51,7 +52,15 @@ export async function installAppTemplate(
     );
   }
   const home = screens.find((s) => s.slug === template.homeScreen);
+  // Un tablero por rol sobre la tabla principal de la plantilla (0225); se edita en «Tableros».
+  const sample = suggestTableros({
+    trackers: template.trackers as never,
+    roles: template.roles,
+    screen: home?.slug ?? screens[0]?.slug,
+  });
+  const dashboards = tablerosSchema.safeParse(sample);
   const updated = await updateApp(db, app.id, {
+    ...(dashboards.success ? { dashboards: dashboards.data } : {}),
     homeScreen: home?.slug ?? null,
     location: template.location,
     userId: input.userId,

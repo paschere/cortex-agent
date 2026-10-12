@@ -1,9 +1,10 @@
 'use client';
 
+import { SNOOZE_LABEL, type SnoozeChoice } from '@/lib/hoy/snooze';
 import type { DoneView, TodoView } from '@/lib/hoy/view';
 import { chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
-import { Check, Loader2 } from 'lucide-react';
+import { AlarmClock, Check, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
@@ -12,6 +13,12 @@ export type DecideFn = (input: {
   itemId: string;
   decision: 'approve' | 'dismiss';
   contentHash: string;
+}) => Promise<{ ok: boolean; note: string }>;
+
+export type SnoozeFn = (input: {
+  key: string;
+  choice: SnoozeChoice;
+  title?: string;
 }) => Promise<{ ok: boolean; note: string }>;
 
 /**
@@ -26,6 +33,8 @@ export function TodoList({
   done,
   canDecide,
   decide,
+  snooze,
+  snoozed = 0,
   more,
   moreHref,
 }: {
@@ -33,6 +42,10 @@ export function TodoList({
   done: DoneView[];
   canDecide: boolean;
   decide: DecideFn;
+  /** Posponer («Mañana» / «La otra semana»); sin ella no se ofrece. */
+  snooze?: SnoozeFn;
+  /** Cuántas cosas pospuestas siguen escondidas. */
+  snoozed?: number;
   more: number;
   moreHref: string | null;
 }) {
@@ -68,12 +81,15 @@ export function TodoList({
             {canDecide && <Hint k="a" text="aprobar" />}
             <Hint k="e" text="editar" />
             {canDecide && <Hint k="x" text="descartar" />}
+            {snooze && <Hint k="m" text="posponer (M: la otra semana)" />}
           </p>
         )}
       </div>
       {todos.length === 0 && done.length === 0 && (
         <p className="rounded-card border border-dashed border-border px-4 py-6 text-sm text-ink-muted">
           Nada te espera por ahora. Cuando haya algo que decidir, aparece aquí con todo listo.
+          {snoozed > 0 &&
+            ` Tienes ${snoozed} ${snoozed === 1 ? 'cosa pospuesta' : 'cosas pospuestas'} que volver${snoozed === 1 ? 'á' : 'án'} solas.`}
         </p>
       )}
       <ul className="flex flex-col">
@@ -85,6 +101,7 @@ export function TodoList({
             active={active === i}
             canDecide={canDecide}
             decide={decide}
+            snooze={snooze}
           />
         ))}
         {done.map((d) => (
@@ -112,6 +129,13 @@ export function TodoList({
           </li>
         ))}
       </ul>
+      {snoozed > 0 && todos.length + done.length > 0 && (
+        <p className="flex items-center gap-1.5 px-4 pt-2 text-xs text-ink-faint">
+          <AlarmClock className="h-3.5 w-3.5" aria-hidden />
+          {snoozed} {snoozed === 1 ? 'pospuesta' : 'pospuestas'}:{' '}
+          {snoozed === 1 ? 'vuelve' : 'vuelven'} solas a la hora que elegiste.
+        </p>
+      )}
       {more > 0 && (
         <p className="px-4 pt-2 text-sm text-ink-muted">
           Y {more} más.{' '}
@@ -143,7 +167,15 @@ function Todo({
   active,
   canDecide,
   decide,
-}: { t: TodoView; first: boolean; active: boolean; canDecide: boolean; decide: DecideFn }) {
+  snooze,
+}: {
+  t: TodoView;
+  first: boolean;
+  active: boolean;
+  canDecide: boolean;
+  decide: DecideFn;
+  snooze?: SnoozeFn;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [which, setWhich] = useState<'approve' | 'dismiss' | null>(null);
@@ -162,6 +194,17 @@ function Todo({
     });
   };
   const open = Boolean(t.preview);
+  const [snoozeMenu, setSnoozeMenu] = useState(false);
+  const postpone = (choice: SnoozeChoice) => {
+    if (!snooze) return;
+    setSnoozeMenu(false);
+    setWhich(null);
+    start(async () => {
+      const r = await snooze({ key: t.id, choice, title: t.title });
+      setNote({ ok: r.ok, text: r.note });
+      if (r.ok) router.refresh();
+    });
+  };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `run` se rehace en cada render y sólo lee `t`.
   useEffect(() => {
@@ -173,10 +216,12 @@ function Todo({
       if (e.key === 'a' && t.decide && canDecide) run('approve');
       else if (e.key === 'x' && t.decide && canDecide) run('dismiss');
       else if (e.key === 'e' && t.href) router.push(t.href);
+      else if (e.key === 'm' && snooze) postpone('tomorrow');
+      else if (e.key === 'M' && snooze) postpone('next_week');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, pending, t, canDecide, router]);
+  }, [active, pending, t, canDecide, router, snooze]);
 
   if (note?.ok)
     return (
@@ -237,7 +282,7 @@ function Todo({
             </blockquote>
           )}
 
-          {(t.decide && canDecide) || t.href ? (
+          {(t.decide && canDecide) || t.href || snooze ? (
             <div className="flex flex-wrap items-center gap-2">
               {t.decide && canDecide && (
                 <>
@@ -272,6 +317,40 @@ function Todo({
                     Descartar
                   </button>
                 </>
+              )}
+              {snooze && (
+                <span className="relative inline-flex">
+                  <button
+                    type="button"
+                    disabled={pending}
+                    aria-expanded={snoozeMenu}
+                    aria-haspopup="true"
+                    onClick={() => setSnoozeMenu((v) => !v)}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-pill px-3 text-[0.8125rem] font-semibold text-ink-faint hover:text-ink disabled:opacity-50"
+                  >
+                    <AlarmClock className="h-3.5 w-3.5" aria-hidden />
+                    Posponer
+                  </button>
+                  {snoozeMenu && (
+                    <span
+                      role="menu"
+                      aria-label="Posponer hasta"
+                      className="absolute left-0 top-full z-10 mt-1 flex min-w-[10rem] flex-col rounded-card border border-border bg-surface p-1 shadow-card"
+                    >
+                      {(['tomorrow', 'next_week'] as const).map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => postpone(c)}
+                          className="rounded-sm px-3 py-2 text-left text-[0.8125rem] font-semibold text-ink hover:bg-surface-2"
+                        >
+                          {SNOOZE_LABEL[c]}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                </span>
               )}
               {!(t.decide && canDecide) && t.href && (
                 <Link

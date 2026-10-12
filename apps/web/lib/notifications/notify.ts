@@ -9,6 +9,8 @@ import {
 import { isOrgScoped } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadPreferencesFor } from './preferences';
+import { resolveChannels } from './preferences-shape';
 
 /**
  * LA ÚNICA PUERTA POR LA QUE SE ESCRIBE UN AVISO.
@@ -165,6 +167,14 @@ export async function notify(db: SupabaseClient, input: NotifyInput): Promise<st
   const title = clip(input.title ?? '', TITLE_MAX);
   if (!title) {
     throw new NotificationContractError('notify() sin título. Un aviso vacío es una fila.');
+  }
+
+  // PREFERENCIAS (0223): la persona puede apagar la campana de esta categoría.
+  // Se lee aquí, en la única puerta, para que ningún productor pueda saltársela.
+  // Falla abierto (sin lectura, rige el defecto) y devuelve null como cuando la
+  // base no deja escribir: los productores ya lo tratan como «no hubo aviso».
+  if (!resolveChannels(await loadPreferencesFor(db, userId), input.kind, new Date()).bell) {
+    return null;
   }
 
   const bodyRaw = input.body ? clip(input.body, BODY_MAX) : '';

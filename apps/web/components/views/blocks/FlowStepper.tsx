@@ -3,10 +3,11 @@
 import type { ComputedBlock } from '@cortex/agent-tools';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { ArrowRight, Check, Eraser, Loader2, Lock, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, Check, Clock, Loader2, Lock, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { SubmitTarget } from '../ViewCanvas';
-import { FileInput, uploadFile } from '../inputs/FileInput';
+import { FileInput } from '../inputs/FileInput';
+import { SignatureInput } from '../inputs/SignatureInput';
 import { useViewWriter } from '../view-writes';
 import { formatWhen } from './theme';
 
@@ -60,123 +61,6 @@ export function FlowSteps({ flow, className }: { flow: FlowView; className?: str
   );
 }
 
-/** Una firma dibujada con el dedo o el mouse; al terminar se sube como imagen. */
-function SignaturePad({
-  target,
-  blockId,
-  field,
-  onChange,
-}: {
-  target: SubmitTarget;
-  blockId: string;
-  field: string;
-  onChange: (v: string) => void;
-}) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const drawing = useRef(false);
-  const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    const c = ref.current;
-    const ctx = c?.getContext('2d');
-    if (!c || !ctx) return;
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#111827';
-  }, []);
-
-  const at = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    return {
-      x: ((e.clientX - r.left) / r.width) * e.currentTarget.width,
-      y: ((e.clientY - r.top) / r.height) * e.currentTarget.height,
-    };
-  };
-
-  async function save() {
-    const c = ref.current;
-    if (!c) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'));
-      if (!blob) throw new Error('No se pudo leer la firma.');
-      const file = new File([blob], 'firma.png', { type: 'image/png' });
-      const up = await uploadFile(target, blockId, field, file, () => undefined);
-      onChange(JSON.stringify(up));
-      setSaved(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo guardar la firma.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      <canvas
-        ref={ref}
-        width={560}
-        height={180}
-        aria-label="Espacio para firmar"
-        className="h-32 w-full touch-none rounded-card border border-dashed border-border-strong bg-white"
-        onPointerDown={(e) => {
-          drawing.current = true;
-          e.currentTarget.setPointerCapture(e.pointerId);
-          const ctx = e.currentTarget.getContext('2d');
-          const p = at(e);
-          ctx?.beginPath();
-          ctx?.moveTo(p.x, p.y);
-          setSaved(false);
-        }}
-        onPointerMove={(e) => {
-          if (!drawing.current) return;
-          const p = at(e);
-          const ctx = e.currentTarget.getContext('2d');
-          ctx?.lineTo(p.x, p.y);
-          ctx?.stroke();
-          setDirty(true);
-        }}
-        onPointerUp={() => {
-          drawing.current = false;
-        }}
-      />
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            const c = ref.current;
-            c?.getContext('2d')?.clearRect(0, 0, c.width, c.height);
-            setDirty(false);
-            setSaved(false);
-            onChange('');
-          }}
-          className="view-press inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted sm:min-h-9"
-        >
-          <Eraser className="h-3.5 w-3.5" aria-hidden /> Borrar
-        </button>
-        <button
-          type="button"
-          disabled={!dirty || busy}
-          onClick={save}
-          className="view-press inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-primary-soft px-3 text-xs font-semibold text-primary-ink disabled:opacity-50 sm:min-h-9"
-        >
-          {busy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-          ) : (
-            <Check className="h-3.5 w-3.5" aria-hidden />
-          )}
-          {saved ? 'Firma guardada' : 'Usar esta firma'}
-        </button>
-      </div>
-      {error && <p className="text-micro font-semibold text-rose">{error}</p>}
-    </div>
-  );
-}
-
 function RequirementInput({
   req,
   value,
@@ -205,7 +89,15 @@ function RequirementInput({
       />
     );
   if (req.kind === 'signature')
-    return <SignaturePad target={target} blockId={blockId} field={req.field} onChange={onChange} />;
+    return (
+      <SignatureInput
+        value={value}
+        onChange={onChange}
+        target={target}
+        blockId={blockId}
+        field={req.field}
+      />
+    );
   if (req.kind === 'comment' || req.type === 'longtext')
     return (
       <textarea
@@ -251,6 +143,7 @@ function RequirementSheet({
   rowId,
   target,
   onClose,
+  onQueued,
 }: {
   move: Move;
   flow: FlowView;
@@ -258,6 +151,7 @@ function RequirementSheet({
   rowId: string;
   target: SubmitTarget;
   onClose: () => void;
+  onQueued?: (to: string) => void;
 }) {
   const writer = useViewWriter();
   const [values, setValues] = useState<Record<string, string>>({});
@@ -270,13 +164,23 @@ function RequirementSheet({
     if (!writer) return;
     setBusy(true);
     setError(null);
-    const res = await writer.edit(blockId, rowId, {
-      [flow.field]: move.to,
-      ...Object.fromEntries(pending.map((r) => [r.field, values[r.field] ?? ''])),
-    });
+    const res = await writer.edit(
+      blockId,
+      rowId,
+      {
+        [flow.field]: move.to,
+        ...Object.fromEntries(pending.map((r) => [r.field, values[r.field] ?? ''])),
+      },
+      {
+        expect: { [flow.field]: flow.current ?? '' },
+        label: `${flow.label}: ${flow.current ?? '—'} → ${move.to}`,
+      },
+    );
     setBusy(false);
-    if (res.ok) onClose();
-    else setError(res.error);
+    if (res.ok) {
+      if (res.queued) onQueued?.(move.to);
+      onClose();
+    } else setError(res.error);
   }
 
   return (
@@ -353,17 +257,31 @@ export function FlowPanel({
   const [open, setOpen] = useState<Move | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Sin señal: el paso quedó guardado en el teléfono y se envía solo.
+  const [queued, setQueued] = useState<string | null>(null);
   const moves = flow.next.filter((m) => m.allowed);
   const blocked = flow.next.filter((m) => !m.allowed);
+  // El servidor ya trae otro estado: lo que estaba pendiente salió (o cambió).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo cuando cambia el estado actual
+  useEffect(() => setQueued(null), [flow.current]);
 
   async function press(m: Move) {
     if (m.requires.some((r) => !r.filled)) return setOpen(m);
     if (!writer) return;
     setBusy(m.to);
     setError(null);
-    const res = await writer.edit(blockId, rowId, { [flow.field]: m.to });
+    const res = await writer.edit(
+      blockId,
+      rowId,
+      { [flow.field]: m.to },
+      {
+        expect: { [flow.field]: flow.current ?? '' },
+        label: `${flow.label}: ${flow.current ?? '—'} → ${m.to}`,
+      },
+    );
     setBusy(null);
     if (!res.ok) setError(res.error);
+    else if (res.queued) setQueued(m.to);
   }
 
   return (
@@ -397,6 +315,12 @@ export function FlowPanel({
           )}
         </div>
       )}
+      {queued && (
+        <p className="inline-flex items-center gap-1.5 rounded-pill bg-amber-soft px-3 py-1 text-xs font-semibold text-ink">
+          <Clock className="h-3.5 w-3.5 text-amber" aria-hidden />
+          Pasará a «{queued}» cuando vuelva la señal.
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-xs font-semibold text-rose">
           {error}
@@ -410,6 +334,7 @@ export function FlowPanel({
           rowId={rowId}
           target={target}
           onClose={() => setOpen(null)}
+          onQueued={setQueued}
         />
       )}
     </div>
@@ -460,6 +385,7 @@ export function CardFlow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const move = flow.next.find((n) => n.allowed);
+  const [queuedTo, setQueuedTo] = useState<string | null>(null);
   return (
     <div className="relative z-10 mt-3 space-y-2 border-t border-border/70 pt-3">
       <div
@@ -486,9 +412,15 @@ export function CardFlow({
             if (move.needs) return onOpen?.();
             setBusy(true);
             setError(null);
-            const res = await writer.edit(blockId, rowId, { [field]: move.to });
+            const res = await writer.edit(
+              blockId,
+              rowId,
+              { [field]: move.to },
+              { label: `Pasar a ${move.to}` },
+            );
             setBusy(false);
             if (!res.ok) setError(res.error);
+            else if (res.queued) setQueuedTo(move.to);
           }}
           className="view-press inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-primary-soft px-3 text-xs font-semibold text-primary-ink disabled:opacity-50 sm:min-h-9"
         >
@@ -500,6 +432,11 @@ export function CardFlow({
           Pasar a {move.to}
           {move.needs ? '…' : ''}
         </button>
+      )}
+      {queuedTo && (
+        <p className="inline-flex items-center gap-1 text-micro font-semibold text-ink-muted">
+          <Clock className="h-3 w-3 text-amber" aria-hidden /> Pendiente: «{queuedTo}»
+        </p>
       )}
       {error && <p className="text-micro font-semibold text-rose">{error}</p>}
     </div>

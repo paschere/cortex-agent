@@ -103,6 +103,16 @@ export const DEFAULT_KEYWORDS = ['today', 'now', 'viewer'] as const;
 export function normalizeFieldInput<T>(raw: T): T {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
   const f = { ...(raw as Record<string, unknown>) };
+  // Nombres que el modelo usa para los campos de captura: se guardan como un
+  // archivo-firma y un texto con lector de códigos (sin tipo nuevo en la base).
+  const alias = typeof f.type === 'string' ? f.type.trim().toLowerCase() : '';
+  if (alias === 'signature' || alias === 'firma') {
+    f.type = 'file';
+    f.accept = 'signature';
+  } else if (['barcode', 'qr', 'codigo', 'código', 'scan'].includes(alias)) {
+    f.type = 'text';
+    f.scan = true;
+  }
   const type = f.type;
   const textual = type === 'text' || type === 'longtext';
   const numeric = type === 'number' || type === 'money';
@@ -110,9 +120,12 @@ export function normalizeFieldInput<T>(raw: T): T {
   const drop = (...keys: string[]) => {
     for (const k of keys) delete f[k];
   };
-  if (type !== 'file') drop('accept', 'multiple');
+  if (type !== 'file') drop('accept', 'multiple', 'evidence', 'watermark');
+  if (type === 'file' && f.accept === 'signature') drop('multiple', 'evidence', 'watermark');
   if (type !== 'select') drop('flow');
-  if (type !== 'text') drop('scan', 'format');
+  if (type !== 'text' && type !== 'longtext') drop('scan');
+  if (type !== 'text') drop('format');
+  if (!f.scan || type !== 'longtext') drop('scanMode');
   if (type !== 'relation') drop('tracker');
   if (!textual) drop('pattern', 'minLength', 'maxLength');
   if (!numeric && !temporal) drop('min', 'max');
@@ -155,7 +168,11 @@ export const trackerFieldSchema = z
     showIf: showIfSchema.optional(),
     // --- Opciones de los tipos nuevos ---
     /** file: qué se acepta. */
-    accept: z.enum(['image', 'any']).optional(),
+    accept: z.enum(['image', 'any', 'signature']).optional(),
+    /** file (foto): guarda fecha, hora y GPS (si la persona lo permite) en el archivo. */
+    evidence: z.boolean().optional(),
+    /** file (foto): además los quema en la imagen (fecha, lugar, quién). */
+    watermark: z.boolean().optional(),
     /** file: varios archivos (máx. 5). */
     multiple: z.boolean().optional(),
     /** relation: slug de la tabla relacionada. */
@@ -165,6 +182,8 @@ export const trackerFieldSchema = z
       .optional(),
     /** text: se llena con el escáner de código de barras/QR. */
     scan: z.boolean().optional(),
+    /** scan en un texto largo: «continuous» deja la cámara abierta y suma cada código en su línea. */
+    scanMode: z.enum(['single', 'continuous']).optional(),
     /** select: el flujo por estados (ver `flow.ts`). */
     flow: flowSchema.optional(),
   })
@@ -340,6 +359,11 @@ export interface FileValueRef {
   name: string;
   mime: string;
   size: number;
+  /** Evidencia de una foto (campo con `evidence`): cuándo y dónde se tomó. */
+  takenAt?: string;
+  lat?: number;
+  lng?: number;
+  accuracy?: number;
 }
 
 export const FILE_MAX_COUNT = 5;
@@ -355,7 +379,19 @@ function asFileRef(x: unknown): FileValueRef | null {
   if (typeof mime !== 'string' || !/^[\w.+-]+\/[\w.+-]+$/.test(mime)) return null;
   const n = Number(size);
   if (!Number.isFinite(n) || n < 0) return null;
-  return { url, name: name.trim(), mime, size: Math.round(n) };
+  const ref: FileValueRef = { url, name: name.trim(), mime, size: Math.round(n) };
+  const takenAt = typeof o.takenAt === 'string' ? Date.parse(o.takenAt) : Number.NaN;
+  if (Number.isFinite(takenAt)) ref.takenAt = new Date(takenAt).toISOString();
+  const lat = Number(o.lat);
+  const lng = Number(o.lng);
+  if (o.lat != null && o.lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    ref.lat = Math.round(lat * 1e6) / 1e6;
+    ref.lng = Math.round(lng * 1e6) / 1e6;
+    const acc = Number(o.accuracy);
+    if (o.accuracy != null && Number.isFinite(acc) && acc >= 0 && acc <= 100000)
+      ref.accuracy = Math.round(acc);
+  }
+  return ref;
 }
 
 /** Lo guardado (cadena JSON) o armado (objeto/arreglo) → archivos; null si algo no cuadra. */
@@ -484,7 +520,10 @@ export function coerceValue(
       if (files.length > FILE_MAX_COUNT) {
         return { ok: false, message: `«${field.label}» admite hasta ${FILE_MAX_COUNT} archivos.` };
       }
-      if (field.accept === 'image' && files.some((f) => !f.mime.startsWith('image/'))) {
+      if (
+        (field.accept === 'image' || field.accept === 'signature') &&
+        files.some((f) => !f.mime.startsWith('image/'))
+      ) {
         return { ok: false, message: `«${field.label}» solo acepta imágenes.` };
       }
       const json = JSON.stringify(field.multiple ? files : files[0]);

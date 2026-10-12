@@ -6,6 +6,7 @@ import { loadSessionBrand } from '@/lib/branding/store';
 import {
   attributeValueSuggestions,
   computeView,
+  draftStatus,
   getKioskSettings,
   listAppUsers,
   listDevices,
@@ -15,6 +16,8 @@ import {
   listRoles,
   listScreens,
   listTrackers,
+  listVersions,
+  loadUsage,
   loadViewSources,
   personLabel,
   screenViews,
@@ -85,6 +88,12 @@ export default async function EditAppPage({
       listDevices(db, app.id),
       listPinStates(db, app.id),
     ]);
+  // Versiones, borrador y uso (0225): extras que no pueden tumbar el editor si una lectura falla.
+  const [versions, draft, usage] = await Promise.all([
+    listVersions(db, app.id, 30).catch(() => []),
+    draftStatus(db, app).catch(() => null),
+    loadUsage(db, app).catch(() => null),
+  ]);
   const attributeValues = await attributeValueSuggestions(db, roles);
   const companyBrand = await loadSessionBrand(db, user.organization.name);
   const pinOf = new Map(pins.map((p) => [p.userId, p]));
@@ -201,6 +210,19 @@ export default async function EditAppPage({
       })),
       actions: [],
     })),
+    dashboards: app.dashboards,
+    portal: app.portal,
+    versions,
+    draft: draft
+      ? {
+          publishedNumber: draft.publishedNumber,
+          publishedAt: draft.publishedAt,
+          hasChanges: draft.hasChanges,
+          summary: draft.summary,
+          changes: draft.changes.map((c) => ({ kind: c.kind, text: c.text })),
+        }
+      : undefined,
+    usage,
     screenFilters: Object.fromEntries(
       screens.flatMap((s) => {
         const bar = views.get(s.view_id)?.spec.filtersBar ?? [];

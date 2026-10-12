@@ -55,14 +55,23 @@ export function previewUrl(url: string): string | null {
 }
 
 /** Guarda la foto en el teléfono y devuelve el archivo provisional que va en el campo. */
-export async function stashBlob(file: File): Promise<UploadedFile> {
+export async function stashBlob(
+  file: File,
+  evidence?: Pick<UploadedFile, 'takenAt' | 'lat' | 'lng' | 'accuracy'> | null,
+): Promise<UploadedFile> {
   const { putBlob } = await import('./offline-store');
   const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
   await putBlob(id, file);
   try {
     previews.set(id, URL.createObjectURL(file));
   } catch {}
-  return { url: `${PENDING_PREFIX}${id}`, name: file.name, mime: file.type, size: file.size };
+  return {
+    url: `${PENDING_PREFIX}${id}`,
+    name: file.name,
+    mime: file.type,
+    size: file.size,
+    ...(evidence ?? {}),
+  };
 }
 
 /**
@@ -86,7 +95,19 @@ export async function resolvePending(
       if (!blob) throw new Error('Una foto guardada ya no está en el teléfono.');
       const meta = parseFileValue(value).find((f) => f.url === `${PENDING_PREFIX}${id}`);
       const file = new File([blob], meta?.name || 'foto.jpg', { type: meta?.mime || blob.type });
-      done[id] = await uploader(file, field);
+      const up = await uploader(file, field);
+      // La evidencia (cuándo y dónde se tomó) viaja con la foto aunque se subiera después.
+      done[id] = {
+        ...(meta?.takenAt ? { takenAt: meta.takenAt } : {}),
+        ...(meta?.lat !== undefined && meta?.lng !== undefined
+          ? {
+              lat: meta.lat,
+              lng: meta.lng,
+              ...(meta.accuracy !== undefined ? { accuracy: meta.accuracy } : {}),
+            }
+          : {}),
+        ...up,
+      };
       uploaded.push(id);
     }
     out[field] = swapPending(value, done);

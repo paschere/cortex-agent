@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isReadOnlySource } from '../views/spec';
 import { type ComputedHome, HOME_SLUG, computeHome, homeEnabled } from './appearance';
+import { PORTAL_SLUG, portalActive, portalNav } from './client-portal';
 import { canCreateIn } from './permissions';
 import {
   type AppAccess,
@@ -9,6 +10,7 @@ import {
   screenViews,
   visibleScreens,
 } from './store';
+import { tableroNav } from './tablero';
 
 /**
  * Lo que una pantalla de app añade al lienzo (0215): el menú con «Inicio», el
@@ -27,7 +29,12 @@ export function navScreens(
     title: s.title,
     icon: s.icon,
   }));
-  return homeEnabled(access.app.home) ? [{ ...HOME_NAV }, ...screens] : screens;
+  return [
+    ...(homeEnabled(access.app.home) ? [{ ...HOME_NAV }] : []),
+    ...portalNav(access),
+    ...tableroNav(access),
+    ...screens,
+  ];
 }
 
 /** ¿Esta ruta es la pantalla «Inicio» de una app que lo tiene? */
@@ -37,6 +44,7 @@ export function isHomeRoute(access: AppAccess, screenRef: string | null | undefi
 
 /** A dónde abre la app: el Inicio si lo tiene, si no su pantalla de siempre (null = ninguna). */
 export function entrySlug(access: AppAccess, firstScreen: AppScreenRow | null): string | null {
+  if (portalActive(access)) return PORTAL_SLUG;
   return homeEnabled(access.app.home) ? HOME_SLUG : (firstScreen?.slug ?? null);
 }
 

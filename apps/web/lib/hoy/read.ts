@@ -29,6 +29,8 @@ import { withPayablesOverlay } from '@cortex/agent-tools/src/payables/overlay';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { activityRows, buildOps } from './ops';
 import { buildHoyMetrics, greetingFor, narrative } from './shape';
+import { withoutSnoozed } from './snooze';
+import { loadSnoozedKeys } from './snooze-store';
 import type { DoneView, DuePartyView, HoyView, TodoView } from './view';
 
 /**
@@ -64,9 +66,11 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
   const financeOn = modules.has('finance');
   const autopilotOn = modules.has('autopilot');
 
+  // Lo que esta persona pospuso (0223): no se muestra hasta que pase la hora.
+  const hiddenP = loadSnoozedKeys(db, input.userId);
   const [money, pilot, waiting, canDecide] = await Promise.all([
     financeOn ? safe(() => readMoney(db, today, isAdmin)) : Promise.resolve(null),
-    autopilotOn ? safe(() => readPilot(db, today)) : Promise.resolve(null),
+    autopilotOn ? safe(() => readPilot(db, today, hiddenP)) : Promise.resolve(null),
     safe(() => readWaitingIndex(input.organizationId, input.userId)),
     safe(() => isCompanyManager(db, input.userId)),
   ]);
@@ -102,8 +106,14 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
     });
   }
   let queueExtra = 0;
+  const hidden = await hiddenP;
+  let snoozedCount = pilot?.snoozed ?? 0;
   for (const q of waiting?.queues ?? []) {
     for (const it of q.items) {
+      if (hidden.has(`${q.queue}-${it.id}`)) {
+        snoozedCount += 1;
+        continue;
+      }
       if (todos.length < MAX_TODOS)
         todos.push({
           id: `${q.queue}-${it.id}`,
@@ -168,7 +178,7 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
         : null,
     forecast: money?.forecast ?? null,
     overdue: overdueInfo,
-    waiting: (waiting?.total ?? 0) + (pilot?.asks.length ?? 0),
+    waiting: Math.max(0, (waiting?.total ?? 0) + (pilot?.asks.length ?? 0) - snoozedCount),
     autopilotDone: pilot?.done.length ?? 0,
   });
 
@@ -224,6 +234,7 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
     money: moneyView,
     todos: shown,
     todosMore: more,
+    snoozed: snoozedCount,
     todosMoreHref: autopilotOn ? '/piloto/panel' : null,
     canDecide: canDecide === true,
     done: pilot?.done ?? [],
@@ -300,7 +311,7 @@ async function readMoney(db: SupabaseClient, today: string, isAdmin: boolean) {
   };
 }
 
-async function readPilot(db: SupabaseClient, today: string) {
+async function readPilot(db: SupabaseClient, today: string, hiddenP: Promise<Set<string>>) {
   const [runs, asks] = await Promise.all([
     listAutopilotRuns(db, { limit: 60 }),
     listOpenAsks(db, { limit: 50 }),
@@ -318,8 +329,14 @@ async function readPilot(db: SupabaseClient, today: string) {
       timeLabel: timeLabel(v.decidedAt),
       href: v.href,
     }));
-  const askViews = asks.map((r) => viewOfRow(r, label));
+  const hidden = await hiddenP;
+  const { shown: askViews, hiddenCount } = withoutSnoozed(
+    asks.map((r) => viewOfRow(r, label)),
+    (v) => v.id ?? v.title,
+    hidden,
+  );
   return {
+    snoozed: hiddenCount,
     asks: askViews.slice(0, MAX_TODOS),
     moreAsks: Math.max(0, askViews.length - MAX_TODOS),
     done,

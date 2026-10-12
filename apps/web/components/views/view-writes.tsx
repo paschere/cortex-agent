@@ -1,8 +1,10 @@
 'use client';
 
+import { activeOutbox } from '@/lib/apps/app-outbox';
 import { assignRowAction, assignablePeopleAction } from '@/lib/apps/location-actions';
 import { editAppRowAction, runAppActionAction } from '@/lib/apps/write-actions';
 import { editViewRowAction, runViewActionAction } from '@/lib/views/actions';
+import { hasPending, resolvePending } from '@/lib/views/offline-files';
 import type {
   AssignablePerson,
   ComputedAction,
@@ -11,10 +13,11 @@ import type {
 } from '@cortex/agent-tools';
 import { validateRowValues } from '@cortex/agent-tools/src/trackers/validation';
 import { clsx } from 'clsx';
-import { Check, Loader2, X } from 'lucide-react';
+import { Check, Clock, Loader2, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { SubmitTarget } from './ViewCanvas';
 import { AssignPicker } from './blocks/AssignPicker';
+import { uploaderFor } from './blocks/form-transport';
 
 /**
  * ESCRIBIR DESDE UNA VISTA (migración 0160): editar una celda, mover una
@@ -27,10 +30,24 @@ import { AssignPicker } from './blocks/AssignPicker';
  * gráficos) reflejen el cambio y no sólo la celda.
  */
 
-type Result = { ok: true; message: string } | { ok: false; error: string };
+/** `queued`: no había señal; quedó guardado en el teléfono y se envía solo, en orden. */
+type Result = { ok: true; message: string; queued?: boolean } | { ok: false; error: string };
+
+/** Lo que el que escribe sabe de la edición: lo que la persona VIO (para detectar un cambio ajeno) y cómo llamarla. */
+export interface EditOptions {
+  expect?: Record<string, string>;
+  label?: string;
+}
+
+const QUEUED_MESSAGE = 'Guardado en el teléfono · se envía al volver la señal.';
 
 export interface ViewWriter {
-  edit(blockId: string, rowId: string, patch: Record<string, string>): Promise<Result>;
+  edit(
+    blockId: string,
+    rowId: string,
+    patch: Record<string, string>,
+    opts?: EditOptions,
+  ): Promise<Result>;
   act(blockId: string, action: ComputedAction, rowId: string, rowLabel: string): Promise<Result>;
   /**
    * «Asignar a…»: sólo dentro de una aplicación. Sin esto (vistas del equipo,
@@ -122,26 +139,74 @@ export function ViewWriterProvider({
           return res;
         },
       },
-      async edit(blockId, rowId, patch) {
-        const res = await editAppRowAction(target.appId, target.screen, blockId, rowId, patch);
-        if (res.ok) onChanged?.();
-        return res;
+      async edit(blockId, rowId, patch, opts) {
+        // Sin señal (o con fotos/firmas guardadas en el teléfono): a la cola de la app,
+        // que lo envía en orden al volver la señal. Con señal, directo como siempre.
+        const outbox = activeOutbox(target.appId);
+        const label = opts?.label ?? `Cambio en «${rowId.slice(0, 8)}»`;
+        const keep = async (): Promise<Result> => {
+          if (!outbox) return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
+          await outbox.queueEdit({
+            screen: target.screen,
+            blockId,
+            rowId,
+            label,
+            patch,
+            expect: opts?.expect,
+          });
+          return { ok: true, message: QUEUED_MESSAGE, queued: true };
+        };
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return keep();
+        let outgoing = patch;
+        if (hasPending(patch)) {
+          try {
+            outgoing = await resolvePending(patch, uploaderFor(target, blockId));
+          } catch {
+            return keep();
+          }
+        }
+        try {
+          const res = await editAppRowAction(target.appId, target.screen, blockId, rowId, outgoing);
+          if (res.ok) onChanged?.();
+          return res;
+        } catch {
+          // La server action no llegó: sin red.
+          return keep();
+        }
       },
       async act(blockId, action, rowId, rowLabel) {
         if (action.confirm && !window.confirm(`¿${action.label} en «${rowLabel}»?`))
           return { ok: false, error: 'Cancelado.' };
         const reason = askReason(action, rowLabel);
         if (reason === null) return { ok: false, error: 'Cancelado.' };
-        const res = await runAppActionAction(
-          target.appId,
-          target.screen,
-          blockId,
-          action.id,
-          rowId,
-          reason,
-        );
-        if (res.ok) onChanged?.();
-        return res;
+        const outbox = activeOutbox(target.appId);
+        const keep = async (): Promise<Result> => {
+          if (!outbox) return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
+          await outbox.queueAct({
+            screen: target.screen,
+            blockId,
+            rowId,
+            actionId: action.id,
+            reason: reason || undefined,
+            label: `${action.label}: ${rowLabel}`,
+          });
+          return { ok: true, message: QUEUED_MESSAGE, queued: true };
+        };
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return keep();
+        try {
+          const res = await runAppActionAction(
+            target.appId,
+            target.screen,
+            blockId,
+            action.id,
+            rowId,
+            reason,
+          );
+          if (res.ok) onChanged?.();
+          return res;
+        } catch {
+          return keep();
+        }
       },
     };
   } else if (target.kind === 'public') {
@@ -232,13 +297,21 @@ export function EditableValue({
   const writer = useViewWriter();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(raw == null ? '' : String(raw));
-  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error' | 'queued'>('idle');
   const [error, setError] = useState<string | null>(null);
+  // Lo que se escribió sin señal: se muestra con un reloj hasta que el servidor lo confirme.
+  const [queuedValue, setQueuedValue] = useState<string | null>(null);
   const input = useRef<HTMLInputElement & HTMLSelectElement & HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!editing) setValue(raw == null ? '' : String(raw));
   }, [raw, editing]);
+  // El servidor ya trae otro valor: lo pendiente se resolvió (o cambió).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo cuando cambia lo que dice el servidor
+  useEffect(() => {
+    setQueuedValue(null);
+    setState((s) => (s === 'queued' ? 'idle' : s));
+  }, [raw]);
   useEffect(() => {
     if (editing) input.current?.focus();
   }, [editing]);
@@ -259,8 +332,17 @@ export function EditableValue({
     }
     setEditing(false);
     setState('saving');
-    const res = await writer?.edit(blockId, rowId, { [field]: next });
-    if (res?.ok) {
+    const res = await writer?.edit(
+      blockId,
+      rowId,
+      { [field]: next },
+      { expect: { [field]: raw == null ? '' : String(raw) }, label: `${label ?? field} → ${next}` },
+    );
+    if (res?.ok && res.queued) {
+      setState('queued');
+      setQueuedValue(next);
+      setError(null);
+    } else if (res?.ok) {
       setState('saved');
       setError(null);
       setTimeout(() => setState('idle'), 1500);
@@ -346,7 +428,23 @@ export function EditableValue({
           style={{ textAlign: 'inherit' }}
           className="-mx-1 w-[calc(100%+0.5rem)] rounded-sm px-1 underline decoration-border-strong decoration-dotted underline-offset-4 transition-colors hover:bg-primary-soft/40"
         >
-          {state === 'saving' ? <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> : display}
+          {state === 'saving' ? (
+            <Loader2 className="inline h-3.5 w-3.5 animate-spin" />
+          ) : state === 'queued' && queuedValue !== null ? (
+            queuedValue || '—'
+          ) : (
+            display
+          )}
+          {state === 'queued' && (
+            <span
+              role="img"
+              className="ml-1 inline-flex align-middle text-amber"
+              title="Guardado en el teléfono; se envía al volver la señal"
+              aria-label="Pendiente de enviar"
+            >
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+            </span>
+          )}
           {state === 'saved' && <Check className="ml-1 inline h-3.5 w-3.5 text-emerald" />}
           {state === 'error' && <X className="ml-1 inline h-3.5 w-3.5 text-rose" />}
         </button>

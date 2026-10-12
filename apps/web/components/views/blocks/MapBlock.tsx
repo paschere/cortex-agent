@@ -21,7 +21,7 @@ import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SubmitTarget } from '../ViewCanvas';
 import { RowActions } from '../view-writes';
-import type { MapPin as Pin } from './MapCanvas';
+import type { MapCircle, MapPin as Pin } from './MapCanvas';
 import { useRecordOpener } from './RecordDrawer';
 import { Card, EmptyState, StatusChip, TONE_COLOR } from './theme';
 
@@ -103,6 +103,7 @@ export function MapBlock({ block, target }: { block: MapData; target: SubmitTarg
   const inApp = target.kind === 'custom_app';
   const [people, setPeople] = useState<LiveTeamPerson[]>([]);
   const [peopleError, setPeopleError] = useState<string | null>(null);
+  const [places, setPlaces] = useState<MapCircle[]>([]);
   const [loadedAt, setLoadedAt] = useState<number | null>(null);
   const [layers, setLayers] = useState({ people: true, records: true });
   const [role, setRole] = useState('');
@@ -134,6 +135,15 @@ export function MapBlock({ block, target }: { block: MapData; target: SubmitTarg
         if (cancelled) return;
         if (res.ok) {
           setPeople(res.people);
+          setPlaces(
+            res.places.map((g) => ({
+              key: g.id,
+              lat: g.lat,
+              lng: g.lng,
+              radiusM: g.radiusM,
+              label: g.name,
+            })),
+          );
           setPeopleError(null);
           setLoadedAt(Date.now());
         } else setPeopleError(res.error);
@@ -262,6 +272,7 @@ export function MapBlock({ block, target }: { block: MapData; target: SubmitTarg
         <MapCanvas
           pins={pins}
           fitKey={fitKey}
+          circles={places}
           picked={picked}
           picking={picking}
           onSelect={onSelect}
@@ -417,7 +428,8 @@ export function MapBlock({ block, target }: { block: MapData; target: SubmitTarg
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-ink">{p.name}</span>
                     <span className="block truncate text-micro text-ink-faint">
-                      {p.roleName} · {p.stale ? 'sin señal ' : ''}
+                      {p.roleName} · {p.place ? `en ${p.place} · ` : ''}
+                      {p.stale ? 'sin señal ' : ''}
                       {agoSeconds(p.ageSeconds)}
                     </span>
                   </span>
@@ -571,6 +583,7 @@ function PersonCard({
       <p className="mt-2 text-xs text-ink-muted">
         Última posición {person.stale ? '(sin señal) ' : ''}
         <strong className="font-semibold text-ink">{agoSeconds(person.ageSeconds)}</strong>
+        {person.place && ` · en ${person.place}`}
         {person.accuracyM !== null && ` · precisión ~${person.accuracyM} m`}
         {person.batteryPct !== null && (
           <span className="ml-1 inline-flex items-center gap-1">

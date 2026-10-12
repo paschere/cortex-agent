@@ -5,7 +5,15 @@ import { fontStack } from '@/lib/apps/app-brand';
 import { externalBrand } from '@/lib/apps/external-brand';
 import { openExternalApp } from '@/lib/apps/external-session';
 import { getKioskDevice } from '@/lib/apps/kiosk-session';
-import { HOME_SLUG, homeEnabled, listKioskPeople, screenFor } from '@cortex/agent-tools';
+import {
+  HOME_SLUG,
+  PORTAL_SLUG,
+  homeEnabled,
+  listKioskPeople,
+  portalActive,
+  screenFor,
+  tableroNav,
+} from '@cortex/agent-tools';
 import { notFound, redirect } from 'next/navigation';
 import { EntryForm } from './EntryForm';
 
@@ -26,9 +34,13 @@ export default async function AppEntryPage({ params }: { params: Promise<{ app: 
   const session = await openApp(opened.app.id);
   if (session) {
     const screen = screenFor(session.access, null);
+    // Un cliente del portal (0225) entra a su portal.
+    if (portalActive(session.access)) redirect(`/a/${opened.app.id}/${PORTAL_SLUG}`);
     // Con «Inicio» encendido, la app abre ahí (0215).
     if (homeEnabled(session.access.app.home)) redirect(`/a/${opened.app.id}/${HOME_SLUG}`);
     if (screen) redirect(`/a/${opened.app.id}/${screen.slug}`);
+    const tab = tableroNav(session.access)[0];
+    if (tab) redirect(`/a/${opened.app.id}/${tab.slug}`);
     return (
       <PublicShell brand={await externalBrand(opened.db, opened.app)}>
         <p className="mx-auto mt-16 max-w-sm text-center text-sm text-ink-muted">

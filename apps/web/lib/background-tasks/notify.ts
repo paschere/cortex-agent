@@ -1,6 +1,7 @@
 import 'server-only';
 import { sendEmail } from '@/lib/email';
 import { notify } from '@/lib/notifications/notify';
+import { channelsFor } from '@/lib/notifications/preferences';
 import { pushToPeople } from '@/lib/notifications/push';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
@@ -77,6 +78,9 @@ export async function noteTask(
       kind === 'needs_you'
         ? `task:${task.id}:needs_you:${task.segment}`
         : `task:${task.id}:${kind}`;
+    // Preferencias de la persona (0223): campana, celular y correo se piden por
+    // separado, y las horas de silencio detienen los dos últimos.
+    const channels = await channelsFor(db, task.userId, KIND[kind]);
     const id = await notify(db, {
       userId: task.userId,
       kind: KIND[kind],
@@ -86,18 +90,20 @@ export async function noteTask(
       source: { kind: 'task', id: task.id },
       dedupeKey,
     });
-    if (!id) return;
+    // Sin campana apagada, un id nulo es un fallo de la base: como siempre, no se sigue.
+    if (!id && channels.bell) return;
 
     const pushed = await pushToPeople(db, [task.userId], {
       title,
       body,
       url: href,
       tag: dedupeKey,
+      kind: KIND[kind],
     }).catch((err) => {
       logger.warn({ err, taskId: task.id }, 'tasks: el push no salió');
       return [] as string[];
     });
-    if (pushed.length > 0) return;
+    if (pushed.length > 0 || !channels.email) return;
 
     const { data } = await db.from('users').select('email').eq('id', task.userId).maybeSingle();
     const email = (data as { email?: string } | null)?.email;

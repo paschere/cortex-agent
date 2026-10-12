@@ -275,6 +275,7 @@ export function hoyFixture(opts: FixtureOptions = {}): HoyView {
     money: opts.sinPlata ? null : { currency: 'COP', metrics: built.metrics, kpis: built.kpis },
     todos,
     todosMore: opts.vacio ? 0 : 2,
+    snoozed: opts.vacio ? 0 : 2,
     todosMoreHref: '/piloto/panel',
     canDecide: true,
     done: [

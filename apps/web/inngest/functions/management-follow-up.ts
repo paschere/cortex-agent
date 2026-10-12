@@ -3,6 +3,7 @@ import { renderManagementFollowUpEmail } from '@/lib/email-templates/management-
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { notify } from '@/lib/notifications/notify';
+import { emailAllowedUsers } from '@/lib/notifications/preferences';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   FOLLOW_UP_STATES,
@@ -241,7 +242,10 @@ export const managementFollowUpWorkspaceJob: JobHandler = async ({ event, step }
         ownerName,
         firstNoticeOn: item.firstNoticeOn,
       });
+      // Preferencias (0223): a quien apagó el correo de esta categoría no se le manda.
+      const mailOk = await emailAllowedUsers(db, recipients, 'management_attention');
       const emails = recipients
+        .filter((id) => mailOk.has(id))
         .map((id) => directory.get(id)?.email ?? '')
         .filter((e) => e.includes('@'));
       // Un correo por persona: nadie ve la dirección de otro en el «Para».
@@ -258,7 +262,10 @@ export const managementFollowUpWorkspaceJob: JobHandler = async ({ event, step }
         else mailNote = outcome.reason ?? 'No se pudo enviar el correo.';
       }
 
-      const ok = inApp > 0 || mailed > 0;
+      // Si TODOS apagaron campana y correo para esta categoría, no es un fallo
+      // de entrega: no hay a quién avisarle y reintentar mañana no cambia nada.
+      const everyoneOptedOut = recipients.length > 0 && mailOk.size === 0 && inApp === 0;
+      const ok = inApp > 0 || mailed > 0 || everyoneOptedOut;
       if (!ok && claim.outcome === 'claimed') {
         // Nada llegó por ningún canal: se suelta para que mañana sea un intento
         // de verdad y no una fila que bloquea el aviso para siempre.

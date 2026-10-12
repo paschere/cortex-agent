@@ -6,8 +6,11 @@ import {
   realSender,
   vapidConfig,
 } from '@/lib/apps/push';
+import type { NotificationKind } from '@/lib/notifications-shape';
 import { logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadPreferences } from './preferences';
+import { resolveChannels } from './preferences-shape';
 
 /**
  * WEB PUSH DE LA APP PRINCIPAL DE CORTEX (0220), sobre lo que ya hay de las
@@ -28,6 +31,12 @@ export interface MainPushPayload {
   /** Ruta interna que abre el aviso. */
   url: string;
   tag: string;
+  /**
+   * Clase del aviso. Con ella se aplican las preferencias de cada persona
+   * (celular apagado, horas de silencio). Sin ella no se filtra: es para envíos
+   * que no son un aviso de la campana.
+   */
+  kind?: NotificationKind;
 }
 
 /** Una ruta interna o la bandeja: un aviso nunca abre otro sitio. */
@@ -44,12 +53,20 @@ export async function pushToPeople(
   vapid: VapidConfig | null = vapidConfig(),
 ): Promise<string[]> {
   if (!userIds.length || !vapid) return [];
+  let targets = userIds;
+  if (payload.kind) {
+    const kind = payload.kind;
+    const prefs = await loadPreferences(db, userIds);
+    const now = new Date();
+    targets = userIds.filter((id) => resolveChannels(prefs.get(id), kind, now).push);
+    if (!targets.length) return [];
+  }
   const { data, error } = await db
     .from('push_subscriptions')
     .select('id, endpoint, p256dh, auth, member_id')
     .eq('subject_kind', 'member')
     .is('app_id', null)
-    .in('member_id', userIds);
+    .in('member_id', targets);
   if (error) throw error;
   const subs = (data ?? []) as Array<{
     id: string;

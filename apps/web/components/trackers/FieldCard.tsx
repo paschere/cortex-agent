@@ -232,16 +232,47 @@ export function FieldCard({
               options={[
                 { value: 'any', label: 'Cualquier archivo' },
                 { value: 'image', label: 'Sólo imágenes' },
+                { value: 'signature', label: 'Firma dibujada' },
               ]}
-              onChange={(accept) => set({ accept })}
+              onChange={(accept) =>
+                set(
+                  accept === 'signature'
+                    ? { accept, multiple: undefined, evidence: undefined, watermark: undefined }
+                    : { accept },
+                )
+              }
             />
-            <Toggle
-              label="Varios archivos"
-              hint="Hasta 5 por registro."
-              checked={Boolean(field.multiple)}
-              disabled={readOnly}
-              onChange={(multiple) => set({ multiple })}
-            />
+            {field.accept !== 'signature' && (
+              <Toggle
+                label="Varios archivos"
+                hint="Hasta 5 por registro."
+                checked={Boolean(field.multiple)}
+                disabled={readOnly}
+                onChange={(multiple) => set({ multiple })}
+              />
+            )}
+            {field.accept === 'image' && (
+              <>
+                <Toggle
+                  label="Foto con evidencia"
+                  hint="Guarda fecha, hora y GPS (si la persona lo permite)."
+                  checked={Boolean(field.evidence)}
+                  disabled={readOnly}
+                  onChange={(evidence) =>
+                    set(evidence ? { evidence } : { evidence: undefined, watermark: undefined })
+                  }
+                />
+                {field.evidence && (
+                  <Toggle
+                    label="Marca de agua"
+                    hint="Fecha, lugar y quién, grabados en la imagen."
+                    checked={Boolean(field.watermark)}
+                    disabled={readOnly}
+                    onChange={(watermark) => set({ watermark })}
+                  />
+                )}
+              </>
+            )}
           </div>
         )}
         {typeHas.relation(field.type) && (
@@ -267,10 +298,19 @@ export function FieldCard({
         {typeHas.scan(field.type) && (
           <Toggle
             label="Se llena con el escáner"
-            hint="Código de barras o QR desde la cámara."
+            hint="Código de barras o QR desde la cámara (en un texto largo, un código por línea)."
             checked={Boolean(field.scan)}
             disabled={readOnly}
-            onChange={(scan) => set({ scan })}
+            onChange={(scan) => set(scan ? { scan } : { scan, scanMode: undefined })}
+          />
+        )}
+        {field.type === 'longtext' && field.scan && (
+          <Toggle
+            label="Escanear varios seguidos"
+            hint="La cámara sigue abierta y suma cada código (uno por línea)."
+            checked={field.scanMode === 'continuous'}
+            disabled={readOnly}
+            onChange={(on) => set({ scanMode: on ? 'continuous' : undefined })}
           />
         )}
 

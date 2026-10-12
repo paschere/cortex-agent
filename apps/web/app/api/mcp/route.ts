@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
 import { sendApprovalRequestEmail } from '@/lib/approval-email';
 import { decideApproval } from '@/lib/approvals/decide';
+import { grantedForAgent } from '@/lib/granted-tools';
 import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
 import { issuer, sha256 } from '@/lib/oauth';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
@@ -945,7 +946,10 @@ async function dispatch(
           conversationId,
         });
         try {
-          const result = await runTool(entry.tool, args, ctx);
+          const result = await runTool(entry.tool, args, {
+            ...ctx,
+            grantedToolIds: grantedForAgent(catalog.values(), entry.agentId),
+          });
           if (conversationId) {
             await persistToolMessage({
               organizationId: auth.organizationId,

@@ -14,14 +14,19 @@ export {
   appsAssignMembers,
   appsCreate,
   appsDelete,
+  appsGeofences,
   appsGet,
   appsInviteUsers,
   appsList,
   appsPublish,
+  appsUsage,
+  appsVersions,
   appsUpdate,
 } from './tools';
 export * from './permissions';
 export * from './location-shape';
+export * from './geofence';
+export * from './geofence-run';
 export * from './location';
 export * from './store';
 export * from './templates';
@@ -30,6 +35,12 @@ export * from './external';
 export * from './automations';
 export * from './kiosk';
 export * from './portal';
+export * from './tablero';
+export * from './client-portal';
+export * from './versions-shape';
+export * from './versions';
+export * from './usage';
+export * from './app-extras';
 export * from './appearance';
 export * from './screen-extras';
 export { appsDesign, reviewAppDraft, appDraftSchema } from './design';
