@@ -703,17 +703,17 @@ describe('las alertas de la caja en la revisión semanal', () => {
         cashAlerts: [
           {
             severity: 'critical',
-            message: 'La caja queda en rojo la semana del 16 nov (−$ 3,2 M).',
+            message: 'La caja queda en rojo la semana del 16 nov (−$ 3.200.000).',
           },
         ],
       },
     });
     expect(get(comp.facts, 'caja.alerta.0')?.display).toBe(
-      'La caja queda en rojo la semana del 16 nov (−$ 3,2 M).',
+      'La caja queda en rojo la semana del 16 nov (−$ 3.200.000).',
     );
     const recs = weeklyRecommendations(comp.facts, comp, { hasPulse: true });
     expect(recs[0]).toBe(
-      'Mira la caja de las próximas semanas: La caja queda en rojo la semana del 16 nov (−$ 3,2 M). Pídeme «¿cómo va a estar la caja?» para ver por qué y qué hacer.',
+      'Mira la caja de las próximas semanas: La caja queda en rojo la semana del 16 nov (−$ 3.200.000). Pídeme «¿cómo va a estar la caja?» para ver por qué y qué hacer.',
     );
     expect(checkGrounding(recs.join('\n'), comp.facts, MON)).toEqual({ ok: true, ungrounded: [] });
   });

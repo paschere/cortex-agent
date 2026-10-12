@@ -58,7 +58,7 @@ describe('el escenario en palabras', () => {
         every: 'month',
         start: '2026-11-01',
       }),
-    ).toBe('sale un gasto nuevo de $ 3,5 M cada mes el día 1 desde el 1 nov («Vendedor nuevo»)');
+    ).toBe('sale un gasto nuevo de $ 3.500.000 cada mes el día 1 desde el 1 nov («Vendedor nuevo»)');
     expect(
       describeAdjustment({
         kind: 'add_recurring',
@@ -68,7 +68,7 @@ describe('el escenario en palabras', () => {
         every: 'week',
         start: '2026-10-09',
       }),
-    ).toBe('entra un ingreso nuevo de $ 800 mil cada viernes desde el 9 oct («Ventas mostrador»)');
+    ).toBe('entra un ingreso nuevo de $ 800.000 cada viernes desde el 9 oct («Ventas mostrador»)');
     expect(describeAdjustment({ kind: 'scale_category', category: 'nomina', factor: 1.1 })).toBe(
       'Nómina sube 10%',
     );
@@ -83,7 +83,7 @@ describe('el escenario en palabras', () => {
         amount: 20_000_000,
         date: '2026-11-15',
       }),
-    ).toBe('sale un pago único de $ 20 M el 15 nov («Compra camión»)');
+    ).toBe('sale un pago único de $ 20.000.000 el 15 nov («Compra camión»)');
   });
 
   it('describeScenario junta las cláusulas en una frase', () => {

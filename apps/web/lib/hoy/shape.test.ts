@@ -296,7 +296,7 @@ describe('la frase', () => {
     const parts = narrative(input);
     const t = narrativeText(parts);
     expect(t).toContain('aguanta la nómina del 15 oct');
-    expect(t).toContain('Te deben $ 12,7 M vencido, sobre todo Frigoandes');
+    expect(t).toContain('Te deben $ 12.740.000 vencido, sobre todo Frigoandes');
     expect(parts.find((p) => p.mark)?.text).toBe('tres cosas');
     expect(t.endsWith('lo demás ya lo estoy moviendo.')).toBe(true);
   });

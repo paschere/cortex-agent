@@ -50,14 +50,14 @@ describe('formatCompact (es-CO)', () => {
     expect(formatCompact(0)).toBe('0');
     expect(formatCompact(12.5)).toBe('12,5');
   });
-  it('miles, millones y miles de millones', () => {
-    expect(formatCompact(48_000)).toBe('48 mil');
-    expect(formatCompact(48_200_000)).toBe('48,2 M');
-    expect(formatCompact(1_200_000_000)).toBe('1,2 mil M');
+  it('cifras completas hasta mil millones, y desde ahí abreviadas', () => {
+    expect(formatCompact(48_000)).toBe('48.000');
+    expect(formatCompact(48_200_000)).toBe('48.200.000');
+    expect(formatCompact(1_200_000_000)).toBe('1,2 mil millones');
   });
   it('dinero, porcentaje y signo', () => {
-    expect(formatCompact(48_200_000, { money: true })).toBe('$ 48,2 M');
-    expect(formatCompact(-3_500_000, { money: true })).toBe('−$ 3,5 M');
+    expect(formatCompact(48_200_000, { money: true })).toBe('$ 48.200.000');
+    expect(formatCompact(-3_500_000, { money: true })).toBe('−$ 3.500.000');
     expect(formatCompact(12, { percent: true })).toBe('12 %');
     expect(formatCompact(-0.01)).toBe('0');
   });

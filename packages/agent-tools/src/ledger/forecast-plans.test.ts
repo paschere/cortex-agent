@@ -161,7 +161,7 @@ describe('ventas estimadas de los clientes regulares', () => {
     );
     const oct = allItems(r).find((i) => i.from === 'estimate' && i.expectedDate < '2026-11-15');
     expect(oct?.amount).toBe(6_000_000);
-    expect(oct?.reason).toContain('este mes ya van $ 4 M');
+    expect(oct?.reason).toContain('este mes ya van $ 4.000.000');
   });
 
   it('con menos de 3 meses no se estima nada; y se puede apagar', () => {

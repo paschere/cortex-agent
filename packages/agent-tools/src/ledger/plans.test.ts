@@ -261,7 +261,7 @@ describe('lo que se repite, decidido por una persona', () => {
     });
     const run = await runForecast(w.db, { today: TODAY, scenarioId: s.id });
     expect(run.scenario?.scenario?.label).toBe('Dos personas más');
-    expect(run.comparison?.summary).toMatch(/^Si sale un gasto nuevo de \$ 9 M/);
+    expect(run.comparison?.summary).toMatch(/^Si sale un gasto nuevo de \$ 9\.000\.000/);
     // Dos meses de nómina nueva (30 oct y 30 nov) al final del horizonte.
     expect(run.comparison?.weeks.at(-1)?.delta).toBe(-18_000_000);
     await expect(runForecast(w.db, { today: TODAY, scenarioId: 'no-existe' })).rejects.toThrow(
@@ -441,7 +441,7 @@ describe('las herramientas de la caja', () => {
       scenario: { comparison: string } | null;
     };
     expect(out.weeks).toHaveLength(13);
-    expect(out.explanation[0]).toMatch(/^Caja hoy: \$ 30 M\. La semana más apretada/);
+    expect(out.explanation[0]).toMatch(/^Caja hoy: \$ 30\.000\.000\. La semana más apretada/);
     expect(out.scenario?.comparison).toMatch(/^Si Nexa paga 30 días más tarde/);
     expect(out.recurring.some((r) => r.key?.startsWith('det-'))).toBe(true);
     expect(JSON.stringify(out)).not.toContain('Ana');
@@ -540,7 +540,7 @@ describe('la caja mínima de la empresa (0175)', () => {
       guidance: string;
     };
     expect(out.minimumCash).toBe(20_000_000);
-    expect(out.guidance).toMatch(/caja mínima de la empresa queda en \$ 20 M/);
+    expect(out.guidance).toMatch(/caja mínima de la empresa queda en \$ 20\.000\.000/);
     expect((await getLedgerSettings(w.db)).minimumCash).toBe(20_000_000);
 
     const forecast = (await getTool('ledger.forecast')?.handler({}, ctxFor(w, MEMBER))) as {

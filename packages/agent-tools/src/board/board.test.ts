@@ -96,7 +96,7 @@ describe('compose', () => {
       'proximos',
     ]);
     const facts = Object.fromEntries(c.facts.map((f) => [f.key, f]));
-    expect(facts.ventas_mes?.display).toBe('$ 50 M');
+    expect(facts.ventas_mes?.display).toBe('$ 50.000.000');
     expect(facts.ventas_mes_cambio?.display).toBe('+25 %');
     expect(c.fallbackSummary).toHaveLength(5);
     expect(c.nextSteps.join(' ')).toMatch(/Cobrar la cartera vencida/);
@@ -137,7 +137,7 @@ describe('compose: la misma fuente que las tarjetas de /estados', () => {
     expect(facts.ventas_ytd?.value).toBe(600_000_000);
     expect(facts.utilidad_neta_ytd?.value).toBe(140_000_000);
     // El mes sigue siendo de caja, y se dice.
-    expect(facts.ventas_mes?.display).toBe('$ 50 M');
+    expect(facts.ventas_mes?.display).toBe('$ 50.000.000');
     expect(text(c)).toMatch(/Siigo \(contable\)/);
     expect(text(c)).toMatch(/de caja/);
   });
@@ -208,10 +208,10 @@ describe('summary writer', () => {
 
   it('keeps a grounded draft', async () => {
     const lines = [
-      'En septiembre las ventas fueron $ 50 M, +25 % frente al año anterior.',
+      'En septiembre las ventas fueron $ 50.000.000, +25 % frente al año anterior.',
       'El año va bien contra el presupuesto.',
-      'La caja está en $ 30 M.',
-      'Hay $ 20 M por cobrar.',
+      'La caja está en $ 30.000.000.',
+      'Hay $ 20.000.000 por cobrar.',
       'Hay que decidir la sede de Cali.',
     ];
     const out = await writeBoardSummary(base, async () => lines);
@@ -223,7 +223,7 @@ describe('summary writer', () => {
     let calls = 0;
     const out = await writeBoardSummary(base, async () => {
       calls += 1;
-      return ['Vendimos $ 77 M.', 'Ganamos 42 %.', 'Todo bien.'];
+      return ['Vendimos $ 77.000.000.', 'Ganamos 42 %.', 'Todo bien.'];
     });
     expect(calls).toBe(2);
     expect(out.source).toBe('plantilla');

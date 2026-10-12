@@ -102,11 +102,12 @@ const ONE_DECIMAL = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 })
 const WHOLE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
 
 /**
- * Plata para leer de un vistazo. Pesos: «$ 38,5 M», «$ 950 mil», «−$ 3,2 M».
+ * Plata para leer de un vistazo. Pesos completos: «$ 38.500.000», «$ 950.000», «−$ 3.200.000»;
+ * sólo desde mil millones se abrevia: «$ 1,6 mil millones».
  * Otra moneda nunca se escribe con el signo del peso: «12.000 USD».
  *
- * La unidad se elige DESPUÉS de redondear: 999.950.000 es «$ 1 mil M» (no
- * «$ 1.000 M» ni «$ 999,9 M») y 999.500 es «$ 1 M» (no «$ 1.000 mil»).
+ * La unidad se elige DESPUÉS de redondear: 999.950.000 es «$ 1 mil millones»
+ * (no «$ 1.000 M» ni «$ 999,9 M»); por debajo, la cifra va entera.
  */
 export function formatMoney(value: number, currency = 'COP'): string {
   if (!Number.isFinite(value)) return '—';
@@ -116,9 +117,9 @@ export function formatMoney(value: number, currency = 'COP'): string {
     return `${sign}${WHOLE.format(n)} ${currency.toUpperCase()}`;
   // Décimas de millón y de mil millones ya redondeadas, para decidir la unidad.
   const tenthsOfM = Math.round(n / 1e5);
-  if (tenthsOfM >= 10_000) return `${sign}$ ${ONE_DECIMAL.format(Math.round(n / 1e8) / 10)} mil M`;
-  if (Math.round(n / 1e3) >= 1000) return `${sign}$ ${ONE_DECIMAL.format(tenthsOfM / 10)} M`;
-  if (n >= 1e3) return `${sign}$ ${WHOLE.format(Math.round(n / 1e3))} mil`;
+  // Pesos completos; sólo desde mil millones se abrevia (regla del dueño).
+  if (tenthsOfM >= 10_000)
+    return `${sign}$ ${ONE_DECIMAL.format(Math.round(n / 1e8) / 10)} mil millones`;
   return `${sign}$ ${WHOLE.format(n)}`;
 }
 

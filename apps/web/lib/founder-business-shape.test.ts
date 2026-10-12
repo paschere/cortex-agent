@@ -104,10 +104,10 @@ function risk(
 }
 
 describe('compactCop', () => {
-  it('lee millones con una coma decimal y miles sin decimales', () => {
-    expect(compactCop(38_500_000)).toBe('$ 38,5 M');
-    expect(compactCop(950_000)).toBe('$ 950 mil');
-    expect(compactCop(1_200_000_000)).toBe('$ 1,2 mil M');
+  it('pesos completos; sólo desde mil millones abrevia', () => {
+    expect(compactCop(38_500_000)).toBe('$ 38.500.000');
+    expect(compactCop(950_000)).toBe('$ 950.000');
+    expect(compactCop(1_200_000_000)).toBe('$ 1,2 mil millones');
     expect(compactCop(0)).toBe('$ 0');
   });
 });
@@ -129,7 +129,7 @@ describe('companyStatus', () => {
     );
     expect(status.label).toBe('Pide atención');
     expect(status.tone).toBe('amber');
-    expect(status.reasons).toEqual(['$ 38,5 M en cartera vencida', '2 procesos con error']);
+    expect(status.reasons).toEqual(['$ 38.500.000 en cartera vencida', '2 procesos con error']);
   });
 
   it('un cobro del plan pendiente es rosa', () => {
@@ -274,7 +274,7 @@ describe('rankActionItems', () => {
   it('ordena lo que más pesa primero y lo dice como lo diría una persona', () => {
     const items = rankActionItems(entries, { now: NOW });
     expect(items.map((i) => [i.companyName, i.text])).toEqual([
-      ['Transportes Andinos', '$ 38,5 M vencidos, 7 facturas'],
+      ['Transportes Andinos', '$ 38.500.000 vencidos, 7 facturas'],
       ['Test', '2 procesos fallando'],
       ['Andes Cargo', '4 decisiones esperando hace 3 días'],
       ['Nueva', 'puesta en marcha al 20 % · sigue: conecta tu correo'],
@@ -385,7 +385,7 @@ describe('rankActionItems', () => {
       { now: NOW },
     );
     expect(items.map((i) => i.kind)).toEqual(['decisions', 'payments']);
-    expect(items[1]?.text).toBe('$ 20 M por pagar esta semana');
+    expect(items[1]?.text).toBe('$ 20.000.000 por pagar esta semana');
   });
 
   it('es estable: mismo puntaje, orden por nombre', () => {

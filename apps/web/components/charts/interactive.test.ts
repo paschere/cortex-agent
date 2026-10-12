@@ -230,7 +230,7 @@ describe('pregúntale a Cortex', () => {
       rangePhrase: RANGES[1]?.phrase ?? '',
       from: '2026-09-11',
       to: '2026-10-10',
-      headline: '$ 48,2 M',
+      headline: '$ 48.200.000',
     });
     expect(p).toContain('«Caja»');
     expect(p).toContain('11 sep al 10 oct');

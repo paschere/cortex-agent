@@ -2,22 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { formatMoney, isNewFromZero, pctChange } from './forecast-shared';
 
 describe('formatMoney: la unidad se elige después de redondear', () => {
-  it('999.950.000 es «$ 1 mil M», no «$ 1000 M» ni «$ 999,9 M»', () => {
-    expect(formatMoney(999_950_000)).toBe('$ 1 mil M');
-    expect(formatMoney(999_949_999)).toBe('$ 999,9 M');
-    expect(formatMoney(1_000_000_000)).toBe('$ 1 mil M');
-    expect(formatMoney(1_240_000_000)).toBe('$ 1,2 mil M');
+  it('999.950.000 es «$ 1 mil millones», no «$ 1000 M» ni «$ 999,9 M»', () => {
+    expect(formatMoney(999_950_000)).toBe('$ 1 mil millones');
+    expect(formatMoney(999_949_999)).toBe('$ 999.949.999');
+    expect(formatMoney(1_000_000_000)).toBe('$ 1 mil millones');
+    expect(formatMoney(1_240_000_000)).toBe('$ 1,2 mil millones');
   });
 
-  it('999.500 es «$ 1 M» y 999.499 es «$ 999 mil»', () => {
-    expect(formatMoney(999_500)).toBe('$ 1 M');
-    expect(formatMoney(999_499)).toBe('$ 999 mil');
-    expect(formatMoney(1_000)).toBe('$ 1 mil');
+  it('999.500 y 999.499 van en pesos completos', () => {
+    expect(formatMoney(999_500)).toBe('$ 999.500');
+    expect(formatMoney(999_499)).toBe('$ 999.499');
+    expect(formatMoney(1_000)).toBe('$ 1.000');
     expect(formatMoney(999)).toBe('$ 999');
   });
 
   it('el signo, el cero negativo y lo no finito', () => {
-    expect(formatMoney(-999_950_000)).toBe('−$ 1 mil M');
+    expect(formatMoney(-999_950_000)).toBe('−$ 1 mil millones');
     expect(formatMoney(-0.4)).toBe('$ 0');
     expect(formatMoney(Number.NaN)).toBe('—');
     expect(formatMoney(Number.POSITIVE_INFINITY)).toBe('—');

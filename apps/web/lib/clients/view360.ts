@@ -48,9 +48,8 @@ export function shortMoney(value: number): string {
   const n = Math.abs(Math.round(value));
   const sign = value < 0 ? '−' : '';
   const one = (x: number) => x.toLocaleString('es-CO', { maximumFractionDigits: 1 });
-  if (n >= 1e9) return `${sign}$ ${one(n / 1e9)} mil M`;
-  if (n >= 1e6) return `${sign}$ ${one(n / 1e6)} M`;
-  if (n >= 1e3) return `${sign}$ ${Math.round(n / 1e3).toLocaleString('es-CO')} mil`;
+  // Pesos completos; sólo desde mil millones se abrevia (regla del dueño).
+  if (n >= 1e9) return `${sign}$ ${one(n / 1e9)} mil millones`;
   return `${sign}$ ${n.toLocaleString('es-CO')}`;
 }
 

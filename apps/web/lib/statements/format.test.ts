@@ -3,10 +3,10 @@ import { change, isNewFromZero, shortMoney } from './format';
 
 describe('formatos de estados', () => {
   it('shortMoney usa la misma regla de unidades que el resto de Finanzas', () => {
-    expect(shortMoney(999_950_000)).toBe('$ 1 mil M');
-    expect(shortMoney(999_500)).toBe('$ 1 M');
-    expect(shortMoney(38_500_000)).toBe('$ 38,5 M');
-    expect(shortMoney(-3_200_000)).toBe('−$ 3,2 M');
+    expect(shortMoney(999_950_000)).toBe('$ 1 mil millones');
+    expect(shortMoney(999_500)).toBe('$ 999.500');
+    expect(shortMoney(38_500_000)).toBe('$ 38.500.000');
+    expect(shortMoney(-3_200_000)).toBe('−$ 3.200.000');
   });
 
   it('change nunca devuelve Infinity ni NaN: base cero es «nuevo»', () => {

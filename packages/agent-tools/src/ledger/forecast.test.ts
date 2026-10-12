@@ -72,7 +72,7 @@ describe('la proyección de 13 semanas de Transportes del Valle', () => {
   it('caja inicial: sólo las cuentas en pesos; la de dólares queda por fuera y se dice', () => {
     expect(r.startingCash).toBe(60_500_000);
     expect(r.assumptions).toContain(
-      'Caja inicial $ 60,5 M: 2 cuentas en COP (Bancolombia corriente, Davivienda ahorros).',
+      'Caja inicial $ 60.500.000: 2 cuentas en COP (Bancolombia corriente, Davivienda ahorros).',
     );
     expect(r.assumptions).toContain(
       'Quedaron por fuera 1 cuenta en otra moneda (12.000 USD): la proyección es sólo en COP, sin convertir.',
@@ -187,16 +187,16 @@ describe('la proyección de 13 semanas de Transportes del Valle', () => {
       ['big_outflow', 'info', '2026-11-23'],
     ]);
     expect(r.alerts[0]?.message).toBe(
-      'La caja baja a $ 22,9 M la semana del 14 dic, por debajo de $ 35,8 M (un mes de gastos fijos).',
+      'La caja baja a $ 22.896.002 la semana del 14 dic, por debajo de $ 35.822.667 (un mes de gastos fijos).',
     );
     expect(r.alerts[1]?.message).toContain('Almacenes Éxito es el 65% de lo que se espera cobrar');
     // El Sol ya no es «mal pagador» (una anulada no cuenta como no cobrada),
     // pero su factura vencida hace 140 días sí se avisa.
     expect(r.alerts[2]?.message).toContain(
-      'Distribuidora El Sol tiene $ 8 M vencidos hace 140 días que se cuentan al 34%',
+      'Distribuidora El Sol tiene $ 8.000.000 vencidos hace 140 días que se cuentan al 34%',
     );
     expect(r.alerts[3]?.message).toBe(
-      'Pago grande: Pago a Autonorte · Cuota inicial camión, $ 60 M el 25 nov.',
+      'Pago grande: Pago a Autonorte · Cuota inicial camión, $ 60.000.000 el 25 nov.',
     );
   });
 
@@ -204,7 +204,7 @@ describe('la proyección de 13 semanas de Transportes del Valle', () => {
     expect(r.assumptions[0]).toBe(
       'Semanas de lunes a domingo en días de Bogotá, del 28 sep al 27 dic; la primera cuenta desde hoy, 2 oct.',
     );
-    expect(r.assumptions).toContain('Caja mínima: $ 35,8 M, un mes de los gastos que se repiten.');
+    expect(r.assumptions).toContain('Caja mínima: $ 35.822.667, un mes de los gastos que se repiten.');
     expect(r.assumptions).toContain(
       'No se proyectan ventas que todavía no se han facturado, salvo ingresos que se repiten.',
     );
@@ -305,7 +305,7 @@ describe('casos de borde', () => {
     expect(usd.currency).toBe('USD');
     expect(usd.startingCash).toBe(12_000);
     expect(itemsOf(usd, 'EXP-1')).toHaveLength(1);
-    expect(usd.assumptions.some((a) => a.includes('$ 60,5 M'))).toBe(true);
+    expect(usd.assumptions.some((a) => a.includes('$ 60.500.000'))).toBe(true);
     expect(formatMoney(usd.weeks[12]?.closing ?? 0, 'USD')).toMatch(/ USD$/);
   });
 
@@ -400,7 +400,7 @@ describe('casos de borde', () => {
     // El 28 dic ya cae después del domingo 27 dic.
     expect(rec.map((i) => i.expectedDate)).toEqual(['2026-10-28', '2026-11-28']);
     expect(rec[0]?.reason).toBe('se declaró que pasa cada mes hacia el día 28');
-    expect(r.assumptions).toContain('Caja mínima: $ 2 M, un mes de los gastos que se repiten.');
+    expect(r.assumptions).toContain('Caja mínima: $ 2.000.000, un mes de los gastos que se repiten.');
   });
 
   it('caja mínima fijada: el umbral decide la alerta', () => {
@@ -456,7 +456,7 @@ describe('escenarios', () => {
     );
     const cmp = compareScenarios(b, s);
     expect(cmp.summary).toBe(
-      'Si Nexa paga 30 días más tarde, la caja más baja pasa de $ 22,9 M (semana del 14 dic) a $ 16,3 M en la semana del 23 nov.',
+      'Si Nexa paga 30 días más tarde, la caja más baja pasa de $ 22.896.002 (semana del 14 dic) a $ 16.252.002 en la semana del 23 nov.',
     );
     expect(cmp.weeks).toHaveLength(13);
     for (const w of cmp.weeks) expect(w.delta).toBe(w.scenarioClosing - w.baseClosing);
@@ -510,7 +510,7 @@ describe('escenarios', () => {
       severity: 'warn',
     });
     expect(compareScenarios(b, s).summary).toBe(
-      'Si sale un pago único de $ 50 M el 1 dic («Saldo camión»), la caja más baja pasa de $ 22,9 M a −$ 27,1 M en la semana del 14 dic, y queda en rojo desde la semana del 30 nov.',
+      'Si sale un pago único de $ 50.000.000 el 1 dic («Saldo camión»), la caja más baja pasa de $ 22.896.002 a −$ 27.103.998 en la semana del 14 dic, y queda en rojo desde la semana del 30 nov.',
     );
   });
 
@@ -529,7 +529,7 @@ describe('escenarios', () => {
       'El escenario corre a «Fantasma», pero no hay nada suyo en la proyección.',
     );
     expect(compareScenarios(b, s).summary).toBe(
-      'Si Fantasma paga 10 días más tarde, la caja más baja no cambia: $ 22,9 M la semana del 14 dic.',
+      'Si Fantasma paga 10 días más tarde, la caja más baja no cambia: $ 22.896.002 la semana del 14 dic.',
     );
   });
 
@@ -572,7 +572,7 @@ describe('explicar una semana', () => {
       [...e.items.map((i) => i.expectedAmount)].sort((a, b) => b - a),
     );
     expect(e.summary).toBe(
-      'La semana del 23 nov abre con $ 71,8 M, entran $ 38 M y salen $ 61,3 M (lo que más pesa: Pago a Autonorte · Cuota inicial camión, salen $ 60 M) y cierra con $ 48,6 M.',
+      'La semana del 23 nov abre con $ 71.842.002, entran $ 38.000.000 y salen $ 61.250.000 (lo que más pesa: Pago a Autonorte · Cuota inicial camión, salen $ 60.000.000) y cierra con $ 48.592.002.',
     );
   });
 
@@ -585,7 +585,7 @@ describe('explicar una semana', () => {
   it('semana sin movimientos', () => {
     const empty = forecast({ asOf: AS_OF, currency: 'COP', accounts: accounts(), movements: [] });
     expect(explainWeek(empty, '2026-10-12').summary).toBe(
-      'La semana del 12 oct no tiene cobros ni pagos esperados: abre y cierra con $ 60,5 M.',
+      'La semana del 12 oct no tiene cobros ni pagos esperados: abre y cierra con $ 60.500.000.',
     );
   });
 });

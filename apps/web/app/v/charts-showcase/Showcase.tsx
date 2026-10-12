@@ -152,14 +152,14 @@ export function ChartsShowcase({ dark: initial }: { dark: boolean }) {
         >
           <Kpi
             title="Ventas del mes"
-            value="$ 48,2 M"
+            value="$ 48.200.000"
             values={[31, 28, 35, 40, 42, 38, 45, 48]}
             tone="primary"
             prev={38}
           />
           <Kpi
             title="Devoluciones"
-            value="$ 3,1 M"
+            value="$ 3.100.000"
             values={[2, 2.4, 2.1, 2.8, 3.4, 3.0, 3.3, 3.1]}
             tone="rose"
             prev={2.6}
@@ -332,42 +332,42 @@ export function ChartsShowcase({ dark: initial }: { dark: boolean }) {
               note="Una barra segmentada con 2 px entre tramos y la leyenda con montos."
             >
               <SegmentBar
-                total="$ 184,6 M"
+                total="$ 184.600.000"
                 totalLabel="Por cobrar"
                 items={[
                   {
                     key: 'c',
                     label: 'Al día',
                     value: 96.2,
-                    display: '$ 96,2 M',
+                    display: '$ 96.200.000',
                     color: CHART_COLOR.emerald,
                   },
                   {
                     key: '1',
                     label: '1–30 días',
                     value: 41.5,
-                    display: '$ 41,5 M',
+                    display: '$ 41.500.000',
                     color: CHART_COLOR.sky,
                   },
                   {
                     key: '2',
                     label: '31–60 días',
                     value: 27.3,
-                    display: '$ 27,3 M',
+                    display: '$ 27.300.000',
                     color: CHART_COLOR.amber,
                   },
                   {
                     key: '3',
                     label: '61–90 días',
                     value: 14.8,
-                    display: '$ 14,8 M',
+                    display: '$ 14.800.000',
                     color: CHART_COLOR.rose,
                   },
                   {
                     key: '4',
                     label: 'Más de 90',
                     value: 4.8,
-                    display: '$ 4,8 M',
+                    display: '$ 4.800.000',
                     color: 'rgb(var(--ink-muted))',
                   },
                 ]}
@@ -378,10 +378,10 @@ export function ChartsShowcase({ dark: initial }: { dark: boolean }) {
                 name="Ventas por cliente"
                 color={CHART_COLOR.primary}
                 items={[
-                  { label: 'Almacenes Éxito S.A.', value: 64, display: '$ 64,0 M' },
-                  { label: 'Servientrega S.A.', value: 41, display: '$ 41,0 M' },
-                  { label: 'Frigoandes Ltda.', value: 23, display: '$ 23,0 M' },
-                  { label: 'Distribuciones El Paisa', value: 9, display: '$ 9,0 M' },
+                  { label: 'Almacenes Éxito S.A.', value: 64, display: '$ 64.000.000' },
+                  { label: 'Servientrega S.A.', value: 41, display: '$ 41.000.000' },
+                  { label: 'Frigoandes Ltda.', value: 23, display: '$ 23.000.000' },
+                  { label: 'Distribuciones El Paisa', value: 9, display: '$ 9.000.000' },
                 ]}
               />
             </Block>

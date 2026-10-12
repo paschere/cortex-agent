@@ -22,7 +22,7 @@ export function fullMoney(n: number): string {
   return FULL.format(Math.round(n)).replace(/ /g, ' ');
 }
 
-/** «$ 38,5 M», «$ 950 mil», «$ 1 mil M»: la misma regla de unidades que el resto de Finanzas. */
+/** «$ 38.500.000», «$ 950.000», «$ 1,6 mil millones»: la misma regla de unidades que el resto de Finanzas. */
 export function shortMoney(n: number): string {
   return formatMoney(n);
 }

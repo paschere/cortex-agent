@@ -124,14 +124,14 @@ export function formatMoney(n: number, currency = 'COP'): string {
   ).format(n);
 }
 
-/** Cifras grandes en poco espacio: «$ 12,4 M». Para totales en tarjetas. */
+/** Cifras grandes en poco espacio: «$ 12.400.000» completo y «$ 1,6 mil millones» desde mil millones. Para totales en tarjetas. */
 export function formatCompactMoney(n: number, currency = 'COP'): string {
   const abs = Math.abs(n);
-  if (abs < 1_000_000) return formatMoney(n, currency);
+  // Pesos completos; sólo desde mil millones se abrevia (regla del dueño).
+  if (abs < 1_000_000_000) return formatMoney(n, currency);
   const sign = n < 0 ? '-' : '';
   const symbol = currency === 'COP' ? '$' : currency;
-  if (abs >= 1_000_000_000) return `${sign}${symbol} ${formatNumber(abs / 1_000_000_000, 1)} mil M`;
-  return `${sign}${symbol} ${formatNumber(abs / 1_000_000, 1)} M`;
+  return `${sign}${symbol} ${formatNumber(abs / 1_000_000_000, 1)} mil millones`;
 }
 
 export function formatPercent(n: number): string {

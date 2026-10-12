@@ -93,17 +93,20 @@ export function formatFull(n: number): string {
   return (n < 0 ? '−' : '') + GROUPED.format(Math.abs(Math.round(n)));
 }
 
-/** [divisor, sufijo, desde cuánto se usa]. «mil» desde 10.000: 1.240 se escribe entero. */
+/**
+ * [divisor, sufijo, desde cuánto se usa]. Regla del dueño: las cifras van
+ * completas en pesos («$ 48.215.000»); sólo desde los miles de millones se
+ * abrevian («$ 1,6 mil millones»), porque ahí el número entero ya no se lee.
+ */
 const UNITS: Array<[number, string, number]> = [
-  [1e12, ' B', 1e12],
-  [1e9, ' mil M', 1e9],
-  [1e6, ' M', 1e6],
-  [1e3, ' mil', 1e4],
+  [1e12, ' billones', 1e12],
+  [1e9, ' mil millones', 1e9],
 ];
 
 /**
- * Cifras cortas para el eje: «1.240», «48 mil», «48,2 M», «1,2 mil M».
- * Con `money`, «$ 48,2 M»; con `percent`, «12 %».
+ * Cifras para el eje: completas («1.240», «48.200.000») y sólo desde los miles
+ * de millones abreviadas («1,2 mil millones»). Con `money`, «$ 48.200.000»;
+ * con `percent`, «12 %».
  */
 export function formatCompact(
   n: number,
@@ -112,7 +115,7 @@ export function formatCompact(
   if (!Number.isFinite(n)) return '—';
   const abs = Math.abs(n);
   let body: string;
-  const unit = UNITS.find(([, , from]) => abs >= from);
+  const unit = UNITS.find(([, , from]) => Math.round(abs) >= from);
   if (unit) {
     const scaled = abs / unit[0];
     body = (scaled >= 100 ? GROUPED : ONE_DECIMAL).format(scaled) + unit[1];

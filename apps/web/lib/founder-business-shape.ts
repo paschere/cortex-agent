@@ -102,14 +102,13 @@ export type BusinessMap = Readonly<Record<string, CompanyBusiness>>;
 const ONE_DECIMAL = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
 const WHOLE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
 
-/** «$ 38,5 M», «$ 950 mil», «$ 1,2 mil M»: pesos para leer de un vistazo. */
+/** «$ 38.500.000», «$ 950.000», «$ 1,2 mil millones»: pesos para leer de un vistazo. */
 export function compactCop(value: number): string {
   const sign = value < 0 ? '−' : '';
   const n = Math.abs(value);
-  if (n >= 1e9) return `${sign}$ ${ONE_DECIMAL.format(n / 1e9)} mil M`;
-  if (n >= 1e6) return `${sign}$ ${ONE_DECIMAL.format(n / 1e6)} M`;
-  if (n >= 1e3) return `${sign}$ ${WHOLE.format(n / 1e3)} mil`;
-  return `${sign}$ ${WHOLE.format(n)}`;
+  // Pesos completos; sólo desde mil millones se abrevia (regla del dueño).
+  if (Math.round(n) >= 1e9) return `${sign}$ ${ONE_DECIMAL.format(n / 1e9)} mil millones`;
+  return `${sign}$ ${WHOLE.format(Math.round(n))}`;
 }
 
 /** «$ 38.512.000»: la cifra exacta, para el título o la ficha. */
@@ -294,7 +293,7 @@ export interface ActionItem {
   kind: ActionKind;
   companyId: string;
   companyName: string;
-  /** Lo que pasa, sin el nombre de la empresa: «$ 38,5 M vencidos, 7 facturas». */
+  /** Lo que pasa, sin el nombre de la empresa: «$ 38.500.000 vencidos, 7 facturas». */
   text: string;
   /** El botón: «Cobrar», «Revisar»… */
   cta: string;

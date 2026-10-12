@@ -22,9 +22,9 @@ function Mock({ label, title, children }: { label: string; title: string; childr
 
 function CarteraMock() {
   const rows = [
-    ['Nexa Logística', '34 días', '$8,4 M', 'Recordatorio listo'],
-    ['Ferretería El Puente', '61 días', '$3,1 M', 'Escalar'],
-    ['Agroandina', 'Vence hoy', '$5,0 M', 'Aviso enviado'],
+    ['Nexa Logística', '34 días', '$8.400.000', 'Recordatorio listo'],
+    ['Ferretería El Puente', '61 días', '$3.100.000', 'Escalar'],
+    ['Agroandina', 'Vence hoy', '$5.000.000', 'Aviso enviado'],
   ] as const;
   return (
     <Mock label="la cartera por cobrar hoy" title="Cartera · por cobrar hoy">
@@ -49,9 +49,9 @@ function CarteraMock() {
 
 function PulsoMock() {
   const tiles = [
-    ['Ventas del mes', '$182 M', '▲ vs. mes pasado'],
-    ['Cartera vencida', '$41 M', '▼ desde ayer'],
-    ['Caja hoy', '$96 M', 'Sobre el mínimo'],
+    ['Ventas del mes', '$182.000.000', '▲ vs. mes pasado'],
+    ['Cartera vencida', '$41.000.000', '▼ desde ayer'],
+    ['Caja hoy', '$96.000.000', 'Sobre el mínimo'],
   ] as const;
   return (
     <Mock label="el pulso diario de la empresa" title="Pulso de hoy · 7:00 a. m.">
