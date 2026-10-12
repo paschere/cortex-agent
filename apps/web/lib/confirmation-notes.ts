@@ -139,7 +139,7 @@ export function confirmationFollowUp(toolId: string, result: unknown): string {
       return `Aprobé y la pestaña ya quedó abierta${host ? ` en ${host}` : ''} (id de pestaña: ${sessionId}). La estoy viendo en vivo aquí en el chat. No la vuelvas a abrir: continúa ahí con lo que ibas a hacer.`;
     }
   }
-  return 'Aprobé y ya se ejecutó — el resultado quedó en la tarjeta de arriba. No lo repitas: continúa desde ahí.';
+  return 'Aprobé y ya se ejecutó. Sigue con el siguiente paso de lo que te pedí, sin repetir lo que ya quedó hecho.';
 }
 
 /**

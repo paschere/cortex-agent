@@ -1,4 +1,5 @@
 import { buildToolContext } from '@/lib/agent';
+import { approvedResultsBlock } from '@/lib/approved-results';
 import {
   ASK_CHOICE_DESCRIPTION,
   ASK_CHOICE_TOOL_ID,
@@ -11,6 +12,7 @@ import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { humanChatError } from '@/lib/chat-error';
 import { CITATION_RULE } from '@/lib/citations';
+import { isControlHandoffMessage } from '@/lib/confirmation-notes';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { querySheet, tableQuerySchema } from '@/lib/feed/table-query';
 import { enqueueJobs } from '@/lib/jobs';
@@ -1296,6 +1298,30 @@ export async function POST(req: NextRequest) {
         ...coreMessages.slice(0, -1),
         { ...last, content: `${turnBlocks}\n\n${last.content}` },
       ];
+    }
+  }
+  // LO APROBADO, CON SU RESULTADO. El mensaje de control «Aprobé y …» que
+  // escribe la tarjeta no trae qué salió; sin eso el paso siguiente de un
+  // pedido largo no sabe sobre qué tabla o vista seguir. Se pega aquí, sólo
+  // para el modelo. Ver lib/approved-results.ts.
+  if (lastUserMessage && isControlHandoffMessage(lastUserMessage.content) && lastAssistantRow?.id) {
+    try {
+      const { data: approvedRow, error: approvedError } = await db
+        .from('messages')
+        .select('tool_results')
+        .eq('id', lastAssistantRow.id)
+        .maybeSingle();
+      if (approvedError) throw approvedError;
+      const block = approvedResultsBlock(approvedRow?.tool_results);
+      const last = coreMessages[coreMessages.length - 1];
+      if (block && last && last.role === 'user' && typeof last.content === 'string') {
+        coreMessages = [
+          ...coreMessages.slice(0, -1),
+          { ...last, content: `${last.content}\n\n${block}` },
+        ];
+      }
+    } catch (err) {
+      logger.warn({ err, conversationId }, 'chat: approved results digest failed');
     }
   }
   if (glance) coreMessages = attachScreenFrame(coreMessages, glance);
