@@ -68,3 +68,26 @@ describe('la continuación automática', () => {
     expect(maxStepsFor(300_000)).toBe(12);
   });
 });
+
+describe('un turno mudo', () => {
+  const base = {
+    lastStepText: '',
+    lastStepHadTools: false,
+    finishReason: 'stop',
+    stepsUsed: 2,
+    maxSteps: 12,
+    pastSoft: false,
+    alreadyContinued: false,
+  };
+  it('sin una palabra en todo el turno se pide cerrar (el caso del mensaje vacío)', () => {
+    expect(shouldContinue({ ...base, turnHadNoText: true })).toBe('silent');
+    expect(continuationNudge('silent', '')).toContain('sin escribirle nada');
+  });
+  it('si una tarjeta espera a la persona, el silencio es correcto', () => {
+    expect(shouldContinue({ ...base, turnHadNoText: true, awaitingPerson: true })).toBeNull();
+  });
+  it('nunca dos continuaciones ni pasado el tiempo', () => {
+    expect(shouldContinue({ ...base, turnHadNoText: true, alreadyContinued: true })).toBeNull();
+    expect(shouldContinue({ ...base, turnHadNoText: true, pastSoft: true })).toBeNull();
+  });
+});

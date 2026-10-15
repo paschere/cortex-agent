@@ -690,6 +690,9 @@ body {
 .company-narration h3 { font-size: 24px; letter-spacing: -.02em; font-weight: 800; }
 .company-narration p { margin-block: 10px; max-width: 640px; color: rgb(var(--ink-muted)); font-size: 13px; line-height: 1.7; }
 .company-narration textarea { width: 100%; background: rgb(var(--canvas)); border: 1px solid rgb(var(--border)); border-radius: 12px; padding: 15px; margin-block: 10px; font-size: 14px; line-height: 1.8; resize: vertical; }
+/* Chat en oscuro: el compositor no lleva la sombra clara del papel y la cabecera queda quieta. */
+:root[data-theme="dark"] .chat-composer-dock form { box-shadow: 0 8px 30px -12px rgb(0 0 0 / .55); border-color: rgb(var(--border-strong)); }
+:root[data-theme="dark"] .cortex-chat > header { background: rgb(var(--surface) / .8); }
 .chat-header-link { font-size: 12px; font-weight: 500; color: rgb(var(--ink-muted)); padding: 8px 10px; border-radius: 9px; }
 .chat-header-link:hover { background: rgb(var(--surface-2)); color: rgb(var(--ink)); }
 .conversation-starts { width: 100%; max-width: 650px; text-align: left; margin: 14px auto 22px; }

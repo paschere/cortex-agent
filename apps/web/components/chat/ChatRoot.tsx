@@ -3,7 +3,7 @@
 import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
 import type { TaskBanner } from '@/lib/background-tasks/banner';
 import type { BrainSource } from '@/lib/brain-sources-shape';
-import { type ChatErrorKind, classifyClientChatError } from '@/lib/chat-error';
+import { CHAT_ERRORS, type ChatErrorKind, classifyClientChatError } from '@/lib/chat-error';
 import { type ScreenFrame, rememberFrame } from '@/lib/screen-marks';
 import type { ScreenGlance } from '@/lib/tab-recorder';
 import { type WaitingNoticeData, clipTitle } from '@/lib/waiting-shape';
@@ -12,7 +12,6 @@ import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
 import { Menu } from 'lucide-react';
-import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { BackgroundBanner } from './BackgroundBanner';
@@ -25,9 +24,11 @@ import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { Presence } from './Presence';
 import { useScreenView } from './ScreenView';
-import { useBackgroundTask } from './useBackgroundTask';
+import { StalledNotice } from './StalledNotice';
 import { ThreadAside, ThreadHistory } from './ThreadHistory';
 import { WaitingNotice } from './WaitingNotice';
+import { useBackgroundTask } from './useBackgroundTask';
+import { useTurnWatchdog } from './useTurnWatchdog';
 
 interface AgentInfo {
   slug: string;
@@ -330,6 +331,25 @@ export function ChatRoot({
   });
   const working = isLoading || bg.running;
 
+  // Un turno que se queda mudo no deja la pantalla esperando: aviso «sigue
+  // trabajando» si no llega nada, y error con Reintentar / Continuar si el
+  // stream cierra sin respuesta. Ver lib/turn-watchdog.ts.
+  const watchdog = useTurnWatchdog({
+    isLoading,
+    messages,
+    conversationId,
+    setMessages: (next) => setMessages(next),
+    stop,
+    onEmptyEnd: useCallback(
+      () =>
+        setBlocked(
+          (previous) =>
+            previous ?? { message: CHAT_ERRORS.cut, isLimit: false, kind: 'interrupted' },
+        ),
+      [],
+    ),
+  });
+
   /**
    * Los dos cabos de la vigilancia, atados al `useChat` que ya existe.
    *
@@ -516,15 +536,7 @@ export function ChatRoot({
               {messages.length > 0 && waiting && (waiting.total > 0 || waiting.lead) ? (
                 <WaitingNotice waiting={waiting} onAsk={handleSend} />
               ) : null}
-              <div className="flex min-w-0 shrink items-center gap-3">
-                <Link href="/management" className="chat-header-link">
-                  Agenda
-                </Link>
-                <Link href="/onboarding" className="chat-header-link hidden sm:inline-flex">
-                  Mi empresa
-                </Link>
-                <ThreadHistory />
-              </div>
+              <ThreadHistory />
             </header>
 
             {/*
@@ -551,6 +563,16 @@ export function ChatRoot({
               followUpsAbove
               {...(companyName ? { companyName } : {})}
             />
+
+            {watchdog.stalled && !blocked && (
+              <StalledNotice
+                onStop={watchdog.stopTurn}
+                onRetry={() => {
+                  watchdog.stopTurn();
+                  void reload();
+                }}
+              />
+            )}
 
             {blocked && (
               <ChatErrorCard
@@ -595,7 +617,7 @@ export function ChatRoot({
 
             <InputBar
               onSend={handleSend}
-              onStop={bg.running ? () => void bg.cancel() : stop}
+              onStop={bg.running ? () => void bg.cancel() : watchdog.stopTurn}
               background={backgroundMode}
               onBackgroundChange={setBackgroundMode}
               {...(isLoading && !bg.running && conversationId

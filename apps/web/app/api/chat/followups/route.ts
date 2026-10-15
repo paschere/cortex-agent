@@ -121,7 +121,7 @@ const SYSTEM = [
   '- Tienen que ser accionables: algo que se pueda averiguar o hacer, no una invitación a divagar.',
   '- Prohibido lo genérico. Nada de "¿quieres saber más?", "¿te amplío?", "¿quieres detalles?", "¿en qué más te ayudo?". Si no se te ocurre nada concreto, devuelve menos preguntas, o ninguna.',
   '- No repitas la pregunta que ya se hizo, ni pidas algo que la respuesta ya dio.',
-  '- Español de Colombia, tuteo, una línea cada una, máximo 90 caracteres.',
+  '- Español de Colombia con «tú»: nunca uses voseo («querés», «tenés», «podés», «sabés»); escribe «quieres», «tienes», «puedes», «sabes». Una línea cada una, máximo 90 caracteres.',
   '',
   'Formato: una pregunta por línea, sin numerar, sin viñetas, sin comillas y sin ninguna otra frase. Si no hay ninguna buena, no escribas nada.',
 ].join('\n');

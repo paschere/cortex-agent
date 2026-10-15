@@ -1,4 +1,5 @@
 import { isControlHandoffMessage } from './confirmation-notes';
+import { isContinuationMessage } from './continue-intent';
 
 /**
  * QUÉ SE LE PREGUNTA A BRAIN KNOWLEDGE ANTES DE CONTESTAR.
@@ -61,7 +62,7 @@ export function ragQueryFor(messages: readonly ChatLine[]): RagDecision {
   const last = users[users.length - 1]?.content.trim() ?? '';
   if (!last) return { run: false, reason: 'empty' };
   if (isControlHandoffMessage(last)) return { run: false, reason: 'control' };
-  if (ACKNOWLEDGMENT_RE.test(last) || GREETING_RE.test(last))
+  if (ACKNOWLEDGMENT_RE.test(last) || GREETING_RE.test(last) || isContinuationMessage(last))
     return { run: false, reason: 'acknowledgment' };
 
   if (words(last) >= SHORT_WORDS)
@@ -71,10 +72,23 @@ export function ragQueryFor(messages: readonly ChatLine[]): RagDecision {
     .slice(0, -1)
     .slice(-PREVIOUS_TURNS)
     .map((m) => m.content.trim())
-    .filter((text) => text && !isControlHandoffMessage(text) && !ACKNOWLEDGMENT_RE.test(text));
+    .filter(
+      (text) =>
+        text &&
+        !isControlHandoffMessage(text) &&
+        !ACKNOWLEDGMENT_RE.test(text) &&
+        !isContinuationMessage(text),
+    );
   if (!before.length) return { run: true, query: last, widened: false };
   // Lo último pesa más: va al final, que es donde el embedding lo lee con más
   // fuerza, y lo anterior se recorta primero si no cabe.
   const context = before.join(' · ').slice(-(MAX_QUERY_CHARS - last.length - 3));
   return { run: true, query: `${context} · ${last}`, widened: true };
+}
+
+/** Tope por fragmento pegado encima de la pregunta: un chunk enorme no pesa cada paso del turno. */
+export const MAX_FRAGMENT_CHARS = 2_000;
+
+export function clipFragment(text: string, max = MAX_FRAGMENT_CHARS): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }

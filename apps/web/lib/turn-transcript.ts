@@ -122,6 +122,10 @@ export const INTERRUPTION_NOTES: Record<Exclude<TurnOutcome, 'complete'>, string
     'Esta respuesta se cortó antes de terminar. Escríbeme «sigue» y continúo desde aquí sin repetir lo que ya hice.',
 };
 
+/** Un turno que terminó bien pero sin texto ni herramientas (el modelo no dijo nada). */
+export const NO_ANSWER_NOTE =
+  'No logré generar una respuesta esta vez. Escríbeme «sigue» o vuelve a pedírmelo.';
+
 export const formatNote = (note: string) => `_${note}_`;
 
 const NOTE_PATTERNS = Object.values(INTERRUPTION_NOTES).map(formatNote);
@@ -165,7 +169,18 @@ export function buildAssistantRecord(
     .trim();
   const toolCalls = steps.flatMap((s) => (s.toolCalls ?? []) as AssistantRecord['toolCalls']);
   const toolResults = steps.flatMap((s) => (s.toolResults ?? []) as AssistantRecord['toolResults']);
-  if (!text && toolCalls.length === 0) return null;
+  if (!text && toolCalls.length === 0) {
+    // Los puntos de control no escriben nada hasta que haya algo que guardar.
+    if (outcome === 'pending') return null;
+    // Todo turno termina con un mensaje del asistente, nunca con silencio: si
+    // no se produjo nada, la fila lleva la explicación (la pregunta ya está
+    // guardada y la persona ve qué pasó y qué hacer).
+    if (outcome === 'complete') {
+      return { content: NO_ANSWER_NOTE, toolCalls: [], toolResults: [], parts: null };
+    }
+    const note = formatNote(INTERRUPTION_NOTES[outcome]);
+    return { content: note, toolCalls: [], toolResults: [], parts: null };
+  }
 
   let parts: StoredPart[] | null = null;
   try {

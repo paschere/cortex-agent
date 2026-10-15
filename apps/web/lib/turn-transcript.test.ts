@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   INTERRUPTION_NOTES,
+  NO_ANSWER_NOTE,
   TurnTranscript,
   buildAssistantRecord,
   digestToolWork,
@@ -43,9 +44,16 @@ describe('lo producido, anotado mientras pasa', () => {
 });
 
 describe('la fila que se guarda', () => {
-  it('NUNCA un mensaje vacío: sin texto ni herramientas no hay fila', () => {
-    expect(buildAssistantRecord([], 'error')).toBeNull();
-    expect(buildAssistantRecord([{ text: '  ' }], 'deadline')).toBeNull();
+  it('NUNCA un mensaje vacío ni un turno mudo: sin nada producido la fila lleva la nota', () => {
+    expect(buildAssistantRecord([], 'error')?.content).toBe(formatNote(INTERRUPTION_NOTES.error));
+    expect(buildAssistantRecord([{ text: '  ' }], 'deadline')?.content).toBe(
+      formatNote(INTERRUPTION_NOTES.deadline),
+    );
+    expect(buildAssistantRecord([], 'client')?.content).toBe(formatNote(INTERRUPTION_NOTES.client));
+    // Terminó bien pero el modelo no dijo nada: explicación, no silencio.
+    expect(buildAssistantRecord([], 'complete')?.content).toBe(NO_ANSWER_NOTE);
+    // Los puntos de control no escriben nada hasta tener algo que guardar.
+    expect(buildAssistantRecord([], 'pending')).toBeNull();
   });
 
   it('un turno cortado lleva su nota en content y en parts, con la herramienta a medias', () => {

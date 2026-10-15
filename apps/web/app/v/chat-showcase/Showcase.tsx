@@ -1,12 +1,12 @@
 'use client';
 
+import { BackgroundBanner } from '@/components/chat/BackgroundBanner';
 import {
   ArtifactPanel,
   type ChatArtifact,
   ChatArtifactsProvider,
   type PanelTab,
 } from '@/components/chat/ChatArtifacts';
-import { BackgroundBanner } from '@/components/chat/BackgroundBanner';
 import { ChatComposeProvider } from '@/components/chat/ChatCompose';
 import { ChatErrorCard } from '@/components/chat/ChatErrorCard';
 import { ConversationHeader } from '@/components/chat/ConversationHeader';
@@ -109,6 +109,49 @@ const PLAN_INVS = [
         { id: '3', status: 'in_progress', note: 'Esperando el código de verificación' },
       ],
     },
+  },
+];
+
+const LONG_ANSWER = `Revisé las tres fuentes y esto es lo que encontré sobre los **prealertas** y las atenciones de la semana:
+
+- Hay 14 prealertas abiertas, 6 con más de tres días sin movimiento.
+- Los vuelos de AWB PARCIAL MERFLEX 2026 tienen dos guías sin factura asociada.
+- Las atenciones de Aduanas quedaron todas cerradas, salvo la de Transmar.
+
+| Frente | Abiertos | Críticos |
+| --- | --- | --- |
+| Prealertas | 14 | 6 |
+| Vuelos | 9 | 2 |
+| Atenciones | 5 | 1 |
+
+Puedo cruzar estos tres frentes contra las facturas de Siigo para saber cuáles ya están cobradas y cuáles siguen pendientes, y dejarte una vista con las guías sin factura. Antes de tocar nada necesito tu aprobación para crear el registro en la hoja de seguimiento y marcar las existentes (Prealertas, Vuelos, Atenciones) sin duplicar nada de lo que ya está cargado por el equipo de operaciones en la carpeta compartida.`;
+
+const LONG_MESSAGES: Message[] = [
+  {
+    id: 'lu1',
+    role: 'user',
+    content:
+      'Necesito que revises el seguimiento de prealertas, vuelos y atenciones de esta semana contra las facturas de Siigo y me digas qué guías no tienen factura. Además quiero que armes una vista con eso, que no dupliques lo que ya cargó operaciones, y que si encuentras algo crítico me lo marques primero. Usa la hoja AWB PARCIAL MERFLEX 2026 como base y avísame si algo no cuadra con lo que tiene el cliente.',
+    createdAt: new Date('2026-10-09T09:00:00'),
+  },
+  {
+    id: 'la1',
+    role: 'assistant',
+    content: LONG_ANSWER,
+    createdAt: new Date('2026-10-09T09:01:00'),
+  },
+  {
+    id: 'lu2',
+    role: 'user',
+    content: 'Aprobé y ya se ejecutó la acción. Continúa con lo que sigue.',
+    createdAt: new Date('2026-10-09T09:02:00'),
+  },
+  {
+    id: 'la2',
+    role: 'assistant',
+    content:
+      'Listo, creé el registro en la hoja de seguimiento y marqué las guías sin factura. Quedaron 3 críticas arriba de la vista. Última línea de esta respuesta: ya puedes revisar la vista completa y dime si quieres que avise a Operaciones.',
+    createdAt: new Date('2026-10-09T09:03:00'),
   },
 ];
 
@@ -312,6 +355,7 @@ export function ChatShowcase({
   navegador = null,
   archivos = false,
   tarea = null,
+  largo = false,
 }: {
   dark: boolean;
   error: string | null;
@@ -323,6 +367,7 @@ export function ChatShowcase({
   navegador?: 'normal' | 'ayuda' | null;
   archivos?: boolean;
   tarea?: 'trabajando' | 'necesita' | null;
+  largo?: boolean;
 }) {
   const [background, setBackground] = useState(false);
   const [client] = useState(() => {
@@ -333,12 +378,17 @@ export function ChatShowcase({
         { id: 's1', label: 'Siigo', tone: 'ok' },
         { id: 's2', label: 'Correo', tone: 'ok' },
         { id: 's3', label: 'Drive', tone: 'attention' },
+        { id: 's4', label: 'AWB PARCIAL MERFLEX 2026', tone: 'ok' },
+        { id: 's4', label: 'AWB PARCIAL MERFLEX 2026', tone: 'ok' },
+        { id: 's5', label: 'Alegra', tone: 'ok' },
       ],
     });
     c.setQueryData(['chat-mentions', 'Fri'], MENTION_GROUPS);
     return c;
   });
-  const [title, setTitle] = useState('Quién me debe y cómo cobro');
+  const [title, setTitle] = useState(
+    largo ? 'Guías sin factura de Merflex' : 'Quién me debe y cómo cobro',
+  );
   const [shown, setShown] = useState(error !== 'ninguno');
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
@@ -416,7 +466,19 @@ export function ChatShowcase({
               </header>
               <MessageList
                 companyName="Distribuciones del Caribe S.A.S."
-                messages={empty ? [] : approve ? [...MESSAGES, APPROVAL] : MESSAGES}
+                messages={
+                  empty
+                    ? []
+                    : largo
+                      ? [
+                          ...LONG_MESSAGES,
+                          ...MESSAGES,
+                          ...LONG_MESSAGES.map((m) => ({ ...m, id: `${m.id}-b` })),
+                        ]
+                      : approve
+                        ? [...MESSAGES, APPROVAL]
+                        : MESSAGES
+                }
                 isLoading={false}
                 {...(approve ? { conversationId: 'demo' } : {})}
                 agent={{ slug: 'cortex', name: 'Cortex' } as never}
@@ -444,7 +506,11 @@ export function ChatShowcase({
                     dock
                     messageId="a1"
                     ready
-                    stored={['Prepara los de Transmar también', 'Guárdalo como vista']}
+                    stored={[
+                      'Prepara los de Transmar también',
+                      '¿Cuándo querés que lo envíe?',
+                      '¿Ya tenés la guía de Merflex?',
+                    ]}
                     onPick={() => {}}
                   />
                 </div>

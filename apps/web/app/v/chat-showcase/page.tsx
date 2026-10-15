@@ -8,7 +8,7 @@ import { ChatShowcase } from './Showcase';
  * (URLs de Drive, tabla de ocho columnas, código largo, chips con argumentos
  * largos, el aviso de error). Parámetros: `?modo=oscuro`, `?error=limite`,
  * `?error=ninguno`, `?vacio=1` (chat nuevo), `?panel=1` (panel derecho abierto; `fuentes` o `actividad` abren esa pestaña), `?aprobar=1` (tarjeta de aprobación),
- * `?arroba=1` (menú de @ abierto), `?archivos=1` (pestaña «Archivos» del panel con archivos de mentira), `?tarea=1` / `?tarea=necesita` (la franja de una tarea en segundo plano), `?navegador=1` (panel Navegador con una sesión de mentira; `ayuda` pide tus manos).
+ * `?largo=1` (conversación larga como la captura: pedido largo, respuesta larga, mensaje de control, respuesta final y pastillas), `?arroba=1` (menú de @ abierto), `?archivos=1` (pestaña «Archivos» del panel con archivos de mentira), `?tarea=1` / `?tarea=necesita` (la franja de una tarea en segundo plano), `?navegador=1` (panel Navegador con una sesión de mentira; `ayuda` pide tus manos).
  */
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +33,7 @@ export default async function ChatShowcasePage({
       tarea={one('tarea') === 'necesita' ? 'necesita' : one('tarea') === '1' ? 'trabajando' : null}
       approve={one('aprobar') === '1'}
       mention={one('arroba') === '1'}
+      largo={one('largo') === '1'}
       navegador={
         one('navegador') === 'ayuda' ? 'ayuda' : one('navegador') === '1' ? 'normal' : null
       }

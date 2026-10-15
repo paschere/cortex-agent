@@ -1,5 +1,4 @@
 import { buildToolContext } from '@/lib/agent';
-import { approvedResultsBlock } from '@/lib/approved-results';
 import {
   ASK_CHOICE_DESCRIPTION,
   ASK_CHOICE_TOOL_ID,
@@ -13,10 +12,13 @@ import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attac
 import { humanChatError } from '@/lib/chat-error';
 import { CITATION_RULE } from '@/lib/citations';
 import { isControlHandoffMessage } from '@/lib/confirmation-notes';
+import { followOnBlock, isContinuationMessage } from '@/lib/continue-intent';
+import { firstRealRequest, looksBadTitle, titleFromText } from '@/lib/conversation-title';
+import { generateConversationTitle } from '@/lib/conversation-title-gen';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { querySheet, tableQuerySchema } from '@/lib/feed/table-query';
 import { enqueueJobs } from '@/lib/jobs';
-import { ragQueryFor } from '@/lib/rag-query';
+import { clipFragment, ragQueryFor } from '@/lib/rag-query';
 import {
   POINT_AT_DESCRIPTION,
   POINT_AT_TOOL_ID,
@@ -56,12 +58,14 @@ import {
   turnOutcome,
 } from '@/lib/turn-persist';
 import {
+  INTERRUPTION_NOTES,
   TurnTranscript,
   digestToolWork,
+  formatNote,
   isInterruptedContent,
   withoutNotes,
 } from '@/lib/turn-transcript';
-import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
+import { chatModel } from '@cortex/agent-tools';
 import {
   type AnyTool,
   CUSTOM_TOOL_FAMILY,
@@ -102,7 +106,6 @@ import {
   type CoreTool,
   createDataStreamResponse,
   formatDataStreamPart,
-  generateText,
   jsonSchema,
   streamText,
   tool,
@@ -187,7 +190,62 @@ const Body = z.object({
   screen: ScreenGlanceSchema.optional(),
 });
 
+/**
+ * Lo que el envoltorio de POST necesita saber para no dejar un turno mudo: en
+ * cuanto la pregunta de la persona queda guardada, el turno ES nuestro y debe
+ * terminar con una respuesta del asistente guardada, salga como salga.
+ */
+interface TurnGuard {
+  db: ReturnType<typeof getOrgScopedClient> | null;
+  conversationId: string | null;
+  /** `after()` ya está registrado: él guarda la respuesta (o el error). */
+  afterOwnsPersistence: boolean;
+}
+
 export async function POST(req: NextRequest) {
+  const guard: TurnGuard = { db: null, conversationId: null, afterOwnsPersistence: false };
+  try {
+    return await handleChat(req, guard);
+  } catch (err) {
+    // Sin conversación todavía no hay turno (sesión, cuerpo inválido…): se deja
+    // propagar tal cual, incluidas las redirecciones de Next.
+    if (!guard.db || !guard.conversationId) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(
+      {
+        conversationId: guard.conversationId,
+        reason: 'exception-before-stream',
+        message: message.slice(0, 4000),
+        name: err instanceof Error ? err.name : undefined,
+        stack: err instanceof Error ? err.stack?.slice(0, 4000) : undefined,
+      },
+      'chat stream error',
+    );
+    if (!guard.afterOwnsPersistence) {
+      try {
+        await guard.db.from('messages').insert({
+          conversation_id: guard.conversationId,
+          role: 'assistant',
+          content: formatNote(INTERRUPTION_NOTES.error),
+        });
+      } catch (persistErr) {
+        logger.error(
+          {
+            conversationId: guard.conversationId,
+            message: persistErr instanceof Error ? persistErr.message : String(persistErr),
+          },
+          'chat: could not persist the failure message',
+        );
+      }
+    }
+    return new Response(humanChatError(message), {
+      status: 500,
+      headers: { 'X-Conversation-Id': guard.conversationId, 'Content-Type': 'text/plain' },
+    });
+  }
+}
+
+async function handleChat(req: NextRequest, guard: TurnGuard) {
   // The clock starts before anything else happens, including the session
   // lookup, because the person's wait started before that too. Constructing it
   // is one `performance.now()`; it holds no handle to anything and writes
@@ -290,7 +348,10 @@ export async function POST(req: NextRequest) {
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
 
   if (!conversationId) {
-    const title = (lastUserMessage?.content ?? 'New conversation').slice(0, 60);
+    const title = titleFromText(
+      firstRealRequest(messages) ?? lastUserMessage?.content ?? 'Conversación nueva',
+      60,
+    );
     const { data: conv, error: convErr } = await db
       .from('conversations')
       .insert({
@@ -309,6 +370,8 @@ export async function POST(req: NextRequest) {
 
   // Persist the user's last message
   const glance = parsed.data.screen;
+  guard.db = db;
+  guard.conversationId = conversationId;
   if (lastUserMessage) {
     await db.from('messages').insert({
       conversation_id: conversationId,
@@ -579,7 +642,7 @@ export async function POST(req: NextRequest) {
                 // a different claim from the same rate quoted last week.
                 `[^${i + 1}] ${h.documentTitle} ${h.spokenAt ? `at ${h.spokenAt}` : `chunk ${h.chunkIndex}`}` +
                 `${h.age ? ` · ${h.age}` : ''}${h.relevance === 'weak' ? ' · coincidencia débil' : ''}:\n` +
-                `${h.spokenAt ? `[${h.spokenAt}] ` : ''}${h.content}`,
+                `${h.spokenAt ? `[${h.spokenAt}] ` : ''}${clipFragment(h.content)}`,
             )
             .join('\n\n') +
           (ragOut.conflicts && ragOut.conflicts.length > 0
@@ -1311,19 +1374,26 @@ export async function POST(req: NextRequest) {
       ];
     }
   }
-  // LO APROBADO, CON SU RESULTADO. El mensaje de control «Aprobé y …» que
-  // escribe la tarjeta no trae qué salió; sin eso el paso siguiente de un
-  // pedido largo no sabe sobre qué tabla o vista seguir. Se pega aquí, sólo
-  // para el modelo. Ver lib/approved-results.ts.
-  if (lastUserMessage && isControlHandoffMessage(lastUserMessage.content) && lastAssistantRow?.id) {
+  // SEGUIR DESPUÉS DE UNA APROBACIÓN O DE UN «SIGUE». El mensaje de control
+  // «Aprobé y …» no trae qué salió, y un «va» / «dale» / «continua» suelto no
+  // dice qué hacer; sin esto el modelo respondía «no tengo contexto» o se
+  // detenía a mitad del plan. Se pega sólo para el modelo: lo ejecutado, el
+  // estado del plan y lo pendiente. Ver lib/continue-intent.ts y
+  // lib/approved-results.ts.
+  const followIsControl = Boolean(
+    lastUserMessage && isControlHandoffMessage(lastUserMessage.content),
+  );
+  if (lastUserMessage && (followIsControl || isContinuationMessage(lastUserMessage.content))) {
     try {
-      const { data: approvedRow, error: approvedError } = await db
+      const { data: recentRows, error: recentError } = await db
         .from('messages')
-        .select('tool_results')
-        .eq('id', lastAssistantRow.id)
-        .maybeSingle();
-      if (approvedError) throw approvedError;
-      const block = approvedResultsBlock(approvedRow?.tool_results);
+        .select('content, tool_results')
+        .eq('conversation_id', conversationId)
+        .eq('role', 'assistant')
+        .order('created_at', { ascending: false })
+        .limit(6);
+      if (recentError) throw recentError;
+      const block = followOnBlock(lastUserMessage.content, recentRows ?? [], followIsControl);
       const last = coreMessages[coreMessages.length - 1];
       if (block && last && last.role === 'user' && typeof last.content === 'string') {
         coreMessages = [
@@ -1332,7 +1402,10 @@ export async function POST(req: NextRequest) {
         ];
       }
     } catch (err) {
-      logger.warn({ err, conversationId }, 'chat: approved results digest failed');
+      logger.warn(
+        { conversationId, message: err instanceof Error ? err.message : String(err) },
+        'chat: follow-on digest failed',
+      );
     }
   }
   if (glance) coreMessages = attachScreenFrame(coreMessages, glance);
@@ -1445,6 +1518,31 @@ export async function POST(req: NextRequest) {
       },
     });
 
+  /**
+   * Último recurso: si tras todo lo anterior no hay fila del asistente, se
+   * escribe la nota de error. Un turno sin respuesta guardada es lo que la
+   * persona vive como «se quedó colgado».
+   */
+  const ensureAssistantRow = async (why: string) => {
+    if (persister.id()) return;
+    logger.error(
+      { conversationId, reason: why, steps: stepsUsed },
+      'chat: turn ended without a persisted assistant message',
+    );
+    try {
+      await db.from('messages').insert({
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: formatNote(INTERRUPTION_NOTES.error),
+      });
+    } catch (err) {
+      logger.error(
+        { conversationId, message: err instanceof Error ? err.message : String(err) },
+        'chat: could not persist the fallback assistant message',
+      );
+    }
+  };
+
   // Se resuelve cuando el turno terminó DE CUALQUIER FORMA (ver `execute`).
   let markEnded: () => void = () => {};
   const ended = new Promise<void>((resolve) => {
@@ -1475,12 +1573,18 @@ export async function POST(req: NextRequest) {
       const outcome = turnOutcome({ interrupted: budget.reason(), finished, errored });
       budget.dispose();
       if (outcome !== 'complete') {
-        logger.warn('chat: turn interrupted', {
+        const detail = {
           conversationId,
           outcome,
+          reason: budget.reason() ?? (errored ? 'model-or-stream-error' : 'not-finished'),
           elapsedMs: Date.now() - startedWall,
           steps: stepsUsed,
-        });
+          producedAnything: transcript.steps().length > 0,
+        };
+        // Un corte nuestro (tiempo, cliente) es esperable; un error o un turno
+        // que no cerró sin que nadie lo cortara, no: va como error con todo el contexto.
+        if (outcome === 'error') logger.error(detail, 'chat: turn ended in error');
+        else logger.warn('chat: turn interrupted', detail);
       }
 
       const steps = transcript.steps();
@@ -1508,22 +1612,29 @@ export async function POST(req: NextRequest) {
       }
 
       const assistantMessageId = await persister.finalize(steps, outcome);
+      if (!assistantMessageId) await ensureAssistantRow('finalize-returned-no-row');
 
       if (assistantMessageId) {
-        const isFirstTurn = coreMessages.filter((m) => m.role === 'assistant').length <= 1;
-        if (isFirstTurn && lastUserMessage) {
+        const titleSource = firstRealRequest(messages);
+        if (titleSource) {
           void (async () => {
             try {
-              const { text: titleText } = await generateText({
-                model: utilityModel(),
-                prompt: `Summarize this sales conversation starter in 5 words or fewer, no punctuation: "${lastUserMessage.content.slice(0, 200)}"`,
-                providerOptions: NO_THINKING,
-                maxTokens: 256,
-              });
-              await db
+              // Sólo se titula mientras el título siga siendo el provisional o uno malo:
+              // un título renombrado a mano no se toca.
+              const { data: current } = await db
                 .from('conversations')
-                .update({ title: titleText.trim() })
-                .eq('id', conversationId);
+                .select('title')
+                .eq('id', conversationId)
+                .maybeSingle();
+              if (
+                current &&
+                !looksBadTitle(current.title as string | null) &&
+                !(current.title as string).endsWith('…')
+              ) {
+                return;
+              }
+              const title = await generateConversationTitle(titleSource);
+              await db.from('conversations').update({ title }).eq('id', conversationId);
             } catch {
               /* non-fatal */
             }
@@ -1562,9 +1673,14 @@ export async function POST(req: NextRequest) {
       logger.error('chat: post-turn persistence failed', {
         conversationId,
         message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack?.slice(0, 2000) : undefined,
       });
+      // Si lo de después de guardar falló pero la respuesta no quedó, que quede
+      // al menos la explicación: nunca un turno sin mensaje del asistente.
+      await ensureAssistantRow('post-turn-exception');
     }
   });
+  guard.afterOwnsPersistence = true;
 
   return createDataStreamResponse({
     headers: { 'X-Conversation-Id': conversationId },
@@ -1599,9 +1715,26 @@ export async function POST(req: NextRequest) {
         // UNA continuación automática cuando el turno terminó en una promesa o
         // sin pasos (lib/turn-continuation.ts). Sólo si el primer tramo terminó
         // bien y queda tiempo.
+        const turnSteps = transcript.steps();
+        const turnHadNoText = !turnSteps.some((st) => (st.text ?? '').trim().length > 0);
+        const awaitingPerson = turnSteps.some((st) =>
+          ((st.toolResults ?? []) as { toolName?: string; result?: unknown }[]).some((r) => {
+            const res = r.result as Record<string, unknown> | null | undefined;
+            return (
+              r.toolName === ASK_CHOICE_TOOL_NAME ||
+              Boolean(
+                res &&
+                  typeof res === 'object' &&
+                  (res.__requires_confirmation || res.__confirmation_in_progress),
+              )
+            );
+          }),
+        );
         const kind =
           finished && !errored && !budget.reason()
             ? shouldContinue({
+                turnHadNoText,
+                awaitingPerson,
                 lastStepText,
                 lastStepHadTools,
                 finishReason: lastFinishReason,
@@ -1616,11 +1749,11 @@ export async function POST(req: NextRequest) {
           logger.info('chat: auto-continuing turn', { conversationId, kind, stepsUsed });
           finished = false;
           const second = runModel(
-            [
+            sanitizeHistory([
               ...coreMessages,
               ...(response.messages as CoreMessage[]),
               { role: 'user', content: continuationNudge(kind, lastStepText) },
-            ],
+            ]),
             kind === 'steps' ? 1 : Math.max(maxSteps - stepsUsed, 4),
           );
           second.mergeIntoDataStream(target as never, mergeOptions);

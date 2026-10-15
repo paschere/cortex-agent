@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireSession();
+  // Costo y tokens: sólo para administradores; el resto no ve esa cifra.
+  if (user.role !== 'org_admin') return NextResponse.json({ cost: null });
   const db = getOrgScopedClient(user.organization.id);
   const { data: conv, error } = await db
     .from('conversations')

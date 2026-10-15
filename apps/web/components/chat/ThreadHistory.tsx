@@ -289,7 +289,7 @@ function ThreadItem({
         className={clsx(
           'flex min-w-0 items-center gap-2 rounded-sm py-2 pl-2.5 pr-9 text-sm transition-colors duration-150 motion-reduce:transition-none',
           active
-            ? 'bg-surface font-semibold text-ink shadow-card ring-1 ring-inset ring-border'
+            ? 'bg-surface-2 font-medium text-ink'
             : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
         )}
       >

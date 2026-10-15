@@ -202,22 +202,6 @@ export function ConversationHeader({ conversationId, title, onTitle, scope, mess
               {restScope > 0 && <span>+{restScope}</span>}
             </>
           )}
-          {cost.data && (
-            <span
-              className="tabular ml-1 font-mono"
-              title="Lo que ha costado esta conversación (estimado, a la tasa de la empresa)"
-            >
-              · {cost.data.line}
-            </span>
-          )}
-          {total && metrics && (
-            <span className="tabular ml-1 font-mono">
-              · {total}
-              {metrics.toolCalls > 0
-                ? ` · ${metrics.toolCalls} ${metrics.toolCalls === 1 ? 'paso' : 'pasos'}`
-                : ''}
-            </span>
-          )}
         </div>
       </div>
       <HeaderActions
@@ -239,6 +223,24 @@ export function ConversationHeader({ conversationId, title, onTitle, scope, mess
                 onCloseAutoFocus={() => setArmed(false)}
                 className="z-[70] w-56 rounded-card border border-border bg-surface p-1.5 shadow-pop"
               >
+                {(cost.data || (total && metrics)) && (
+                  <>
+                    <div className="tabular px-2.5 py-1.5 font-mono text-micro leading-relaxed text-ink-faint">
+                      {cost.data && (
+                        <div title="Estimado, a la tasa de la empresa">{cost.data.line}</div>
+                      )}
+                      {total && metrics && (
+                        <div>
+                          {total}
+                          {metrics.toolCalls > 0
+                            ? ` · ${metrics.toolCalls} ${metrics.toolCalls === 1 ? 'paso' : 'pasos'}`
+                            : ''}
+                        </div>
+                      )}
+                    </div>
+                    <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                  </>
+                )}
                 <DropdownMenu.Item
                   className={menuItem}
                   disabled={!conversationId}

@@ -460,6 +460,34 @@ export function MessageList({
     el.scrollTo({ top: el.scrollHeight, behavior: still ? 'auto' : 'smooth' });
   }, [messages, isLoading]);
 
+  /**
+   * El área de abajo (pastillas + compositor) cambia de alto —aparecen los
+   * seguimientos, se abre el teclado, crece el compositor— y el visor se encoge
+   * sin que `messages` cambie: lo último leído quedaba tapado por debajo. Si la
+   * persona estaba al fondo, se queda al fondo cuando el visor o el contenido
+   * cambian de tamaño.
+   */
+  const hasMessages = messages.length > 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hasMessages cambia el hijo observado.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let pinned = true;
+    const onScroll = () => {
+      pinned = el.scrollHeight - el.scrollTop - el.clientHeight < STUCK_TO_BOTTOM_PX * 2;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    const ro = new ResizeObserver(() => {
+      if (pinned && landed.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      ro.disconnect();
+    };
+  }, [conversationId, hasMessages]);
+
   const empty = messages.length === 0 && !isLoading;
   const turns = useMemo(() => turnsOf(messages), [messages]);
 
@@ -504,7 +532,7 @@ export function MessageList({
           />
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-[45rem] space-y-11 px-4 py-8 sm:px-6">
+        <div className="mx-auto w-full max-w-[45rem] space-y-11 px-4 pt-8 pb-10 sm:px-6">
           {turns.map((turn) => (
             // 14px por dentro contra los 44px de `space-y-11` que separan los
             // turnos. Ver `turnsOf` para por qué la diferencia es el diseño.

@@ -1,3 +1,5 @@
+import { toTuteo } from './es-co';
+
 /**
  * THE BAR A FOLLOW-UP QUESTION HAS TO CLEAR.
  *
@@ -127,7 +129,7 @@ export function keepIfSpecific(
 
 /** Split the model's reply into candidates, tolerating bullets and quotes. */
 export function parseSuggestions(text: string): string[] {
-  return text
+  return toTuteo(text)
     .split('\n')
     .map((line) =>
       line

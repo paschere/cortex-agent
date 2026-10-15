@@ -150,7 +150,7 @@ describe('un turno que se corta por tiempo', () => {
 });
 
 describe('un turno que falla antes de producir nada', () => {
-  it('no se cuelga, no guarda un mensaje vacío y la persona ve el error humano', async () => {
+  it('no se cuelga, guarda la nota de error (nunca silencio ni vacío) y la persona ve el error humano', async () => {
     const model = new MockLanguageModelV1({
       doStream: async () => {
         throw new Error('messages: text content blocks must be non-empty');
@@ -159,8 +159,8 @@ describe('un turno que falla antes de producir nada', () => {
     const budget = createTurnBudget({ limitMs: 60_000, startedAt: Date.now() });
     const { body, outcome, id, table } = await runTurn(model, budget);
     expect(outcome).toBe('error');
-    expect(id).toBeNull();
-    expect(table.log).toEqual([]);
+    expect(id).toBe('m1');
+    expect(table.log).toEqual(['insert:m1']);
     expect(body).toContain('3:"error humano"');
   });
 });

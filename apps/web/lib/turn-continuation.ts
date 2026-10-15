@@ -81,7 +81,7 @@ export function promisesAction(text: string): boolean {
   return announces(tail);
 }
 
-export type ContinuationKind = 'promise' | 'steps';
+export type ContinuationKind = 'promise' | 'steps' | 'silent';
 
 /** Decide si el turno merece UNA continuación automática. */
 export function shouldContinue(input: {
@@ -92,8 +92,17 @@ export function shouldContinue(input: {
   maxSteps: number;
   pastSoft: boolean;
   alreadyContinued: boolean;
+  /** El turno entero no escribió ni una palabra (sólo herramientas, o nada). */
+  turnHadNoText?: boolean;
+  /** Alguna herramienta quedó esperando la aprobación de la persona. */
+  awaitingPerson?: boolean;
 }): ContinuationKind | null {
   if (input.alreadyContinued || input.pastSoft) return null;
+  // Terminó en silencio: ni una palabra en todo el turno (visto el 2026-10-08:
+  // un mensaje del asistente vacío tras «sigue»). Si hay una tarjeta esperando
+  // a la persona, el silencio es correcto.
+  if (input.turnHadNoText && !input.awaitingPerson && input.finishReason === 'stop')
+    return 'silent';
   // Se agotaron los pasos con herramientas pendientes de comentar: la persona
   // se quedaría sin respuesta escrita.
   if (input.stepsUsed >= input.maxSteps && input.lastStepHadTools) return 'steps';
@@ -103,6 +112,13 @@ export function shouldContinue(input: {
 
 /** El empujón: un mensaje de la persona generado por Cortex, dicho como tal. */
 export function continuationNudge(kind: ContinuationKind, announced: string): string {
+  if (kind === 'silent') {
+    return (
+      '[Mensaje automático de Cortex] Tu turno terminó sin escribirle nada a la persona. ' +
+      'Si queda trabajo pendiente del plan, continúalo ahora con las herramientas; si ya terminaste, ' +
+      'dile en dos o tres frases qué quedó hecho y qué sigue.'
+    );
+  }
   if (kind === 'steps') {
     return (
       '[Mensaje automático de Cortex] Se acabaron los pasos de este turno. ' +

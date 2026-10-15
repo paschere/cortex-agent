@@ -98,9 +98,35 @@ function bodyRewriter(mode: ThinkingMode) {
     }
 
     markCacheBreakpoint(body);
+    markToolLoopTail(body);
 
     return fetch(input, { ...init, body: JSON.stringify(body) });
   };
+}
+
+/**
+ * SEGUNDO PUNTO DE CACHÉ, SÓLO DENTRO DEL BUCLE DE HERRAMIENTAS.
+ *
+ * Un turno de varios pasos reenvía en cada paso todo lo anterior (la pregunta,
+ * las llamadas y sus resultados, hasta 24 000 caracteres cada uno) a precio
+ * completo, porque el único punto de caché termina en el `system`. Medido en
+ * producción: una conversación de ~6 turnos sumó 1,7 M de tokens de entrada.
+ *
+ * Cuando el último mensaje trae `tool_result` —es decir, ya estamos en el
+ * paso 2 o posterior—, marcar su último bloque hace que el paso siguiente LEA
+ * ese prefijo al 10 % en vez de pagarlo entero. En el primer paso del turno no
+ * se marca (no hay resultados), así que un turno de un solo paso no paga
+ * ninguna escritura de más. Son 2 de los 4 puntos que admite la API.
+ */
+export function markToolLoopTail(body: Record<string, unknown>): void {
+  const messages = body.messages;
+  if (!Array.isArray(messages) || messages.length === 0) return;
+  const last = messages[messages.length - 1] as { role?: unknown; content?: unknown };
+  if (last?.role !== 'user' || !Array.isArray(last.content) || last.content.length === 0) return;
+  const blocks = last.content as Record<string, unknown>[];
+  if (!blocks.some((b) => b && typeof b === 'object' && b.type === 'tool_result')) return;
+  const tail = blocks[blocks.length - 1];
+  if (tail && typeof tail === 'object') tail.cache_control = { type: 'ephemeral' };
 }
 
 /**

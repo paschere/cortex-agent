@@ -42,3 +42,14 @@ describe('qué se le pregunta a Brain Knowledge', () => {
     });
   });
 });
+
+describe('las señales de «continúa» no buscan', () => {
+  it('va / continua / sigue / hágale no gastan una búsqueda ni ensanchan la siguiente', () => {
+    for (const text of ['va', 'continua', 'sigue', 'hágale', 'adelante'])
+      expect(ragQueryFor([u('¿Qué condiciones tenemos con Nexa Logística?'), u(text)]).run).toBe(
+        false,
+      );
+    const next = ragQueryFor([u('condiciones con Nexa Logística'), u('va'), u('y la tarifa?')]);
+    expect(next.run && next.query).not.toContain('va ·');
+  });
+});

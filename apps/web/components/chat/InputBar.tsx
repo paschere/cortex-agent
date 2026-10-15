@@ -310,7 +310,17 @@ export function InputBar({
     retry: false,
     refetchOnWindowFocus: false,
   });
-  const connected = sources.data?.sources ?? [];
+  const connected = useMemo(() => {
+    const seen = new Set<string>();
+    return (sources.data?.sources ?? []).filter((source) => {
+      const key = `${source.id}|${source.label.trim().toLowerCase()}`;
+      const byLabel = `~${source.label.trim().toLowerCase()}`;
+      if (seen.has(key) || seen.has(byLabel)) return false;
+      seen.add(key);
+      seen.add(byLabel);
+      return true;
+    });
+  }, [sources.data]);
   const registerFilePicker = useCallback(
     (open: () => void) => setOpenFilePicker((prev) => (prev === open ? prev : open)),
     [],
@@ -882,16 +892,16 @@ export function InputBar({
             {connected.length > 0 && (
               <ul
                 aria-label="Fuentes conectadas"
-                className="hidden min-w-0 items-center gap-1.5 overflow-hidden sm:flex"
+                className="hidden min-w-0 items-center gap-1.5 overflow-hidden lg:flex"
               >
-                {connected.slice(0, 4).map((source) => (
+                {connected.slice(0, 3).map((source) => (
                   <li
                     key={source.id}
-                    className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 text-xs text-ink-muted"
+                    className="inline-flex h-7 min-w-0 max-w-[11rem] items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 text-xs text-ink-muted"
                   >
                     <span
                       className={clsx(
-                        'h-1.5 w-1.5 rounded-full',
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
                         source.tone === 'error'
                           ? 'bg-rose'
                           : source.tone === 'attention'
@@ -900,11 +910,11 @@ export function InputBar({
                       )}
                       aria-hidden
                     />
-                    {source.label}
+                    <span className="truncate">{source.label}</span>
                   </li>
                 ))}
-                {connected.length > 4 && (
-                  <li className="shrink-0 text-xs text-ink-faint">+{connected.length - 4}</li>
+                {connected.length > 3 && (
+                  <li className="shrink-0 text-xs text-ink-faint">+{connected.length - 3}</li>
                 )}
               </ul>
             )}
@@ -1008,10 +1018,6 @@ export function InputBar({
         ) : (
           composer
         )}
-
-        <p className="mt-1.5 text-center text-micro text-ink-faint">
-          Revisa las fuentes disponibles antes de decidir.
-        </p>
       </div>
     </div>
   );
