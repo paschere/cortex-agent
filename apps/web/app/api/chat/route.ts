@@ -11,6 +11,7 @@ import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { humanChatError } from '@/lib/chat-error';
 import { CITATION_RULE } from '@/lib/citations';
+import { createProposalGuard } from '@/lib/confirmation-dedupe';
 import { isControlHandoffMessage } from '@/lib/confirmation-notes';
 import { followOnBlock, isContinuationMessage } from '@/lib/continue-intent';
 import { firstRealRequest, looksBadTitle, titleFromText } from '@/lib/conversation-title';
@@ -953,6 +954,9 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
     .filter((c) => c.kind === 'registry')
     .map((c) => c.id);
 
+  // Una propuesta idéntica (misma herramienta, misma entrada) por turno.
+  const proposalGuard = createProposalGuard();
+
   const execRegistry = async (
     t: AnyTool,
     args: unknown,
@@ -983,6 +987,8 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
         });
       } catch (err) {
         if (err instanceof ConfirmationRequiredError) {
+          // La misma propuesta dos veces en un turno no crea una segunda tarjeta.
+          if (proposalGuard.seen(t.id, err.input)) return proposalGuard.duplicate(t.id) as never;
           // Return a sentinel value the client can detect to show a confirmation prompt
           return {
             __requires_confirmation: true,
@@ -1043,6 +1049,7 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
       ),
       execute: async (args, { abortSignal }) => {
         if (!server.trusted) {
+          if (proposalGuard.seen(sdkName, args)) return proposalGuard.duplicate(sdkName) as never;
           return {
             __requires_confirmation: true,
             toolId: sdkName,

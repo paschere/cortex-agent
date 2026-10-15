@@ -1,5 +1,6 @@
 import { AppEditor } from '@/components/apps/editor/AppEditor';
 import type { AppEditorData } from '@/components/apps/editor/shared';
+import { EmbedChrome } from '@/components/apps/panel/EmbedChrome';
 import { computeUsage, suggestTableros } from '@cortex/agent-tools';
 import { notFound } from 'next/navigation';
 
@@ -266,7 +267,7 @@ const VERSIONS = [
 export default async function AppEditorShowcasePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; panel?: string }>;
 }) {
   if (process.env.NODE_ENV === 'production') notFound();
   DATA.versions = VERSIONS as never;
@@ -284,7 +285,15 @@ export default async function AppEditorShowcasePage({
     roleKey: 'cliente',
     attribute: 'cliente',
   } as never;
-  const { tab } = await searchParams;
+  const { tab, panel } = await searchParams;
+  // `?panel=1`: el diseño compacto que usa el panel de la app al lado del chat.
+  if (panel === '1')
+    return (
+      <div className="cortex-workspace min-h-screen bg-canvas px-3 py-4">
+        <EmbedChrome />
+        <AppEditor data={DATA} initialTab={tab} compact />
+      </div>
+    );
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <AppEditor data={DATA} initialTab={tab} />

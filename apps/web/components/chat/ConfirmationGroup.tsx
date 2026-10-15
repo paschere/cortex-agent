@@ -1,5 +1,6 @@
 'use client';
 
+import { dedupeProposals } from '@/lib/confirmation-dedupe';
 import { confirmationFollowUp } from '@/lib/confirmation-notes';
 import { mandatoryHumanConfirmation } from '@cortex/agent-tools/src/security/mandatory-confirmation';
 import { Check, Loader2 } from 'lucide-react';
@@ -51,13 +52,15 @@ export function followUpFor(outcomes: GroupOutcome[]): string | null {
 }
 
 export function ConfirmationGroup({
-  items,
+  items: proposed,
   conversationId,
   onConfirmed,
   onSay,
   waiting,
   why,
 }: GroupProps) {
+  // Una propuesta idéntica es una tarjeta: nunca dos «dobles autenticaciones».
+  const items = dedupeProposals(proposed);
   const handles = useRef(new Map<string, CardHandle>());
   const outcomes = useRef(new Map<string, GroupOutcome>());
   const [running, setRunning] = useState(false);

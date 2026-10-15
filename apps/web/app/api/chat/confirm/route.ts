@@ -1,6 +1,7 @@
 import { REVERSIBLE_TOOLS, undoPlanFor } from '@/lib/activity/undo';
 import { buildToolContext } from '@/lib/agent';
 import { confirmationResults, pendingConfirmationIndex } from '@/lib/confirmation-claim';
+import { pendingTwinIndexes } from '@/lib/confirmation-dedupe';
 import { sameShape } from '@/lib/confirmation-edit';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -161,6 +162,9 @@ export async function POST(req: NextRequest) {
       { error: 'Esta propuesta ya cambió o está en ejecución. Actualiza la conversación.' },
       { status: 409 },
     );
+  // Las copias idénticas que sigan pendientes en este mensaje: aprobar una no
+  // deja a su gemela esperando.
+  const twins = pendingTwinIndexes(original, index);
   let output: unknown;
   let failed = false;
   try {
@@ -196,7 +200,16 @@ export async function POST(req: NextRequest) {
     const next = latest.tool_results.map((entry: Record<string, unknown>, i: number) =>
       i === index
         ? { ...entry, result: output, ...(editedInput !== undefined ? { editedInput } : {}) }
-        : entry,
+        : twins.includes(i)
+          ? {
+              ...entry,
+              result: {
+                __superseded: true,
+                toolId,
+                message: 'Era una copia de una propuesta que ya se aprobó.',
+              },
+            }
+          : entry,
     );
     const { data: saved } = await db
       .from('messages')

@@ -65,6 +65,15 @@ const config = {
         source: '/v/app-preview',
         headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
       },
+      {
+        // La app al lado del chat (vista y editor) también va en un iframe del mismo origen.
+        source: '/panel/apps/:path*',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+      },
+      {
+        source: '/v/app-editor-showcase',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+      },
     ];
   },
 };

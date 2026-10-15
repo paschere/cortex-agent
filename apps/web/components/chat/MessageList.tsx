@@ -1,6 +1,7 @@
 'use client';
 
 import type { BrainSource } from '@/lib/brain-sources-shape';
+import { appSyncKey, latestAppRef } from '@/lib/chat-app-panel';
 import type { TurnInvocation } from '@/lib/chat-turn';
 import { type ExercisedMandate, planNotices } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
@@ -383,6 +384,37 @@ export function MessageList({
     .join(
       ',',
     )}|${isLoading ? 'w' : ''}|${metrics ? metrics.totalMs : ''}|${freshSources?.length ?? initialBrainSources?.[lastAssistant?.id ?? '']?.length ?? 0}`;
+  /**
+   * La app de la conversación (la que Cortex creó, cambió, publicó o leyó): da su
+   * chip en la cabecera y refresca el panel de la app cuando Cortex la cambia.
+   * La primera lectura es la historia (no abre ni refresca nada).
+   */
+  const syncApp = artifacts?.syncConversationApp;
+  const appRef = useMemo(
+    () =>
+      latestAppRef(
+        messages.flatMap((m) =>
+          m.role === 'assistant'
+            ? ((m.toolInvocations ?? []) as unknown as Array<{
+                toolName: string;
+                state?: string;
+                result?: unknown;
+              }>)
+            : [],
+        ),
+      ),
+    [messages],
+  );
+  const appKey = appSyncKey(appRef);
+  const appSeen = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `appKey` resume la app.
+  useEffect(() => {
+    if (!syncApp) return;
+    const history = !appSeen.current;
+    appSeen.current = true;
+    syncApp(appRef, history);
+  }, [appKey, syncApp]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: la firma resume lo que cambia.
   useEffect(() => {
     if (!setTurn) return;

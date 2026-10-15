@@ -13,6 +13,8 @@
  * Pura: la importan el navegador y la ruta.
  */
 
+import { labelFor } from './confirmation-values';
+
 export type EditKind = 'text' | 'longtext' | 'number' | 'boolean';
 
 export interface EditableField {
@@ -33,14 +35,12 @@ const NOT_EDITABLE = new Set([
   'tracker',
   'draftId',
   'id',
+  'slug',
   'conversationId',
 ]);
 const LONG = new Set(['body', 'message', 'text', 'notes', 'description', 'content', 'note']);
 
-function humanKey(key: string): string {
-  const spaced = key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
+const humanKey = labelFor;
 
 const MAX_FIELDS = 12;
 

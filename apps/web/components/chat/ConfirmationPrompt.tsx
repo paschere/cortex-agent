@@ -114,9 +114,12 @@ export function ConfirmationPrompt({
   const fields = editableFields(input);
   const canEdit = fields.length > 0;
 
-  // Los valores de ANTES de una fila que se edita (sólo lectura en el servidor).
+  // Los valores de ANTES (sólo lectura en el servidor): la fila que se edita o,
+  // para trackers.define, la definición actual de la tabla.
   useEffect(() => {
-    if (toolId !== 'trackers.upsert' || !isRecord(input) || typeof input.rowId !== 'string') return;
+    const row = toolId === 'trackers.upsert' && isRecord(input) && typeof input.rowId === 'string';
+    const table = toolId === 'trackers.define' && isRecord(input) && typeof input.slug === 'string';
+    if (!row && !table) return;
     if (waiting || previewPreset) return;
     let alive = true;
     fetch('/api/chat/confirm/preview', {
@@ -131,9 +134,20 @@ export function ConfirmationPrompt({
             before?: Record<string, unknown> | null;
             fieldLabels?: Record<string, string>;
             trackerName?: string;
+            exists?: boolean;
+            current?: { name?: string; description?: string; fields: unknown[] } | null;
           } | null,
         ) => {
-          if (!alive || !data?.before) return;
+          if (!alive || !data) return;
+          if (table) {
+            if (typeof data.exists !== 'boolean') return;
+            setPreviewCtx({
+              trackerExists: data.exists,
+              trackerBefore: data.exists ? (data.current ?? null) : null,
+            });
+            return;
+          }
+          if (!data.before) return;
           setPreviewCtx({
             before: data.before,
             ...(data.fieldLabels ? { fieldLabels: data.fieldLabels } : {}),
@@ -566,6 +580,58 @@ export function ConfirmationPrompt({
   );
 }
 
+/** Los primeros N renglones de una lista; el resto, detrás de «y N más». */
+const LIST_SHOWN = 8;
+
+function RowList({ items, total }: { items: string[]; total: number }) {
+  const [open, setOpen] = useState(false);
+  const shown = open ? items : items.slice(0, LIST_SHOWN);
+  const more = Math.max(total, items.length) - LIST_SHOWN;
+  return (
+    <div>
+      <ul className="space-y-0.5">
+        {shown.map((line, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: líneas de sólo lectura, sin estado
+          <li key={i} className="[overflow-wrap:anywhere]">
+            {line}
+          </li>
+        ))}
+      </ul>
+      {more > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="mt-1 rounded-pill text-xs font-medium text-primary hover:underline"
+        >
+          {open ? 'Ver menos' : `y ${more} más`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function RowText({ text, full, long }: { text: string; full?: string; long?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      className={long ? 'block whitespace-pre-wrap rounded-sm bg-surface px-2 py-1.5' : undefined}
+    >
+      {open && full ? full : text}
+      {full && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="ml-1.5 rounded-pill text-xs font-medium text-primary hover:underline"
+        >
+          {open ? 'Ver menos' : 'Ver más'}
+        </button>
+      )}
+    </span>
+  );
+}
+
 /** «Qué va a cambiar»: antes → después, el correo tal cual, o los campos. */
 export function PreviewBlock({
   preview,
@@ -587,11 +653,11 @@ export function PreviewBlock({
             key={r.key}
             className="grid grid-cols-[minmax(0,7rem)_1fr] gap-x-3 text-xs sm:grid-cols-[8rem_1fr]"
           >
-            <dt className="truncate font-medium text-ink-faint" title={r.label}>
-              {r.label}
-            </dt>
+            <dt className="font-medium text-ink-faint [overflow-wrap:anywhere]">{r.label}</dt>
             <dd className="min-w-0 leading-snug text-ink [overflow-wrap:anywhere]">
-              {preview.kind === 'diff' && r.before !== undefined && r.changed ? (
+              {r.items ? (
+                <RowList items={r.items} total={r.total ?? r.items.length} />
+              ) : preview.kind === 'diff' && r.before !== undefined && r.changed ? (
                 <span className="flex flex-wrap items-center gap-x-1.5">
                   <span className="text-ink-faint line-through decoration-ink-faint/50">
                     {r.before}
@@ -601,12 +667,13 @@ export function PreviewBlock({
                 </span>
               ) : preview.kind === 'diff' && !r.changed ? (
                 <span className="text-ink-faint">{r.after} · sin cambio</span>
-              ) : r.long ? (
-                <span className="block whitespace-pre-wrap rounded-sm bg-surface px-2 py-1.5 text-ink">
-                  {r.after}
-                </span>
+              ) : r.long || r.full ? (
+                <RowText text={r.after} full={r.full} long={r.long} />
               ) : (
                 r.after
+              )}
+              {r.secondary && (
+                <span className="mt-0.5 block text-micro text-ink-faint">{r.secondary}</span>
               )}
             </dd>
           </div>

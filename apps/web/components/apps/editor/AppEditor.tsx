@@ -8,7 +8,7 @@ import { clsx } from 'clsx';
 import { Archive, ChevronLeft, ExternalLink, Loader2, MoreHorizontal, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { AppearanceTab } from './AppearanceTab';
 import { AutomationsTab } from './AutomationsTab';
 import { FlowsTab } from './FlowsTab';
@@ -87,8 +87,28 @@ function autosize(el: HTMLTextAreaElement | null) {
   el.style.height = `${el.scrollHeight}px`;
 }
 
-export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTab?: string }) {
+/**
+ * `compact`: el editor dentro del panel al lado del chat. Es el mismo editor y las
+ * mismas acciones; cambia el marco: sin enlace de vuelta ni «Publicar» (el panel
+ * trae el suyo), un solo título pequeño y, si el panel es angosto, las pestañas
+ * se pliegan en un selector.
+ */
+export function AppEditor({
+  data,
+  initialTab,
+  compact = false,
+}: { data: AppEditorData; initialTab?: string; compact?: boolean }) {
   const { app } = data;
+  const root = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = root.current;
+    if (!compact || !el) return;
+    const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 640));
+    ro.observe(el);
+    setNarrow(el.clientWidth < 640);
+    return () => ro.disconnect();
+  }, [compact]);
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(
     TABS.some((t) => t.id === initialTab) ? (initialTab as Tab) : 'screens',
@@ -129,13 +149,15 @@ export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTa
   const published = app.status === 'published';
 
   return (
-    <div className="space-y-5">
-      <Link
-        href="/apps"
-        className="inline-flex items-center gap-1 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Aplicaciones
-      </Link>
+    <div ref={root} className={compact ? 'space-y-4' : 'space-y-5'}>
+      {!compact && (
+        <Link
+          href="/apps"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Aplicaciones
+        </Link>
+      )}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
@@ -148,8 +170,13 @@ export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTa
               save({ icon: next });
             }}
           >
-            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-card border border-border bg-primary-soft text-primary-ink shadow-card transition-transform hover:scale-105">
-              <Glyph name={icon} className="h-7 w-7 text-2xl" />
+            <span
+              className={clsx(
+                'grid shrink-0 place-items-center rounded-card border border-border bg-primary-soft text-primary-ink shadow-card transition-transform hover:scale-105',
+                compact ? 'h-11 w-11' : 'h-14 w-14',
+              )}
+            >
+              <Glyph name={icon} className={compact ? 'h-5 w-5 text-xl' : 'h-7 w-7 text-2xl'} />
             </span>
           </IconPicker>
 
@@ -177,7 +204,10 @@ export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTa
                 }}
                 maxLength={80}
                 placeholder="Nombre de la aplicación"
-                className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-0.5 -mx-2 text-xl font-semibold leading-snug text-ink outline-none transition-colors placeholder:text-ink-faint hover:bg-surface-2 focus:border-primary focus:bg-surface"
+                className={clsx(
+                  compact ? 'text-base' : 'text-xl',
+                  'block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-0.5 -mx-2 font-semibold leading-snug text-ink outline-none transition-colors placeholder:text-ink-faint hover:bg-surface-2 focus:border-primary focus:bg-surface',
+                )}
               />
             </label>
             <label className="mt-0.5 block">
@@ -218,7 +248,7 @@ export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTa
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className={clsx('flex shrink-0 items-center gap-2', compact && 'hidden')}>
             <PublishBar data={data} />
             <Link href={`/apps/${app.slug}`} className={BTN_PRIMARY}>
               <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Abrir la app
@@ -282,44 +312,62 @@ export function AppEditor({ data, initialTab }: { data: AppEditorData; initialTa
         />
       </section>
 
-      <div className="sticky top-0 z-20 -mx-1 bg-canvas/90 px-1 backdrop-blur">
-        <div
-          role="tablist"
-          className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {TABS.map((t) => {
-            const active = tab === t.id;
-            const count = counts[t.id];
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(t.id)}
-                className={clsx(
-                  '-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors',
-                  active
-                    ? 'border-primary text-ink'
-                    : 'border-transparent text-ink-muted hover:text-ink',
-                )}
-              >
+      {compact && narrow ? (
+        <label className="sticky top-0 z-20 -mx-1 block bg-canvas/90 px-1 py-1 backdrop-blur">
+          <span className="sr-only">Sección de la app</span>
+          <select
+            value={tab}
+            onChange={(e) => setTab(e.target.value as Tab)}
+            className="h-10 w-full rounded-pill border border-border bg-surface px-4 text-sm font-semibold text-ink outline-none focus:border-primary"
+          >
+            {TABS.map((t) => (
+              <option key={t.id} value={t.id}>
                 {t.label}
-                {count !== undefined && count > 0 && (
-                  <span
-                    className={clsx(
-                      'rounded-pill px-1.5 text-micro font-semibold',
-                      active ? 'bg-primary-soft text-primary-ink' : 'bg-surface-2 text-ink-faint',
-                    )}
-                  >
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                {counts[t.id] ? ` (${counts[t.id]})` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <div className="sticky top-0 z-20 -mx-1 bg-canvas/90 px-1 backdrop-blur">
+          <div
+            role="tablist"
+            className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {TABS.map((t) => {
+              const active = tab === t.id;
+              const count = counts[t.id];
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(t.id)}
+                  className={clsx(
+                    '-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors',
+                    active
+                      ? 'border-primary text-ink'
+                      : 'border-transparent text-ink-muted hover:text-ink',
+                  )}
+                >
+                  {t.label}
+                  {count !== undefined && count > 0 && (
+                    <span
+                      className={clsx(
+                        'rounded-pill px-1.5 text-micro font-semibold',
+                        active ? 'bg-primary-soft text-primary-ink' : 'bg-surface-2 text-ink-faint',
+                      )}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {tab === 'screens' && <ScreensTab data={data} />}
       {tab === 'home' && <HomeTab data={data} />}

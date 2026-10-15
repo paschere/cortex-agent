@@ -96,6 +96,11 @@ export interface AppRunnerProps {
    * es. Sin esto, la app de un miembro (/apps/<slug>) como siempre.
    */
   basePath?: string;
+  /**
+   * El panel de la app al lado del chat: las direcciones quedan dentro de
+   * /panel/apps/<id>/vista, sin cabecera propia ni tema propio (lo manda el panel).
+   */
+  embedBase?: string;
   session?: {
     appId: string;
     userKey: string;
@@ -212,6 +217,7 @@ export function AppRunner({
   portal,
   title,
   basePath,
+  embedBase,
   session = null,
   previewAttributes,
   buttons = [],
@@ -224,7 +230,7 @@ export function AppRunner({
 }: AppRunnerProps) {
   const router = useRouter();
   const como = readOnly && !preview ? previewQuery(role.key, previewAttributes) : '';
-  const base = basePath ?? `/apps/${app.slug}`;
+  const base = basePath ?? embedBase ?? `/apps/${app.slug}`;
   const hrefFor = (slug: string) => `${base}/${slug}${como}`;
   const editHref = `/apps/${app.slug}/edit`;
   const { tabs, more, moreActive } = splitTabs(screens, current);
@@ -292,7 +298,7 @@ export function AppRunner({
   return (
     <LocationProvider appId={app.id} initial={readOnly ? null : location}>
       <AppToastProvider>
-        <AppThemeScope />
+        {!embedBase && <AppThemeScope />}
         <div
           className="app-frame"
           style={look ? { fontFamily: look.font } : undefined}

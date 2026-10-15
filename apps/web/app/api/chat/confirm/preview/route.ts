@@ -26,9 +26,14 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'Solicitud inválida.' }, { status: 400 });
   const { conversationId, toolId, input, toolCallId } = parsed.data;
   const empty = NextResponse.json({ before: null });
-  if (toolId !== 'trackers.upsert') return empty;
-  const i = input as { tracker?: unknown; rowId?: unknown } | null;
-  if (!i || typeof i.tracker !== 'string' || typeof i.rowId !== 'string') return empty;
+  const i = input as { tracker?: unknown; rowId?: unknown; slug?: unknown } | null;
+  const isRow =
+    toolId === 'trackers.upsert' &&
+    Boolean(i) &&
+    typeof i?.tracker === 'string' &&
+    typeof i?.rowId === 'string';
+  const isDefine = toolId === 'trackers.define' && typeof i?.slug === 'string';
+  if (!isRow && !isDefine) return empty;
 
   const db = getOrgScopedClient(user.organization.id);
   const { data: conv } = await db
@@ -56,16 +61,34 @@ export async function POST(req: NextRequest) {
   );
   if (!pending) return empty;
 
+  if (isDefine) {
+    // La definición actual de la tabla, para enseñar sólo lo que cambia.
+    const { data: current } = await db
+      .from('trackers')
+      .select('name,description,fields')
+      .eq('slug', String(i?.slug))
+      .maybeSingle();
+    if (!current) return NextResponse.json({ exists: false });
+    return NextResponse.json({
+      exists: true,
+      current: {
+        name: current.name,
+        description: current.description ?? '',
+        fields: Array.isArray(current.fields) ? current.fields : [],
+      },
+    });
+  }
+
   const { data: tracker } = await db
     .from('trackers')
     .select('id,name,fields')
-    .eq('slug', i.tracker)
+    .eq('slug', String(i?.tracker))
     .maybeSingle();
   if (!tracker) return empty;
   const { data: row } = await db
     .from('tracker_rows')
     .select('label,values')
-    .eq('id', i.rowId)
+    .eq('id', String(i?.rowId))
     .eq('tracker_id', tracker.id)
     .maybeSingle();
   if (!row) return empty;

@@ -3,6 +3,7 @@
 import { ConfirmationGroup } from '@/components/chat/ConfirmationGroup';
 import { ConfirmationPrompt } from '@/components/chat/ConfirmationPrompt';
 import { PlanApprovalCard } from '@/components/chat/PlanApprovalCard';
+import { proposalReason } from '@/lib/confirmation-why';
 import type { PlanState } from '@/lib/plan-state';
 import { useEffect } from 'react';
 
@@ -55,6 +56,46 @@ const ROW_BEFORE = {
   before: { estado: 'Vencida', saldo: 12000000, nota: 'Pagó por transferencia el 9 de octubre' },
   fieldLabels: { estado: 'Estado', saldo: 'Saldo', nota: 'Nota' },
   trackerName: 'Clientes de la costa',
+};
+
+const FIELD_TYPES = ['text', 'date', 'select', 'money', 'longtext', 'time', 'number'] as const;
+const DEFINE_FIELDS = Array.from({ length: 14 }, (_, i) => ({
+  key: `campo_${i + 1}`,
+  label:
+    ['Fecha', 'Cliente', 'Documento', 'Motivo', 'Estado', 'Valor', 'Notas'][i % 7] +
+    (i > 6 ? ' 2' : ''),
+  type: FIELD_TYPES[i % FIELD_TYPES.length],
+  required: i < 3,
+}));
+const DEFINE_INPUT = {
+  slug: 'atenciones',
+  name: 'Atenciones',
+  description: 'Cada atención que se le hace a un cliente en el día.',
+  fields: DEFINE_FIELDS,
+};
+const DEFINE_NEXT = {
+  ...DEFINE_INPUT,
+  fields: [
+    ...DEFINE_FIELDS.slice(0, 5).map((f, i) =>
+      i === 1 ? { ...f, type: 'select', options: ['A', 'B'] } : f,
+    ),
+    ...DEFINE_FIELDS.slice(6, 12),
+    {
+      key: 'canal',
+      label: 'Canal',
+      type: 'select',
+      options: ['WhatsApp', 'Correo'],
+      required: true,
+    },
+  ],
+};
+const DEFINE_BEFORE = {
+  trackerExists: true,
+  trackerBefore: {
+    name: 'Atenciones',
+    description: DEFINE_INPUT.description,
+    fields: DEFINE_FIELDS,
+  },
 };
 
 const MAIL = {
@@ -140,6 +181,51 @@ export function ApprovalsShowcase({ dark, granted }: { dark: boolean; granted: b
               toolId: 'trackers.remove',
               input: { tracker: 'clientes-costa', rowId: '22222222-2222-4222-8222-222222222222' },
             },
+          ]}
+        />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-micro font-semibold text-ink-faint">
+          5 · Una tabla nueva con 14 campos (lista, 8 y «y 6 más»)
+        </h2>
+        <ConfirmationPrompt
+          conversationId="00000000-0000-4000-8000-000000000001"
+          toolId="trackers.define"
+          input={DEFINE_INPUT}
+          toolCallId="d1"
+          why={
+            proposalReason(
+              'Tengo el diseño completo.Corrijo los nombres de los campos porque uno supera el límite de 16 caracteres.El id del campo es nit_cliente.',
+            ) ?? undefined
+          }
+          previewPreset={{ trackerExists: false }}
+        />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-micro font-semibold text-ink-faint">
+          6 · Una tabla que ya existe: sólo la diferencia
+        </h2>
+        <ConfirmationPrompt
+          conversationId="00000000-0000-4000-8000-000000000001"
+          toolId="trackers.define"
+          input={DEFINE_NEXT}
+          toolCallId="d2"
+          why="Quieres sumar el canal por donde llega cada atención. Quito los campos que no usabas."
+          previewPreset={DEFINE_BEFORE}
+        />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-micro font-semibold text-ink-faint">
+          7 · La misma propuesta dos veces: se dibuja una sola tarjeta
+        </h2>
+        <ConfirmationGroup
+          conversationId="00000000-0000-4000-8000-000000000001"
+          items={[
+            { toolCallId: 'x1', toolId: 'trackers.define', input: DEFINE_INPUT },
+            { toolCallId: 'x2', toolId: 'trackers.define', input: DEFINE_INPUT },
           ]}
         />
       </section>

@@ -15,7 +15,7 @@ import { Menu } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { BackgroundBanner } from './BackgroundBanner';
-import { ArtifactPanel, ChatArtifactsProvider, ComputerPill } from './ChatArtifacts';
+import { AppPill, ArtifactPanel, ChatArtifactsProvider, ComputerPill } from './ChatArtifacts';
 import { ChatComposeProvider } from './ChatCompose';
 import { ChatErrorCard } from './ChatErrorCard';
 import { ConversationHeader } from './ConversationHeader';
@@ -532,6 +532,7 @@ export function ChatRoot({
                 scope={scope}
                 messages={messages}
               />
+              <AppPill />
               <ComputerPill />
               {messages.length > 0 && waiting && (waiting.total > 0 || waiting.lead) ? (
                 <WaitingNotice waiting={waiting} onAsk={handleSend} />

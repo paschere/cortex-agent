@@ -1,3 +1,4 @@
+import { type AppRef, appRefFromResult } from '@/lib/chat-app-panel';
 import { type GridRow, dig } from '@/lib/result-grid';
 import { toolDisplayName } from '@/lib/tool-labels';
 
@@ -11,7 +12,7 @@ import { toolDisplayName } from '@/lib/tool-labels';
  * CSV. Es puro para poder probarlo.
  */
 
-export type ArtifactKind = 'table' | 'chart' | 'report' | 'proposal' | 'summary';
+export type ArtifactKind = 'table' | 'chart' | 'report' | 'proposal' | 'summary' | 'app';
 
 export interface ArtifactCsv {
   headers: string[];
@@ -22,6 +23,8 @@ export interface ArtifactMeta {
   title: string;
   kind: ArtifactKind;
   csv?: ArtifactCsv;
+  /** Una app de la conversación: se abre en la pestaña «App» (vista y editor), no en «Resultado». */
+  app?: AppRef;
 }
 
 function field(value: unknown, key: string): unknown {
@@ -83,6 +86,11 @@ const PANELABLE: ReadonlySet<string> = new Set([
   'goals_list',
   'inbox_overview',
   'apps_design',
+  'apps_create',
+  'apps_update',
+  'apps_apply_draft',
+  'apps_publish',
+  'apps_get',
 ]);
 
 function trackerCsv(result: unknown): ArtifactCsv | undefined {
@@ -180,6 +188,14 @@ export function artifactMeta(
     }
     case 'apps_design':
       return { title: 'Vista previa de la app', kind: 'summary' };
+    case 'apps_create':
+    case 'apps_update':
+    case 'apps_apply_draft':
+    case 'apps_publish':
+    case 'apps_get': {
+      const app = appRefFromResult(toolName, result);
+      return app ? { title: app.name, kind: 'app', app } : null;
+    }
     default:
       return { title: toolDisplayName(toolName), kind: 'summary' };
   }

@@ -56,6 +56,7 @@ import {
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentTray } from './AttachmentTray';
+import { useChatArtifacts } from './ChatArtifacts';
 import { ScopePicker, ScopeStrip } from './MemoryScope';
 import { ScreenViewButton, type ScreenViewSession, ScreenViewStrip } from './ScreenView';
 import { VoiceDictation } from './VoiceDictation';
@@ -273,6 +274,7 @@ export function InputBar({
   onBackgroundChange,
   onSendToBackground,
 }: InputBarProps) {
+  const artifacts = useChatArtifacts();
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const [caret, setCaret] = useState(0);
@@ -508,6 +510,9 @@ export function InputBar({
    */
   function applyItem(item: PaletteItem) {
     if (mention) {
+      // Mencionar una app deja su chip en la cabecera (abrirla al lado es un clic).
+      if (groups.some((g) => g.id === 'aplicaciones' && g.items.some((i) => i.id === item.id)))
+        artifacts?.mentionApp({ id: item.id, name: item.label });
       const before = text.slice(0, mention.start);
       const after = text.slice(caret);
       const token = `@${item.expands}`;

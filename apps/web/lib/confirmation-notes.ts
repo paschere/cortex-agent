@@ -1,3 +1,5 @@
+import { riskOfTool } from '@/lib/risk';
+
 /**
  * Why each gated tool is gated — shared by the MCP confirmation flow and the
  * web chat's ConfirmationPrompt so both surfaces explain stakes the same way.
@@ -64,6 +66,20 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
     'Guarda un procedimiento reutilizable que cualquiera del equipo puede ejecutar desde cualquier lado — un error en su diseño se repite en cada ejecución.',
   'pipeline.update':
     'Cambia un procedimiento compartido para todos los que lo usan, desde la próxima ejecución.',
+  // Lo que cambia DENTRO de Cortex: tablas, vistas y aplicaciones propias. Nada
+  // de esto sale a un tercero; lo que se dice es qué cambia y si se recoge.
+  'trackers.define':
+    'Crea la tabla, o cambia sus campos si ya existe, dentro de Cortex. No sale nada a un tercero. Las filas que ya hay se conservan; los campos que no estén en la lista dejan de verse. No tiene botón Deshacer, pero se puede volver a cambiar.',
+  'trackers.set_flow':
+    'Cambia las reglas de estados de una tabla de Cortex: quién puede pasar un registro de un estado a otro y qué se exige. Rige desde ya para todos los que la usan. Las filas no se tocan y se puede volver a cambiar.',
+  'apps.apply_draft':
+    'Crea dentro de Cortex la aplicación del borrador completa: sus tablas nuevas, sus roles y sus pantallas, de una vez. Queda sin publicar, así que nadie más la ve todavía; si un paso falla, se deshace todo.',
+  'apps.update':
+    'Cambia el borrador de una aplicación de Cortex (pantallas, roles, permisos). Quienes la usan siguen viendo la última versión publicada hasta que se publique, y se puede volver a una versión anterior.',
+  'views.create':
+    'Crea una vista nueva dentro de Cortex. No cambia datos ni envía nada; se puede archivar cuando quieras.',
+  'views.update':
+    'Cambia el contenido de una vista que ya existe dentro de Cortex, para todos los que la ven. No toca los datos de las tablas.',
   'presentations.create_pdf':
     'Genera un documento de presentación de un candidato para cliente, con su nombre y su perfil adentro, que puede terminar compartido por fuera.',
 };
@@ -91,10 +107,29 @@ const FAMILY_SYSTEM: Record<string, string> = {
   custom: 'un sistema propio de tu empresa conectado por un administrador',
 };
 
+/**
+ * Lo que vive DENTRO de Cortex: cambiarlo no toca a ningún tercero, así que la
+ * frase del riesgo no puede decir «sistema externo». Qué se cambia, en palabras.
+ */
+const FAMILY_INTERNAL: Record<string, string> = {
+  trackers: 'las tablas de tu espacio',
+  views: 'las vistas de tu espacio',
+  apps: 'las aplicaciones de tu espacio',
+  memory: 'lo que Cortex recuerda de tu empresa',
+  tasks: 'las tareas',
+  goals: 'las metas de tu espacio',
+};
+
 export function confirmationReason(toolId: string): string {
   const note = CONFIRMATION_NOTES[toolId];
   if (note) return note;
   const family = toolId.split('.')[0] ?? '';
+  const internal = FAMILY_INTERNAL[family];
+  if (internal) {
+    if (riskOfTool(toolId).level === 'alto')
+      return `Quita o borra algo de ${internal}, dentro de Cortex. No sale nada a un tercero, pero no se recupera desde aquí.`;
+    return `Cambia ${internal}, dentro de Cortex. No sale nada a un tercero; revisa el detalle antes de aprobar.`;
+  }
   const system = FAMILY_SYSTEM[family] ?? 'un sistema externo';
   return `Ejecuta una escritura sobre ${system} — cambia datos reales fuera de esta conversación y puede quedar visible para otras personas.`;
 }
@@ -167,6 +202,7 @@ const CONTROL_MESSAGE_STEMS = [
   'Aprobé el plan',
   'Ya terminé en la página',
   'Ya escribí «',
+  'Edité la app en el panel',
 ] as const;
 
 export function isControlHandoffMessage(message: string): boolean {

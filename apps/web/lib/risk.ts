@@ -20,7 +20,7 @@ export interface Risk {
 const HIGH =
   /(^|[._])(send|pay|transfer|delete|remove|destroy|void|cancel|file|submit|publish|approve|disburse|payroll|refund|wire|charge|email|whatsapp|sms|message|reply|forward|invite)([._]|$)|payment|payroll|nomina|dian|exogena|transfer/i;
 const MEDIUM =
-  /(^|[._])(create|update|upsert|set|write|add|insert|edit|schedule|log|register|record|save|archive|import|sync|mark|assign|connect)([._]|$)/i;
+  /(^|[._])(create|define|apply|update|upsert|set|write|add|insert|edit|schedule|log|register|record|save|archive|import|sync|mark|assign|connect)([._]|$)/i;
 
 const RISKS: Record<RiskLevel, Risk> = {
   alto: { level: 'alto', label: 'Riesgo alto', tone: 'rose' },

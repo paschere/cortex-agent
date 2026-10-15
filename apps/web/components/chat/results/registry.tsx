@@ -124,6 +124,10 @@ export function normalizeToolId(toolName: string): string {
  * `ssr: false` no hace falta: son componentes de cliente dentro de un árbol de
  * cliente. Lo que aporta `dynamic` aquí es el corte del bundle.
  */
+const appCard: ResultView = dynamic(() =>
+  import('./AppResultCard').then((m) => m.AppResultCard as unknown as ResultView),
+);
+
 export const RICH: Record<string, ResultView> = {
   // -------------------------------------------------------------------------
   // Las que ya existían como ramas `if` escritas a mano en `MessageBubble`.
@@ -237,6 +241,15 @@ export const RICH: Record<string, ResultView> = {
   research_parallel: dynamic(() =>
     import('./ResearchTable').then((m) => m.ResearchTable as unknown as ResultView),
   ),
+  // Una app que Cortex creó, cambió, publicó o leyó: tarjeta con «Abrir al lado» (vista y editor).
+  apps_create: appCard,
+  apps_update: appCard,
+  apps_apply_draft: appCard,
+  apps_publish: appCard,
+  apps_get: appCard,
+  apps_list: dynamic(() =>
+    import('./AppResultCard').then((m) => m.AppListResult as unknown as ResultView),
+  ),
   // El borrador de una app: resumen en el chat, vista previa funcionando al lado.
   apps_design: dynamic(() =>
     import('./AppDraftResult').then((m) => m.AppDraftResult as unknown as ResultView),
@@ -270,6 +283,12 @@ const RICH_NEEDS: Record<string, (result: unknown) => boolean> = {
   trackers_list: (r) => Array.isArray(field(r, 'trackers')),
   research_parallel: (r) => Array.isArray(field(r, 'rows')) && Array.isArray(field(r, 'columns')),
   apps_design: (r) => isPlainObject(field(r, 'draft')),
+  apps_create: (r) => typeof field(field(r, 'app'), 'id') === 'string',
+  apps_update: (r) => typeof field(field(r, 'app'), 'id') === 'string',
+  apps_apply_draft: (r) => typeof field(field(r, 'app'), 'id') === 'string',
+  apps_publish: (r) => typeof field(field(r, 'app'), 'id') === 'string',
+  apps_get: (r) => typeof field(field(r, 'app'), 'id') === 'string',
+  apps_list: (r) => Array.isArray(field(r, 'apps')) && (field(r, 'apps') as unknown[]).length > 0,
   kb_propose_memory: (r) => typeof field(r, 'statement') === 'string',
   actions_propose: (r) => {
     const action = field(r, 'action');

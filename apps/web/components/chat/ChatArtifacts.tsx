@@ -9,6 +9,20 @@ import {
   liveSessionOf,
 } from '@/lib/browser-live-steps';
 import {
+  APP_PANEL_MODE_KEY,
+  APP_PANEL_WIDTH_KEY,
+  type AppPanelMode,
+  type AppRef,
+  MIN_APP_PANEL,
+  MIN_CHAT,
+  clampAppPanelWidth,
+  defaultAppPanelWidth,
+  parseStoredMode,
+  parseStoredWidth,
+  shouldRefresh,
+  shouldSwitchFromDraft,
+} from '@/lib/chat-app-panel';
+import {
   type ArtifactMeta,
   askMorePrompt,
   csvFileName,
@@ -21,7 +35,15 @@ import { inferSheet } from '@/lib/xlsx/infer';
 import { buildXlsx, xlsxFileName } from '@/lib/xlsx/write';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { BookmarkPlus, Download, Globe, MessageSquareText, PanelRightOpen, X } from 'lucide-react';
+import {
+  BookmarkPlus,
+  Download,
+  Globe,
+  LayoutGrid,
+  MessageSquareText,
+  PanelRightOpen,
+  X,
+} from 'lucide-react';
 import dynamic from 'next/dynamic';
 import {
   type ReactNode,
@@ -35,9 +57,15 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { FilesPanel } from '../tareas/FilesPanel';
+import type { AppPanelFixture } from './AppSidePanel';
 import { useChatCompose } from './ChatCompose';
 import type { TurnMetrics } from './TaskRows';
 import { ActivityTab, SourcesTab, useTurnRows } from './TurnPanel';
+
+// La app al lado (iframes del editor y de la vista): sólo se baja si hay una app.
+const AppSide = dynamic(() => import('./AppSidePanel').then((m) => m.AppSidePanel), {
+  ssr: false,
+});
 
 // La pantalla viva pesa (canvas, socket, portapapeles): sólo se baja si hay pestaña.
 const BrowserTabPanel = dynamic(() => import('./BrowserPanel'), { ssr: false });
@@ -63,7 +91,7 @@ export interface ChatArtifact extends ArtifactMeta {
   render: () => ReactNode;
 }
 
-export type PanelTab = 'navegador' | 'resultado' | 'fuentes' | 'actividad' | 'archivos';
+export type PanelTab = 'app' | 'navegador' | 'resultado' | 'fuentes' | 'actividad' | 'archivos';
 
 /** Lo que el último turno leyó y ejecutó, para las pestañas «Fuentes» y «Actividad». */
 export interface TurnInsight {
@@ -98,6 +126,23 @@ interface ArtifactsApi {
   conversationId: string | undefined;
   /** Archivos de muestra (pantallas de prueba): si vienen, la pestaña no consulta nada. */
   filesFixture: TaskFile[] | undefined;
+  /** La app de esta conversación (la que Cortex creó o cambió, la que se leyó o se mencionó con @). */
+  app: AppRef | null;
+  appMode: AppPanelMode;
+  setAppMode: (mode: AppPanelMode) => void;
+  /** Sube cada vez que Cortex cambia la app desde el chat: el panel recarga. */
+  appSync: number;
+  /** Abre la app al lado, en «Vista» o «Editar». */
+  openApp: (app: AppRef, mode?: AppPanelMode) => void;
+  /** La conversación habla de esta app (resultado de una herramienta). `history` = al cargar. */
+  syncConversationApp: (app: AppRef | null, history: boolean) => void;
+  /** Se mencionó una app con @: aparece su chip sin abrir nada. */
+  mentionApp: (app: { id: string; name: string }) => void;
+  /** Datos de muestra (pantallas de prueba): el panel no consulta nada. */
+  appFixture: AppPanelFixture | undefined;
+  /** Ancho recordado del panel cuando muestra una app. */
+  appWidth: number;
+  setAppWidth: (width: number) => void;
 }
 
 const ArtifactsContext = createContext<ArtifactsApi | null>(null);
@@ -111,10 +156,16 @@ export function ChatArtifactsProvider({
   initialSteps = [],
   conversationId,
   initialFiles,
+  initialApp = null,
+  initialAppMode,
+  appFixture,
 }: {
   children: ReactNode;
   conversationId?: string;
   initialFiles?: TaskFile[];
+  initialApp?: AppRef | null;
+  initialAppMode?: AppPanelMode;
+  appFixture?: AppPanelFixture;
   initial?: ChatArtifact | null;
   initialTab?: PanelTab;
   initialTurn?: TurnInsight | null;
@@ -122,8 +173,97 @@ export function ChatArtifactsProvider({
   initialSteps?: BrowserStep[];
 }) {
   const [current, setCurrent] = useState<ChatArtifact | null>(initial);
-  const [panelOpen, setPanelOpen] = useState(Boolean(initial) || Boolean(initialTab));
-  const [tab, setTab] = useState<PanelTab>(initialTab ?? 'resultado');
+  const [app, setApp] = useState<AppRef | null>(initialApp);
+  const [appMode, setAppModeState] = useState<AppPanelMode>(initialAppMode ?? 'vista');
+  const [appSync, setAppSync] = useState(0);
+  const [appWidth, setAppWidthState] = useState(() =>
+    typeof window === 'undefined' ? 720 : defaultAppPanelWidth(window.innerWidth),
+  );
+  const [panelOpen, setPanelOpen] = useState(
+    Boolean(initial) || Boolean(initialTab) || Boolean(initialApp && initialAppMode),
+  );
+  const [tab, setTab] = useState<PanelTab>(
+    initialTab ?? (initialApp && initialAppMode ? 'app' : 'resultado'),
+  );
+  const appRef = useRef(app);
+  appRef.current = app;
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const panelOpenRef = useRef(panelOpen);
+  panelOpenRef.current = panelOpen;
+  // Lo recordado del navegador (modo y ancho) se lee después de montar: nada de sorpresas al hidratar.
+  useEffect(() => {
+    try {
+      if (!initialAppMode)
+        setAppModeState(parseStoredMode(localStorage.getItem(APP_PANEL_MODE_KEY)));
+      setAppWidthState(
+        parseStoredWidth(localStorage.getItem(APP_PANEL_WIDTH_KEY), window.innerWidth),
+      );
+    } catch {
+      /* sin almacenamiento: valores por defecto */
+    }
+  }, [initialAppMode]);
+  const setAppMode = useCallback((mode: AppPanelMode) => {
+    setAppModeState(mode);
+    try {
+      localStorage.setItem(APP_PANEL_MODE_KEY, mode);
+    } catch {
+      /* ignorar */
+    }
+  }, []);
+  const setAppWidth = useCallback((width: number) => {
+    const next = clampAppPanelWidth(width, window.innerWidth);
+    setAppWidthState(next);
+    try {
+      localStorage.setItem(APP_PANEL_WIDTH_KEY, String(next));
+    } catch {
+      /* ignorar */
+    }
+  }, []);
+  const openApp = useCallback(
+    (next: AppRef, mode?: AppPanelMode) => {
+      setApp(next);
+      if (mode) setAppMode(mode);
+      setTab('app');
+      setPanelOpen(true);
+    },
+    [setAppMode],
+  );
+  const syncConversationApp = useCallback((next: AppRef | null, history: boolean) => {
+    const prev = appRef.current;
+    if (!next) {
+      if (prev && prev.source !== 'mention') setApp(null);
+      return;
+    }
+    const draftOpen =
+      panelOpenRef.current &&
+      currentRef.current?.kind === 'summary' &&
+      currentRef.current.title === 'Vista previa de la app';
+    if (!history && shouldSwitchFromDraft(draftOpen, prev, next)) {
+      // El borrador se creó: el panel pasa solo a la app de verdad.
+      setApp(next);
+      setCurrent(null);
+      setTab('app');
+      setPanelOpen(true);
+      return;
+    }
+    if (!shouldRefresh(prev, next)) return;
+    setApp(next);
+    if (prev?.id === next.id && !history) setAppSync((n) => n + 1);
+  }, []);
+  const mentionApp = useCallback((m: { id: string; name: string }) => {
+    if (appRef.current?.id === m.id) return;
+    setApp({
+      id: m.id,
+      slug: m.id,
+      name: m.name,
+      icon: '▦',
+      status: 'draft',
+      version: null,
+      source: 'mention',
+      updatedAt: null,
+    });
+  }, []);
   const [turn, setTurnState] = useState<TurnInsight | null>(initialTurn);
   const [live, setLive] = useState<LiveSessionRef | null>(initialLive);
   const [steps, setSteps] = useState<BrowserStep[]>(initialSteps);
@@ -188,6 +328,14 @@ export function ChatArtifactsProvider({
     setPanelOpen(true);
   }, []);
   const open = useCallback((artifact: ChatArtifact) => {
+    if (artifact.app) {
+      // Una app no es un resultado más: tiene su pestaña (vista y editor).
+      setApp(artifact.app);
+      setCurrent(null);
+      setTab('app');
+      setPanelOpen(true);
+      return;
+    }
     setCurrent(artifact);
     setTab('resultado');
     setPanelOpen(true);
@@ -218,8 +366,28 @@ export function ChatArtifactsProvider({
       stopLive,
       conversationId,
       filesFixture: initialFiles,
+      app,
+      appMode,
+      setAppMode,
+      appSync,
+      openApp,
+      syncConversationApp,
+      mentionApp,
+      appFixture,
+      appWidth,
+      setAppWidth,
     }),
     [
+      app,
+      appMode,
+      setAppMode,
+      appSync,
+      openApp,
+      syncConversationApp,
+      mentionApp,
+      appFixture,
+      appWidth,
+      setAppWidth,
       current,
       open,
       close,
@@ -251,7 +419,9 @@ export function ArtifactFrame({
 }: { artifact: ChatArtifact; children: ReactNode }) {
   const api = useChatArtifacts();
   if (!api) return <>{children}</>;
-  const isOpen = api.current?.id === artifact.id;
+  const isOpen = artifact.app
+    ? api.panelOpen && api.tab === 'app' && api.app?.id === artifact.app.id
+    : api.current?.id === artifact.id;
   return (
     <div>
       {children}
@@ -314,6 +484,7 @@ const secondary =
   'inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-3.5 py-1.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-border motion-reduce:transition-none';
 
 const TAB_LABEL: Record<PanelTab, string> = {
+  app: 'App',
   navegador: 'Computadora',
   resultado: 'Resultado',
   fuentes: 'Fuentes',
@@ -330,27 +501,33 @@ function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean })
   const rows = useTurnRows(api?.turn ?? null);
   const hasBrowser = Boolean(api?.live) || (api?.steps.length ?? 0) > 0;
   const showComputer = hasBrowser || Boolean(api?.turn?.working && rows.activity.length > 0);
+  const hasApp = Boolean(api?.app);
   const counts: Record<PanelTab, number | null> = {
+    app: null,
     navegador: api?.steps.length ?? null,
     resultado: null,
     fuentes: rows.sources.length,
     actividad: rows.activity.length,
     archivos: api?.filesFixture?.length ?? null,
   };
-  const tabs: PanelTab[] = showComputer
+  const base: PanelTab[] = showComputer
     ? ['navegador', 'resultado', 'fuentes', 'actividad', 'archivos']
     : ['resultado', 'fuentes', 'actividad', 'archivos'];
+  const tabs: PanelTab[] = hasApp ? ['app', ...base] : base;
+  const draftOpen = artifact?.title === 'Vista previa de la app';
   return (
     <>
       <div className="flex min-h-[3.5rem] shrink-0 items-center gap-2 border-b border-border px-4">
         <Title className="min-w-0 flex-1 truncate font-display text-lg text-ink">
-          {tab === 'resultado' && artifact
-            ? artifact.title
-            : tab === 'navegador'
-              ? hasBrowser
-                ? 'Cortex en el navegador'
-                : 'La computadora de Cortex'
-              : 'Lo que Cortex armó'}
+          {tab === 'app' && api?.app
+            ? api.app.name
+            : tab === 'resultado' && artifact
+              ? artifact.title
+              : tab === 'navegador'
+                ? hasBrowser
+                  ? 'Cortex en el navegador'
+                  : 'La computadora de Cortex'
+                : 'Lo que Cortex armó'}
         </Title>
         <button
           type="button"
@@ -383,7 +560,11 @@ function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean })
                 : 'border-transparent text-ink-faint hover:text-ink',
             )}
           >
-            {t === 'navegador' && hasBrowser ? 'Navegador' : TAB_LABEL[t]}
+            {t === 'navegador' && hasBrowser
+              ? 'Navegador'
+              : t === 'resultado' && draftOpen
+                ? 'Borrador'
+                : TAB_LABEL[t]}
             {counts[t] ? (
               <span className="tabular rounded-pill bg-surface-2 px-1.5 text-micro text-ink-muted">
                 {counts[t]}
@@ -396,8 +577,12 @@ function PanelBody({ onClose, sheet }: { onClose: () => void; sheet?: boolean })
         role="tabpanel"
         id="panel-tabpanel"
         aria-labelledby={`panel-tab-${tab}`}
-        className="scroll-slim min-h-0 flex-1 overflow-y-auto p-4"
+        className={clsx(
+          'min-h-0 flex-1',
+          tab === 'app' ? 'flex flex-col overflow-hidden' : 'scroll-slim overflow-y-auto p-4',
+        )}
       >
+        {tab === 'app' && <AppSide />}
         {tab === 'resultado' &&
           (artifact ? (
             artifact.render()
@@ -477,6 +662,81 @@ export function ComputerPill() {
   );
 }
 
+/**
+ * El divisor entre la conversación y el panel de la app: se arrastra (o se mueve
+ * con las flechas) y el ancho se recuerda. El panel crece hacia la izquierda.
+ */
+function Splitter({ width, onChange }: { width: number; onChange: (width: number) => void }) {
+  const drag = useRef<{ x: number; w: number } | null>(null);
+  const [active, setActive] = useState(false);
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: un divisor que se arrastra y recibe foco no es un <hr>.
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Ancho del panel de la app"
+      aria-valuenow={width}
+      aria-valuemin={MIN_APP_PANEL}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        drag.current = { x: e.clientX, w: width };
+        setActive(true);
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (drag.current) onChange(drag.current.w + (drag.current.x - e.clientX));
+      }}
+      onPointerUp={() => {
+        drag.current = null;
+        setActive(false);
+      }}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 80 : 24;
+        if (e.key === 'ArrowLeft') onChange(width + step);
+        else if (e.key === 'ArrowRight') onChange(width - step);
+        else return;
+        e.preventDefault();
+      }}
+      onDoubleClick={() => onChange(defaultAppPanelWidth(window.innerWidth))}
+      className={clsx(
+        'group absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize touch-none outline-none',
+        'focus-visible:bg-primary-soft',
+      )}
+    >
+      <span
+        aria-hidden
+        className={clsx(
+          'absolute inset-y-3 left-0.5 w-0.5 rounded-full transition-colors duration-150 motion-reduce:transition-none',
+          active ? 'bg-primary' : 'bg-transparent group-hover:bg-border-strong',
+        )}
+      />
+    </div>
+  );
+}
+
+/** «App: Control de vuelos · abrir»: en la cabecera mientras la conversación tiene una app. */
+export function AppPill() {
+  const api = useChatArtifacts();
+  if (!api?.app) return null;
+  if (api.panelOpen && api.tab === 'app') return null;
+  const { app } = api;
+  return (
+    <button
+      type="button"
+      onClick={() => api.openApp(app)}
+      title={`Abrir «${app.name}» al lado`}
+      className="inline-flex min-w-0 max-w-[16rem] shrink items-center gap-1.5 sm:gap-2 rounded-pill bg-surface-2 px-3 py-1 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-border motion-reduce:transition-none"
+    >
+      <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden />
+      <span className="min-w-[3.5rem] truncate">
+        <span className="hidden sm:inline">App: </span>
+        {app.name}
+      </span>
+      <span className="hidden shrink-0 text-primary-ink sm:inline">· abrir</span>
+    </button>
+  );
+}
+
 /** El panel mismo. Escritorio: hoja a la derecha. Teléfono y tableta: hoja desde abajo. */
 export function ArtifactPanel() {
   const api = useChatArtifacts();
@@ -517,14 +777,21 @@ export function ArtifactPanel() {
   }
 
   if (desktop) {
+    const isApp = api.tab === 'app';
     return (
       <aside
         aria-label="Lo que Cortex armó"
+        style={
+          isApp
+            ? { width: `min(${api.appWidth}px, calc(100% - ${MIN_CHAT + 280}px - 1rem))` }
+            : undefined
+        }
         className={clsx(
-          'animate-rise hidden min-h-0 shrink-0 flex-col overflow-hidden rounded-[18px] bg-surface shadow-sheet lg:flex',
-          api.tab === 'navegador' ? 'w-[min(44rem,52%)]' : 'w-[min(30rem,38%)]',
+          'animate-rise relative hidden min-h-0 shrink-0 flex-col overflow-hidden rounded-[18px] bg-surface shadow-sheet lg:flex',
+          !isApp && (api.tab === 'navegador' ? 'w-[min(44rem,52%)]' : 'w-[min(30rem,38%)]'),
         )}
       >
+        {isApp && <Splitter width={api.appWidth} onChange={api.setAppWidth} />}
         <PanelBody onClose={api.close} />
       </aside>
     );
@@ -538,7 +805,7 @@ export function ArtifactPanel() {
           aria-describedby={undefined}
           className={clsx(
             'cortex-workspace fixed inset-x-0 bottom-0 z-[61] flex flex-col overflow-hidden bg-surface pb-[env(safe-area-inset-bottom)] shadow-pop focus:outline-none',
-            api.tab === 'navegador'
+            api.tab === 'navegador' || api.tab === 'app'
               ? 'h-[100dvh] pt-[env(safe-area-inset-top)]'
               : 'max-h-[88dvh] rounded-t-[22px]',
           )}

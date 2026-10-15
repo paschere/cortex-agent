@@ -2,6 +2,7 @@
 
 import { BackgroundBanner } from '@/components/chat/BackgroundBanner';
 import {
+  AppPill,
   ArtifactPanel,
   type ChatArtifact,
   ChatArtifactsProvider,
@@ -18,6 +19,7 @@ import { DeclaredTable } from '@/components/chat/results/DeclaredTable';
 import { TABLE as DECLARED } from '@/components/chat/results/registry';
 import { FIXTURE_FILES, FIXTURE_TASKS } from '@/lib/background-tasks/fixtures';
 import { type BrowserStep, browserSteps } from '@/lib/browser-live-steps';
+import type { AppRef } from '@/lib/chat-app-panel';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Message } from 'ai';
 import { useEffect, useState } from 'react';
@@ -153,6 +155,81 @@ const LONG_MESSAGES: Message[] = [
       'Listo, creé el registro en la hoja de seguimiento y marqué las guías sin factura. Quedaron 3 críticas arriba de la vista. Última línea de esta respuesta: ya puedes revisar la vista completa y dime si quieres que avise a Operaciones.',
     createdAt: new Date('2026-10-09T09:03:00'),
   },
+];
+
+const APP_SUMMARY = {
+  id: '00000000-0000-4000-8000-000000000001',
+  slug: 'control_vuelos',
+  name: 'Control de vuelos de carga',
+  description: 'Operarios registran vuelos; supervisor aprueba; gerencia ve indicadores.',
+  icon: '✈️',
+  status: 'draft' as const,
+  screens: [
+    { slug: 'registrar_vuelo', title: 'Registrar vuelo', roles: ['operario'] },
+    { slug: 'por_aprobar', title: 'Por aprobar', roles: ['supervisor'] },
+    { slug: 'indicadores', title: 'Indicadores', roles: ['gerencia'] },
+  ],
+  url: '/apps/control_vuelos',
+  editUrl: '/apps/00000000-0000-4000-8000-000000000001/edit',
+  updatedAt: '2026-10-15T10:00:00Z',
+};
+
+const APP_REF: AppRef = {
+  id: APP_SUMMARY.id,
+  slug: APP_SUMMARY.slug,
+  name: APP_SUMMARY.name,
+  icon: APP_SUMMARY.icon,
+  status: 'draft',
+  version: null,
+  source: 'created',
+  updatedAt: APP_SUMMARY.updatedAt,
+};
+
+const APP_INFO = {
+  id: APP_SUMMARY.id,
+  slug: APP_SUMMARY.slug,
+  name: APP_SUMMARY.name,
+  icon: APP_SUMMARY.icon,
+  status: 'draft' as const,
+  publishedNumber: null,
+  canEdit: true,
+  hasChanges: true,
+  changes: ['Primera versión: 3 pantallas y 2 roles.'],
+  summary: 'Todavía no se ha publicado',
+  roles: [
+    { key: 'operario', name: 'Operario' },
+    { key: 'supervisor', name: 'Supervisor' },
+  ],
+};
+
+const APP_MESSAGES: Message[] = [
+  {
+    id: 'au1',
+    role: 'user',
+    content:
+      'Arma una app para que los operarios registren los vuelos de carga y el supervisor los apruebe.',
+    createdAt: new Date('2026-10-15T10:00:00'),
+  },
+  {
+    id: 'aa1',
+    role: 'assistant',
+    content:
+      'Listo: creé **Control de vuelos de carga** como borrador, con tres pantallas. Ábrela al lado para verla funcionando, cambiarle algo o publicarla.',
+    createdAt: new Date('2026-10-15T10:00:30'),
+    toolInvocations: [
+      {
+        state: 'result',
+        toolCallId: 'app1',
+        toolName: 'apps_apply_draft',
+        args: {},
+        result: {
+          app: APP_SUMMARY,
+          created: ['tabla vuelos', 'app', '3 pantallas'],
+          markdown: 'Aplicación **Control de vuelos de carga** creada como borrador.',
+        },
+      },
+    ],
+  } as Message,
 ];
 
 const MESSAGES: Message[] = [
@@ -356,6 +433,8 @@ export function ChatShowcase({
   archivos = false,
   tarea = null,
   largo = false,
+  app = null,
+  appFixtures,
 }: {
   dark: boolean;
   error: string | null;
@@ -368,6 +447,8 @@ export function ChatShowcase({
   archivos?: boolean;
   tarea?: 'trabajando' | 'necesita' | null;
   largo?: boolean;
+  app?: 'vista' | 'editar' | 'chip' | null;
+  appFixtures?: { draft: unknown; previews: Record<string, unknown> };
 }) {
   const [background, setBackground] = useState(false);
   const [client] = useState(() => {
@@ -414,6 +495,17 @@ export function ChatShowcase({
     <QueryClientProvider client={client}>
       <ChatArtifactsProvider
         initial={initial}
+        {...(app && appFixtures
+          ? {
+              initialApp: APP_REF,
+              ...(app !== 'chip' ? { initialAppMode: app } : {}),
+              appFixture: {
+                info: APP_INFO,
+                draft: appFixtures.draft,
+                previews: appFixtures.previews,
+              },
+            }
+          : {})}
         {...(navegador
           ? {
               initialTab: 'navegador' as const,
@@ -462,6 +554,7 @@ export function ChatShowcase({
                   ]}
                   messages={MESSAGES}
                 />
+                <AppPill />
                 <ThreadHistory />
               </header>
               <MessageList
@@ -469,15 +562,17 @@ export function ChatShowcase({
                 messages={
                   empty
                     ? []
-                    : largo
-                      ? [
-                          ...LONG_MESSAGES,
-                          ...MESSAGES,
-                          ...LONG_MESSAGES.map((m) => ({ ...m, id: `${m.id}-b` })),
-                        ]
-                      : approve
-                        ? [...MESSAGES, APPROVAL]
-                        : MESSAGES
+                    : app
+                      ? APP_MESSAGES
+                      : largo
+                        ? [
+                            ...LONG_MESSAGES,
+                            ...MESSAGES,
+                            ...LONG_MESSAGES.map((m) => ({ ...m, id: `${m.id}-b` })),
+                          ]
+                        : approve
+                          ? [...MESSAGES, APPROVAL]
+                          : MESSAGES
                 }
                 isLoading={false}
                 {...(approve ? { conversationId: 'demo' } : {})}

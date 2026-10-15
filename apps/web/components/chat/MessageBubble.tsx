@@ -3,6 +3,8 @@
 import { type AwaitingChoice, isAwaitingChoice } from '@/lib/ask-choice';
 import type { BrainSource } from '@/lib/brain-sources-shape';
 import { artifactMeta } from '@/lib/chat-artifact';
+import { dedupeProposals } from '@/lib/confirmation-dedupe';
+import { proposalReason } from '@/lib/confirmation-why';
 import {
   type ExercisedMandate,
   type NoticePlanEntry,
@@ -277,19 +279,20 @@ export function MessageBubble({
     ? (confirmationInvocation as unknown as { result: ConfirmationSentinel }).result
     : null;
   // Todas las tarjetas pendientes del mensaje (la barra «Aprobar las N» las agrupa).
-  const confirmationItems = (toolInvocations ?? []).flatMap((inv) => {
-    const result = inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
-    return isConfirmationSentinel(result)
-      ? [{ toolCallId: inv.toolCallId, toolId: result.toolId, input: result.input }]
-      : [];
-  });
-  // «Por qué lo propongo»: lo primero que Cortex dijo en este mensaje, sin markdown.
-  const proposalWhy = (() => {
-    const text = (content ?? '').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim();
-    if (!text || isStreaming) return undefined;
-    const first = text.split(/(?<=[.!?:])\s/)[0] ?? text;
-    return first.length > 240 ? `${first.slice(0, 237)}…` : first;
-  })();
+  // Una propuesta idéntica (mismo toolCallId, o misma herramienta y entrada) = una tarjeta.
+  const confirmationItems = dedupeProposals(
+    (toolInvocations ?? []).flatMap((inv) => {
+      const result = inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
+      return isConfirmationSentinel(result)
+        ? [{ toolCallId: inv.toolCallId, toolId: result.toolId, input: result.input }]
+        : [];
+    }),
+  );
+  // «Por qué lo propongo»: lo que Cortex dijo, trozo a trozo, sin sus notas técnicas.
+  const textParts = (message.parts ?? []).flatMap((p) => (p.type === 'text' ? [p.text] : []));
+  const proposalWhy = isStreaming
+    ? undefined
+    : proposalReason(textParts.length > 0 ? textParts : (content ?? ''));
 
   /**
    * La pregunta con opciones, si este mensaje trae una.

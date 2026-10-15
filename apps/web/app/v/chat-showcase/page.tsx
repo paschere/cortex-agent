@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { SAMPLE_DRAFT, sampleFixtures } from '../apps-showcase/preview-draft';
 import { ChatShowcase } from './Showcase';
 
 /**
@@ -8,7 +9,7 @@ import { ChatShowcase } from './Showcase';
  * (URLs de Drive, tabla de ocho columnas, código largo, chips con argumentos
  * largos, el aviso de error). Parámetros: `?modo=oscuro`, `?error=limite`,
  * `?error=ninguno`, `?vacio=1` (chat nuevo), `?panel=1` (panel derecho abierto; `fuentes` o `actividad` abren esa pestaña), `?aprobar=1` (tarjeta de aprobación),
- * `?largo=1` (conversación larga como la captura: pedido largo, respuesta larga, mensaje de control, respuesta final y pastillas), `?arroba=1` (menú de @ abierto), `?archivos=1` (pestaña «Archivos» del panel con archivos de mentira), `?tarea=1` / `?tarea=necesita` (la franja de una tarea en segundo plano), `?navegador=1` (panel Navegador con una sesión de mentira; `ayuda` pide tus manos).
+ * `?largo=1` (conversación larga como la captura: pedido largo, respuesta larga, mensaje de control, respuesta final y pastillas), `?arroba=1` (menú de @ abierto), `?archivos=1` (pestaña «Archivos» del panel con archivos de mentira), `?tarea=1` / `?tarea=necesita` (la franja de una tarea en segundo plano), `?app=1` (conversación con `apps.apply_draft` y la app al lado: `1`/`vista` en Vista, `editar` en Editar; `?app=chip` sólo el chip con el panel cerrado), `?navegador=1` (panel Navegador con una sesión de mentira; `ayuda` pide tus manos).
  */
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,16 @@ export default async function ChatShowcasePage({
       approve={one('aprobar') === '1'}
       mention={one('arroba') === '1'}
       largo={one('largo') === '1'}
+      app={
+        one('app') === 'editar'
+          ? 'editar'
+          : one('app') === 'chip'
+            ? 'chip'
+            : one('app') === '1' || one('app') === 'vista'
+              ? 'vista'
+              : null
+      }
+      appFixtures={{ draft: SAMPLE_DRAFT, previews: sampleFixtures(false) }}
       navegador={
         one('navegador') === 'ayuda' ? 'ayuda' : one('navegador') === '1' ? 'normal' : null
       }
