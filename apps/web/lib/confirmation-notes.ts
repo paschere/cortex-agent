@@ -118,7 +118,7 @@ export function confirmationReason(toolId: string): string {
  */
 export function confirmationFollowUp(toolId: string, result: unknown): string {
   const r = (result && typeof result === 'object' ? result : {}) as Record<string, unknown>;
-  if (toolId === 'browser.open_page') {
+  if (toolId === 'browser.open_page' || toolId === 'browser.open_chrome_page') {
     const sessionId = typeof r.sessionId === 'string' ? r.sessionId : '';
     const page = (r.page && typeof r.page === 'object' ? r.page : {}) as Record<string, unknown>;
     const url = typeof page.url === 'string' ? page.url : '';
@@ -136,6 +136,9 @@ export function confirmationFollowUp(toolId: string, result: unknown): string {
     if (sessionId) {
       // El id viaja en el texto porque es lo único que browser.act necesita
       // para retomar EXACTAMENTE esta pestaña en vez de abrir otra.
+      if (toolId === 'browser.open_chrome_page') {
+        return `Aprobé y la pestaña ya quedó abierta en mi Chrome${host ? ` en ${host}` : ''} (id de pestaña: ${sessionId}). No la vuelvas a abrir: continúa ahí con lo que ibas a hacer.`;
+      }
       return `Aprobé y la pestaña ya quedó abierta${host ? ` en ${host}` : ''} (id de pestaña: ${sessionId}). La estoy viendo en vivo aquí en el chat. No la vuelvas a abrir: continúa ahí con lo que ibas a hacer.`;
     }
   }

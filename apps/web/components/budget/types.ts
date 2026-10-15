@@ -1,5 +1,5 @@
 import type { ScreenResult } from '@/components/statements/types';
-import type { Budget, BudgetReport, ForecastBundle } from '@cortex/agent-tools';
+import type { Budget, BudgetDrill, BudgetReport, ForecastBundle } from '@cortex/agent-tools';
 
 export interface BudgetLinks {
   self: string;
@@ -24,6 +24,12 @@ export interface BudgetActions {
     budgetId: string,
     status: 'borrador' | 'aprobado' | 'archivado',
   ) => Promise<ScreenResult>;
+  /** Umbrales de alerta (0228). */
+  saveThresholds: (input: {
+    enabled: boolean;
+    warnPct: number;
+    overPct: number;
+  }) => Promise<ScreenResult>;
 }
 
 export interface BudgetScenario {
@@ -47,6 +53,8 @@ export interface BudgetScreenProps {
   statusLabels: Record<string, string>;
   scenario: BudgetScenario;
   hasLastYear: boolean;
+  /** Los movimientos de una categoría en un mes (`?detalle=…&mes=…`), si se pidió. */
+  drill: BudgetDrill | null;
   links: BudgetLinks;
   actions: BudgetActions;
 }

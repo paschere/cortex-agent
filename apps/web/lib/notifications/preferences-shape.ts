@@ -116,6 +116,7 @@ export const CATEGORY_OF_KIND: Record<NotificationKind, NotificationCategory> = 
   action_failed: 'anomalies',
   task_failed: 'anomalies',
   management_attention: 'anomalies',
+  budget_alert: 'anomalies',
   receivables_overdue: 'receivables',
   mail_worth_seeing: 'mail',
   work_assigned: 'work',

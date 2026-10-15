@@ -11,6 +11,7 @@ import {
   bogotaToday,
   budgetCategoryLabel,
   listBudgets,
+  loadBudgetDrill,
   loadBudgetReport,
   loadForecast,
   monthlyPnl,
@@ -19,6 +20,7 @@ import {
 import {
   createBudgetAction,
   removeBudgetCategoryAction,
+  saveAlertThresholdsAction,
   setBudgetCellsAction,
   setBudgetStatusAction,
 } from './actions';
@@ -95,6 +97,19 @@ export default async function BudgetPage({
       )
       .catch(() => false),
   ]);
+  // 0228: «Ver los movimientos» de una categoría y un mes (desde una alerta o una fila).
+  const drillCategory = /^[a-z0-9_ ()]{2,60}$/.test(one('detalle')) ? one('detalle') : '';
+  const drillMonth = Number(one('mes'));
+  const drill =
+    drillCategory && Number.isInteger(drillMonth) && drillMonth >= 1 && drillMonth <= 12
+      ? await loadBudgetDrill(db, {
+          category: drillCategory,
+          label: budgetCategoryLabel(drillCategory),
+          year,
+          month: drillMonth,
+          viewerId: user.id,
+        }).catch(() => null)
+      : null;
   const known = new Set<string>([...LEDGER_CATEGORIES, ...report.cells.map((c) => c.category)]);
   const href = (path: string) => workspaceHref(user.organization.id, path);
   return (
@@ -111,6 +126,7 @@ export default async function BudgetPage({
       statusLabels={{ ...BUDGET_STATUS_LABEL }}
       scenario={scenario}
       hasLastYear={lastYear}
+      drill={drill}
       links={{
         self: href('/presupuesto'),
         statements: href('/estados'),
@@ -122,6 +138,7 @@ export default async function BudgetPage({
         setCells: setBudgetCellsAction,
         removeCategory: removeBudgetCategoryAction,
         setStatus: setBudgetStatusAction,
+        saveThresholds: saveAlertThresholdsAction,
       }}
     />
   );

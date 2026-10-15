@@ -30,6 +30,7 @@ import { ArrowRight, CheckCircle2, Loader2, PencilLine, Target, TrendingUp } fro
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
+import { AlertsStrip, DrillPanel, TrendSection } from './VsExtras';
 import type { BudgetScreenProps } from './types';
 
 /**
@@ -369,6 +370,24 @@ function VsTab(props: BudgetScreenProps) {
     { key: 'pm', label: `Presupuesto ${monthName(month)}`, type: 'money', width: 160 },
     { key: 'rm', label: `Real ${monthName(month)}`, type: 'money', width: 140 },
     { key: 'vm', label: 'Variación del mes', type: 'money', width: 150 },
+    {
+      key: 'vp',
+      label: 'Variación del mes (%)',
+      type: 'percent',
+      width: 150,
+      description: 'Real del mes contra el presupuesto del mes (prorrateado si va en curso)',
+    },
+    {
+      key: 'sm',
+      label: 'Semáforo del mes',
+      type: 'status',
+      width: 190,
+      options: Object.entries(props.lightLabels).map(([value, label]) => ({
+        value,
+        label,
+        tone: LIGHT_TONE[value] ?? 'neutral',
+      })),
+    },
     { key: 'py', label: 'Presupuesto a la fecha', type: 'money', width: 170 },
     { key: 'ry', label: 'Real a la fecha', type: 'money', width: 150 },
     { key: 'ej', label: 'Ejecución', type: 'percent', width: 110 },
@@ -391,12 +410,19 @@ function VsTab(props: BudgetScreenProps) {
     return {
       id: r.category,
       locked: true,
+      href: withParam(props.links.self, {
+        anio: String(props.year),
+        detalle: r.category,
+        mes: String(month),
+      }),
       values: {
         categoria: r.label,
         tipo: r.kind,
         pm: c?.budgetToDate ?? 0,
         rm: c?.actual ?? null,
         vm: c?.variance ?? null,
+        vp: c && c.pct !== null && c.actual !== null ? Math.round((c.pct - 1) * 1000) / 10 : null,
+        sm: c?.light ?? 'pendiente',
         py: r.ytd.budget,
         ry: r.ytd.actual,
         ej: r.ytd.pct === null ? null : Math.round(r.ytd.pct * 1000) / 10,
@@ -455,6 +481,8 @@ function VsTab(props: BudgetScreenProps) {
           );
         })}
       </div>
+      <AlertsStrip {...props} />
+      <TrendSection props={props} month={month} setMonth={setMonth} />
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-ink-muted">Mes</span>
         {MONTHS_SHORT.map((label, i) => (
@@ -474,7 +502,7 @@ function VsTab(props: BudgetScreenProps) {
           </button>
         ))}
         {vs.currentFraction < 1 && month === vs.throughMonth && (
-          <span className={statusPill('amber')}>
+          <span className={clsx(statusPill('amber'), '!whitespace-normal')}>
             {capital(monthName(month))} va en curso: se compara contra el{' '}
             {Math.round(vs.currentFraction * 100)} % del presupuesto del mes
           </span>
@@ -489,6 +517,7 @@ function VsTab(props: BudgetScreenProps) {
         urlParam={false}
         height="auto"
       />
+      <DrillPanel props={props} />
       {vs.unbudgeted.length > 0 && (
         <p className="text-xs text-ink-muted">
           Tuvieron gasto sin estar en el presupuesto: {vs.unbudgeted.join(', ')}. Agrégalas en
@@ -501,9 +530,12 @@ function VsTab(props: BudgetScreenProps) {
         </p>
       )}
       <p className="text-xs text-ink-muted">
-        Lo real es de caja (el libro de plata). Gasto: verde hasta el 100 %, amarillo hasta 110 %,
-        rojo más. Ingreso al revés. En gris, «sin datos reales»: un gasto presupuestado sin ningún
-        real casi siempre es un gasto que falta cargar, no un ahorro.
+        Lo real es de caja (el libro de plata). Gasto: verde por debajo de{' '}
+        {props.report.thresholds.warnPct} % del presupuesto, amarillo hasta{' '}
+        {props.report.thresholds.overPct} %, rojo desde ahí (los umbrales los fija quien
+        administra). Ingreso al revés. Abre una fila para ver sus movimientos. En gris, «sin datos
+        reales»: un gasto presupuestado sin ningún real casi siempre es un gasto que falta cargar,
+        no un ahorro.
       </p>
     </div>
   );

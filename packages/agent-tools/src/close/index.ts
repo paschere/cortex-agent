@@ -136,3 +136,6 @@ export type {
   WritebackOutcome,
   WritebackQueue,
 } from './writeback/store';
+
+export { findUnusualMovements } from './unusual';
+export type { MovementLite as CloseMovementLite, Unusual as CloseUnusual } from './unusual';

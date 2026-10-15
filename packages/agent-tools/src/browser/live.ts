@@ -1,5 +1,14 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { isChromeSessionId } from './chrome/protocol';
+import {
+  chromeAct,
+  chromeAskPerson,
+  chromeClose,
+  chromeOpen,
+  chromeRead,
+  chromeRequestSecret,
+} from './chrome/tools';
 import { createHttpTransport } from './client';
 import { choosePageControl } from './jev-repair';
 import { forbiddenTargetReason } from './live-target';
@@ -111,6 +120,8 @@ const viewSchema = z.object({
       name: z.string(),
       value: z.string().optional(),
       disabled: z.boolean().optional(),
+      // Tu Chrome: contraseña, tarjeta o código. Sin valor y sin forma de llenarse aquí.
+      sensitive: z.boolean().optional(),
     }),
   ),
 });
@@ -275,6 +286,8 @@ export const browserAct = registerTool({
   }),
   rateLimit: { perMinute: 40 },
   handler: async (input, ctx) => {
+    // Pestaña del Chrome de la persona (sesión chr_…): otro camino, mismas formas.
+    if (isChromeSessionId(input.sessionId)) return chromeAct(ctx, input, ctx.signal);
     const transport = createHttpTransport(ctx.logger);
     const owner = browserActorKey(ctx.organizationId, ctx.userId);
 
@@ -396,6 +409,7 @@ export const browserReadPage = registerTool({
   }),
   rateLimit: { perMinute: 40 },
   handler: async (input, ctx) => {
+    if (isChromeSessionId(input.sessionId)) return chromeRead(ctx, input, ctx.signal);
     const transport = createHttpTransport(ctx.logger);
     const fresh = await transport.read(
       input.sessionId,
@@ -475,6 +489,7 @@ export const browserAskPerson = registerTool({
   }),
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
+    if (isChromeSessionId(input.sessionId)) return chromeAskPerson(ctx, input, ctx.signal);
     const transport = createHttpTransport(ctx.logger);
     const asked = await transport.control(
       input.sessionId,
@@ -516,6 +531,7 @@ export const browserRequestSecret = registerTool({
   }),
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
+    if (isChromeSessionId(input.sessionId)) return chromeRequestSecret(ctx, input, ctx.signal);
     const transport = createHttpTransport(ctx.logger);
     const owner = browserActorKey(ctx.organizationId, ctx.userId);
     const fresh = await transport.read(input.sessionId, owner);
@@ -548,8 +564,51 @@ export const browserClosePage = registerTool({
   outputSchema: z.object({ ok: z.boolean() }),
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
+    if (isChromeSessionId(input.sessionId)) return chromeClose(ctx, input.sessionId, ctx.signal);
     const transport = createHttpTransport(ctx.logger);
     await transport.closeSession(input.sessionId, browserActorKey(ctx.organizationId, ctx.userId));
     return { ok: true };
+  },
+});
+
+/**
+ * CORTEX EN TU CHROME: abrir una pestaña en el navegador REAL de la persona.
+ *
+ * Es una herramienta APARTE de browser.open_page, y a propósito. open_page
+ * declara una concesión de conversación de 15 minutos y puede delegarse con
+ * un plan o un mandato; si ésta compartiera su identificador, un «sí» dado
+ * para una pestaña en la nube valdría también para entrar con las sesiones
+ * abiertas del banco de la persona. Aquí NO: cada apertura es una tarjeta
+ * nueva, sin concesión (mandatory-confirmation.ts la lista), y además la
+ * extensión le pregunta a la persona por cada sitio. El resto de gestos
+ * (browser.act, read_page, ask_person, request_secret, close_page) sirven las
+ * dos clases de pestaña: el id `chr_…` las lleva por este camino.
+ */
+export const browserOpenChromePage = registerTool({
+  id: 'browser.open_chrome_page',
+  description:
+    'Abre una página en el Chrome REAL de la persona (extensión «Cortex en tu Chrome»), con las sesiones que ella ya tiene abiertas — su portal del banco, la DIAN, un sistema con doble factor — donde el navegador en la nube no puede entrar. Úsala SOLO cuando lo pedido necesita SU sesión iniciada; para cualquier otro sitio usa browser.open_page. Pide su aprobación cada vez, y la extensión le pregunta además por cada sitio (solo esta vez / siempre / nunca). Devuelve el id de pestaña (chr_…) y lo que hay en la página; después se maneja con browser.act, browser.read_page, browser.ask_person, browser.request_secret y browser.close_page igual que la pestaña normal. Sin Chrome conectado falla con las instrucciones para emparejarlo.',
+  inputSchema: z.object({
+    url: z.string().url().max(600).describe('La dirección completa, con https://'),
+    purpose: z
+      .string()
+      .min(3)
+      .max(200)
+      .describe(
+        'Qué vas a hacer ahí, en una frase. Es lo que la persona aprueba y lo que queda en la auditoría.',
+      ),
+  }),
+  outputSchema: z.object({
+    sessionId: z.string(),
+    page: viewSchema,
+    thumbnail: z.string().optional(),
+    guidance: z.string(),
+  }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 4 },
+  handler: async (input, ctx) => {
+    const forbidden = forbiddenTargetReason(input.url);
+    if (forbidden) throw new Error(forbidden);
+    return chromeOpen(ctx, input, ctx.signal);
   },
 });

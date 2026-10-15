@@ -9,6 +9,7 @@ import { AlertCircle, Check, Globe, Hand, Loader2, Monitor, Play } from 'lucide-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatArtifacts } from './ChatArtifacts';
 import { useChatCompose } from './ChatCompose';
+import { ChromeSessionScreen, lastShotOf } from './ChromeSession';
 import { PlanSteps } from './PlanCard';
 import { BrowserPanelScreen } from './results/BrowserLive';
 
@@ -379,7 +380,17 @@ export default function BrowserTabPanel() {
     <div className="flex flex-col gap-5">
       <PlanChecklist />
       {!browsingNow || !live ? <ComputerFrame /> : null}
-      {live ? (
+      {live?.sessionId.startsWith('chr_') ? (
+        <div className={replaying ? 'hidden' : undefined}>
+          <ChromeSessionScreen
+            sessionId={live.sessionId}
+            lastShot={lastShotOf(steps, live.sessionId)}
+            running={running ? running.doing : null}
+            {...(compose ? { onSay: compose.ask } : {})}
+            onStopped={api.stopLive}
+          />
+        </div>
+      ) : live ? (
         <div className={replaying ? 'hidden' : undefined}>
           <BrowserPanelScreen
             tab={live}

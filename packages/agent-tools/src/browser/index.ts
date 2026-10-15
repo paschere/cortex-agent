@@ -169,7 +169,12 @@ export {
   browserAct,
   browserAskPerson,
   browserClosePage,
+  browserOpenChromePage,
   browserOpenPage,
   browserReadPage,
   browserRequestSecret,
 } from './live';
+
+// Cortex en tu Chrome (migración 0227): la extensión del navegador de la
+// persona. Contrato, consentimiento, tokens y cola; ver browser/chrome/.
+export * as chromeDevice from './chrome/api';

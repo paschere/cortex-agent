@@ -1,5 +1,6 @@
 import { runChatTurn } from '@/app/api/chat-app/google/turn';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
+import { tryWhatsappTask } from '@/lib/task-intake/whatsapp';
 import { readWaitingNotice } from '@/lib/waiting';
 import { briefingLetter, waitingQuestion, whatsappBriefingGate } from '@/lib/waiting-shape';
 import { authorizeBridgeSession } from '@/lib/whatsapp/bridge';
@@ -180,6 +181,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!text) {
     return NextResponse.json({ reply: EMPTY_REPLY, delayMs: humanDelayMs(EMPTY_REPLY.length) });
+  }
+
+  // ── TAREAS POR WHATSAPP (0226) ───────────────────────────────────────────
+  // «Cortex, …» (o la palabra que la persona eligió) de un número ya vinculado
+  // y que lo encendió en Ajustes abre una tarea en segundo plano y contesta,
+  // en este mismo chat abierto, con un acuse corto y el enlace. Sin disparador
+  // —o sin haberlo encendido— el mensaje sigue su camino de siempre.
+  try {
+    const started = await tryWhatsappTask({
+      organizationId: sender.organizationId,
+      bridgeOrganizationId: auth.caller.organizationId,
+      userId: sender.userId,
+      displayName: sender.displayName ?? body.pushName?.trim() ?? null,
+      phone,
+      text,
+      messageId: body.messageId?.trim() || null,
+    });
+    if (started) {
+      const ack = started.reply ? toWhatsappText(started.reply) : null;
+      return NextResponse.json({
+        reply: ack,
+        ...(ack ? { delayMs: humanDelayMs(ack.length) } : {}),
+        reason: 'task started',
+      });
+    }
+  } catch (err) {
+    logger.warn(`whatsapp: task trigger skipped — ${(err as Error).message ?? 'unknown'}`);
   }
 
   let userText = text;

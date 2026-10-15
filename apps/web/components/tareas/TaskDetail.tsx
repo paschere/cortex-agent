@@ -15,7 +15,9 @@ import { MessageSquare, RotateCcw, Square } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { FilesPanel } from './FilesPanel';
+import { ShareReplay } from './ShareReplay';
 import { TaskApprovals } from './TaskApprovals';
+import { TaskCost } from './TaskCost';
 import { TaskStatusChip } from './TaskStatusChip';
 
 function when(iso: string | null): string {
@@ -147,6 +149,11 @@ export function TaskDetail({
             </div>
           ))}
         </dl>
+        <TaskCost
+          taskId={task.id}
+          live={live}
+          {...(fixture ? { fixtureLine: '$ 3.870 · 41.200 tokens' } : {})}
+        />
         {capLeft !== null && (
           <p className="mt-3 text-xs text-ink-faint">
             Tope de la tarea: {formatTaskDuration(TASK_CAP_MS)} de trabajo; le quedan{' '}
@@ -159,6 +166,9 @@ export function TaskDetail({
               <MessageSquare className="h-3.5 w-3.5" aria-hidden />
               Abrir la conversación
             </Link>
+          )}
+          {!live && canCancelTask(viewer, ref) && (
+            <ShareReplay taskId={task.id} fixture={fixture === true} />
           )}
           {canCancel(task.status) && canCancelTask(viewer, ref) && (
             <button

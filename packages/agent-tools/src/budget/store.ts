@@ -3,12 +3,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isCompanyManager } from '../directory/store';
 import { monthlyPnl } from '../ledger/plans';
 import { canSeePayrollDetail } from '../ledger/privacy';
+import { type AlertThresholds, type BudgetAlert, DEFAULT_THRESHOLDS, budgetAlerts } from './alerts';
+import { loadAlertSettings } from './alerts-store';
 import {
   BUDGET_STATUSES,
   type Budget,
   type BudgetCell,
   type BudgetStatus,
   type BudgetVsActual,
+  actualByCategory,
   budgetFromActuals,
   budgetKindOf,
   budgetVsActual,
@@ -328,6 +331,15 @@ export interface BudgetReport {
   vs: BudgetVsActual | null;
   canEdit: boolean;
   payrollConfidential: boolean;
+  /** Los umbrales de la empresa (0228): de ahí salen el semáforo y las alertas. */
+  thresholds: AlertThresholds;
+  /** Gastos del mes en curso que cruzaron un umbral. */
+  alerts: BudgetAlert[];
+  /**
+   * Lo real mes a mes por categoría, el año del presupuesto y el anterior (si
+   * el libro lo cubre): para la evolución y la comparación contra el año pasado.
+   */
+  monthly: Array<{ month: string; byCategory: Record<string, number> }>;
 }
 
 /** El presupuesto de un año (o el pedido) contra lo real. */
@@ -335,26 +347,47 @@ export async function loadBudgetReport(
   db: SupabaseClient,
   opts: { year: number; today: string; viewerId: string | null; budgetId?: string | null },
 ): Promise<BudgetReport> {
-  const [budget, canEdit, admin] = await Promise.all([
+  const [budget, canEdit, admin, thresholds] = await Promise.all([
     opts.budgetId ? getBudget(db, opts.budgetId) : activeBudget(db, opts.year),
     canEditBudget(db, opts.viewerId),
     canSeePayrollDetail(db, opts.viewerId),
+    loadAlertSettings(db).catch(() => DEFAULT_THRESHOLDS),
   ]);
-  if (!budget) return { budget: null, cells: [], vs: null, canEdit, payrollConfidential: !admin };
+  if (!budget)
+    return {
+      budget: null,
+      cells: [],
+      vs: null,
+      canEdit,
+      payrollConfidential: !admin,
+      thresholds,
+      alerts: [],
+      monthly: [],
+    };
   const thisYear = Number(opts.today.slice(0, 4));
   const thisMonth = Number(opts.today.slice(5, 7));
   const months = thisYear * 12 + thisMonth - (budget.year * 12 + 1) + 1;
+  // Un año más atrás, si cabe en lo que el libro lee, para comparar con el año pasado.
+  const reach = months + 12 <= 36 ? months + 12 : months;
   const [cells, history] = await Promise.all([
     budgetCells(db, budget.id),
     months >= 1 && months <= 36
-      ? monthlyPnl(db, { months, today: opts.today, includePayroll: admin })
+      ? monthlyPnl(db, { months: reach, today: opts.today, includePayroll: admin })
       : Promise.resolve([]),
   ]);
+  const vs = budgetVsActual(cells, history, {
+    year: budget.year,
+    today: opts.today,
+    thresholds,
+  });
   return {
     budget,
     cells,
-    vs: budgetVsActual(cells, history, { year: budget.year, today: opts.today }),
+    vs,
     canEdit,
     payrollConfidential: !admin,
+    thresholds,
+    alerts: budgetAlerts(vs, thresholds),
+    monthly: history.map((m) => ({ month: m.month, byCategory: actualByCategory(m) })),
   };
 }

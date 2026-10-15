@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["chrome", "node"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false,
+    "sourceMap": false
+  },
+  "include": [
+    "vitest.config.ts",
+    "src/**/*",
+    "../../packages/agent-tools/src/browser/chrome/protocol.ts",
+    "../../packages/agent-tools/src/browser/chrome/consent.ts",
+    "../../packages/agent-tools/src/browser/chrome/domain.ts"
+  ]
+}

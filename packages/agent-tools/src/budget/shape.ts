@@ -120,13 +120,34 @@ export const LIGHT_LABEL: Record<Light, string> = {
   sin_datos: 'Sin datos reales',
 };
 
-export function lightFor(kind: BudgetKind, actual: number, budget: number): Light {
+/** Desde qué % del presupuesto un gasto pasa a amarillo y a rojo (0228). */
+export interface LightThresholds {
+  warnPct: number;
+  overPct: number;
+}
+
+export function lightFor(
+  kind: BudgetKind,
+  actual: number,
+  budget: number,
+  thresholds?: LightThresholds,
+): Light {
   if (budget <= 0.5) return actual > 0.5 ? 'sin_presupuesto' : 'verde';
   // Un gasto presupuestado con cero real casi siempre es un gasto que no se
   // cargó, no un ahorro: no se pinta verde, se dice que no hay datos.
   if (kind === 'gasto' && actual < 0.5) return 'sin_datos';
   const ratio = actual / budget;
-  if (kind === 'gasto') return ratio <= 1 ? 'verde' : ratio <= 1.1 ? 'amarillo' : 'rojo';
+  if (kind === 'gasto') {
+    // Con umbrales de la empresa (0228): verde por debajo del aviso, amarillo
+    // hasta «se pasó», rojo desde ahí. Sin ellos, el semáforo de siempre.
+    if (thresholds)
+      return ratio * 100 < thresholds.warnPct
+        ? 'verde'
+        : ratio * 100 < thresholds.overPct
+          ? 'amarillo'
+          : 'rojo';
+    return ratio <= 1 ? 'verde' : ratio <= 1.1 ? 'amarillo' : 'rojo';
+  }
   return ratio >= 1 ? 'verde' : ratio >= 0.9 ? 'amarillo' : 'rojo';
 }
 
@@ -184,7 +205,7 @@ export interface BudgetVsActual {
 export function budgetVsActual(
   cells: BudgetCell[],
   history: PnlMonth[],
-  opts: { year: number; today: string },
+  opts: { year: number; today: string; thresholds?: LightThresholds },
 ): BudgetVsActual {
   const thisYear = Number(opts.today.slice(0, 4));
   const thisMonth = Number(opts.today.slice(5, 7));
@@ -239,7 +260,7 @@ export function budgetVsActual(
         actual: a,
         variance: round2(a - budgetToDate),
         pct: budgetToDate > 0.5 ? a / budgetToDate : null,
-        light: lightFor(kind, a, budgetToDate),
+        light: lightFor(kind, a, budgetToDate, opts.thresholds),
       };
     });
     const ytdBudget = round2(months.slice(0, throughMonth).reduce((s, c) => s + c.budgetToDate, 0));
@@ -256,7 +277,8 @@ export function budgetVsActual(
         actual: ytdActual,
         variance: round2(ytdActual - ytdBudget),
         pct: ytdBudget > 0.5 ? ytdActual / ytdBudget : null,
-        light: throughMonth === 0 ? 'pendiente' : lightFor(kind, ytdActual, ytdBudget),
+        light:
+          throughMonth === 0 ? 'pendiente' : lightFor(kind, ytdActual, ytdBudget, opts.thresholds),
       },
       yearBudget: round2(budgets.reduce((s, v) => s + v, 0)),
       missingMonths:

@@ -7,6 +7,10 @@ export function mandatoryHumanConfirmation(toolId: string): boolean {
     ) ||
     [
       'trackers.remove',
+      // Entrar con las sesiones abiertas de la persona en SU Chrome (0227):
+      // ningún mandato, plan ni concesión de conversación lo delega; cada
+      // apertura es una tarjeta y la extensión pregunta además por cada sitio.
+      'browser.open_chrome_page',
       'kb.share_space',
       'reports.share',
       'views.share',

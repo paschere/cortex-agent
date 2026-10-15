@@ -46,6 +46,8 @@ export interface CloseScreenData {
   links: {
     self: string;
     pdf: string;
+    /** Informe en Excel (0228); por defecto, el de PDF con otra extensión. */
+    xlsx?: string;
     integrations: string;
     approvals: string;
     /** El chat, para «Pídeselo a Cortex» (se le agrega ?prompt=). */

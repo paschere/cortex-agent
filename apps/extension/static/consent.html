@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cortex pide permiso</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <main id="app">
+    <p class="faint">Cortex pide permiso para trabajar en</p>
+    <p class="big-site" id="site"></p>
+    <p class="sub" id="purpose"></p>
+    <div class="hint">
+      Cortex verá y manejará esta pestaña con tu sesión abierta. Nunca lee tus contraseñas: las escribes tú.
+      Puedes detenerlo cuando quieras con el botón «Detener» de la pestaña.
+    </div>
+    <div class="btns">
+      <button id="once" class="primary" type="button">Solo esta vez</button>
+      <button id="always" type="button">Siempre en este sitio</button>
+      <button id="never" type="button">Nunca en este sitio</button>
+      <button id="deny" class="quiet" type="button">Ahora no</button>
+    </div>
+    <p class="faint" id="note" role="status"></p>
+  </main>
+  <script src="consent-page.js"></script>
+</body>
+</html>

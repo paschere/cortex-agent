@@ -57,6 +57,7 @@ function world(seed: Record<string, Row[]> = {}) {
     accounting_invoices: [],
     tax_obligations: [],
     stock_movements: [],
+    sales_documents: [],
     clients: [],
     ...seed,
   });
@@ -571,5 +572,104 @@ describe('registrar en el programa: idempotente y nunca dos veces', () => {
     q = await loadWritebackQueue(db, { period: '2026-09' });
     expect(q.items.map((i) => i.kind)).toEqual(['pago_proveedor']);
     expect(q.done.map((i) => i.kind)).toEqual(['compra']);
+  });
+  it('las revisiones nuevas leen libro, facturas y movimientos inusuales (0228)', async () => {
+    const move = (over: Row): Row => ({
+      id: nextId(),
+      organization_id: ORG,
+      direction: 'out',
+      kind: 'expense',
+      status: 'settled',
+      amount: 100_000,
+      currency: 'COP',
+      date: '2026-09-10',
+      category: 'mantenimiento',
+      counterparty_name: 'Taller Rápido',
+      account_id: 'acc-1',
+      source_kind: 'bank',
+      duplicate_of: null,
+      excluded_reason: null,
+      ...over,
+    });
+    const { db } = world({
+      company_modules: [],
+      accounting_connections: [SIIGO_CONN],
+      ledger_accounts: [
+        {
+          id: 'acc-1',
+          organization_id: ORG,
+          name: 'Bancolombia corriente',
+          source_kind: 'bank',
+          balance: 10_000_000,
+          balance_at: '2026-09-30',
+          balance_source: 'bank',
+        },
+      ],
+      ledger_movements: [
+        move({ date: '2026-09-30' }),
+        // anotado a mano: sin respaldo en el extracto
+        move({ source_kind: 'manual', amount: 250_000, category: 'otros' }),
+        // lo habitual de mantenimiento y un monto 4x en septiembre
+        move({ date: '2026-06-12', amount: 900_000 }),
+        move({ date: '2026-07-12', amount: 900_000 }),
+        move({ date: '2026-08-12', amount: 900_000 }),
+        move({ date: '2026-08-20', amount: 900_000 }),
+        move({ date: '2026-09-14', amount: 3_600_000 }),
+      ],
+      sales_documents: [
+        {
+          id: nextId(),
+          organization_id: ORG,
+          kind: 'invoice',
+          status: 'emitida',
+          issue_date: '2026-09-05',
+          total: 1_000_000,
+          provider_invoice_id: 'siigo-1',
+          provider_number: 'FV-1',
+          emission_uncertain: false,
+        },
+        {
+          id: nextId(),
+          organization_id: ORG,
+          kind: 'invoice',
+          status: 'error',
+          issue_date: '2026-09-07',
+          total: 500_000,
+          provider_invoice_id: null,
+          provider_number: null,
+          emission_uncertain: false,
+        },
+      ],
+    });
+    const view = await computeClose(db, '2026-09');
+    const task = (k: string) => view.tasks.find((t) => t.key === k);
+    expect(task('conciliacion_cuentas')?.auto).toMatchObject({ state: 'pendiente', count: 1 });
+    expect(task('conciliacion_cuentas')?.auto.detail).toContain('Bancolombia corriente (1');
+    expect(task('facturas_emitidas')?.auto).toMatchObject({ state: 'pendiente', count: 1 });
+    expect(task('anomalias')?.auto.state).toBe('pendiente');
+    expect(task('anomalias')?.auto.detail).toContain('veces lo habitual');
+    expect(task('anomalias')?.ready).toBe(false);
+  });
+  it('un mes cerrado no gana tareas nuevas: se ve como quedó (0228)', async () => {
+    const { db, tables } = world();
+    const view = await computeClose(db, '2026-09');
+    for (const t of view.tasks.filter((x) => !x.ready))
+      await markCloseTask(db, {
+        period: '2026-09',
+        key: t.key,
+        status: 'no_aplica',
+        evidence: 'No aplica este mes en la empresa de prueba',
+        userId: ADMIN,
+      });
+    await closePeriod(db, { period: '2026-09', userId: ADMIN });
+    // Como un mes cerrado antes de la 0228: sin la fila de una tarea que hoy existe.
+    const rows = tables.close_tasks as Row[];
+    const gone = rows.findIndex((r) => r.key === 'anomalias');
+    expect(gone).toBeGreaterThanOrEqual(0);
+    rows.splice(gone, 1);
+    const after = await computeClose(db, '2026-09');
+    expect(after.tasks.some((t) => t.key === 'anomalias')).toBe(false);
+    expect(after.progress.done).toBe(after.progress.total);
+    expect(after.pending).toBe(0);
   });
 });

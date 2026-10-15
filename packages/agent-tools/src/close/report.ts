@@ -31,6 +31,8 @@ export async function loadCloseReport(
       auto: AutoCheck;
       evidence: string | null;
       doneBy: string | null;
+      doneAt?: string | null;
+      ownerId?: string | null;
     }>;
   };
   const tasks =
@@ -42,6 +44,7 @@ export async function loadCloseReport(
           detail: t.auto?.detail ?? '',
           evidence: t.evidence,
           doneByName: t.doneBy ? (names.get(t.doneBy) ?? null) : null,
+          ownerName: t.ownerId ? (names.get(t.ownerId) ?? null) : null,
         }))
       : view.tasks.map((t) => ({
           title: t.title,
@@ -50,6 +53,7 @@ export async function loadCloseReport(
           detail: t.auto.detail,
           evidence: t.evidence,
           doneByName: t.doneBy ? (names.get(t.doneBy) ?? null) : null,
+          ownerName: t.ownerId ? (names.get(t.ownerId) ?? null) : null,
         }));
 
   const { data, error } = await db

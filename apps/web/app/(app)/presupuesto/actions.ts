@@ -7,6 +7,7 @@ import {
   bogotaToday,
   createBudget,
   removeBudgetCategory,
+  saveBudgetAlertSettings,
   setBudgetLines,
   setBudgetStatus,
   toolErrorMessage,
@@ -103,6 +104,32 @@ export async function setBudgetStatusAction(
         b.status === 'aprobado'
           ? `«${b.name}» quedó aprobado: es el que se compara contra lo real.`
           : `«${b.name}» quedó como ${b.status}.`,
+    };
+  } catch (err) {
+    return { ok: false, error: toolErrorMessage(err) };
+  }
+}
+
+/** Los umbrales de alerta del presupuesto (0228): aviso y «se pasó», por empresa. */
+export async function saveAlertThresholdsAction(input: {
+  enabled: boolean;
+  warnPct: number;
+  overPct: number;
+}): Promise<ScreenResult> {
+  try {
+    const { user, db } = await scoped();
+    const t = await saveBudgetAlertSettings(db, {
+      enabled: Boolean(input.enabled),
+      warnPct: Number(input.warnPct),
+      overPct: Number(input.overPct),
+      userId: user.id,
+    });
+    revalidatePath(PATH);
+    return {
+      ok: true,
+      note: t.enabled
+        ? `Listo: avisaré desde ${t.warnPct} % y marcaré «se pasó» desde ${t.overPct} % del presupuesto del mes.`
+        : 'Apagué las alertas de presupuesto (el semáforo sigue con estos umbrales).',
     };
   } catch (err) {
     return { ok: false, error: toolErrorMessage(err) };

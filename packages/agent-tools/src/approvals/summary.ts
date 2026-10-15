@@ -121,6 +121,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   browser_run_flow: 'Hacer el trámite en el portal',
   browser_submit_flow: 'Radicar el trámite en el portal',
   browser_open_page: 'Abrir el sitio en una pestaña viva',
+  browser_open_chrome_page: 'Abrir el sitio en tu Chrome',
   browser_act: 'Dar un paso en la página',
   browser_read_page: 'Leer la página como está',
   browser_ask_person: 'Pedirte el volante de la pestaña',

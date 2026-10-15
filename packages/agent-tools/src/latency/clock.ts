@@ -34,6 +34,7 @@ import type { Logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { LATENCY_KEEP_DAYS } from './policy';
 import type { TurnCacheStep, TurnLatency, TurnStageKey, TurnStageSample } from './types';
+import { recordModelUsage, sumCacheSteps } from './usage';
 
 export interface TurnClockInit {
   organizationId: string;
@@ -263,6 +264,27 @@ export class TurnClock {
         purge_at: purgeAt,
       });
       if (error) this.init.logger?.warn({ err: error }, 'turn_latencies insert failed');
+      // 0228: el consumo con precio, que no caduca (usage.ts). Su propio insert:
+      // si la tabla falta, la medición de tiempos ya quedó.
+      const spent = sumCacheSteps(m.cache);
+      await recordModelUsage(
+        db,
+        {
+          userId: this.init.userId,
+          conversationId: this.init.conversationId,
+          messageId: opts.messageId,
+          surface: m.surface,
+          source: 'chat',
+          model: m.model,
+          steps: m.steps,
+          // Sin detalle de caché (turno sin pasos) la entrada completa a 1x.
+          inputTokens: m.cache.length ? spent.input : (m.promptTokens ?? 0),
+          cacheReadTokens: spent.cacheRead,
+          cacheWriteTokens: spent.cacheWrite,
+          outputTokens: m.completionTokens ?? 0,
+        },
+        this.init.logger,
+      );
     } catch (err) {
       this.init.logger?.warn({ err }, 'turn_latencies capture threw');
     }

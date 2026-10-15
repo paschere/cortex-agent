@@ -4,8 +4,11 @@ import {
   BUDGET_LIGHT_LABEL,
   BUDGET_STATUS_LABEL,
   type Budget,
+  type BudgetDrill,
   LEDGER_CATEGORIES,
   type ScenarioAdjustment,
+  actualByCategory,
+  budgetAlerts,
   budgetCategoryLabel,
   budgetFromActuals,
   budgetVsActual,
@@ -55,10 +58,54 @@ export default async function PresupuestoShowcasePage({
         createdAt: '2026-01-15T15:00:00Z',
         updatedAt: '2026-01-20T15:00:00Z',
       };
-  const tweaked = cells.map((c) =>
-    c.category === 'mercadeo' ? { ...c, amount: Math.round(c.amount * 0.7) } : c,
-  );
-  const vs = budget ? budgetVsActual(tweaked, history, { year: 2026, today: TODAY }) : null;
+  const tweaked = cells.map((c) => {
+    if (c.category === 'mercadeo') return { ...c, amount: Math.round(c.amount * 0.7) };
+    // Octubre en curso: un gasto pasado (arriendo) y uno cerca del límite (servicios).
+    if (c.month === 10 && c.category === 'arriendo') return { ...c, amount: 1_400_000 };
+    if (c.month === 10 && c.category === 'servicios_publicos') return { ...c, amount: 400_000 };
+    return c;
+  });
+  const thresholds = { enabled: true, warnPct: 90, overPct: 110 };
+  const vs = budget
+    ? budgetVsActual(tweaked, history, { year: 2026, today: TODAY, thresholds })
+    : null;
+  const detalle = one('detalle');
+  const drill: BudgetDrill | null =
+    budget && detalle
+      ? {
+          category: detalle,
+          label: budgetCategoryLabel(detalle),
+          year: 2026,
+          month: Number(one('mes')) || 10,
+          total: 1_656_000,
+          count: 3,
+          rows: [
+            {
+              id: 'd1',
+              date: '2026-10-01',
+              counterparty: 'Inmobiliaria Centro',
+              description: 'Arriendo bodega octubre',
+              amount: 1_250_000,
+            },
+            {
+              id: 'd2',
+              date: '2026-10-03',
+              counterparty: 'Inmobiliaria Centro',
+              description: 'Parqueadero adicional',
+              amount: 330_000,
+            },
+            {
+              id: 'd3',
+              date: '2026-10-04',
+              counterparty: 'Administración Zona Franca',
+              description: 'Cuota de administración',
+              amount: 76_000,
+            },
+          ],
+          truncated: false,
+          confidential: false,
+        }
+      : null;
 
   const clients = [
     'Nexa Logística',
@@ -123,7 +170,16 @@ export default async function PresupuestoShowcasePage({
         one('vista') === 'editar' ? 'editar' : one('vista') === 'pronostico' ? 'pronostico' : 'real'
       }
       budgets={budget ? [budget] : []}
-      report={{ budget, cells: tweaked, vs, canEdit: true, payrollConfidential: false }}
+      report={{
+        budget,
+        cells: tweaked,
+        vs,
+        canEdit: true,
+        payrollConfidential: false,
+        thresholds,
+        alerts: vs ? budgetAlerts(vs, thresholds) : [],
+        monthly: history.map((m) => ({ month: m.month, byCategory: actualByCategory(m) })),
+      }}
       forecast={{ pnl, clients: clientF, demand, payrollConfidential: false, gaps: [] }}
       forecastError={null}
       categories={[...LEDGER_CATEGORIES].map((key) => ({ key, label: budgetCategoryLabel(key) }))}
@@ -131,6 +187,7 @@ export default async function PresupuestoShowcasePage({
       statusLabels={{ ...BUDGET_STATUS_LABEL }}
       scenario={scenario}
       hasLastYear
+      drill={drill}
       links={{
         self: '/v/presupuesto-showcase',
         statements: '/v/estados-showcase',

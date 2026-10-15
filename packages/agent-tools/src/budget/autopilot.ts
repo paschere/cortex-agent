@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { budgetAlerts } from './alerts';
+import { loadAlertSettings } from './alerts-store';
 import type { SnapshotBudget } from './autopilot-collect';
 import { budgetOverruns } from './shape';
 import { loadBudgetReport } from './store';
@@ -13,13 +15,16 @@ export async function budgetSnapshot(
 ): Promise<SnapshotBudget | undefined> {
   const r = await loadBudgetReport(db, { year: Number(today.slice(0, 4)), today, viewerId: null });
   if (!r.budget || !r.vs) return undefined;
+  const thresholds = await loadAlertSettings(db).catch(() => undefined);
+  const alerts = thresholds ? budgetAlerts(r.vs, thresholds) : undefined;
   const overruns = budgetOverruns(r.vs);
-  if (!overruns.length) return undefined;
+  if (!overruns.length && !alerts?.length) return undefined;
   return {
     budgetName: r.budget.name,
     year: r.budget.year,
     month: r.vs.throughMonth,
     currency: r.budget.currency,
     overruns,
+    ...(alerts ? { alerts } : {}),
   };
 }

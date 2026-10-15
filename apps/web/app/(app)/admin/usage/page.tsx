@@ -1,4 +1,5 @@
 import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
+import { UsageCostSection } from '@/components/admin/UsageCostSection';
 import { BarChart } from '@/components/charts/BarChart';
 import { SegmentBar } from '@/components/charts/SegmentBar';
 import { CHART_COLOR } from '@/components/charts/colors';
@@ -8,6 +9,9 @@ import { Panel } from '@/components/ui/panel';
 import { cacheSavingsUsd, formatUsd, rateFor, stepCostUsd } from '@/lib/model-pricing';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { bogotaDay } from '@/lib/usage-cost';
+import { loadUsageRows, loadUsdCopRate } from '@/lib/usage-cost-store';
+import { buildUsageCostData } from '@/lib/usage-cost-view';
 import { clsx } from 'clsx';
 import {
   AlertTriangle,
@@ -22,6 +26,7 @@ import {
 import Link from 'next/link';
 import { formatTokens, turnTokens } from '../audit/_components/format';
 import { LegendDot, RISK_BAR, SURFACE_BAR } from '../audit/_components/tags';
+import { saveUsdCopRateAction } from './actions';
 
 interface AuditEvent {
   user_id: string;
@@ -286,6 +291,62 @@ export default async function UsagePage({
 
   const totalCostUsd = chatCostUsd + errandCost.usd + orchCost.usd;
   const hasCostData = latRows.length > 0 || errandCost.tokens > 0 || orchCost.tokens > 0;
+
+  // 0228: el costo en pesos desde el libro de consumo (model_usage). Una lectura
+  // aparte y tolerante: sin la tabla (migración sin aplicar) la sección se omite.
+  const CHART_DAYS = 90;
+  const todayBogota = bogotaDay(new Date().toISOString());
+  const costData = await (async () => {
+    try {
+      const sinceChart = new Date(Date.now() - CHART_DAYS * 86_400_000).toISOString();
+      const [{ rows: usageRows, truncated }, rate] = await Promise.all([
+        loadUsageRows(sb, { since: sinceChart }),
+        loadUsdCopRate(sb),
+      ]);
+      const ids = (pick: (r: (typeof usageRows)[number]) => string | null) => [
+        ...new Set(usageRows.map(pick).filter((v): v is string => Boolean(v))),
+      ];
+      const [people, convs, tasks] = await Promise.all([
+        sb
+          .from('users')
+          .select('id, email, name')
+          .in('id', ids((r) => r.userId).slice(0, 200)),
+        sb
+          .from('conversations')
+          .select('id, title')
+          .in('id', ids((r) => r.conversationId).slice(0, 500)),
+        sb
+          .from('background_tasks')
+          .select('id, title')
+          .in('id', ids((r) => r.taskId).slice(0, 500)),
+      ]);
+      return buildUsageCostData(usageRows, {
+        rate: rate.rate,
+        customRate: rate.custom,
+        days,
+        chartDays: CHART_DAYS,
+        today: todayBogota,
+        userNames: new Map(
+          ((people.data ?? []) as unknown as UserRow[]).map((u) => [u.id, u.name || u.email]),
+        ),
+        conversationTitles: new Map(
+          ((convs.data ?? []) as unknown as Array<{ id: string; title: string | null }>).map(
+            (c) => [c.id, c.title?.trim() || 'Conversación sin título'],
+          ),
+        ),
+        taskTitles: new Map(
+          ((tasks.data ?? []) as unknown as Array<{ id: string; title: string }>).map((t) => [
+            t.id,
+            t.title,
+          ]),
+        ),
+        truncated,
+        canEditRate: true,
+      });
+    } catch {
+      return null;
+    }
+  })();
 
   const pct = (arr: number[], p: number) => {
     if (arr.length === 0) return 0;
@@ -595,6 +656,8 @@ export default async function UsagePage({
             autoritativa está en la consola de Anthropic.
           </p>
         </Panel>
+
+        {costData && <UsageCostSection data={costData} saveRate={saveUsdCopRateAction} />}
 
         <div className="grid gap-4 lg:grid-cols-2">
           {/* By tool */}

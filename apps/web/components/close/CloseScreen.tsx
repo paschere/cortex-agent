@@ -170,6 +170,13 @@ export function CloseScreen({
               <FileDown className="h-3.5 w-3.5" aria-hidden />
               Informe PDF
             </a>
+            <a
+              href={data.links.xlsx ?? data.links.pdf.replace(/pdf$/, 'xlsx')}
+              className={pillLink}
+            >
+              <FileDown className="h-3.5 w-3.5" aria-hidden />
+              Excel
+            </a>
           </>
         }
       />
@@ -1153,6 +1160,9 @@ function HistoryTab({ data }: { data: CloseScreenData }) {
             rel="noreferrer"
           >
             <FileDown className="h-3.5 w-3.5" aria-hidden /> PDF
+          </a>
+          <a href={`/api/cierre/${h.period}/xlsx`} className={pillLink}>
+            <FileDown className="h-3.5 w-3.5" aria-hidden /> Excel
           </a>
         </div>
       ))}

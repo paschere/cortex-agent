@@ -97,6 +97,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   // ask_person, request_secret, close_page) los decide el bot dentro de la
   // pestaña y no son una petición — están en la fontanería del test.
   'browser.open_page': 'Entra a este sitio web y encárgate: ',
+  'browser.open_chrome_page': 'Entra con mi Chrome (con mi sesión abierta) a ',
 
   'chat.send_dm': 'Escríbele por Google Chat a ',
   'chat.send_message': 'Publica en el espacio de Google Chat ',
@@ -416,6 +417,9 @@ export const TOOL_PHRASE: Record<string, string> = {
   'accounting.sync_now': 'Trae ya lo nuevo del programa contable',
   'apps.list': 'Muéstrame las aplicaciones que tenemos',
   'apps.design': 'Diséñame una aplicación completa para ',
+  'apps.apply_draft': 'Crea la aplicación tal como está en la vista previa',
+  'trackers.set_flow': 'Agrégale un flujo por estados a la tabla ',
+  'tasks.start_background': 'Haz esto en segundo plano: ',
   'apps.create': 'Hazme una aplicación para ',
   'apps.get': 'Muéstrame cómo está armada la aplicación ',
   'apps.update': 'Cambia la aplicación ',

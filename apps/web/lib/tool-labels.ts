@@ -96,6 +96,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   browser_run_flow: { label: 'Hacer el trámite en el portal', icon: 'Globe' },
   browser_submit_flow: { label: 'Radicar el trámite en el portal', icon: 'Send' },
   browser_open_page: { label: 'Abrir el sitio en una pestaña viva', icon: 'Globe' },
+  browser_open_chrome_page: { label: 'Abrir el sitio en tu Chrome', icon: 'Globe' },
   browser_act: { label: 'Dar un paso en la página', icon: 'MousePointerClick' },
   browser_read_page: { label: 'Leer la página como está', icon: 'Eye' },
   browser_ask_person: { label: 'Pedirte el volante de la pestaña', icon: 'Hand' },

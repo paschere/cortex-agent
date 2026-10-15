@@ -37,6 +37,11 @@ const PUBLIC_PATHS = [
   '/.well-known/oauth-protected-resource',
   '/.well-known/oauth-authorization-server',
   '/api/oauth',
+  // Cortex en tu Chrome (0227): la extensión habla aquí con su token de
+  // dispositivo (Authorization: Bearer cbd_…), sin cookie. Cada ruta lo
+  // verifica contra el hash guardado y rechaza con 401 lo demás; el token no
+  // vale en ninguna otra ruta de la app (todas exigen la sesión).
+  '/api/extension',
   // The MCP endpoint authenticates with an OAuth bearer token (no better-auth
   // session cookie), so it must bypass the session-cookie redirect. It enforces
   // its own bearer validation and returns 401 + WWW-Authenticate when missing.
@@ -120,6 +125,10 @@ const PUBLIC_PATHS = [
   // El resto de /informe-socios y /api/board sigue detrás de la sesión.
   '/informe',
   '/api/board/public',
+  // Repetición compartida de una tarea (0226): la página por token y sus capturas.
+  // El token (192 bits, sólo su hash en la base) es la credencial; ver
+  // lib/task-share/public.ts. Sólo lectura.
+  '/r',
   // La hoja de estilos de informes y gráficas (app/report.css/route.ts): la
   // carga el layout raíz en TODAS las páginas, también las públicas — una
   // vista compartida o la landing la pedían sin cookie y rebotaban a /login.

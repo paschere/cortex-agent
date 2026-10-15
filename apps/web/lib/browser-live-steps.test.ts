@@ -154,3 +154,31 @@ describe('liveSessionOf', () => {
     expect(steps.map((s) => s.sentence)).toEqual(['Abrí a.co', 'Fui a b.co']);
   });
 });
+
+describe('Cortex en tu Chrome', () => {
+  it('cuenta la apertura en tu Chrome y toma la sesión chr_ como pestaña viva', () => {
+    const calls = [
+      inv(
+        'browser_open_chrome_page',
+        { url: 'https://sucursalvirtual.bancolombia.com/x' },
+        { sessionId: 'chr_0123456789abcdef', thumbnail: '/api/browser/chrome/shot/abc' },
+      ),
+    ];
+    const s = summarizeBrowserStep(calls[0] as ReturnType<typeof inv>);
+    expect(s?.sentence).toBe('Abrí sucursalvirtual.bancolombia.com en tu Chrome');
+    expect(s?.thumb).toBe('/api/browser/chrome/shot/abc');
+    expect(liveSessionOf(calls)).toMatchObject({ sessionId: 'chr_0123456789abcdef' });
+  });
+
+  it('cerrar la pestaña de tu Chrome la quita de en vivo', () => {
+    const live = liveSessionOf([
+      inv(
+        'browser_open_chrome_page',
+        { url: 'https://a.co' },
+        { sessionId: 'chr_0123456789abcdef' },
+      ),
+      inv('browser_close_page', { sessionId: 'chr_0123456789abcdef' }, { ok: true }),
+    ]);
+    expect(live).toBeNull();
+  });
+});

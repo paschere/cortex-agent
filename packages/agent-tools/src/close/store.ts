@@ -1,5 +1,6 @@
 import { ForbiddenError, type UUID, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { listAccountingConnections } from '../accounting/store';
 import { writeAuditEvent } from '../audit';
 import { isCompanyManager } from '../directory/store';
 import type { ModuleKey } from '../modules/catalog';
@@ -23,10 +24,12 @@ import {
   periodStart,
   progressOf,
   shiftDay,
+  shiftPeriod,
   taskDef,
   taskReady,
   tasksFor,
 } from './shape';
+import { findUnusualMovements } from './unusual';
 import { pendingWritebackCounts } from './writeback/store';
 
 /**
@@ -222,6 +225,174 @@ async function taxesOf(db: SupabaseClient, period: string) {
   };
 }
 
+/**
+ * Por cuenta del banco: lo que el libro tiene del mes sin que venga del
+ * extracto, y el saldo a fin de mes que se deduce del último saldo del banco
+ * (restando o sumando lo que se movió entre esa fecha y el fin del mes).
+ */
+async function accountReconciliation(db: SupabaseClient, period: string) {
+  const { data, error } = await db
+    .from('ledger_accounts')
+    .select('id, name, balance, balance_at')
+    .eq('source_kind', 'bank')
+    .limit(50);
+  if (error) throw error;
+  const accounts = (data ?? []) as Array<{
+    id: string;
+    name: string;
+    balance: number | string;
+    balance_at: string | null;
+  }>;
+  const start = periodStart(period);
+  const end = periodEnd(period);
+  const out: NonNullable<CloseCheckData['accountRecon']> = [];
+  for (const a of accounts) {
+    const extra = await db
+      .from('ledger_movements')
+      .select('amount')
+      .eq('account_id', a.id)
+      .neq('source_kind', 'bank')
+      .eq('status', 'settled')
+      .in('kind', ['income', 'expense'])
+      .is('duplicate_of', null)
+      .is('excluded_reason', null)
+      .gte('date', start)
+      .lte('date', end)
+      .limit(2000);
+    if (extra.error) throw extra.error;
+    const rows = (extra.data ?? []) as Array<{ amount: number | string }>;
+    let balanceAtEnd: number | null = null;
+    if (a.balance_at && a.balance_at <= shiftDay(end, 45)) {
+      const from = a.balance_at < end ? a.balance_at : end;
+      const to = a.balance_at < end ? end : a.balance_at;
+      const moves = await db
+        .from('ledger_movements')
+        .select('amount, direction')
+        .eq('account_id', a.id)
+        .eq('status', 'settled')
+        .in('kind', ['income', 'expense', 'transfer'])
+        .is('duplicate_of', null)
+        .gt('date', from)
+        .lte('date', to)
+        .limit(5000);
+      if (moves.error) throw moves.error;
+      const net = (
+        (moves.data ?? []) as Array<{ amount: number | string; direction: string }>
+      ).reduce((s, m) => s + (m.direction === 'in' ? 1 : -1) * (Number(m.amount) || 0), 0);
+      balanceAtEnd =
+        Math.round((a.balance_at < end ? Number(a.balance) + net : Number(a.balance) - net) * 100) /
+        100;
+    }
+    out.push({
+      name: a.name,
+      extraCount: rows.length,
+      extraAmount: rows.reduce((s, r) => s + (Number(r.amount) || 0), 0),
+      balanceAtEnd,
+    });
+  }
+  return out;
+}
+
+/** Facturas de venta del mes: las de Cortex contra lo que ve el programa. */
+async function issuedInvoicesOf(
+  db: SupabaseClient,
+  period: string,
+): Promise<NonNullable<CloseCheckData['issuedInvoices']> | null> {
+  const start = periodStart(period);
+  const end = periodEnd(period);
+  const docs = await db
+    .from('sales_documents')
+    .select('status, total, provider_invoice_id, provider_number, emission_uncertain')
+    .eq('kind', 'invoice')
+    .neq('status', 'anulada')
+    .gte('issue_date', start)
+    .lte('issue_date', end)
+    .limit(2000);
+  if (docs.error) throw docs.error;
+  const rows = (docs.data ?? []) as Array<{
+    status: string;
+    total: number | string;
+    provider_invoice_id: string | null;
+    provider_number: string | null;
+    emission_uncertain: boolean;
+  }>;
+  const connections = await listAccountingConnections(db).catch(() => []);
+  const hasProgram = connections.some((c) => c.enabled);
+  const prog = hasProgram
+    ? await db
+        .from('accounting_invoices')
+        .select('source_ref, doc_number, total')
+        .eq('annulled', false)
+        .gte('issued_on', start)
+        .lte('issued_on', end)
+        .limit(5000)
+    : null;
+  if (prog?.error) throw prog.error;
+  const program = (prog?.data ?? []) as Array<{
+    source_ref: string;
+    doc_number: string;
+    total: number | string;
+  }>;
+  if (!rows.length && !program.length) return null;
+  const emitted = rows.filter((r) => r.status === 'emitida');
+  const known = new Set(program.flatMap((p) => [p.source_ref, p.doc_number]));
+  const missing = program.length
+    ? emitted.filter(
+        (r) =>
+          !(r.provider_invoice_id && known.has(r.provider_invoice_id)) &&
+          !(r.provider_number && known.has(r.provider_number)),
+      ).length
+    : 0;
+  return {
+    cortexCount: emitted.length,
+    cortexTotal: emitted.reduce((s, r) => s + (Number(r.total) || 0), 0),
+    programCount: hasProgram ? program.length : null,
+    programTotal: hasProgram ? program.reduce((s, r) => s + (Number(r.total) || 0), 0) : null,
+    problems: rows.filter((r) => r.status !== 'emitida' || r.emission_uncertain).length,
+    missingInProgram: missing,
+  };
+}
+
+/** Lo inusual del mes: el mes contra los tres anteriores. */
+async function unusualOf(db: SupabaseClient, period: string) {
+  const from = periodStart(shiftPeriod(period, -3));
+  const { data, error } = await db
+    .from('ledger_movements')
+    .select('id, date, amount, direction, category, counterparty_name')
+    .gte('date', from)
+    .lte('date', periodEnd(period))
+    .eq('status', 'settled')
+    .eq('kind', 'expense')
+    .eq('direction', 'out')
+    .is('duplicate_of', null)
+    .is('excluded_reason', null)
+    .limit(8000);
+  if (error) throw error;
+  const all = (
+    (data ?? []) as Array<{
+      id: string;
+      date: string;
+      amount: number | string;
+      direction: 'in' | 'out';
+      category: string | null;
+      counterparty_name: string | null;
+    }>
+  ).map((r) => ({
+    id: r.id,
+    date: r.date,
+    amount: Number(r.amount) || 0,
+    direction: r.direction,
+    category: r.category,
+    counterparty: r.counterparty_name,
+  }));
+  const start = periodStart(period);
+  const found = findUnusualMovements(
+    all.filter((m) => m.date >= start),
+    all.filter((m) => m.date < start),
+  );
+  return found.map((u) => ({ kind: u.kind, label: u.label, amount: u.amount }));
+}
+
 /** Lee todo lo que la lista necesita saber del mes. Nada aquí escribe. */
 export async function loadCloseCheckData(
   db: SupabaseClient,
@@ -231,56 +402,75 @@ export async function loadCloseCheckData(
   const start = periodStart(period);
   const end = periodEnd(period);
   const on = (m: ModuleKey) => modulesOn.has(m);
-  const [bankAccounts, unmatched, awaiting, writebacks, uncategorized, payroll, taxes, inventory] =
-    await Promise.all([
-      attempt(() => bankAccountsCoverage(db, period)),
-      attempt(() => bankUnmatched(db, period)),
-      on('payables')
-        ? attempt(() =>
-            countRows(
+  const [
+    bankAccounts,
+    unmatched,
+    awaiting,
+    writebacks,
+    uncategorized,
+    payroll,
+    taxes,
+    inventory,
+    accountRecon,
+    issued,
+    unusual,
+  ] = await Promise.all([
+    attempt(() => bankAccountsCoverage(db, period)),
+    attempt(() => bankUnmatched(db, period)),
+    on('payables')
+      ? attempt(() =>
+          countRows(
+            db
+              .from('payable_invoices')
+              .select('id', { count: 'exact', head: true })
+              .gte('issue_date', start)
+              .lte('issue_date', end)
+              .in('status', ['recibida', 'por_aprobar']),
+          ),
+        )
+      : Promise.resolve(0),
+    attempt(() => pendingWritebackCounts(db, period)),
+    on('finance') ? attempt(() => uncategorizedOf(db, period)) : Promise.resolve(undefined),
+    on('payroll')
+      ? attempt(
+          async () =>
+            (await countRows(
               db
-                .from('payable_invoices')
+                .from('ledger_movements')
                 .select('id', { count: 'exact', head: true })
-                .gte('issue_date', start)
-                .lte('issue_date', end)
-                .in('status', ['recibida', 'por_aprobar']),
-            ),
-          )
-        : Promise.resolve(0),
-      attempt(() => pendingWritebackCounts(db, period)),
-      on('finance') ? attempt(() => uncategorizedOf(db, period)) : Promise.resolve(undefined),
-      on('payroll')
-        ? attempt(
-            async () =>
-              (await countRows(
-                db
-                  .from('ledger_movements')
-                  .select('id', { count: 'exact', head: true })
-                  .gte('date', start)
-                  .lte('date', end)
-                  .eq('category', 'nomina')
-                  .eq('direction', 'out')
-                  .neq('status', 'cancelled')
-                  .is('duplicate_of', null),
-              )) > 0,
-          )
-        : Promise.resolve(undefined),
-      on('taxes') ? attempt(() => taxesOf(db, period)) : Promise.resolve(undefined),
-      on('inventory')
-        ? attempt(
-            async () =>
-              (await countRows(
-                db
-                  .from('stock_movements')
-                  .select('id', { count: 'exact', head: true })
-                  .eq('reference_kind', 'conteo')
-                  .gte('occurred_on', shiftDay(end, -7))
-                  .lte('occurred_on', shiftDay(end, 10)),
-              )) > 0,
-          )
-        : Promise.resolve(undefined),
-    ]);
+                .gte('date', start)
+                .lte('date', end)
+                .eq('category', 'nomina')
+                .eq('direction', 'out')
+                .neq('status', 'cancelled')
+                .is('duplicate_of', null),
+            )) > 0,
+        )
+      : Promise.resolve(undefined),
+    on('taxes') ? attempt(() => taxesOf(db, period)) : Promise.resolve(undefined),
+    on('inventory')
+      ? attempt(
+          async () =>
+            (await countRows(
+              db
+                .from('stock_movements')
+                .select('id', { count: 'exact', head: true })
+                .eq('reference_kind', 'conteo')
+                .gte('occurred_on', shiftDay(end, -7))
+                .lte('occurred_on', shiftDay(end, 10)),
+            )) > 0,
+        )
+      : Promise.resolve(undefined),
+    attempt(() => accountReconciliation(db, period)),
+    on('sales')
+      ? attempt(async () => (await issuedInvoicesOf(db, period)) ?? null)
+      : Promise.resolve(null),
+    on('finance') ? attempt(() => unusualOf(db, period)) : Promise.resolve(undefined),
+  ]);
   return {
+    accountRecon,
+    issuedInvoices: issued,
+    unusual,
     bankAccounts,
     bankUnmatched: unmatched,
     payablesAwaiting: awaiting,
@@ -320,7 +510,11 @@ function buildView(
   now: Date,
 ): CloseView {
   const byKey = new Map(stored.map((t) => [t.key, t]));
-  const tasks: CloseTaskView[] = defs.map((def) => {
+  // Un mes cerrado se muestra como quedó: las tareas que se agregaron a la
+  // lista después de cerrarlo (0228) no le cuentan como pendientes.
+  const shown =
+    row?.status === 'cerrado' && stored.length ? defs.filter((d) => byKey.has(d.key)) : defs;
+  const tasks: CloseTaskView[] = shown.map((def) => {
     const t = byKey.get(def.key);
     const auto = checks.get(def.key) ??
       t?.auto_check ?? { state: 'error', detail: 'Sin revisar todavía.' };
@@ -627,6 +821,7 @@ export async function closePeriod(
       evidence: t.evidence,
       doneBy: t.doneBy,
       doneAt: t.doneAt,
+      ownerId: t.ownerId,
     })),
   };
   const { error } = await db

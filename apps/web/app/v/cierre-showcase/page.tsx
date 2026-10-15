@@ -44,9 +44,38 @@ export default async function CierreShowcasePage({
     uncategorized: { count: 0, amount: 0 },
     taxPending: [],
     taxDue: 2,
+    accountRecon: [
+      { name: 'Bancolombia corriente', extraCount: 0, extraAmount: 0, balanceAtEnd: 48_250_000 },
+      {
+        name: 'Davivienda ahorros',
+        extraCount: 2,
+        extraAmount: 1_380_000,
+        balanceAtEnd: 12_900_000,
+      },
+    ],
+    issuedInvoices: {
+      cortexCount: 14,
+      cortexTotal: 86_450_000,
+      programCount: 15,
+      programTotal: 91_200_000,
+      problems: 1,
+      missingInProgram: 0,
+    },
+    unusual: [
+      {
+        kind: 'monto_alto',
+        label: '$ 6.800.000 en mantenimiento (Taller Rápido), 4,3 veces lo habitual',
+        amount: 6_800_000,
+      },
+      {
+        kind: 'duplicado',
+        label: 'posible duplicado: $ 1.190.000 a Papelería El Cóndor dos veces (12/09 y 14/09)',
+        amount: 1_190_000,
+      },
+    ],
   };
   const tasks = CLOSE_TASKS.filter(
-    (t) => !t.module || ['payables', 'finance', 'taxes'].includes(t.module),
+    (t) => !t.module || ['payables', 'finance', 'taxes', 'sales'].includes(t.module),
   ).map((def) => {
     const auto = evaluateCloseCheck(def.key, checks, period);
     const status = def.key === 'provisiones' ? ('hecha' as const) : ('pendiente' as const);

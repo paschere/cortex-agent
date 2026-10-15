@@ -86,6 +86,8 @@ export const NOTIFICATION_KINDS = [
   'task_finished',
   'task_needs_you',
   'task_failed',
+  /** Un gasto cruzó el umbral del presupuesto del mes (90 % / 110 %). Ver la 0228. */
+  'budget_alert',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -138,6 +140,7 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   task_finished: 'good',
   task_needs_you: 'warning',
   task_failed: 'bad',
+  budget_alert: 'warning',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -164,6 +167,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   task_finished: 'Tarea',
   task_needs_you: 'Tarea',
   task_failed: 'Tarea',
+  budget_alert: 'Presupuesto',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */

@@ -22,7 +22,13 @@ export function BudgetFixture({
       <main className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8 md:py-7">
         <BudgetScreen
           {...props}
-          actions={{ create: fake, setCells: fake, removeCategory: fake, setStatus: fake }}
+          actions={{
+            create: fake,
+            setCells: fake,
+            removeCategory: fake,
+            setStatus: fake,
+            saveThresholds: fake,
+          }}
         />
       </main>
     </div>

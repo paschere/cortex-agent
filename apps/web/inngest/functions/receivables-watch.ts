@@ -1,3 +1,4 @@
+import { runBudgetAlerts } from '@/lib/budget-alerts';
 import { sendEmail } from '@/lib/email';
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
@@ -154,6 +155,17 @@ export const receivablesWatchWorkspaceJob: JobHandler = async ({ event, step }) 
     } catch (err) {
       logger.warn({ err, organizationId }, 'ledger sync failed');
       return { status: 'error' as const };
+    }
+  });
+
+  // 0228: con el libro al día, las alertas de presupuesto (umbral por empresa).
+  // Su propio paso: si falla, los avisos de cartera salen igual.
+  await step.run('budget-alerts', async () => {
+    try {
+      return await runBudgetAlerts(getOrgScopedClient(organizationId), { today });
+    } catch (err) {
+      logger.warn({ err, organizationId }, 'budget alerts failed');
+      return { alerts: 0, notified: 0 };
     }
   });
 

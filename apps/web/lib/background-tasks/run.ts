@@ -16,14 +16,17 @@ import { createTurnPersister } from '@/lib/turn-persist';
 import { type TurnOutcome, digestToolWork, withoutNotes } from '@/lib/turn-transcript';
 import {
   type AnyTool,
+  anthropicStepCache,
   chatModel,
   checkMeter,
   describePendingCall,
   enabledModules,
   filterTools,
   isRefused,
+  recordModelUsage,
   runTool,
   selectToolsForTurn,
+  sumCacheSteps,
   toolAllowedByModules,
   toolErrorDetail,
   toolErrorMessage,
@@ -472,6 +475,8 @@ async function runClaimed(db: SupabaseClient, task: TaskRecord): Promise<Segment
   });
 
   const usage = { promptTokens: 0, completionTokens: 0 };
+  // 0228: la entrada por paso con su caché, para ponerle precio a la tanda.
+  const cacheSteps: Array<{ read: number; written: number; promptTokens: number }> = [];
   let end: SegmentEnd = 'finished';
   let finishReason: string | undefined;
   let finalText: string | null = null;
@@ -493,6 +498,10 @@ async function runClaimed(db: SupabaseClient, task: TaskRecord): Promise<Segment
       onStepFinish: (step) => {
         usage.promptTokens += step.usage?.promptTokens || 0;
         usage.completionTokens += step.usage?.completionTokens || 0;
+        cacheSteps.push({
+          ...anthropicStepCache(step.providerMetadata),
+          promptTokens: step.usage?.promptTokens || 0,
+        });
         steps.push({
           text: step.text,
           reasoning: typeof step.reasoning === 'string' ? step.reasoning : undefined,
@@ -546,6 +555,7 @@ async function runClaimed(db: SupabaseClient, task: TaskRecord): Promise<Segment
     agentId: agent.id,
     model: agent.defaultModel,
     toolSteps,
+    cacheSteps,
   });
 }
 
@@ -562,6 +572,7 @@ interface CloseInput {
   agentId?: string;
   model?: string | null;
   toolSteps?: number;
+  cacheSteps?: Array<{ read: number; written: number; promptTokens: number }>;
 }
 
 async function closeSegment(
@@ -608,6 +619,28 @@ async function closeSegment(
     patch.result = input.finalText.slice(0, 59_000);
   }
   await finishTask(db, task.id, patch);
+
+  // 0228: el consumo de la tanda con su precio (modelo + caché), por tarea.
+  if (input.model && input.usage.promptTokens + input.usage.completionTokens > 0) {
+    const spent = sumCacheSteps(input.cacheSteps ?? []);
+    await recordModelUsage(
+      db,
+      {
+        userId: task.userId,
+        conversationId: task.conversationId,
+        taskId: task.id,
+        surface: 'task',
+        source: 'task',
+        model: input.model,
+        steps: input.steps.length,
+        inputTokens: input.cacheSteps?.length ? spent.input : input.usage.promptTokens,
+        cacheReadTokens: spent.cacheRead,
+        cacheWriteTokens: spent.cacheWrite,
+        outputTokens: input.usage.completionTokens,
+      },
+      logger,
+    );
+  }
 
   // Auditoría de la tanda, como la del turno del chat.
   if (input.agentId && task.conversationId) {

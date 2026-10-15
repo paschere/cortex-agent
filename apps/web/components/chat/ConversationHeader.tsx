@@ -4,7 +4,7 @@ import type { ScopeSpace } from '@/app/(chat)/chat/actions';
 import { conversationMarkdown, markdownFileName } from '@/lib/chat-turn';
 import { formatDuration } from '@/lib/tool-args';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import {
   Activity,
@@ -31,8 +31,9 @@ import { useTurnRows } from './TurnPanel';
  * persona puede ver); una línea discreta da la duración del último turno que
  * ya medía el servidor; y las dos pestañas del panel (Fuentes, Actividad) se
  * abren desde aquí. El menú «…» fija, renombra, exporta y elimina con las
- * mismas rutas que la lista de chats. No hay costo por turno en lo que el
- * servidor guarda hoy, así que no se muestra uno.
+ * mismas rutas que la lista de chats. Junto a la duración va, discreto, lo que
+ * costó la conversación («$ 1.240 · 12.400 tokens»): el consumo registrado de
+ * sus turnos con precio en pesos (0228); sin consumo registrado, nada.
  */
 
 const menuItem =
@@ -115,6 +116,28 @@ export function ConversationHeader({ conversationId, title, onTitle, scope, mess
 
   const metrics = api?.turn?.metrics ?? null;
   const total = formatDuration(metrics?.totalMs);
+  // El costo se relee cuando termina un turno nuevo (cambian sus medidas) y
+  // una vez más poco después: el consumo se escribe justo tras la respuesta.
+  const turnKey = metrics ? `${metrics.totalMs}:${metrics.toolCalls}` : null;
+  const cost = useQuery({
+    queryKey: ['conversation-cost', conversationId, turnKey],
+    enabled: Boolean(conversationId),
+    staleTime: 15_000,
+    queryFn: async (): Promise<{ line: string; usd: number } | null> => {
+      const r = await fetch(`/api/conversations/${conversationId}/cost`, { cache: 'no-store' });
+      if (!r.ok) return null;
+      const body = (await r.json()) as { cost: { line: string; usd: number } | null };
+      return body.cost;
+    },
+  });
+  useEffect(() => {
+    if (!turnKey) return;
+    const t = setTimeout(
+      () => void qc.invalidateQueries({ queryKey: ['conversation-cost', conversationId] }),
+      2500,
+    );
+    return () => clearTimeout(t);
+  }, [turnKey, conversationId, qc]);
   const isPinned = conversationId ? pinned.has(conversationId) : false;
   const shownScope = scope.slice(0, 2);
   const restScope = scope.length - shownScope.length;
@@ -178,6 +201,14 @@ export function ConversationHeader({ conversationId, title, onTitle, scope, mess
               ))}
               {restScope > 0 && <span>+{restScope}</span>}
             </>
+          )}
+          {cost.data && (
+            <span
+              className="tabular ml-1 font-mono"
+              title="Lo que ha costado esta conversación (estimado, a la tasa de la empresa)"
+            >
+              · {cost.data.line}
+            </span>
           )}
           {total && metrics && (
             <span className="tabular ml-1 font-mono">

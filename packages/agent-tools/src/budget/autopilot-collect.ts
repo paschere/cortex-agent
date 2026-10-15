@@ -1,5 +1,6 @@
 import type { PlanItem } from '../autopilot/types';
 import { formatMoney } from '../ledger/forecast-shared';
+import { type BudgetAlert, alertHref, alertPct, alertTitle } from './alerts';
 import type { Overrun } from './shape';
 
 /**
@@ -18,6 +19,12 @@ export interface SnapshotBudget {
   month: number;
   currency: string;
   overruns: Overrun[];
+  /**
+   * 0228: lo que cruzó el umbral de la empresa en el mes en curso («Combustible
+   * va en 112 % del presupuesto del mes»). Con esto presente, el aviso del mes
+   * sale de aquí y de `overruns` sólo queda el acumulado del año.
+   */
+  alerts?: BudgetAlert[];
 }
 
 const MONTHS = [
@@ -38,7 +45,23 @@ const MONTHS = [
 /** Pura: una línea por categoría que se pasó (hasta cuatro, las más grandes). */
 export function collectPresupuesto(s: SnapshotBudget | undefined): PlanItem[] {
   if (!s) return [];
-  return s.overruns.slice(0, 4).map((o) => ({
+  const fromAlerts: PlanItem[] = (s.alerts ?? []).slice(0, 5).map((a) => ({
+    area: 'finanzas',
+    title: alertTitle(a),
+    why:
+      a.level === 'excedido'
+        ? `En ${MONTHS[a.month - 1]} van ${formatMoney(a.actual, s.currency)} contra ${formatMoney(a.budget, s.currency)} presupuestados (${formatMoney(a.over, s.currency)} arriba). Mira los movimientos de la categoría.`
+        : `En ${MONTHS[a.month - 1]} van ${formatMoney(a.actual, s.currency)} de ${formatMoney(a.budget, s.currency)} presupuestados (${alertPct(a.ratio)} %): le queda ${formatMoney(Math.max(a.budget - a.actual, 0), s.currency)} al mes.`,
+    proposedAction: null,
+    effect: null,
+    risk: a.ratio >= 1.25 ? 'high' : a.level === 'excedido' ? 'medium' : 'low',
+    amount: Math.max(a.over, 0),
+    currency: s.currency,
+    dedupeKey: `presupuesto:${s.year}:${a.category}:alerta:${a.month}:${a.level}`,
+    href: alertHref(a),
+  }));
+  const overruns = s.alerts ? s.overruns.filter((o) => o.scope === 'acumulado') : s.overruns;
+  const legacy: PlanItem[] = overruns.slice(0, 4).map((o) => ({
     area: 'finanzas',
     title: `${o.label} se pasó del presupuesto`,
     why:
@@ -53,4 +76,5 @@ export function collectPresupuesto(s: SnapshotBudget | undefined): PlanItem[] {
     dedupeKey: `presupuesto:${s.year}:${o.category}:${o.scope}:${o.scope === 'mes' ? o.month : 'ytd'}`,
     href: '/presupuesto',
   }));
+  return [...fromAlerts, ...legacy];
 }

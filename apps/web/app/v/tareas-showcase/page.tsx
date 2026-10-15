@@ -22,7 +22,15 @@ export default async function TareasShowcasePage({
   return (
     <TareasShowcase
       dark={one('modo') === 'oscuro'}
-      view={one('vista') === 'tarea' ? 'tarea' : one('vista') === 'necesita' ? 'necesita' : 'lista'}
+      view={
+        one('vista') === 'tarea'
+          ? 'tarea'
+          : one('vista') === 'necesita'
+            ? 'necesita'
+            : one('vista') === 'galeria'
+              ? 'galeria'
+              : 'lista'
+      }
       admin={one('admin') === '1'}
     />
   );

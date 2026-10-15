@@ -4,6 +4,7 @@ import { type JobContext, type JobHandler, enqueueJob } from '@/lib/jobs';
 import { noteMailWorthSeeing, noteMailboxLearningStopped } from '@/lib/notifications/producers';
 import { mustRead, mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
+import { runEmailIntake } from '@/lib/task-intake/email';
 import {
   bogotaToday,
   importConfirmedDocuments,
@@ -182,7 +183,7 @@ export const gmailSweepDispatchJob: JobHandler = async ({ event, step }) => {
       .limit(MAX_MAILBOXES_PER_RUN);
     if (afterUserId) query = query.gt('user_id', afterUserId);
 
-    return buildGmailSweepPage({
+    const base = await buildGmailSweepPage({
       afterUserId,
       pageSize: MAX_MAILBOXES_PER_RUN,
       load: async (): Promise<GmailSweepMailbox[]> => {
@@ -194,6 +195,21 @@ export const gmailSweepDispatchJob: JobHandler = async ({ event, step }) => {
         }));
       },
     });
+
+    // Tareas por correo (0226): quien las encendió entra al barrido aunque su
+    // buzón no esté en el aprendizaje (no tiene fila en gmail_sync_state). Sólo
+    // en la primera página, y sin repetir a nadie.
+    if (afterUserId) return base;
+    const { data: intake } = await db
+      .from('task_intake_prefs')
+      .select('user_id, organization_id')
+      .eq('email_enabled', true)
+      .limit(MAX_MAILBOXES_PER_RUN);
+    const have = new Set(base.mailboxes.map((m) => m.userId));
+    const extra = ((intake ?? []) as Array<{ user_id: string; organization_id: string }>)
+      .filter((r) => !have.has(r.user_id))
+      .map((r) => ({ userId: r.user_id, organizationId: r.organization_id }));
+    return { ...base, mailboxes: [...base.mailboxes, ...extra] };
   });
 
   // Usuarios y continuación comparten el mismo paso. Inngest lo persiste; el
@@ -212,6 +228,23 @@ export const gmailSweepUserJob: JobHandler = async ({ event, step }) => {
   const organizationId = event.data.organizationId as string | undefined;
   if (!userId || !organizationId) return { skipped: 'faltan usuario o espacio de trabajo' };
 
+  // 0. Tareas por correo (0226) -------------------------------------------
+  // Opt-in por persona, en su propio paso y ANTES del resto: no depende de que
+  // el buzón esté en el aprendizaje, y un fallo aquí no toca lo demás (ni al
+  // revés). Una tarea por mensaje que la persona se mandó a sí misma, a su alias
+  // +cortex o etiquetó «Cortex»; nunca envía nada.
+  const tasksByEmail = await step.run('tasks-by-email', async () => {
+    try {
+      return await runEmailIntake(organizationId, userId);
+    } catch (err) {
+      logger.warn(
+        { err: (err as Error).message, organizationId },
+        'gmail-sweep: tareas por correo falló',
+      );
+      return { failed: true as const };
+    }
+  });
+
   // 1. Consulta transitoria, sin archivar en el cerebro ------------------------------------
   const swept = await step.run('consult-new-mail-v2', async () => {
     const ctx = learnContext(organizationId, userId);
@@ -227,7 +260,7 @@ export const gmailSweepUserJob: JobHandler = async ({ event, step }) => {
   });
 
   if (!swept || swept.skipped) {
-    return { skipped: swept?.skipped ?? 'acceso perdido' };
+    return { skipped: swept?.skipped ?? 'acceso perdido', tasksByEmail };
   }
 
   // 2. De qué hay que enterarse AHORA --------------------------------------
@@ -272,6 +305,7 @@ export const gmailSweepUserJob: JobHandler = async ({ event, step }) => {
     alerted,
     proposed,
     payables,
+    tasksByEmail,
     ...swept.tally,
   };
 };

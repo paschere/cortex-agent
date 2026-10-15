@@ -426,6 +426,20 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'primary',
     icon: 'SquareKanban',
   },
+  research: {
+    name: 'Investigación en paralelo',
+    blurb:
+      'Para preguntas grandes: Cortex reparte el trabajo entre varios agentes que sólo leen (web, cerebro, tablas, correo, contabilidad) y entrega una tabla con cada resultado.',
+    tone: 'primary',
+    icon: 'Telescope',
+  },
+  tasks: {
+    name: 'Tareas en segundo plano',
+    blurb:
+      'Trabajo largo que Cortex sigue haciendo aunque cierres la pestaña: con su plan, sus archivos y avisos al terminar o cuando te necesita.',
+    tone: 'primary',
+    icon: 'Workflow',
+  },
   views: {
     name: 'Vistas',
     blurb:
@@ -748,6 +762,8 @@ const FAMILY_GROUP: Record<string, string> = {
   trackers: 'docs',
   views: 'docs',
   apps: 'docs',
+  research: 'docs',
+  tasks: 'docs',
   github: 'eng',
   linear: 'eng',
   payroll: 'money',

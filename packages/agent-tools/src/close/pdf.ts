@@ -40,6 +40,7 @@ export interface ClosePdfInput {
     detail: string;
     evidence: string | null;
     doneByName: string | null;
+    ownerName?: string | null;
   }>;
   /** Lo registrado en el programa contable en el mes, por clase. */
   writebacks: Array<{ label: string; count: number; amount: number }>;

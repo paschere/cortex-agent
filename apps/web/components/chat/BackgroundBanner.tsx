@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { Loader2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { ShareReplay } from '../tareas/ShareReplay';
 import { TaskApprovals } from '../tareas/TaskApprovals';
 
 /**
@@ -108,6 +109,9 @@ export function BackgroundBanner({
           >
             Ver tarea
           </Link>
+          {(task.status === 'done' || task.status === 'failed') && (
+            <ShareReplay taskId={task.id} label="Compartir" />
+          )}
           {!terminal && (
             <button
               type="button"

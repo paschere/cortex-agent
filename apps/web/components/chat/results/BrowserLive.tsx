@@ -152,7 +152,28 @@ export function BrowserLive({ result, onSay }: ResultViewProps) {
     // resultado ya la dijo el texto del turno; aquí no se duplica.
     return null;
   }
+  // Tu Chrome (chr_…): no hay transmisión que abrir; la pantalla vive en el panel.
+  if (tab.sessionId.startsWith('chr_')) return <ChromeLine sessionId={tab.sessionId} />;
   return <LiveTab key={tab.sessionId} tab={tab} onSay={onSay} />;
+}
+
+function ChromeLine({ sessionId }: { sessionId: string }) {
+  const artifacts = useChatArtifacts();
+  return (
+    <div className="mt-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-ink-muted">
+      <MonitorSmartphone className="mr-1.5 inline h-3.5 w-3.5" />
+      Cortex está trabajando en tu Chrome.
+      {artifacts?.live?.sessionId === sessionId ? (
+        <button
+          type="button"
+          onClick={() => artifacts.openTab('navegador')}
+          className="ml-2 font-semibold text-primary-ink hover:underline"
+        >
+          Ver el panel
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function LiveTab({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void }) {

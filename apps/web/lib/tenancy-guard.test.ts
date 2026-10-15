@@ -35,6 +35,10 @@ const ALLOWED = new Map<string, string>([
     'Defines both clients. The scoped one is built by wrapping the raw one.',
   ],
   [
+    'lib/browser-device/auth.ts',
+    'Cortex en tu Chrome (0227). Las rutas /api/extension/* se autentican con un token de dispositivo (solo su hash existe en la base) y canjean un código de emparejamiento: las dos cosas ocurren antes de saber la organización, que sale de la fila del código o del dispositivo. Desde ahí todo va con getOrgScopedClient y filtrando por el usuario.',
+  ],
+  [
     'lib/oauth.ts',
     'The MCP OAuth handshake. Clients, codes and tokens are keyed by hash and issued before any workspace is in hand; the workspace comes from the user the token resolves to.',
   ],
@@ -65,6 +69,10 @@ const ALLOWED = new Map<string, string>([
   [
     'lib/board/public.ts',
     'A partners report link (/informe/<token>, migration 0191) is opened by partners or board members with no Cortex account, so the token is the credential — the same posture as a shared view. It is used for exactly two reads: the report row by token and its workspace name. The PDF, the logo and the password attempt go through getOrgScopedClient(report.organization_id).',
+  ],
+  [
+    'lib/task-share/public.ts',
+    'La repetición compartida de una tarea (/r/<token>, migración 0226) la abre quien no tiene cuenta, así que el token es la credencial (192 bits; en la base sólo su hash). Una única lectura: la fila task_shares por hash, que lleva su propia empresa. Las capturas y las vistas van con getOrgScopedClient(share.organization_id).',
   ],
   [
     'lib/compliance/public.ts',

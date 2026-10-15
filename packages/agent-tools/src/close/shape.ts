@@ -121,12 +121,15 @@ export function defaultClosePeriod(
 
 export const CLOSE_TASK_KEYS = [
   'extractos',
+  'conciliacion_cuentas',
   'conciliacion',
+  'facturas_emitidas',
   'facturas_proveedor',
   'causacion',
   'recibos',
   'pagos_proveedor',
   'sin_categoria',
+  'anomalias',
   'nomina',
   'impuestos',
   'inventario',
@@ -167,6 +170,18 @@ export const CLOSE_TASKS: readonly CloseTaskDef[] = [
     auto: true,
   },
   {
+    key: 'conciliacion_cuentas',
+    title: () => 'Libro de plata y extracto cuadran en cada cuenta del banco',
+    help: 'Por cada cuenta: que nada del libro del mes esté sin respaldo en el extracto, y el saldo a fin de mes que dice el banco.',
+    fix: {
+      href: '/finance',
+      label: 'Ver el libro',
+      prompt:
+        'Concilia el libro de plata con el extracto de cada cuenta del banco de este mes: ¿qué movimientos del libro no están en el extracto?',
+    },
+    auto: true,
+  },
+  {
     key: 'conciliacion',
     title: () => 'Movimientos del banco conciliados o explicados',
     help: 'Cada abono del mes atado a la factura que paga, o explicado (préstamo, aporte, devolución).',
@@ -174,6 +189,19 @@ export const CLOSE_TASKS: readonly CloseTaskDef[] = [
       href: '/payments',
       label: 'Conciliar',
       prompt: '¿Qué abonos del banco no tienen factura este mes?',
+    },
+    auto: true,
+  },
+  {
+    key: 'facturas_emitidas',
+    title: () => 'Facturas de venta emitidas coinciden con el programa contable',
+    help: 'Cada factura que Cortex emitió en el mes, aceptada y visible en Siigo, Alegra o QuickBooks, sin borradores ni errores colgados.',
+    module: 'sales',
+    fix: {
+      href: '/ventas',
+      label: 'Ver las facturas',
+      prompt:
+        'Compara las facturas de venta emitidas este mes con las que ve el programa contable: ¿cuál falta o quedó con error?',
     },
     auto: true,
   },
@@ -231,6 +259,19 @@ export const CLOSE_TASKS: readonly CloseTaskDef[] = [
       href: '/finance',
       label: 'Categorizar',
       prompt: '¿Qué movimientos de este mes no tienen categoría?',
+    },
+    auto: true,
+  },
+  {
+    key: 'anomalias',
+    title: () => 'Movimientos inusuales del mes revisados',
+    help: 'Montos muy por encima de lo normal en su categoría, posibles duplicados y categorías disparadas: se revisan o se explican antes de cerrar.',
+    module: 'finance',
+    fix: {
+      href: '/finance',
+      label: 'Revisar',
+      prompt:
+        'Revisa los movimientos inusuales de este mes (montos altos, posibles duplicados, categorías disparadas) y dime cuáles parecen error',
     },
     auto: true,
   },
@@ -329,6 +370,33 @@ export interface CloseCheckData {
   taxDue?: number;
   /** ¿Hay un conteo de inventario cerca del fin de mes? */
   inventoryCounted?: boolean;
+  /**
+   * Por cuenta del banco: movimientos del libro del mes que NO vienen del
+   * extracto (anotados a mano o por el chat) y el saldo a fin de mes que se
+   * deduce del último saldo del banco.
+   */
+  accountRecon?: Array<{
+    name: string;
+    extraCount: number;
+    extraAmount: number;
+    balanceAtEnd: number | null;
+  }>;
+  /**
+   * Facturas de venta del mes. null = no se emitió ninguna ni hay programa que
+   * comparar. `programCount`/`programTotal` son null sin programa conectado.
+   */
+  issuedInvoices?: {
+    cortexCount: number;
+    cortexTotal: number;
+    programCount: number | null;
+    programTotal: number | null;
+    /** En borrador, emitiendo, con error o con emisión incierta. */
+    problems: number;
+    /** Emitidas por Cortex que el programa no muestra (con sincronización al día). */
+    missingInProgram: number;
+  } | null;
+  /** Lo que salió fuera de lo normal en el mes (ver anomalies.ts). */
+  unusual?: Array<{ kind: string; label: string; amount: number }>;
 }
 
 const ERROR_CHECK: AutoCheck = {
@@ -338,6 +406,15 @@ const ERROR_CHECK: AutoCheck = {
 
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+function balancesText(accounts: NonNullable<CloseCheckData['accountRecon']>): string {
+  const known = accounts.filter((a) => a.balanceAtEnd !== null);
+  if (!known.length) return '';
+  return ` (saldo a fin de mes: ${known
+    .slice(0, 3)
+    .map((a) => `${a.name} ${money(a.balanceAtEnd as number)}`)
+    .join(', ')})`;
 }
 
 function money(n: number): string {
@@ -372,6 +449,65 @@ export function evaluateCheck(key: CloseTaskKey, data: CloseCheckData, period: s
           .slice(0, 4)
           .map((a) => `${a.name}${a.lastDate ? ` (va hasta el ${shortDay(a.lastDate)})` : ''}`)
           .join(', ')}${behind.length > 4 ? '…' : ''}.`,
+      };
+    }
+    case 'conciliacion_cuentas': {
+      if (!data.accountRecon) return ERROR_CHECK;
+      if (data.accountRecon.length === 0)
+        return { state: 'no_aplica', detail: 'No hay cuentas de banco en el libro.' };
+      const off = data.accountRecon.filter((a) => a.extraCount > 0);
+      if (off.length === 0)
+        return {
+          state: 'ok',
+          detail: `Libro y extracto cuadran en ${plural(data.accountRecon.length, 'cuenta', 'cuentas')}${balancesText(data.accountRecon)}.`,
+        };
+      const count = off.reduce((s, a) => s + a.extraCount, 0);
+      return {
+        state: 'pendiente',
+        count,
+        detail: `${plural(count, 'movimiento del libro', 'movimientos del libro')} sin respaldo en el extracto: ${off
+          .slice(0, 3)
+          .map((a) => `${a.name} (${a.extraCount}, ${money(a.extraAmount)})`)
+          .join('; ')}${off.length > 3 ? '…' : ''}. Importa el extracto o explícalos.`,
+      };
+    }
+    case 'facturas_emitidas': {
+      if (data.issuedInvoices === undefined) return ERROR_CHECK;
+      const inv = data.issuedInvoices;
+      if (inv === null)
+        return { state: 'no_aplica', detail: 'No se emitió ninguna factura de venta este mes.' };
+      const issues = inv.problems + inv.missingInProgram;
+      if (issues > 0) {
+        const parts: string[] = [];
+        if (inv.problems > 0)
+          parts.push(
+            `${plural(inv.problems, 'factura', 'facturas')} en borrador, con error o sin confirmar`,
+          );
+        if (inv.missingInProgram > 0)
+          parts.push(
+            `${plural(inv.missingInProgram, 'factura emitida no aparece', 'facturas emitidas no aparecen')} en el programa`,
+          );
+        return { state: 'pendiente', count: issues, detail: `${parts.join('; ')}.` };
+      }
+      return {
+        state: 'ok',
+        detail:
+          inv.programCount === null
+            ? `${plural(inv.cortexCount, 'factura emitida', 'facturas emitidas')} por ${money(inv.cortexTotal)}; sin programa conectado para compararlas.`
+            : `${plural(inv.cortexCount, 'factura emitida', 'facturas emitidas')} por ${money(inv.cortexTotal)}, todas en el programa (que muestra ${plural(inv.programCount, 'factura', 'facturas')} del mes por ${money(inv.programTotal ?? 0)}).`,
+      };
+    }
+    case 'anomalias': {
+      if (!data.unusual) return ERROR_CHECK;
+      if (data.unusual.length === 0)
+        return { state: 'ok', detail: 'No veo movimientos fuera de lo normal este mes.' };
+      return {
+        state: 'pendiente',
+        count: data.unusual.length,
+        detail: `${plural(data.unusual.length, 'cosa fuera de lo normal', 'cosas fuera de lo normal')}: ${data.unusual
+          .slice(0, 3)
+          .map((u) => u.label)
+          .join('; ')}${data.unusual.length > 3 ? '…' : ''}. Revísalas o explícalas.`,
       };
     }
     case 'conciliacion': {

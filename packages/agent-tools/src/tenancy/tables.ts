@@ -218,6 +218,7 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // across workspaces — corpus size, tool count and connected integrations all
   // move it — so a distribution that mixed them would describe nobody.
   turn_latencies: tenant(),
+  model_usage: tenant(),
 
   // --- Learning (migration 0083) --------------------------------------------
   // What using Cortex taught it. Tenant in the strongest sense there is: this
@@ -318,6 +319,26 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // worker. Tenant, y propia de quien la pidió (la pantalla filtra por dueño salvo
   // administradores, igual que /actividad).
   background_tasks: tenant(),
+  // Repetición compartida, plantillas de tarea y pedir tareas por correo/WhatsApp
+  // (migración 0226). Todas tenant. `task_shares` se lee por hash de token con el
+  // cliente sin alcance sólo en lib/task-share/public.ts.
+  task_shares: tenant(),
+  task_share_shots: tenant(),
+  task_templates: tenant(),
+  task_intake_prefs: tenant(),
+  task_intake_log: tenant(),
+  // Cortex en tu Chrome (migración 0227): dispositivos emparejados, códigos,
+  // reglas por sitio, sesiones, cola de órdenes (con su auditoría) y fotos.
+  // Todas tenant y de una sola persona; el canje del código y el token del
+  // dispositivo entran por lib/browser-device/auth.ts (cliente de servicio
+  // permitido en tenancy-guard) y de ahí en adelante todo va con el cliente
+  // de la organización.
+  browser_devices: tenant(),
+  browser_pairing_codes: tenant(),
+  browser_device_sites: tenant(),
+  browser_device_sessions: tenant(),
+  browser_device_commands: tenant(),
+  browser_device_shots: tenant(),
   // Preferencias de avisos por persona y cosas de Hoy pospuestas (migración
   // 0223). Tenant; cada fila es de una persona y la pantalla sólo toca las suyas.
   notification_preferences: tenant(),
@@ -541,6 +562,8 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // 0175: la caja mínima de la empresa. Tenant: una fila por empresa, llave
   // `organization_id`; es la decisión de una empresa sobre su propia caja.
   ledger_settings: tenant(),
+  budget_alert_settings: tenant(),
+  budget_alert_events: tenant(),
 
   // --- Vistas (migración 0156) ------------------------------------------------
   // Pantallas armadas sobre las tablas de arriba. Tenant las tres. La vista es

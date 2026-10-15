@@ -56,6 +56,7 @@ export interface LiveFixture {
 
 const BROWSER_TOOLS = new Set([
   'browser_open_page',
+  'browser_open_chrome_page',
   'browser_act',
   'browser_read_page',
   'browser_ask_person',
@@ -207,6 +208,14 @@ export function summarizeBrowserStep(inv: StepInvocation): BrowserStep | null {
       if (waitingOk) ok = `Esperando tu OK para abrir ${host}`;
       break;
     }
+    case 'browser_open_chrome_page': {
+      const host = hostOf(str(args.url)) || 'el sitio';
+      doing = `abriendo ${host} en tu Chrome`;
+      ok = `Abrí ${host} en tu Chrome`;
+      fail = `No pude abrir ${host} en tu Chrome`;
+      if (waitingOk) ok = `Esperando tu OK para abrir ${host} en tu Chrome`;
+      break;
+    }
     case 'browser_act':
       [doing, ok, fail] = actWords(args);
       fail = `No pude ${fail}`;
@@ -302,7 +311,11 @@ export function liveSessionOf(invocations: readonly StepInvocation[]): LiveSessi
       if (!current || !id || id === current.sessionId) current = null;
       continue;
     }
-    if (typeof r.sessionId === 'string' && r.sessionId && tool === 'browser_open_page') {
+    if (
+      typeof r.sessionId === 'string' &&
+      r.sessionId &&
+      (tool === 'browser_open_page' || tool === 'browser_open_chrome_page')
+    ) {
       current = { sessionId: r.sessionId };
       continue;
     }

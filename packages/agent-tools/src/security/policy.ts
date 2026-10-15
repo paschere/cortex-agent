@@ -297,6 +297,9 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // which understates it, because it acts as the company on somebody else's
   // system even when it only looks.
   'browser.run_flow': { blastRadius: 'internal_write' },
+  // Cortex en tu Chrome (0227): entra con las sesiones abiertas de la persona.
+  // El verbo 'open' se leería como una lectura; no lo es.
+  'browser.open_chrome_page': { sensitivity: 'pii', blastRadius: 'internal_write' },
   // Filing something with a government body or a customer's portal leaves the
   // company in the fullest sense there is — it is a legal act performed with
   // the company's credentials, on a system nobody here can roll back. Nothing

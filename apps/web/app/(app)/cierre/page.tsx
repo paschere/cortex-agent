@@ -170,6 +170,7 @@ export default async function CierrePage({
     links: {
       self: href('/cierre'),
       pdf: `/api/cierre/${period}/pdf`,
+      xlsx: `/api/cierre/${period}/xlsx`,
       integrations: href('/integrations#programas-contables'),
       approvals: href('/approvals'),
       chat: href('/chat'),

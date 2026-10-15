@@ -33,3 +33,5 @@ export {
   report,
 } from './read';
 export type { Distribution, CacheBehaviour, LatencyReport, LoadLatencyOptions } from './read';
+export { anthropicStepCache, recordModelUsage, sumCacheSteps } from './usage';
+export type { ModelUsageInput, UsageSource } from './usage';
