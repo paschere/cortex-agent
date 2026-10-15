@@ -21,6 +21,7 @@ export { COMP_SENSITIVITY_NOTE } from './sensitive';
 
 export {
   payrollFetch,
+  payrollConfigured,
   fetchTeamOverview,
   fetchTeamAssignments,
   fetchEmployeeProfile,

@@ -1,3 +1,4 @@
+import { logger } from '@cortex/core';
 import { ProviderUncertainError, ProviderValidationError } from '../types';
 import {
   type ProviderBalance,
@@ -6,8 +7,9 @@ import {
   type TrialBalanceRow,
   balanceFromTrialBalance,
   pnlFromTrialBalance,
-  trialBalanceFromRows,
-  xlsxRows,
+  describeSheetsForLog,
+  parseTrialBalanceSheets,
+  readSpreadsheetSheets,
 } from './reports';
 import type { SiigoClient } from './siigo-client';
 
@@ -72,15 +74,25 @@ async function trialBalance(
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (bytes.length > 25 * 1024 * 1024)
     throw new Error('El balance de prueba de Siigo es demasiado grande.');
-  const rows = trialBalanceFromRows(
-    await xlsxRows(bytes, { contentType: res.headers.get('content-type') }),
+  const sheets = await readSpreadsheetSheets(bytes, {
+    contentType: res.headers.get('content-type'),
+  });
+  const { result } = parseTrialBalanceSheets(sheets);
+  // Un mes sin movimientos: Siigo entrega un Excel sin la tabla (o con ella
+  // vacía). Son ceros, no un error.
+  if (result.kind === 'ok') return result.rows;
+  if (result.kind === 'empty' || result.kind === 'no-data') return [];
+  logger.warn(
+    { year, monthStart, monthEnd, bytes: bytes.length, ...describeSheetsForLog(sheets) },
+    'siigo: no reconocí las columnas del balance de prueba',
   );
-  if (!rows.length)
-    throw new Error(
-      'No reconocí las columnas del balance de prueba de Siigo (código, débito, crédito, saldo final).',
-    );
-  return rows;
+  throw new Error(
+    'No reconocí las columnas del balance de prueba de Siigo (código, débito, crédito, saldo final).',
+  );
 }
+
+/** Marca de un período sin movimientos en Siigo (ceros, no faltante). */
+export const NO_MOVEMENTS_NOTE = 'Sin movimientos en Siigo en este período.';
 
 const month = (day: string) => Number(day.slice(5, 7));
 const year = (day: string) => Number(day.slice(0, 4));
@@ -109,6 +121,7 @@ export function siigoReports(
       const rows = await trialBalance(client, doFetch, year(from), month(from), month(to));
       const out = pnlFromTrialBalance(rows, { provider: 'siigo', from, to, currency });
       out.notes.push('Fuente: balance de prueba general de Siigo Nube.');
+      if (!rows.length) out.notes.push(NO_MOVEMENTS_NOTE);
       return out;
     },
   };

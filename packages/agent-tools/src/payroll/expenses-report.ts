@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { fetchExpensesReport } from './client';
+import { fetchExpensesReport, payrollConfigured } from './client';
 import { COMP_SENSITIVITY_NOTE } from './sensitive';
 
 function money(n: number | null | undefined): string {
@@ -10,6 +10,7 @@ function money(n: number | null | undefined): string {
 
 export const payrollExpensesReport = registerTool({
   id: 'payroll.expenses_report',
+  available: payrollConfigured,
   description:
     'See what the team spent on expenses and reimbursements, broken down month by month, by category (home office, medical, active lifestyle, ...), by client and by division, with totals and counts. ' +
     'Use this for "how much did we spend on expenses last quarter", "what are we spending on home office", "which client has the highest expenses", "how have expenses trended this year", or "who expensed the most". ' +

@@ -30,3 +30,22 @@ describe('avance en el chip de la herramienta', () => {
     expect(html(running, new Map([['otra', 'x']]))).not.toContain('tool-progress');
   });
 });
+
+describe('un paso que falló', () => {
+  const failedInv = {
+    ...running,
+    toolName: 'payroll_payroll_stats',
+    state: 'result',
+    result: {
+      __error: true,
+      tool: 'payroll.payroll_stats',
+      message: 'Payroll integration not configured (PAYROLL_API_URL missing) [INTEGRATION_ERROR]',
+    },
+  } as ToolInvocation;
+  it('dice una frase en español y deja el JSON plegado', () => {
+    const out = html(failedInv);
+    expect(out).toContain('todavía no está conectado');
+    expect(out).toContain('tool-error-summary');
+    expect(out).not.toMatch(/<pre[^>]*>[^<]*PAYROLL_API_URL/);
+  });
+});

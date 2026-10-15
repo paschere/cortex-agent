@@ -40,6 +40,11 @@ export interface TeamOverview {
  * INTERNAL_API_TOKEN is set. Both sides must be tightened before the payroll
  * app is exposed publicly.
  */
+/** ¿Está configurado el servicio externo de nómina? Las herramientas que lo usan no se ofrecen sin esto. */
+export function payrollConfigured(): boolean {
+  return Boolean(process.env.PAYROLL_API_URL);
+}
+
 export async function payrollFetch<T>(path: string, ctx: ToolContext): Promise<T> {
   const base = process.env.PAYROLL_API_URL;
   if (!base) {

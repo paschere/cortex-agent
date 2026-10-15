@@ -235,6 +235,13 @@ export interface ToolDef<I, O> {
   outputSchema: z.ZodType<O>;
   requiresConfirmation?: boolean;
   /**
+   * ¿Esta herramienta puede correr en este despliegue? Una que depende de un
+   * servicio sin configurar (una variable de entorno que falta) devuelve false
+   * y NO se ofrece al modelo: ofrecerla sólo produce una llamada que falla ante
+   * la persona. Se evalúa en cada turno; si no se declara, siempre está.
+   */
+  available?: () => boolean;
+  /**
    * Ventana (ms) durante la cual una confirmación humana de ESTA herramienta,
    * en ESTA conversación, vale también para las llamadas siguientes — la
    * «memoria corta del sí» (security/conversation-grace.ts lleva el argumento

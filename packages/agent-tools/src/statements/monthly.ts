@@ -25,8 +25,22 @@ const MAX_FETCH_PER_CALL = 12;
 const TIME_BUDGET_MS = 55_000;
 const OPEN_MONTH_TTL_MS = 6 * 60 * 60_000;
 
-const MONTH_ABBR = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-export const monthLabel = (ym: string) => `${MONTH_ABBR[Number(ym.slice(5, 7)) - 1] ?? ym} ${ym.slice(0, 4)}`;
+const MONTH_ABBR = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
+export const monthLabel = (ym: string) =>
+  `${MONTH_ABBR[Number(ym.slice(5, 7)) - 1] ?? ym} ${ym.slice(0, 4)}`;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -49,13 +63,19 @@ export interface MonthlyRow {
   inProgress: boolean;
   /** Salió de la copia guardada, no de una lectura nueva. */
   cached: boolean;
+  /** El programa contable no tuvo movimientos ese mes (ceros, no faltante). */
+  noMovements?: boolean;
 }
 
 /** Un estado de resultados de un mes → la fila de la tabla. Puro. */
 export function rowFromPnl(
   month: string,
   pnl: ProviderPnl,
-  opts: { inProgress?: boolean; cached?: boolean; cash?: { revenue: number; net: number } | null } = {},
+  opts: {
+    inProgress?: boolean;
+    cached?: boolean;
+    cash?: { revenue: number; net: number } | null;
+  } = {},
 ): MonthlyRow {
   const grossProfit = round2(pnl.revenue - pnl.costOfSales);
   const operatingIncome = round2(grossProfit - pnl.operatingExpenses);
@@ -73,6 +93,7 @@ export function rowFromPnl(
     cashNet: opts.cash ? round2(opts.cash.net) : null,
     inProgress: opts.inProgress ?? false,
     cached: opts.cached ?? false,
+    noMovements: (pnl.notes ?? []).some((n) => /^Sin movimientos/i.test(n)),
   };
 }
 
@@ -103,6 +124,8 @@ export interface MonthlyResult {
   /** Meses que no se pudieron leer (falta de tiempo o error). */
   missing: string[];
   errors: string[];
+  /** Meses cuya lectura falló de verdad (el motivo va en `errors`). */
+  failed?: string[];
   fetchedMonths: number;
   cachedMonths: number;
 }
@@ -130,13 +153,23 @@ export function monthlyMarkdown(r: MonthlyResult): string {
     };
     for (const x of r.rows) out.push(line(x));
     if (r.rows.length > 1) out.push(line(sumRows(r.rows), true));
+    const quiet = r.rows.filter((x) => x.noMovements).map((x) => monthLabel(x.month));
+    if (quiet.length)
+      out.push(`Sin movimientos en ${name}: ${quiet.join(', ')} (cuentan como ceros).`);
     out.push(
       `De dónde sale: movimientos de cada mes en el balance de prueba de ${name} (ventas = clase 4 operacional; costo = clases 6 y 7; gastos operacionales = grupos 51 y 52; no operacional = otros ingresos − otros gastos). Base causación, no caja.${withCash ? ' La columna de caja es el libro de plata (lo que de verdad entró y salió); no tiene por qué coincidir.' : ''}`,
     );
   }
-  if (r.missing.length)
+  const failed = new Set(r.failed ?? []);
+  const pending = r.missing.filter((m) => !failed.has(m));
+  const broken = r.missing.filter((m) => failed.has(m));
+  if (broken.length)
     out.push(
-      `Faltan ${r.missing.length} mes(es) por leer (${r.missing.map(monthLabel).join(', ')}). Vuelve a pedirlo y continúa desde ahí: los meses ya leídos quedan guardados.`,
+      `No pude leer ${broken.length === 1 ? 'el mes' : 'los meses'} de ${broken.map(monthLabel).join(', ')} (el motivo está arriba); no entran en la tabla ni en el total. El resto sí se leyó.`,
+    );
+  if (pending.length)
+    out.push(
+      `Faltan ${pending.length} mes(es) por leer (${pending.map(monthLabel).join(', ')}). Vuelve a pedirlo y continúa desde ahí: los meses ya leídos quedan guardados.`,
     );
   for (const e of r.errors) out.push(e);
   return out.join('\n');
@@ -169,6 +202,7 @@ export async function readMonthlyPnl(
     rows: [],
     missing: [],
     errors: [],
+    failed: [],
     fetchedMonths: 0,
     cachedMonths: 0,
   };
@@ -192,8 +226,13 @@ export async function readMonthlyPnl(
     .eq('provider', conn.provider)
     .eq('kind', 'pnl')
     .in('period_key', months.map(keyOf));
-  for (const r of (data ?? []) as Array<{ period_key: string; payload: { report?: ProviderPnl }; fetched_at: string }>)
-    if (r.payload?.report) saved.set(r.period_key, { report: r.payload.report, fetchedAt: r.fetched_at });
+  for (const r of (data ?? []) as Array<{
+    period_key: string;
+    payload: { report?: ProviderPnl };
+    fetched_at: string;
+  }>)
+    if (r.payload?.report)
+      saved.set(r.period_key, { report: r.payload.report, fetchedAt: r.fetched_at });
 
   const isClosed = (ym: string) => monthEnd(opts.year, Number(ym.slice(5, 7))) < opts.today;
   const usable = (ym: string): Snapshot | null => {
@@ -250,8 +289,10 @@ export async function readMonthlyPnl(
           );
         } catch (err) {
           logger.warn({ err, provider: conn.provider, month: ym }, 'mensual: no pude leer un mes');
+          result.failed?.push(ym);
           result.errors.push(humanReportError(err, `el mes de ${monthLabel(ym)}`, name).message);
-          if (/\b429\b|l[ií]mite|ritmo/i.test(err instanceof Error ? err.message : String(err))) break;
+          if (/\b429\b|l[ií]mite|ritmo/i.test(err instanceof Error ? err.message : String(err)))
+            break;
         }
       }
     }
@@ -288,7 +329,11 @@ export async function readMonthlyPnl(
       continue;
     }
     result.rows.push(
-      rowFromPnl(ym, p.pnl, { inProgress: !isClosed(ym), cached: p.cached, cash: cash.get(ym) ?? null }),
+      rowFromPnl(ym, p.pnl, {
+        inProgress: !isClosed(ym),
+        cached: p.cached,
+        cash: cash.get(ym) ?? null,
+      }),
     );
   }
   return result;

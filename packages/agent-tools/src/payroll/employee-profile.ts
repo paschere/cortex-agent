@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { fetchEmployeeProfile } from './client';
+import { fetchEmployeeProfile, payrollConfigured } from './client';
 import { COMP_SENSITIVITY_NOTE, PAYROLL_SOURCE_NOTE } from './sensitive';
 
 function money(n: number | null | undefined): string {
@@ -10,6 +10,7 @@ function money(n: number | null | undefined): string {
 
 export const payrollEmployeeProfile = registerTool({
   id: 'payroll.employee_profile',
+  available: payrollConfigured,
   description:
     'Get the full picture of one person on the team: who they are, which client they are placed with, their job title, when they started and how long they have been here, their current pay rate and how it changed over time, what they were paid in recent payroll periods, and their expense history. ' +
     'Use this for "tell me about <person>", "what does <person> do", "who is <person> working for", "how long has <person> been with us", "what is <person> paid", or "how much has <person> expensed". ' +

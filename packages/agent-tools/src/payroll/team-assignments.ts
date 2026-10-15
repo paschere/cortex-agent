@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { fetchTeamAssignments } from './client';
+import { fetchTeamAssignments, payrollConfigured } from './client';
 import { COMP_SENSITIVITY_NOTE, PAYROLL_SOURCE_NOTE } from './sensitive';
 
 function money(n: number | null | undefined): string {
@@ -10,6 +10,7 @@ function money(n: number | null | undefined): string {
 
 export const payrollTeamAssignments = registerTool({
   id: 'payroll.team_assignments',
+  available: payrollConfigured,
   description:
     'List the people currently working at the company and which client each one is placed with — name, client, division (Tech / Non-tech / Internal), job title, currency, start date, how long they have been here, and their monthly rate. ' +
     'Use this for questions like "who is assigned to <client>", "who works on the <client> team", "who joined recently", or "what does the team for <client> cost us per month". ' +

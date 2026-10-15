@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { fetchExpensesReport, fetchPayrollStats, fetchTeamAssignments } from './client';
+import {
+  fetchExpensesReport,
+  fetchPayrollStats,
+  fetchTeamAssignments,
+  payrollConfigured,
+} from './client';
 import { COMP_SENSITIVITY_NOTE, PAYROLL_SOURCE_NOTE } from './sensitive';
 
 /**
@@ -20,6 +25,7 @@ function money(n: number | null | undefined): string {
 
 export const payrollClientReport = registerTool({
   id: 'payroll.client_report',
+  available: payrollConfigured,
   description:
     'The COST side of one client account in a single call: every person assigned to that client by name with their role, seniority in the account and monthly cost, the total monthly and annualized cost, the expenses charged against that client, and the recent cost trend. ' +
     'Use this whenever someone asks for a report, a summary, the roster, the cost or "everything we have" about a client (e.g. "give me a full report on PureCars"). Prefer it over calling the roster, expenses and stats tools separately. ' +

@@ -415,40 +415,112 @@ function norm(cell: unknown): string {
   return String(cell).replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Filas de una hoja (celdas ya leídas) → cuentas del balance de prueba. Busca
- * el encabezado (código, débito, crédito y saldo final) en las primeras 40
- * filas: los programas ponen arriba el nombre de la empresa, el NIT y el
- * período. Una fila sin código numérico (subtotales, totales) no es cuenta.
- */
-export function trialBalanceFromRows(rows: unknown[][]): TrialBalanceRow[] {
-  let header = -1;
-  const col: Partial<Record<keyof typeof HEADER, number>> = {};
-  for (let i = 0; i < Math.min(rows.length, 40) && header < 0; i++) {
-    const cells = (rows[i] ?? []).map(norm);
-    const find = (re: RegExp) => cells.findIndex((c) => re.test(c));
-    const debit = find(HEADER.debit);
-    const credit = find(HEADER.credit);
-    const final = find(HEADER.final);
-    let code = cells.findIndex((c) => HEADER.code.test(c));
-    if (code < 0) code = cells.findIndex((c) => /c[oó]digo/i.test(c));
-    if (debit >= 0 && credit >= 0 && final >= 0 && code >= 0) {
-      header = i;
-      col.code = code;
-      col.debit = debit;
-      col.credit = credit;
-      col.final = final;
-      const initial = find(HEADER.initial);
-      if (initial >= 0) col.initial = initial;
-      const name = cells.findIndex((c, idx) => idx !== code && HEADER.name.test(c));
-      if (name >= 0) col.name = name;
+const HEADER_SCAN_ROWS = 80;
+
+type ColumnMap = Partial<Record<keyof typeof HEADER, number>> & { code: number };
+
+/** Etiquetas de columna de una fila, o de dos filas (encabezado partido). */
+function headerLabels(top: unknown[], bottom: unknown[] | null): string[] {
+  const t = top.map(norm);
+  if (!bottom) return t;
+  const b = bottom.map(norm);
+  const width = Math.max(t.length, b.length);
+  const out: string[] = [];
+  let carry = '';
+  for (let c = 0; c < width; c++) {
+    const tc = t[c] ?? '';
+    const bc = b[c] ?? '';
+    // Celda combinada: «Movimiento» cubre «Débito» y «Crédito».
+    if (tc) carry = tc;
+    const inherited = !tc && /d[eé]bito|cr[eé]dito|saldo|^valor$/i.test(bc) ? carry : tc;
+    out.push([inherited, bc].filter(Boolean).join(' '));
+  }
+  return out;
+}
+
+function matchHeader(cells: string[]): ColumnMap | null {
+  const find = (re: RegExp) => cells.findIndex((c) => re.test(c));
+  const debit = find(HEADER.debit);
+  const credit = find(HEADER.credit);
+  let code = cells.findIndex((c) => HEADER.code.test(c));
+  if (code < 0) code = cells.findIndex((c) => /c[oó]digo/i.test(c));
+  if (debit < 0 || credit < 0 || code < 0) return null;
+  const initial = find(HEADER.initial);
+  let final = find(HEADER.final);
+  if (final < 0 && initial >= 0) {
+    // «Saldo» a secas, después del inicial y de los movimientos, es el final.
+    for (let i = cells.length - 1; i > initial; i--)
+      if (/^saldo$/i.test(cells[i] ?? '') || /^saldo\b/i.test(cells[i] ?? '')) {
+        if (!HEADER.initial.test(cells[i] ?? '')) {
+          final = i;
+          break;
+        }
+      }
+  }
+  if (final < 0) return null;
+  const map: ColumnMap = { code, debit, credit, final };
+  if (initial >= 0) map.initial = initial;
+  const name = cells.findIndex((c, idx) => idx !== code && HEADER.name.test(c));
+  if (name >= 0) map.name = name;
+  return map;
+}
+
+function findHeader(rows: unknown[][]): { header: number; col: ColumnMap } | null {
+  const limit = Math.min(rows.length, HEADER_SCAN_ROWS);
+  for (let i = 0; i < limit; i++) {
+    const single = matchHeader(headerLabels(rows[i] ?? [], null));
+    if (single) return { header: i, col: single };
+    if (i + 1 < rows.length) {
+      const split = matchHeader(headerLabels(rows[i] ?? [], rows[i + 1] ?? []));
+      if (split) return { header: i + 1, col: split };
     }
   }
-  if (header < 0) return [];
+  return null;
+}
+
+/**
+ * ¿Hay filas que parecen cuentas del PUC con importes (código de 1 a 16 dígitos
+ * seguido de al menos tres importes)? Distingue un balance con columnas que no
+ * conozco de un archivo sin movimientos (sólo títulos o un aviso).
+ */
+export function looksLikeAccountRows(rows: unknown[][]): boolean {
+  for (const raw of rows) {
+    const cells = raw ?? [];
+    let seen = 0;
+    for (let c = 0; c < cells.length; c++) {
+      const text = norm(cells[c]);
+      if (!text) continue;
+      seen += 1;
+      if (seen > 3) break;
+      if (!/^\d{1,16}$/.test(text.replace(/[\s.\-]/g, '')) || /[^\d\s.\-]/.test(text)) continue;
+      let amounts = 0;
+      for (let k = c + 1; k < cells.length; k++) {
+        const t = norm(cells[k]);
+        if (t && parseAmount(cells[k]) !== null) amounts += 1;
+      }
+      if (amounts >= 3) return true;
+    }
+  }
+  return false;
+}
+
+export type TrialBalanceParse =
+  | { kind: 'ok'; rows: TrialBalanceRow[] }
+  /** Encabezado encontrado y cero cuentas: el período no tuvo movimientos. */
+  | { kind: 'empty' }
+  /** Sin encabezado reconocible y sin nada parecido a cuentas con importes. */
+  | { kind: 'no-data' }
+  /** Hay cuentas con importes pero no reconozco las columnas. */
+  | { kind: 'unknown-columns' };
+
+export function parseTrialBalance(rows: unknown[][]): TrialBalanceParse {
+  const found = findHeader(rows);
+  if (!found) return { kind: looksLikeAccountRows(rows) ? 'unknown-columns' : 'no-data' };
+  const { header, col } = found;
   const out: TrialBalanceRow[] = [];
   for (const raw of rows.slice(header + 1)) {
     const cells = raw ?? [];
-    const code = norm(cells[col.code as number]).replace(/[\s.\-]/g, '');
+    const code = norm(cells[col.code]).replace(/[\s.\-]/g, '');
     if (!/^\d{1,16}$/.test(code)) continue;
     const num = (k: keyof typeof HEADER) =>
       col[k] === undefined ? 0 : (parseAmount(cells[col[k] as number]) ?? 0);
@@ -461,7 +533,59 @@ export function trialBalanceFromRows(rows: unknown[][]): TrialBalanceRow[] {
       final: num('final'),
     });
   }
-  return out;
+  return out.length ? { kind: 'ok', rows: out } : { kind: 'empty' };
+}
+
+/**
+ * Filas de una hoja (celdas ya leídas) → cuentas del balance de prueba. Busca
+ * el encabezado (código, débito, crédito y saldo final; puede venir partido en
+ * dos filas) en las primeras filas: los programas ponen arriba el nombre de la
+ * empresa, el NIT y el período. Una fila sin código numérico (subtotales,
+ * totales) no es cuenta.
+ */
+export function trialBalanceFromRows(rows: unknown[][]): TrialBalanceRow[] {
+  const parsed = parseTrialBalance(rows);
+  return parsed.kind === 'ok' ? parsed.rows : [];
+}
+
+/** Resultado de leer todas las hojas de un archivo de balance de prueba. */
+export function parseTrialBalanceSheets(sheets: Array<{ name: string; rows: unknown[][] }>): {
+  result: TrialBalanceParse;
+  sheet: { name: string; rows: unknown[][] } | null;
+} {
+  let empty: (typeof sheets)[number] | null = null;
+  let unknown: (typeof sheets)[number] | null = null;
+  for (const sheet of sheets) {
+    const p = parseTrialBalance(sheet.rows);
+    if (p.kind === 'ok') return { result: p, sheet };
+    if (p.kind === 'empty') empty ??= sheet;
+    if (p.kind === 'unknown-columns') unknown ??= sheet;
+  }
+  if (empty) return { result: { kind: 'empty' }, sheet: empty };
+  if (unknown) return { result: { kind: 'unknown-columns' }, sheet: unknown };
+  return { result: { kind: 'no-data' }, sheet: sheets[0] ?? null };
+}
+
+/**
+ * Cuando no se reconocen las columnas: las primeras filas SOLO con sus celdas
+ * de texto (sin cifras) y los nombres de las hojas, para diagnosticar en logs.
+ */
+export function describeSheetsForLog(
+  sheets: Array<{ name: string; rows: unknown[][] }>,
+  maxRows = 12,
+): { sheets: string[]; firstRows: string[][] } {
+  const target =
+    sheets.find((s) => s.rows.some((r) => (r ?? []).some((c) => norm(c)))) ?? sheets[0];
+  const firstRows = (target?.rows ?? [])
+    .filter((r) => (r ?? []).some((c) => norm(c)))
+    .slice(0, maxRows)
+    .map((r) =>
+      (r ?? [])
+        .map(norm)
+        .filter((t) => t && parseAmount(t) === null && !/^\d+$/.test(t))
+        .map((t) => t.slice(0, 60)),
+    );
+  return { sheets: sheets.map((s) => s.name.slice(0, 60)), firstRows };
 }
 
 /**
@@ -469,11 +593,11 @@ export function trialBalanceFromRows(rows: unknown[][]): TrialBalanceRow[] {
  * de balance de prueba. Detecta el formato por firma (xlsx, HTML como .xls…);
  * un .xlsx va por exceljs y, si éste falla, por el lector mínimo propio.
  */
-export async function readSpreadsheetBytes(
+export async function readSpreadsheetSheets(
   bytes: Uint8Array,
   opts: { contentType?: string | null } = {},
-): Promise<unknown[][]> {
-  const sheets = await readSheetsByFormat(bytes, {
+): Promise<RawSheet[]> {
+  return readSheetsByFormat(bytes, {
     tryPrimary: async (b) => {
       const { default: ExcelJS } = await import('exceljs');
       const workbook = new ExcelJS.Workbook();
@@ -514,6 +638,13 @@ export async function readSpreadsheetBytes(
     );
     throw err;
   });
+}
+
+export async function readSpreadsheetBytes(
+  bytes: Uint8Array,
+  opts: { contentType?: string | null } = {},
+): Promise<unknown[][]> {
+  const sheets = await readSpreadsheetSheets(bytes, opts);
   for (const sheet of sheets) {
     if (trialBalanceFromRows(sheet.rows).length) return sheet.rows;
   }

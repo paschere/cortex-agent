@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   type TrialBalanceRow,
   balanceFromTrialBalance,
+  describeSheetsForLog,
   leafAccounts,
+  parseTrialBalance,
+  parseTrialBalanceSheets,
   parseAmount,
   pnlFromTrialBalance,
   trialBalanceFromRows,
@@ -175,6 +178,41 @@ describe('Siigo reports', () => {
     expect(p.revenue).toBe(500);
     expect(p.costOfSales).toBe(200);
   });
+
+  async function xlsxOf(rows: unknown[][]) {
+    const { default: ExcelJS } = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Balance');
+    for (const r of rows) ws.addRow(r);
+    return new Uint8Array(await wb.xlsx.writeBuffer());
+  }
+  const siigoWith = (bytes: Uint8Array) =>
+    siigoReports(
+      {
+        post: async () => ({ file_url: 'https://reportsexcelprod.blob.core.windows.net/a/b.xlsx' }),
+      } as unknown as Parameters<typeof siigoReports>[0],
+      {
+        fetch: (async () =>
+          new Response(bytes as unknown as ArrayBuffer)) as unknown as typeof fetch,
+      },
+    );
+
+  it('a month without movements (titles only) is zeros, not an error', async () => {
+    const p = await siigoWith(
+      await xlsxOf([['Empresa'], ['No hay información para el período']]),
+    ).profitAndLoss('2026-05-01', '2026-05-31');
+    expect(p.revenue).toBe(0);
+    expect(p.notes.join(' ')).toMatch(/Sin movimientos/);
+  });
+
+  it('accounts with unknown columns still fail', async () => {
+    await expect(
+      siigoWith(await xlsxOf([['Empresa'], ['1105', 'Caja', 1, 2, 3, 4]])).profitAndLoss(
+        '2026-05-01',
+        '2026-05-31',
+      ),
+    ).rejects.toThrow(/No reconocí las columnas/);
+  });
 });
 
 describe('Alegra reports (MCP)', () => {
@@ -316,5 +354,104 @@ describe('QuickBooks reports', () => {
       operatingExpenses: 400,
       netIncome: 300,
     });
+  });
+});
+
+describe('trial balance header variants (Siigo)', () => {
+  const rowsOf = (...r: unknown[][]) => r;
+  it('header split in two rows with a merged «Movimiento»', () => {
+    const parsed = parseTrialBalance(
+      rowsOf(
+        ['Empresa'],
+        ['Código', 'Nombre', 'Saldo inicial', 'Movimiento', null, 'Saldo final'],
+        [null, null, null, 'Débito', 'Crédito', null],
+        ['413505', 'Ventas', 0, 0, 100, -100],
+      ),
+    );
+    expect(parsed.kind).toBe('ok');
+    expect(parsed.kind === 'ok' && parsed.rows[0]).toMatchObject({
+      code: '413505',
+      credit: 100,
+      final: -100,
+    });
+  });
+  it('«Saldo» alone after «Saldo inicial» is the final balance', () => {
+    const parsed = parseTrialBalance(
+      rowsOf(
+        [
+          'Código cuenta contable',
+          'Nombre cuenta contable',
+          'Saldo inicial',
+          'Débito',
+          'Crédito',
+          'Saldo',
+        ],
+        ['1105', 'Caja', 1, 2, 3, 4],
+      ),
+    );
+    expect(parsed.kind === 'ok' && parsed.rows[0]).toMatchObject({
+      name: 'Caja',
+      initial: 1,
+      debit: 2,
+      credit: 3,
+      final: 4,
+    });
+  });
+  it('header below row 40', () => {
+    const filler = Array.from({ length: 50 }, () => ['Título']);
+    const parsed = parseTrialBalance([
+      ...filler,
+      ['Código', 'Nombre', 'Débito', 'Crédito', 'Saldo final'],
+      ['1105', 'Caja', 1, 2, 3],
+    ]);
+    expect(parsed.kind).toBe('ok');
+  });
+  it('header with no account rows is empty (month without movements)', () => {
+    expect(
+      parseTrialBalance(rowsOf(['Código', 'Nombre', 'Débito', 'Crédito', 'Saldo final'])).kind,
+    ).toBe('empty');
+  });
+  it('titles only is no-data; accounts with unknown columns is unknown-columns', () => {
+    expect(parseTrialBalance(rowsOf(['Empresa SAS'], ['No hay datos para el período'])).kind).toBe(
+      'no-data',
+    );
+    expect(parseTrialBalance(rowsOf(['Empresa'], ['1105', 'Caja', 1, 2, 3, 4])).kind).toBe(
+      'unknown-columns',
+    );
+  });
+  it('picks the first sheet with balance data, empty beats nothing', () => {
+    const portada = { name: 'Portada', rows: [['Empresa']] };
+    const data = {
+      name: 'Balance',
+      rows: [
+        ['Código', 'Nombre', 'Débito', 'Crédito', 'Saldo final'],
+        ['1105', 'Caja', 1, 2, 3],
+      ],
+    };
+    expect(parseTrialBalanceSheets([portada, data]).sheet?.name).toBe('Balance');
+    expect(parseTrialBalanceSheets([portada]).result.kind).toBe('no-data');
+  });
+  it('log description keeps only text cells, never amounts', () => {
+    const d = describeSheetsForLog([
+      {
+        name: 'H1',
+        rows: [
+          ['Empresa X', 123456],
+          ['Código', 'Saldo', '1.000,00'],
+        ],
+      },
+    ]);
+    expect(d.sheets).toEqual(['H1']);
+    expect(JSON.stringify(d.firstRows)).not.toMatch(/123456|1\.000/);
+  });
+  it('pnl from no accounts is all zeros', () => {
+    const p = pnlFromTrialBalance([], {
+      provider: 'siigo',
+      from: '2026-05-01',
+      to: '2026-05-31',
+      currency: 'COP',
+    });
+    expect(p.revenue).toBe(0);
+    expect(p.netIncome).toBe(0);
   });
 });

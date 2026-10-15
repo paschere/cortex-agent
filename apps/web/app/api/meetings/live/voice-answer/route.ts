@@ -8,7 +8,14 @@ import { buildSystemPrompt } from '@/lib/system-prompt';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { VOICE_LIVE_FACTS, takeSpokenClauses, wantsLiveLookup } from '@/lib/voice-spoken';
 import { readWorkspaceVoice } from '@/lib/workspace-voice';
-import { getTool, listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
+import {
+  getTool,
+  isToolAvailable,
+  listTools,
+  readWorkspacePlan,
+  runTool,
+  voiceModel,
+} from '@cortex/agent-tools';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -258,7 +265,7 @@ export async function POST(req: NextRequest) {
 
   const aiTools: Record<string, CoreTool> = {};
   if (!quick) {
-    for (const def of listTools()) {
+    for (const def of listTools().filter(isToolAvailable)) {
       const family = def.id.split('.')[0] ?? '';
       if (VOICE_FAMILIES_BLOCKED.has(family)) continue;
       aiTools[def.id.replaceAll('.', '_')] = tool({

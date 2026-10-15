@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { fetchExpensesReport, fetchTeamAssignments } from './client';
+import { fetchExpensesReport, fetchTeamAssignments, payrollConfigured } from './client';
 import { COMP_SENSITIVITY_NOTE } from './sensitive';
 
 /**
@@ -36,6 +36,7 @@ const ScenarioSchema = z.object({
 
 export const payrollCostProjection = registerTool({
   id: 'payroll.cost_projection',
+  available: payrollConfigured,
   description:
     'Project what a team will cost over the next few years, starting from the real payroll baseline (current headcount and monthly cost, optionally filtered to one client or division) and applying explicit assumptions: salary inflation, headcount growth and expense growth. ' +
     'Returns a year-by-year series for three scenarios (conservative / base / aggressive) plus the assumptions used — ready to chart or drop into a report. Use it for "what will this team cost us in 3 years", "project the cost of <client>", or budget planning. ' +

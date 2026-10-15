@@ -1,6 +1,7 @@
 'use client';
 
 import { essentialArgs, formatDuration } from '@/lib/tool-args';
+import { friendlyToolError } from '@/lib/tool-error-text';
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
@@ -183,6 +184,15 @@ function TaskRow({
         />
       </button>
 
+      {failed && (
+        <p
+          className="min-w-0 px-3 pb-1.5 pl-9 text-micro text-ink-muted"
+          data-testid="tool-error-summary"
+        >
+          {friendlyToolError(result)}
+        </p>
+      )}
+
       {running && progress && (
         // Una línea de avance bajo el renglón, truncada: el chip dice qué está
         // pasando AHORA ({«Listé 1.200 archivos…»}). Desaparece al terminar.
@@ -226,10 +236,19 @@ function TaskRow({
                 chevron. Un error se queda en JSON: la forma de un fallo es
                 justo la que nadie debería tener que interpretar.
               */}
-              {failed || typeof result === 'string' ? (
-                <pre className={evidence}>
-                  {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-                </pre>
+              {failed ? (
+                <>
+                  <p className="text-xs text-ink">{friendlyToolError(result)}</p>
+                  {/* El JSON sólo como detalle plegado, para soporte. */}
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-micro text-ink-faint">
+                      Detalle técnico
+                    </summary>
+                    <pre className={evidence}>{JSON.stringify(result, null, 2)}</pre>
+                  </details>
+                </>
+              ) : typeof result === 'string' ? (
+                <pre className={evidence}>{result}</pre>
               ) : (
                 <StructuralResult result={result} />
               )}

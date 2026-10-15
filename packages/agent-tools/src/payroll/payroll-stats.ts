@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { fetchPayrollStats } from './client';
+import { fetchPayrollStats, payrollConfigured } from './client';
 import { COMP_SENSITIVITY_NOTE } from './sensitive';
 
 function money(n: number | null | undefined): string {
@@ -10,6 +10,7 @@ function money(n: number | null | undefined): string {
 
 export const payrollStats = registerTool({
   id: 'payroll.payroll_stats',
+  available: payrollConfigured,
   description:
     'Get how much payroll costs the company over time: one row per completed pay period with the total paid, how many people were paid, the average cost per person, and the split between regular pay, bonuses, reimbursements and deductions — plus totals by currency, division and client. It is a ready-to-chart time series (oldest period first). ' +
     'Use this for "show me the payroll cost trend", "how much did we pay out last period", "is our payroll going up", "how much does the Tech division cost", or "what is our average cost per person". ' +

@@ -71,8 +71,20 @@ export function listTools(): AnyTool[] {
   return [...REGISTRY.values()];
 }
 
+/** ¿Se puede ofrecer? (`available` de la herramienta; si lanza, no.) */
+export function isToolAvailable(tool: Pick<AnyTool, 'available'>): boolean {
+  if (!tool.available) return true;
+  try {
+    return tool.available();
+  } catch {
+    return false;
+  }
+}
+
 export function filterTools(allowed: string[]): AnyTool[] {
-  return [...REGISTRY.values()].filter((t) => allowed.some((pat) => matchPattern(pat, t.id)));
+  return [...REGISTRY.values()].filter(
+    (t) => allowed.some((pat) => matchPattern(pat, t.id)) && isToolAvailable(t),
+  );
 }
 
 /**

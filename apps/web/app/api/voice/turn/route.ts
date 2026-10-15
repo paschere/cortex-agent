@@ -6,7 +6,7 @@ import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { figuresForTts } from '@/lib/voice-figures';
 import { VOICE_LIVE_FACTS, takeSpokenClauses } from '@/lib/voice-spoken';
 import { TTS_VOICE, VOICE_PLANS } from '@/lib/voice-tts';
-import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
+import { isToolAvailable, listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, SecurityBlockedError } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   }));
 
   const aiTools: Record<string, CoreTool> = {};
-  for (const def of listTools()) {
+  for (const def of listTools().filter(isToolAvailable)) {
     const family = def.id.split('.')[0] ?? '';
     if (VOICE_FAMILIES_BLOCKED.has(family)) continue;
     aiTools[def.id.replaceAll('.', '_')] = tool({
