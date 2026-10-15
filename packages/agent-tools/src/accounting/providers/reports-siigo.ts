@@ -3,6 +3,7 @@ import {
   type ProviderBalance,
   type ProviderPnl,
   type ProviderReports,
+  type TrialBalanceRow,
   balanceFromTrialBalance,
   pnlFromTrialBalance,
   trialBalanceFromRows,
@@ -96,6 +97,11 @@ export function siigoReports(
       const out = balanceFromTrialBalance(rows, { provider: 'siigo', asOf, currency });
       out.notes.push('Fuente: balance de prueba general de Siigo Nube.');
       return out;
+    },
+    async trialBalance(from: string, to: string): Promise<TrialBalanceRow[]> {
+      if (year(from) !== year(to))
+        throw new Error('Siigo arma el balance de prueba de un solo año a la vez.');
+      return trialBalance(client, doFetch, year(from), month(from), month(to));
     },
     async profitAndLoss(from: string, to: string): Promise<ProviderPnl> {
       if (year(from) !== year(to))

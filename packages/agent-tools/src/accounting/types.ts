@@ -1,4 +1,5 @@
 import type { ProviderWriter } from '../close/writeback/shape';
+import type { LiveRequest, LiveResult } from './live/shape';
 import type { PayrollPage } from './payroll-provider';
 import type { PurchasePage } from './providers/purchases';
 import type { ProviderReports } from './providers/reports';
@@ -196,6 +197,12 @@ export interface ProviderSession {
    * programa y cómo se lee.
    */
   reports?: ProviderReports;
+  /**
+   * Consulta EN VIVO de documentos y catálogos (facturas, compras, comprobantes,
+   * terceros…), sólo lectura, para `accounting.query`. Sólo los programas que
+   * ya lo permiten; los demás no la traen y la herramienta lo dice.
+   */
+  live?: (req: LiveRequest) => Promise<LiveResult>;
   /**
    * Registrar en el programa (migración 0192, cierre contable): causar una
    * compra, un recibo de caja, un pago a proveedor. Siempre después de la

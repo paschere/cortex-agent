@@ -55,3 +55,5 @@ export type {
   ProviderPnl as AccountingPnlReport,
   ProviderReports as AccountingReportsReader,
 } from '../accounting/providers/reports';
+export { monthlyMarkdown, readMonthlyPnl, rowFromPnl, sumRows } from './monthly';
+export type { MonthlyResult, MonthlyRow } from './monthly';

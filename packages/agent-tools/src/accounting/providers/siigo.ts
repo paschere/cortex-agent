@@ -14,6 +14,7 @@ import type {
   ProviderSession,
   QueryPlanInput,
 } from '../types';
+import { siigoLive } from '../live/siigo-live';
 import { siigoInvoicing } from './invoicing';
 import { siigoPurchasePage } from './purchases';
 import { siigoReports } from './reports-siigo';
@@ -463,6 +464,7 @@ export const siigoProvider: AccountingProvider = {
       listPurchases: (since, page) => siigoPurchasePage(client, since, page),
       listPayroll: (since, page) => siigoPayrollPage(client, since, page),
       reports: siigoReports(client, { fetch: runtime.fetch }),
+      live: (req) => siigoLive(client, req),
       writer: siigoWriter(client),
       async listPage(entity, query, page) {
         const result = await pageRelaxing(client, PATHS[entity], query, page);

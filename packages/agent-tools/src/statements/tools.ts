@@ -6,6 +6,7 @@ import { providerName } from './balance';
 import { MISSING_EXPENSES_HELP } from './headline';
 import { INCOME_LINE_META, pctChange } from './income';
 import { pctText } from './indicators';
+import { monthlyMarkdown, readMonthlyPnl } from './monthly';
 import { type StatementsResult, loadStatements } from './store';
 
 /**
@@ -39,7 +40,7 @@ const change = (now: number, before: number | null | undefined) => {
 
 export function statementsMarkdown(
   r: StatementsResult,
-  section: 'todo' | 'resultados' | 'balance' | 'indicadores' = 'todo',
+  section: 'todo' | 'resultados' | 'balance' | 'indicadores' | 'mensual' = 'todo',
 ): string {
   const out: string[] = [];
   const period = `enero a ${monthName(r.throughMonth)} de ${r.year}${r.income.partialMonth ? ' (el mes va en curso)' : ''}`;
@@ -74,6 +75,9 @@ export function statementsMarkdown(
     );
     if (r.income.payrollConfidential)
       out.push('La nómina va como un solo total confidencial: el detalle lo ve quien administra.');
+    out.push(
+      'Si piden estos resultados mes a mes, vuelve a pedirlos con la sección «mensual» (viene del programa contable, un renglón por mes). No le nombres herramientas a la persona.',
+    );
     const acc = r.accounting.pnl?.report;
     if (acc)
       out.push(
@@ -119,7 +123,7 @@ export function statementsMarkdown(
 export const statementsGet = registerTool({
   id: 'statements.get',
   description:
-    'Los estados financieros de la empresa: estado de resultados (mes, acumulado del año y contra el año anterior: ventas, costo, utilidad bruta, gastos variables y fijos, utilidad operacional/EBITDA aproximado, utilidad neta), balance general (del programa contable si está conectado; si no, un balance aproximado rotulado como tal con lo que no incluye) e indicadores (márgenes bruto/operacional/neto, razón corriente, endeudamiento, días de cartera, inventario y proveedores, ciclo de caja, punto de equilibrio). Cada cifra trae de dónde sale. Úsala para «¿cómo nos fue este año?», «estado de resultados», «balance general», «¿cuál es nuestro margen?», «punto de equilibrio», «indicadores financieros». Sólo lectura. `refresh` le pide al programa contable el balance y los resultados (Siigo, Alegra, QuickBooks).',
+    'Los estados financieros de la empresa: estado de resultados (mes, acumulado del año y contra el año anterior: ventas, costo, utilidad bruta, gastos variables y fijos, utilidad operacional/EBITDA aproximado, utilidad neta), balance general (del programa contable si está conectado; si no, un balance aproximado rotulado como tal con lo que no incluye) e indicadores (márgenes bruto/operacional/neto, razón corriente, endeudamiento, días de cartera, inventario y proveedores, ciclo de caja, punto de equilibrio). Cada cifra trae de dónde sale. Para el estado de resultados MES A MES usa section «mensual» (contable, desde el programa contable, con la caja al lado). Úsala para «¿cómo nos fue este año?», «estado de resultados», «balance general», «¿cuál es nuestro margen?», «punto de equilibrio», «indicadores financieros». Sólo lectura. `refresh` le pide al programa contable el balance y los resultados (Siigo, Alegra, QuickBooks).',
   inputSchema: z.object({
     year: z.number().int().min(2020).max(2100).nullish().describe('Año. Por defecto, el actual.'),
     month: z
@@ -129,7 +133,19 @@ export const statementsGet = registerTool({
       .max(12)
       .nullish()
       .describe('Hasta qué mes (1–12). Por defecto, el mes actual (o diciembre de un año pasado).'),
-    section: z.enum(['todo', 'resultados', 'balance', 'indicadores']).default('todo'),
+    section: z
+      .enum(['todo', 'resultados', 'balance', 'indicadores', 'mensual'])
+      .default('todo')
+      .describe(
+        "«mensual» = estado de resultados contable MES A MES (ventas, costo, utilidad bruta, gastos operacionales, no operacionales, utilidad operacional y neta de cada mes del rango), del programa contable, con la caja al lado. Úsala siempre que pidan los resultados «mes a mes», «por mes» o «cada mes».",
+      ),
+    fromMonth: z
+      .number()
+      .int()
+      .min(1)
+      .max(12)
+      .nullish()
+      .describe('Sólo con «mensual»: primer mes del rango (1–12). Por defecto, enero.'),
     refresh: z
       .boolean()
       .default(false)
@@ -145,9 +161,36 @@ export const statementsGet = registerTool({
     ytdPrev: z.record(z.number()).nullable(),
     indicators: z.array(z.object({ key: z.string(), label: z.string(), display: z.string() })),
     markdown: z.string(),
+    months: z.array(z.record(z.any())).optional(),
   }),
   rateLimit: { perMinute: 20 },
   handler: async (input, ctx) => {
+    if (input.section === 'mensual') {
+      const today = bogotaToday();
+      const thisYear = Number(today.slice(0, 4));
+      const thisMonth = Number(today.slice(5, 7));
+      const year = Math.min(Math.max(input.year ?? thisYear, thisYear - 2), thisYear);
+      const through = Math.min(input.month ?? (year === thisYear ? thisMonth : 12), year === thisYear ? thisMonth : 12);
+      const from = Math.min(input.fromMonth ?? 1, through);
+      const m = await readMonthlyPnl(ctx.db, {
+        year,
+        fromMonth: from,
+        throughMonth: through,
+        today,
+        viewerId: ctx.userId,
+        refresh: input.refresh ?? false,
+      });
+      return {
+        year,
+        throughMonth: through,
+        basis: { income: 'caja' as const, balance: 'aproximado' as const },
+        ytd: {},
+        ytdPrev: null,
+        indicators: [],
+        markdown: monthlyMarkdown(m),
+        months: m.rows.map((x) => ({ ...x })),
+      };
+    }
     const r = await loadStatements(ctx.db, {
       today: bogotaToday(),
       viewerId: ctx.userId,

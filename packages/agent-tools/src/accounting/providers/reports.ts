@@ -89,6 +89,11 @@ export interface ProviderPnl {
 export interface ProviderReports {
   balanceSheet(asOf: string): Promise<ProviderBalance>;
   profitAndLoss(from: string, to: string): Promise<ProviderPnl>;
+  /**
+   * Balance de prueba (cuenta, saldo inicial, débitos, créditos, saldo final)
+   * de un rango de meses. Sólo Siigo lo entrega así.
+   */
+  trialBalance?(from: string, to: string): Promise<TrialBalanceRow[]>;
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;

@@ -4,7 +4,9 @@
  */
 
 import './tools';
+import './live/tools';
 
+export { accountingQuery } from './live/tools';
 export { accountingPayrollSummary, accountingStatus, accountingSyncNow } from './tools';
 export {
   ACCOUNTING_PROVIDERS,

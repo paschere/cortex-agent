@@ -35,6 +35,7 @@ export const RESEARCH_READ_TOOLS: ReadonlySet<string> = new Set([
   'ledger.query',
   'ledger.forecast',
   'accounting.status',
+  'accounting.query',
   // Correo (sólo buscar y leer).
   'gmail.search',
   'gmail.list_threads',
