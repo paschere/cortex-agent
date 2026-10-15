@@ -21,6 +21,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Plus,
   Search,
   SquarePen,
   Trash2,
@@ -317,10 +318,10 @@ function ThreadItem({
         aria-current={active ? 'page' : undefined}
         onClick={onNavigate}
         className={clsx(
-          'flex min-w-0 items-center gap-2 rounded-sm py-2 pl-2.5 pr-9 text-sm transition-colors duration-150 motion-reduce:transition-none',
+          'flex min-w-0 items-center gap-2 rounded-[10px] py-2 pl-2.5 pr-9 text-xs transition-colors duration-150 motion-reduce:transition-none',
           active
-            ? 'bg-surface-2 font-medium text-ink'
-            : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+            ? 'bg-surface font-semibold text-ink shadow-[0_0_0_1px_rgb(var(--border))]'
+            : 'text-ink hover:bg-surface/70',
         )}
       >
         {pinned && <Pin className="h-3 w-3 shrink-0 text-ink-faint" aria-hidden />}
@@ -422,38 +423,16 @@ function ThreadList({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 px-3 pb-2 pt-3">
-        <Link
-          href="/chat"
-          onClick={onNavigate}
-          className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-pill bg-primary px-3.5 py-2 text-sm font-semibold text-white shadow-card transition-colors duration-150 hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
-        >
-          <SquarePen className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-          <span className="truncate">Nuevo chat</span>
-        </Link>
-        {onCollapse && (
-          <button
-            type="button"
-            onClick={onCollapse}
-            aria-label="Ocultar lista de chats"
-            title="Ocultar lista"
-            className="hidden shrink-0 rounded-full p-2 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink lg:inline-flex motion-reduce:transition-none"
-          >
-            <PanelLeft className="h-[18px] w-[18px]" strokeWidth={1.75} />
-          </button>
-        )}
-      </div>
-
-      <div className="px-3 pb-2">
-        <label className="flex items-center gap-2 rounded-pill border border-border bg-surface px-3 py-1.5 text-sm focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/15">
-          <Search className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+      <div className="flex items-center gap-1.5 px-3 pb-2 pt-3">
+        <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[10px] bg-surface px-2.5 text-xs shadow-[0_0_0_1px_rgb(var(--border))] focus-within:shadow-[0_0_0_2px_rgb(var(--primary)/0.45)]">
+          <Search className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar chats"
             aria-label="Buscar chats por título"
-            className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint [&::-webkit-search-cancel-button]:appearance-none"
+            className="min-w-0 flex-1 bg-transparent text-xs text-ink outline-none placeholder:text-ink-faint [&::-webkit-search-cancel-button]:appearance-none"
           />
           {query && (
             <button
@@ -466,9 +445,18 @@ function ThreadList({
             </button>
           )}
         </label>
+        <Link
+          href="/chat"
+          onClick={onNavigate}
+          aria-label="Nuevo chat"
+          title="Nuevo chat"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-primary text-white transition-colors duration-150 hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        >
+          <Plus className="h-[15px] w-[15px]" strokeWidth={2} aria-hidden />
+        </Link>
       </div>
 
-      <fieldset aria-label="Filtrar chats" className="m-0 flex gap-1 border-0 px-3 pb-2">
+      <fieldset aria-label="Filtrar chats" className="m-0 flex items-center gap-1 border-0 px-3 pb-2">
         {filters.map((f) => (
           <button
             key={f.key}
@@ -476,10 +464,10 @@ function ThreadList({
             aria-pressed={filter === f.key}
             onClick={() => setFilter(f.key)}
             className={clsx(
-              'inline-flex h-7 items-center gap-1.5 rounded-pill px-3 text-xs transition-colors duration-150 motion-reduce:transition-none',
+              'inline-flex h-[26px] items-center gap-1.5 rounded-pill px-2.5 text-micro transition-colors duration-150 motion-reduce:transition-none',
               filter === f.key
-                ? 'bg-ink font-semibold text-surface'
-                : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                ? 'bg-ink font-semibold text-canvas'
+                : 'text-ink-muted hover:bg-surface hover:text-ink',
             )}
           >
             {f.label}
@@ -488,6 +476,17 @@ function ThreadList({
             )}
           </button>
         ))}
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="Ocultar lista de chats"
+            title="Ocultar lista"
+            className="ml-auto hidden shrink-0 rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface hover:text-ink lg:inline-flex motion-reduce:transition-none"
+          >
+            <PanelLeft className="h-4 w-4" strokeWidth={1.75} />
+          </button>
+        )}
       </fieldset>
 
       <nav aria-label="Chats" className="scroll-slim min-h-0 flex-1 overflow-y-auto pb-3">
@@ -533,7 +532,7 @@ function ThreadList({
         ) : (
           groups.map((g) => (
             <section key={g.key} className="mt-2 first:mt-0">
-              <h3 className="px-4 pb-1 pt-2 text-micro font-semibold text-ink-faint">{g.label}</h3>
+              <h3 className="px-5 pb-1 pt-2 text-micro font-semibold text-ink-faint">{g.label}</h3>
               <ul className="space-y-px">
                 {g.rows.map((row) => (
                   <ThreadItem
@@ -606,7 +605,7 @@ export function ThreadHistory() {
   }, [pathname]);
 
   const btn =
-    'shrink-0 rounded-full p-2 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none';
+    'shrink-0 rounded-full p-1.5 text-ink-muted transition-colors sm:p-2 duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none';
 
   return (
     <div className="flex min-w-0 shrink items-center gap-1">
@@ -614,7 +613,7 @@ export function ThreadHistory() {
         href="/chat"
         title="Nuevo chat"
         aria-label="Nuevo chat"
-        className={clsx(btn, 'hover:bg-primary-soft hover:text-primary-ink')}
+        className={clsx(btn, 'hover:bg-primary-soft hover:text-primary-ink', !collapsed && 'lg:hidden')}
       >
         <SquarePen strokeWidth={1.75} className="h-[18px] w-[18px]" />
       </Link>

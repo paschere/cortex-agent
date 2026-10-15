@@ -361,7 +361,7 @@ export function TaskRows({
   const summary = howSummary(invocations);
 
   return (
-    <div className="mt-3">
+    <div className="mt-1.5">
       {/*
         A screen reader is told what is happening now, in words, and is NOT read
         the whole list every time a row lands — `aria-live` sits on this one
@@ -381,12 +381,12 @@ export function TaskRows({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className="inline-flex max-w-full items-center gap-2 rounded-pill bg-surface-2 px-3 py-1.5 text-left text-xs text-ink-muted transition-colors duration-150 hover:bg-border hover:text-ink motion-reduce:transition-none"
+          className="inline-flex max-w-full items-center gap-1.5 text-left text-micro font-medium text-ink-faint transition-colors duration-150 hover:text-ink motion-reduce:transition-none"
         >
           <Check className="h-3 w-3 shrink-0 text-emerald" aria-hidden />
           <span className="min-w-0 truncate">
             {summary}
-            {totalLabel ? ` en ${totalLabel}` : ''} · cómo lo hice
+            {totalLabel ? ` en ${totalLabel}` : ''}
           </span>
           <ChevronDown
             className={clsx(

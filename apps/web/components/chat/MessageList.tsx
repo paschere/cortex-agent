@@ -564,11 +564,11 @@ export function MessageList({
           />
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-[45rem] space-y-11 px-4 pt-8 pb-10 sm:px-6">
+        <div className="mx-auto w-full max-w-[50.25rem] space-y-6 px-4 pt-7 pb-8 sm:px-6">
           {turns.map((turn) => (
             // 14px por dentro contra los 44px de `space-y-11` que separan los
             // turnos. Ver `turnsOf` para por qué la diferencia es el diseño.
-            <article key={turn.key} className="space-y-3.5">
+            <article key={turn.key} className="space-y-5">
               {turn.at.map((i) => {
                 const m = messages[i];
                 if (!m) return null;

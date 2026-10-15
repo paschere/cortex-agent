@@ -757,7 +757,7 @@ export function InputBar({
                 `max-h` de 200 no cambia: quien escriba un párrafo sigue
                 teniendo el mismo techo.
               */
-          className="scroll-slim block max-h-[200px] min-h-[64px] w-full resize-none bg-transparent px-4 pt-3.5 text-base text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
+          className="scroll-slim block max-h-[200px] min-h-[44px] w-full resize-none bg-transparent px-4 pt-3 text-sm text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
         />
 
         <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
@@ -821,7 +821,7 @@ export function InputBar({
                   aria-label="Agregar: archivo, dictado, fuentes"
                   title="Agregar"
                   className={clsx(
-                    'grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-muted transition-colors duration-150 hover:bg-border hover:text-ink motion-reduce:transition-none',
+                    'grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-surface-2 text-ink-muted transition-colors duration-150 hover:bg-border hover:text-ink motion-reduce:transition-none',
                     (extras || screen?.live) && 'bg-primary-soft text-primary',
                     'disabled:opacity-40',
                   )}
@@ -887,10 +887,10 @@ export function InputBar({
                 aria-label="Fuentes conectadas"
                 className="hidden min-w-0 items-center gap-1.5 overflow-hidden lg:flex"
               >
-                {connected.slice(0, 3).map((source) => (
+                {connected.slice(0, 2).map((source) => (
                   <li
                     key={source.id}
-                    className="inline-flex h-7 min-w-0 max-w-[11rem] items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 text-xs text-ink-muted"
+                    className="inline-flex h-[26px] shrink-0 max-w-[11rem] items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 text-micro text-ink-muted"
                   >
                     <span
                       className={clsx(
@@ -906,8 +906,8 @@ export function InputBar({
                     <span className="truncate">{source.label}</span>
                   </li>
                 ))}
-                {connected.length > 3 && (
-                  <li className="shrink-0 text-xs text-ink-faint">+{connected.length - 3}</li>
+                {connected.length > 2 && (
+                  <li className="shrink-0 text-micro text-ink-faint">+{connected.length - 2}</li>
                 )}
               </ul>
             )}
@@ -917,9 +917,10 @@ export function InputBar({
               disabled={disabled}
               onClick={() => setVoiceOpen(true)}
               title="Modo voz: habla con Cortex y te responde con voz"
+              aria-label="Hablar"
               className="chat-voice-entry"
             >
-              <Waves className="h-3.5 w-3.5" /> Hablar
+              <Waves className="h-3.5 w-3.5" /> <span className="hidden 2xl:inline">Hablar</span>
             </button>
             {(extras || screen?.live) && (
               <>
@@ -943,7 +944,7 @@ export function InputBar({
                     : 'Segundo plano: Cortex trabaja sin que tengas que quedarte en esta pestaña'
                 }
                 className={clsx(
-                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-pill px-2.5 text-xs font-semibold sm:px-3 transition-colors duration-150 motion-reduce:transition-none',
+                  'inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-pill px-2.5 text-micro font-semibold sm:px-3 transition-colors duration-150 motion-reduce:transition-none',
                   background
                     ? 'bg-primary-soft text-primary-ink hover:bg-border'
                     : 'bg-surface-2 text-ink-muted hover:bg-border hover:text-ink',
@@ -991,9 +992,9 @@ export function InputBar({
               type="submit"
               disabled={disabled || !text.trim()}
               aria-label="Enviar mensaje"
-              className="grid h-9 w-9 place-items-center rounded-full bg-primary text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+              className="grid h-[30px] w-[30px] place-items-center rounded-full bg-primary text-white transition-colors duration-150 hover:bg-primary-strong disabled:opacity-40 motion-reduce:transition-none"
             >
-              <ArrowUp size={17} strokeWidth={2.5} />
+              <ArrowUp size={15} strokeWidth={2.5} />
             </button>
           </div>
         </div>
@@ -1013,7 +1014,7 @@ export function InputBar({
           onClose={() => setVoiceOpen(false)}
         />
       ) : null}
-      <div className="mx-auto w-full max-w-[45rem]">
+      <div className="mx-auto w-full max-w-[46.25rem]">
         {/*
           EL COMPOSITOR VA DENTRO DE LA BANDEJA, no debajo. La bandeja es la
           zona de soltar, y la zona de soltar tiene que ser el sitio donde

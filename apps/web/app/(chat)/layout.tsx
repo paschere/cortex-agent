@@ -28,7 +28,7 @@ export default async function ChatLayout({ children }: { children: ReactNode }) 
     <AppShell user={user}>
       {/* En escritorio no hay una hoja única: el chat dibuja la suya (conversación)
           y el panel de «lo que Cortex armó» la suya, sobre el papel. */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-surface md:bg-transparent md:py-2 md:pr-2">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-surface md:bg-transparent md:py-2.5 md:pr-2.5">
         {/* El chat mide `h-full`: sin esta caja mediría la columna entera y
             empujaría la barra del teléfono fuera de la pantalla. */}
         <BillingBanner organizationId={user.organization.id} />

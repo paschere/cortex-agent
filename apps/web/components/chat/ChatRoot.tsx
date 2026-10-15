@@ -536,7 +536,7 @@ export function ChatRoot({
         <div className="flex h-full min-w-0 gap-2 overflow-hidden md:gap-3">
           <ThreadAside />
           <div className="cortex-chat relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-            <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
+            <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-1.5 md:gap-3 border-b border-border bg-surface px-4">
               <button
                 type="button"
                 onClick={() => setSidebarOpen(true)}
@@ -545,7 +545,7 @@ export function ChatRoot({
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <Presence size="sm" state={working ? 'thinking' : 'resting'} />
+              {working && <Presence size="sm" state="thinking" />}
               <ConversationHeader
                 conversationId={conversationId}
                 title={headerTitle}
@@ -616,7 +616,7 @@ export function ChatRoot({
 
             {/* Los seguimientos, como pastillas justo encima de donde se escribe. */}
             {lastAnswer && !blocked && !working && !bg.live && (
-              <div className="mx-auto w-full max-w-[45rem] shrink-0 px-4 sm:px-6">
+              <div className="mx-auto w-full max-w-[48.25rem] shrink-0 px-4">
                 <FollowUps
                   dock
                   conversationId={conversationId}

@@ -23,6 +23,8 @@ const config: Config = {
         },
         surface: rgb('--surface'),
         'surface-2': rgb('--surface-2'),
+        // La tarjeta dentro de la hoja (lienzo del chat): un punto más cálida que la hoja.
+        well: rgb('--well'),
         border: rgb('--border'),
         'border-strong': rgb('--border-strong'),
         ink: rgb('--ink'),

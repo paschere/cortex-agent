@@ -41,15 +41,20 @@ describe('la pregunta en la transcripción', () => {
     expect(html).not.toContain('shadow-card');
   });
 
-  it('se lee por encima de la respuesta, con un token de la escala', () => {
-    expect(pregunta()).toContain('text-lg');
+  it('es la burbuja del lienzo: a la derecha, con un token de la escala', () => {
+    // Rediseño V3: la pregunta vuelve a ser una burbuja suave (fondo `bubble`,
+    // radio 18/18/6/18) a la derecha, a un 78% como máximo. Sigue siendo un `h2`.
+    const html = pregunta();
+    expect(html).toContain('ml-auto');
+    expect(html).toContain('max-w-[78%]');
+    expect(html).toContain('text-sm');
+    expect(html).not.toContain('text-lg');
   });
 
-  it('baja un paso cuando deja de ser un titular', () => {
-    // Un titular de cuatro renglones no titula nada. Ver HEADLINE_MAX_CHARS.
+  it('una pregunta larga se recoge en cuatro renglones', () => {
     const larga = pregunta({ content: 'a'.repeat(400) });
-    expect(larga).toContain('text-base');
-    expect(larga).not.toContain('text-lg');
+    expect(larga).toContain('line-clamp-4');
+    expect(larga).toContain('Ver pedido completo');
   });
 
   it('lleva la hora a la que se dijo, que es media parte de poder citarla', () => {
@@ -58,20 +63,9 @@ describe('la pregunta en la transcripción', () => {
     expect(html).toContain('2026-08-13T14:32:00.000Z');
   });
 
-  it('lleva la hora ENCIMA y no al lado, que es lo que le devuelve el ancho', () => {
-    // Al lado se comía ochenta píxeles de cada pregunta en un teléfono —medido
-    // a 390px— y en el escritorio se quedaba sola contra el borde derecho.
-    // Encima es un antetítulo, que además es como empieza la entrada de un
-    // registro. Ver la cabecera de la pregunta en MessageBubble.
+  it('lleva la hora DEBAJO de la burbuja, discreta', () => {
     const html = pregunta({ createdAt: new Date('2026-08-13T14:32:00Z') });
-    expect(html.indexOf('<time')).toBeLessThan(html.indexOf('<h2'));
-  });
-
-  it('no se pasa de largo de la respuesta que titula', () => {
-    // El cuerpo de la respuesta mide 64ch sangrado al carril, así que el
-    // titular tiene que terminar en la misma vertical. Sin tope, una pregunta
-    // larga sobresalía de su propio texto y se leía como otra columna.
-    expect(pregunta()).toContain('max-w-[37rem]');
+    expect(html.indexOf('<time')).toBeGreaterThan(html.indexOf('<h2'));
   });
 
   it('no se inventa una hora cuando el mensaje no trae ninguna', () => {

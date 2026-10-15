@@ -549,10 +549,10 @@ export function ChatShowcase({
               : {})}
       >
         <ChatComposeProvider compose={() => {}} ask={() => {}}>
-          <div className="cortex-workspace flex h-[100dvh] gap-2 overflow-hidden bg-canvas p-0 md:gap-3 md:p-2">
+          <div className="cortex-workspace flex h-[100dvh] gap-2 overflow-hidden bg-canvas p-0 md:gap-3 md:p-2.5">
             <ThreadAside />
             <div className="cortex-chat flex min-w-0 flex-1 flex-col overflow-hidden">
-              <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface px-4">
+              <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-border bg-surface px-4 md:gap-3">
                 <ConversationHeader
                   conversationId="demo"
                   title={title}
@@ -606,7 +606,7 @@ export function ChatShowcase({
                 />
               )}
               {!empty && (
-                <div className="mx-auto w-full max-w-[45rem] shrink-0 px-4 sm:px-6">
+                <div className="mx-auto w-full max-w-[48.25rem] shrink-0 px-4">
                   <FollowUps
                     dock
                     messageId="a1"

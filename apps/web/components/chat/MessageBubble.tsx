@@ -29,7 +29,6 @@ import { FollowUps } from './FollowUps';
 import { MessageActions } from './MessageActions';
 import { PlanApprovalCard } from './PlanApprovalCard';
 import { PlanCard } from './PlanCard';
-import { Presence } from './Presence';
 import { ReasoningTrail } from './ReasoningTrail';
 import { GlanceNote } from './ScreenView';
 import { SelectionActions } from './SelectionActions';
@@ -240,16 +239,6 @@ function saidAt(message: Message): { time: string; full: string; iso: string } |
   };
 }
 
-/**
- * A partir de aquí una pregunta deja de ser un titular.
- *
- * Un titular de cuatro renglones no titula nada, y a 19px una pregunta larga
- * —una cita pegada, un párrafo de contexto— se convierte en la pared que este
- * rediseño existe para quitar. Por encima de este límite baja un paso de la
- * escala: sigue mandando sobre la respuesta, sin gritarla.
- */
-const HEADLINE_MAX_CHARS = 180;
-
 export function MessageBubble({
   message,
   conversationId,
@@ -373,74 +362,28 @@ export function MessageBubble({
      * `MessageList`.
      */
     const when = saidAt(message);
-    const headline = content.length <= HEADLINE_MAX_CHARS;
     const longRequest = content.length > 320 || content.split('\n').length > 5;
 
     return (
-      <header className="chat-person-message">
-        {/*
-          LA HORA ES UN ANTETÍTULO, Y ESTABA AL LADO.
-
-          Es evidencia —regla 3 del sistema de diseño— y es media parte de poder
-          citar esto dentro de dos semanas, así que se queda. Lo que cambió es
-          dónde: estaba a la derecha en la misma línea, y ahí hacía dos cosas
-          mal a la vez.
-
-          En el teléfono se comía ochenta píxeles del ancho de CADA pregunta
-          —medido a 390px: la pregunta larga rompía renglón cuatro palabras
-          antes que su respuesta, para siempre—, y en el escritorio se quedaba
-          sola contra el borde derecho de la columna, a cien píxeles de lo
-          último que había escrito, que es el único sitio de la transcripción
-          donde no llega nada más.
-
-          Encima de la pregunta y al margen resuelve las dos: el titular
-          recupera el ancho entero en cualquier pantalla y la hora se alinea con
-          todo lo demás. Y es lo que hace un registro — la fecha antes de la
-          entrada. Ver `saidAt` para por qué el día no se enseña.
-        */}
-        {when && (
-          <time
-            dateTime={when.iso}
-            title={when.full}
-            suppressHydrationWarning
-            className="tabular mb-1 block text-micro text-ink-faint"
+      <div className="ml-auto flex max-w-[78%] flex-col items-end gap-1 max-sm:max-w-[92%]">
+        <header className="chat-person-message">
+          <h2
+            className={clsx(
+              'min-w-0 whitespace-pre-wrap text-sm font-normal leading-[1.55] text-ink [overflow-wrap:anywhere]',
+              // Un pedido largo (se pegó un brief entero) se muestra en cuatro
+              // renglones; «Ver pedido completo» lo abre.
+              longRequest && !requestOpen && 'line-clamp-4',
+            )}
           >
-            {when.time}
-          </time>
-        )}
-        <h2
-          className={clsx(
-            // LA PREGUNTA NO PUEDE SER MÁS ANCHA QUE SU RESPUESTA, y lo era.
-            //
-            // El cuerpo de la respuesta mide 64ch y arranca sangrado al carril,
-            // así que su renglón termina 37rem a la derecha de donde empieza la
-            // pregunta. Sin tope, una pregunta larga se pasaba de largo por
-            // cuarenta píxeles: un titular que sobresale de su propio texto se
-            // lee como otra columna, no como su título.
-            //
-            // En `rem` y no en `ch` porque los dos tamaños del titular tienen
-            // que terminar en la MISMA vertical, y un `ch` a 19px y uno a 15px
-            // no miden lo mismo.
-            'min-w-0 max-w-[37rem] whitespace-pre-wrap [overflow-wrap:anywhere] tracking-[-0.01em] text-ink',
-            // Medido en pantalla: una pregunta pegada de cuatro renglones a
-            // 19px semibold es la pared que esto vino a quitar, y encima
-            // seguía en semibold al bajar a 15px. Larga baja de tamaño Y de
-            // peso: la masa del bloque ya es todo el énfasis que necesita, y
-            // lo que dice de quién es sigue siendo la sangría.
-            headline ? 'text-lg font-semibold' : 'text-base font-medium',
-            // Un pedido largo (se pegó un brief entero) se muestra en cuatro
-            // renglones; «Ver pedido completo» lo abre.
-            longRequest && !requestOpen && 'line-clamp-4',
-          )}
-        >
-          {content}
-        </h2>
+            {content}
+          </h2>
+        </header>
         {longRequest && (
           <button
             type="button"
             onClick={() => setRequestOpen((v) => !v)}
             aria-expanded={requestOpen}
-            className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:text-ink motion-reduce:transition-none"
+            className="inline-flex items-center gap-1 text-micro font-medium text-ink-faint transition-colors duration-150 hover:text-ink motion-reduce:transition-none"
           >
             {requestOpen ? 'Ver menos' : 'Ver pedido completo'}
             <ChevronDown
@@ -452,98 +395,62 @@ export function MessageBubble({
             />
           </button>
         )}
+        {/* La hora es evidencia: se queda, discreta, bajo la burbuja. */}
+        {when && (
+          <time
+            dateTime={when.iso}
+            title={when.full}
+            suppressHydrationWarning
+            className="tabular text-micro text-ink-faint"
+          >
+            {when.time}
+          </time>
+        )}
         {/* Debajo de la pregunta, no dentro: la pregunta la escribió una
-            persona y la foto la tomó Cortex, y meterlo en la misma línea
-            pondría las palabras del producto en boca de otro. */}
+            persona y la foto la tomó Cortex. */}
         {glanceAt && <GlanceNote at={glanceAt} />}
-      </header>
+      </div>
     );
   }
 
+  const said = saidAt(message);
   return (
     /*
-      =========================================================================
-      EL CARRIL DE EVIDENCIA
-      =========================================================================
-      Una columna estrecha y fija a la izquierda de CADA respuesta. El cuerpo
-      queda como prosa limpia y el carril es de donde cuelga todo lo demás.
-
-      Antes esto era `items-start gap-3`: un avatar suelto al lado de un
-      párrafo. La diferencia es `items-stretch` y la línea — la columna existe
-      a lo alto de la respuesta entera, no sólo donde está el punto, así que
-      prosa, pasos, avisos y procedencia quedan atados a una sola vertical. Es
-      lo que permite que los turnos se separen SÓLO con espacio: dónde termina
-      una respuesta lo dice el carril, no una raya que cruce la pantalla.
-
-      LA LÍNEA ES UN FILETE, NO UN BORDE. `--border` sobre `--canvas` es un
-      susurro (231/233/241 sobre 249/250/253) y eso es a propósito: la regla 2
-      del sistema de diseño reserva las líneas para definir un canto y prohíbe
-      que separen. Ésta no separa nada — mide la extensión de una respuesta.
-
-      Y POR ESO `ReasoningTrail` PERDIÓ LA SUYA. Tenía su propio `border-l-2` a
-      30px de ésta, que es la señal de que cada pieza de esta pantalla eligió su
-      sitio por separado. Ahora hereda el carril, como todo lo demás.
+      LA RESPUESTA DE CORTEX, SEGÚN EL LIENZO: avatar «C» a la izquierda, una
+      línea de meta («Cortex · hora») y el cuerpo con interlineado 1.65. Ya no
+      hay carril: los turnos se separan con espacio.
     */
-    <div className="chat-cortex-message group flex items-stretch gap-3 sm:gap-4">
-      {/*
-        LA MISMA PRESENCIA QUE ESTABA TRABAJANDO, YA CALMADA.
-
-        Era un icono de cerebro idéntico en los treinta mensajes de un hilo.
-        Ahora es `Presence`, el mismo objeto que giraba mientras se resolvía
-        este turno: no desaparece un indicador y aparece un avatar, se queda
-        quieto lo que estaba en marcha. Ver Presence.tsx.
-
-        Tres estados y sólo tres, porque son los tres que esta posición puede
-        conocer sin que nadie se los cuente:
-          · escribiendo — hay texto saliendo AHORA en este mensaje;
-          · esperándote — este mensaje contiene una confirmación sin decidir, o
-            una pregunta sin contestar. Las dos paran el turno esperando a una
-            persona, que es lo único que este estado dice; lo que las diferencia
-            —si hay consecuencias o sólo hay una duda— lo dice la tarjeta con su
-            color, y repetirlo aquí sería decirlo dos veces;
-          · quieto — todo lo demás, que es la inmensa mayoría del historial.
-      */}
-      <div className="flex w-7 shrink-0 flex-col items-center">
-        <Presence
-          size="sm"
-          state={
-            isStreaming && !content?.trim()
-              ? 'thinking'
-              : isStreaming && content?.trim()
-                ? 'writing'
-                : (confirmationData && conversationId) ||
-                    (choiceData && !!onRegenerate && !isStreaming)
-                  ? 'waiting'
-                  : 'resting'
-          }
-        />
-        {/*
-          EL CARRIL SE DESVANECE, Y NO ES UN ADORNO: ES QUE SE PASABA.
-
-          Medido en pantalla: el carril mide el alto del cuerpo de la respuesta,
-          y lo último del cuerpo es `MessageActions`, que en toda respuesta que
-          no sea la última está ahí pero invisible hasta que le pasas el ratón
-          por encima. O sea, 26px de fila vacía — y una raya sólida que la
-          recorría y se cortaba en seco 36px por debajo de la última palabra.
-          Parecía un trazo sin terminar en CADA respuesta del historial.
-
-          Colapsar esa fila no sirve: la respuesta cambiaría de alto al pasar el
-          ratón y el turno siguiente daría un salto. Así que la raya se apaga en
-          sus últimos 36px, que es exactamente lo que sobra. Donde sobra, no se
-          ve que sobre; donde no sobra —una respuesta con sus fuentes— termina
-          en un degradado en vez de en un corte, que es como termina algo que
-          mide una extensión en lugar de separar dos cosas.
-
-          Y en un saludo de un renglón el carril entero cabe dentro del
-          desvanecido: queda el punto y nada más, que es lo correcto.
-        */}
-        <span
-          aria-hidden
-          className="mt-2 w-px flex-1 rounded-full bg-border [-webkit-mask-image:linear-gradient(to_bottom,#000_calc(100%_-_2.25rem),transparent)] [mask-image:linear-gradient(to_bottom,#000_calc(100%_-_2.25rem),transparent)]"
-        />
-      </div>
+    <div className="chat-cortex-message group flex items-start gap-3.5">
+      {/* El avatar del lienzo: una «C» en serif, tinta sobre papel. Lo que antes
+          decía `Presence` (pensando, escribiendo, esperándote) ahora lo dice
+          el propio avatar: respira, o lleva un anillo índigo si te espera. */}
+      <span
+        aria-hidden
+        className={clsx(
+          'grid h-7 w-7 shrink-0 select-none place-items-center rounded-full bg-ink font-display text-base text-canvas',
+          isStreaming && 'animate-breathe motion-reduce:animate-none',
+          !isStreaming &&
+            ((confirmationData && conversationId) || (choiceData && !!onRegenerate)) &&
+            'ring-2 ring-primary ring-offset-2 ring-offset-surface',
+        )}
+      >
+        C
+      </span>
 
       <div className="min-w-0 flex-1 pb-0.5">
+        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
+          <span className="font-semibold text-ink-muted">Cortex</span>
+          {said && (
+            <time
+              dateTime={said?.iso}
+              title={said?.full}
+              suppressHydrationWarning
+              className="tabular"
+            >
+              {said?.time}
+            </time>
+          )}
+        </div>
         {/* The margin note comes before the text it annotates, and disappears
             entirely on the many turns that carry no reasoning. */}
         <ReasoningTrail text={reasoningOf(message)} live={isStreaming && !content?.trim()} />

@@ -59,29 +59,29 @@ export function AppResultCard({ result }: ResultViewProps) {
   const draft = app.status !== 'published';
   const open = !!api?.panelOpen && api.tab === 'app' && api.app?.id === app.id;
   return (
-    <div className="flex flex-col gap-3 rounded-card border border-border bg-surface-2/60 p-3.5 sm:flex-row sm:items-center sm:gap-3.5">
-      <div className="flex min-w-0 flex-1 items-start gap-3.5">
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-3 rounded-[14px] border border-border bg-well p-3.5">
+      <div className="flex min-w-[15rem] flex-1 items-center gap-3.5">
         <span
           aria-hidden
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-card bg-primary-soft text-lg text-primary-ink"
+          className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-[13px] bg-primary-soft text-lg text-primary-ink"
         >
-          <Glyph name={app.icon} className="h-5 w-5 text-lg" />
+          <Glyph name={app.icon} className="h-[22px] w-[22px] text-lg" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="min-w-0 truncate text-sm font-bold tracking-tight text-ink">{app.name}</p>
-            <StatusChip app={app} />
-          </div>
-          <p className="mt-0.5 text-xs text-ink-muted">
+          <p className="min-w-0 truncate text-sm font-bold tracking-tight text-ink">{app.name}</p>
+          <p className="mt-0.5 text-micro text-ink-muted">
+            <span className={clsx('font-semibold', draft ? 'text-amber' : 'text-emerald')}>
+              {statusLabel(app.status, app.version)}
+            </span>
             {screens.length > 0
-              ? `${screens.length} ${screens.length === 1 ? 'pantalla' : 'pantallas'}: ${screens
+              ? ` · ${screens.length} ${screens.length === 1 ? 'pantalla' : 'pantallas'}: ${screens
                   .slice(0, 4)
                   .join(', ')}${screens.length > 4 ? '…' : ''}`
-              : 'App de la empresa'}
+              : ' · App de la empresa'}
             {draft ? ' · nadie la ve hasta publicar' : ''}
           </p>
           {list.length > 0 && (
-            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs text-ink-muted">
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-micro text-ink-muted">
               {(list as string[]).slice(0, 4).map((c) => (
                 <li key={c}>{c}</li>
               ))}
@@ -95,7 +95,7 @@ export function AppResultCard({ result }: ResultViewProps) {
             type="button"
             onClick={() => (open ? api.close() : api.openApp(app, 'vista'))}
             aria-pressed={open}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-pill border border-border bg-surface px-3.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-surface-2 motion-reduce:transition-none"
+            className="inline-flex h-[34px] items-center gap-1.5 rounded-pill border border-border bg-transparent px-3.5 text-micro font-semibold text-ink transition-colors duration-150 hover:bg-surface-2 motion-reduce:transition-none"
           >
             <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
             {open ? 'Abierta al lado' : 'Abrir al lado'}
@@ -105,7 +105,7 @@ export function AppResultCard({ result }: ResultViewProps) {
               type="button"
               onClick={() => api.openApp(app, 'vista')}
               title="Se abre al lado para que la revises y la publiques desde ahí"
-              className="inline-flex min-h-9 items-center rounded-pill bg-primary px-4 text-xs font-semibold text-white transition-colors duration-150 hover:bg-primary-strong motion-reduce:transition-none"
+              className="inline-flex h-[34px] items-center rounded-pill bg-primary px-4 text-micro font-semibold text-white transition-colors duration-150 hover:bg-primary-strong motion-reduce:transition-none"
             >
               Publicar
             </button>

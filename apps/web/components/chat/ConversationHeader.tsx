@@ -10,7 +10,6 @@ import {
   Activity,
   BookOpen,
   Download,
-  Filter,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -40,7 +39,7 @@ const menuItem =
   'flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-sm text-ink-muted outline-none transition-colors duration-150 data-[highlighted]:bg-surface-2 data-[highlighted]:text-ink motion-reduce:transition-none';
 
 const chip =
-  'inline-flex h-7 items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:bg-border hover:text-ink motion-reduce:transition-none';
+  'inline-flex h-[30px] items-center gap-1.5 rounded-lg border border-border bg-transparent px-2 text-micro font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink aria-pressed:bg-surface-2 aria-pressed:text-ink motion-reduce:transition-none';
 
 interface Props {
   conversationId: string | undefined;
@@ -173,7 +172,7 @@ export function ConversationHeader({ conversationId, title, onTitle, scope, mess
                 setMode('rename');
               }}
               title={conversationId ? 'Clic para renombrar' : undefined}
-              className="min-w-0 truncate rounded-sm px-1 text-left font-display text-lg tracking-[-0.01em] text-ink enabled:hover:bg-surface-2"
+              className="min-w-0 truncate rounded-sm px-1 text-left font-display text-lg leading-tight tracking-[-0.01em] text-ink enabled:hover:bg-surface-2"
             >
               {title}
             </button>
@@ -185,23 +184,12 @@ export function ConversationHeader({ conversationId, title, onTitle, scope, mess
             </span>
           )}
         </div>
-        <div className="hidden min-w-0 items-center gap-1.5 text-micro text-ink-faint sm:flex">
-          <Filter className="h-3 w-3 shrink-0" aria-hidden />
-          {scope.length === 0 ? (
-            <span>Todo lo que puedes ver</span>
-          ) : (
-            <>
-              {shownScope.map((s) => (
-                <span
-                  key={s.id}
-                  className="truncate rounded-pill bg-surface-2 px-2 py-px text-ink-muted"
-                >
-                  {s.name}
-                </span>
-              ))}
-              {restScope > 0 && <span>+{restScope}</span>}
-            </>
-          )}
+        <div className="hidden min-w-0 text-micro text-ink-faint sm:block">
+          <p className="truncate">
+            {scope.length === 0
+              ? 'Todo lo que puedes ver'
+              : `${shownScope.map((s) => s.name).join(' · ')}${restScope > 0 ? ` · +${restScope}` : ''}`}
+          </p>
         </div>
       </div>
       <HeaderActions
@@ -212,7 +200,7 @@ export function ConversationHeader({ conversationId, title, onTitle, scope, mess
           <DropdownMenu.Root>
             <DropdownMenu.Trigger
               aria-label="Más opciones de la conversación"
-              className="grid h-8 w-8 place-items-center rounded-full text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+              className="grid h-[30px] w-[30px] place-items-center rounded-lg text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
             >
               <MoreHorizontal className="h-4 w-4" />
             </DropdownMenu.Trigger>
@@ -304,7 +292,7 @@ function HeaderActions({
   menu: React.ReactNode;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
+    <div className="flex shrink-0 items-center gap-1 md:gap-1.5">
       {api && (
         <>
           <button
@@ -313,7 +301,7 @@ function HeaderActions({
             aria-pressed={api.panelOpen && api.tab === 'fuentes'}
             className={chip}
           >
-            <BookOpen className="h-3.5 w-3.5" aria-hidden />
+            <BookOpen className="h-3.5 w-3.5 md:hidden" aria-hidden />
             <span className="hidden md:inline">Fuentes</span>
             {sources > 0 && <span className="tabular">{sources}</span>}
           </button>
@@ -323,7 +311,7 @@ function HeaderActions({
             aria-pressed={api.panelOpen && api.tab === 'actividad'}
             className={chip}
           >
-            <Activity className="h-3.5 w-3.5" aria-hidden />
+            <Activity className="h-3.5 w-3.5 md:hidden" aria-hidden />
             <span className="hidden md:inline">Actividad</span>
             {activity > 0 && <span className="tabular">{activity}</span>}
           </button>

@@ -65,7 +65,7 @@ export function CollapsibleResult({
           aria-expanded={open}
           aria-controls={id}
           className={clsx(
-            'flex min-h-11 w-full items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 text-left text-sm text-ink transition-colors duration-150 hover:bg-surface-2 motion-reduce:transition-none',
+            'flex h-[46px] w-full items-center gap-2.5 rounded-sm border border-border bg-well px-3.5 text-left text-xs font-medium text-ink transition-colors duration-150 hover:bg-surface-2 motion-reduce:transition-none',
             open && 'mb-1.5',
           )}
         >

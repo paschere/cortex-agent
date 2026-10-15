@@ -21,6 +21,7 @@ import {
   parseStoredWidth,
   shouldRefresh,
   shouldSwitchFromDraft,
+  statusLabel,
 } from '@/lib/chat-app-panel';
 import {
   type ArtifactMeta,
@@ -39,9 +40,9 @@ import {
   BookmarkPlus,
   Download,
   Globe,
-  LayoutGrid,
   MessageSquareText,
   PanelRightOpen,
+  Smartphone,
   X,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -714,7 +715,7 @@ function Splitter({ width, onChange }: { width: number; onChange: (width: number
   );
 }
 
-/** «App: Control de vuelos · abrir»: en la cabecera mientras la conversación tiene una app. */
+/** «App · Borrador»: chip verde suave en la cabecera mientras la conversación tiene una app. */
 export function AppPill() {
   const api = useChatArtifacts();
   if (!api?.app) return null;
@@ -725,14 +726,12 @@ export function AppPill() {
       type="button"
       onClick={() => api.openApp(app)}
       title={`Abrir «${app.name}» al lado`}
-      className="inline-flex min-w-0 max-w-[16rem] shrink items-center gap-1.5 sm:gap-2 rounded-pill bg-surface-2 px-3 py-1 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-border motion-reduce:transition-none"
+      className="inline-flex h-7 min-w-0 shrink-0 items-center gap-1.5 rounded-pill bg-emerald-soft px-2.5 text-micro font-semibold text-emerald transition-opacity duration-150 hover:opacity-80 motion-reduce:transition-none"
     >
-      <LayoutGrid className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden />
-      <span className="min-w-[3.5rem] truncate">
-        <span className="hidden sm:inline">App: </span>
-        {app.name}
+      <Smartphone className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
+      <span className="truncate">
+        App<span className="hidden sm:inline"> · {statusLabel(app.status, app.version)}</span>
       </span>
-      <span className="hidden shrink-0 text-primary-ink sm:inline">· abrir</span>
     </button>
   );
 }

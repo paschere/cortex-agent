@@ -124,14 +124,14 @@ export function FollowUps({
               title={question}
               onClick={() => onPick(question)}
               className={clsx(
-                'animate-rise group inline-flex gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-left text-xs leading-snug text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink hover:shadow-card motion-reduce:transform-none motion-reduce:transition-none',
-                dock ? 'max-w-[20rem] items-center whitespace-nowrap' : 'max-w-full items-start',
+                'animate-rise group inline-flex gap-1.5 rounded-pill border border-border bg-transparent px-3 py-1.5 text-left text-micro font-medium leading-snug text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink hover:shadow-card motion-reduce:transform-none motion-reduce:transition-none',
+                dock ? 'h-[30px] max-w-[20rem] items-center whitespace-nowrap py-0' : 'max-w-full items-start',
               )}
             >
               <CornerDownRight
                 className={clsx(
                   'h-3 w-3 shrink-0 text-ink-faint group-hover:text-primary',
-                  !dock && 'mt-0.5',
+                  dock ? 'hidden' : 'mt-0.5',
                 )}
                 aria-hidden
               />
