@@ -581,6 +581,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
       // none (a WhatsApp group at `plain` scope) must still get an answer.
       ...(allowed.length > 0 ? { tools: aiTools, toolChoice: 'auto' as const } : {}),
       maxSteps: 12,
+      maxTokens: 16_000,
       experimental_repairToolCall: createToolCallRepair({ surface: 'google_chat' }),
     });
     answer = result.text.trim();

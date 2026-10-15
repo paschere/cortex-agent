@@ -18,12 +18,20 @@ describe('un turno que termina en una promesa', () => {
     expect(promisesAction('Listo el inventario. Voy a crear la tabla con esos campos.')).toBe(true);
     expect(promisesAction('Perfecto. A continuación te la conecto:')).toBe(true);
     expect(promisesAction('Procedo a sincronizar la hoja.')).toBe(true);
+    expect(
+      promisesAction('Ahora tengo los campos exactos. Rediseño con los nombres correctos.'),
+    ).toBe(true);
+    expect(promisesAction('Listo, la creo con esos campos.')).toBe(true);
+    expect(promisesAction('Corrijo los nombres y vuelvo a intentar.')).toBe(true);
   });
   it('no confunde un cierre legítimo con una promesa', () => {
     expect(promisesAction('¿La creo así o quieres cambiar algo?')).toBe(false);
     expect(promisesAction('Si quieres, ahora la conecto.')).toBe(false);
     expect(promisesAction('Quedó en Tablas → Guías.')).toBe(false);
     expect(promisesAction('Ahora todo está listo.')).toBe(false);
+    expect(promisesAction('Quedo atento.')).toBe(false);
+    expect(promisesAction('Diseñó la app con 3 pantallas.')).toBe(false);
+    expect(promisesAction('Creo que quedó bien.')).toBe(false);
     expect(promisesAction('Voy a necesitar que me confirmes el campo clave?')).toBe(false);
     expect(promisesAction('')).toBe(false);
   });

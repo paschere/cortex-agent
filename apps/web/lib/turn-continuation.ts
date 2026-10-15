@@ -53,8 +53,23 @@ const LEAD =
 const PHRASE =
   /(?:^|[^\p{L}])(?:voy a|vamos a|procedo a|paso a|me pongo a|empiezo a|comienzo a|d[ée]jame|dame un momento)(?=[^\p{L}]|$)/iu;
 
+/**
+ * Oraciones que ARRANCAN con un verbo de acción en primera persona, sin «ahora»
+ * delante: «Rediseño con los nombres correctos.» (visto el 2026-10-15: el turno
+ * paró ahí sin llamar `apps.design`). Lista cerrada de verbos de hacer para no
+ * confundir «Quedo atento» o «Listo» con una promesa.
+ */
+const ACTION_VERBS =
+  'rediseño|diseño|creo|armo|construyo|corrijo|reintento|intento|vuelvo|hago|rehago|agrego|añado|actualizo|ajusto|cambio|configuro|conecto|publico|preparo|genero|guardo|aplico|defino|monto|cargo|importo|sincronizo|calculo|ejecuto|lanzo|sigo|continúo|continuo|termino|completo|reviso|busco|consulto|registro|programo|envío|escribo|redacto|organizo';
+const START =
+  new RegExp(
+    `^(?:(?:entonces|bien|listo|perfecto|ok|vale|ya|ahora sí|ahora si|ahí|con eso|con esto)\\s*,?\\s+)?(?:(?:me|te|le|lo|la|les|los|las|se)\\s+){0,2}(?:${ACTION_VERBS})(?=[^\\p{L}]|$)(?!\\s+que\\b)`,
+    'iu',
+  );
+
 function announces(sentence: string): boolean {
   if (PHRASE.test(sentence)) return true;
+  if (START.test(sentence.trim())) return true;
   const m = LEAD.exec(sentence);
   if (!m) return false;
   const verb = (m[2] ?? '').toLowerCase();

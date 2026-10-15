@@ -1462,6 +1462,7 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
   let lastStepText = '';
   let stepsUsed = 0;
   const maxSteps = maxStepsFor(turnLimit);
+  const CHAT_MAX_OUTPUT_TOKENS = 16_000;
 
   const runModel = (messagesForRun: CoreMessage[], stepsForRun: number) =>
     streamText({
@@ -1471,6 +1472,10 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
       tools: aiTools,
       toolChoice: 'auto',
       maxSteps: stepsForRun,
+      // Sin esto el proveedor usa 4096 tokens por paso y una llamada grande
+      // (`apps.design` con todas sus pantallas) se corta a mitad del JSON:
+      // «Se me enredó una pregunta…» (visto el 2026-10-15).
+      maxTokens: CHAT_MAX_OUTPUT_TOKENS,
       // Nuestra señal, no la de la petición: aborta si el cliente se va Y en el
       // corte duro del presupuesto, antes de que Vercel mate la función.
       abortSignal: budget.signal,

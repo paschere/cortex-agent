@@ -490,6 +490,8 @@ async function runClaimed(db: SupabaseClient, task: TaskRecord): Promise<Segment
       tools: aiTools,
       toolChoice: 'auto',
       maxSteps: Math.max(maxStepsFor(limitMs), 24),
+      // Igual que el chat: sin esto una llamada grande se corta en 4096 tokens.
+      maxTokens: 16_000,
       abortSignal: budget.signal,
       experimental_repairToolCall: createToolCallRepair({
         signal: budget.signal,
