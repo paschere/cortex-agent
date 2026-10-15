@@ -1,6 +1,14 @@
 'use client';
 
-import { type ThreadRow, groupThreads, threadTitle } from '@/lib/chat-thread-groups';
+import {
+  THREAD_STATE_LABEL,
+  type ThreadFilter,
+  type ThreadRow,
+  type ThreadState,
+  groupThreads,
+  threadState,
+  threadTitle,
+} from '@/lib/chat-thread-groups';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -85,6 +93,26 @@ function writeLS(key: string, value: string) {
   emit();
 }
 
+/**
+ * Lo que el chat ABIERTO sabe de sí mismo y la lista no puede saber: está
+ * contestando o espera una aprobación. ChatRoot lo publica; la lista lo pinta.
+ */
+type Live = { id: string; state: 'responding' | 'approval' } | null;
+let live: Live = null;
+
+export function setLiveChat(next: Live) {
+  if (live?.id === next?.id && live?.state === next?.state) return;
+  live = next;
+  emit();
+}
+function useLive(): Live {
+  return useSyncExternalStore(
+    subscribe,
+    () => live,
+    () => null,
+  );
+}
+
 function useCollapsed(): boolean {
   return useSyncExternalStore(
     subscribe,
@@ -139,12 +167,14 @@ function ThreadItem({
   row,
   active,
   pinned,
+  state,
   onTogglePin,
   onNavigate,
 }: {
   row: Conversation;
   active: boolean;
   pinned: boolean;
+  state: ThreadState | null;
   onTogglePin: () => void;
   onNavigate?: () => void;
 }) {
@@ -294,7 +324,29 @@ function ThreadItem({
         )}
       >
         {pinned && <Pin className="h-3 w-3 shrink-0 text-ink-faint" aria-hidden />}
-        <span className="min-w-0 flex-1 truncate">{title}</span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate">{title}</span>
+          {state && (
+            <span
+              className={clsx(
+                'flex items-center gap-1.5 truncate text-micro font-normal',
+                state === 'approval' ? 'text-amber' : 'text-ink-faint',
+              )}
+            >
+              <span
+                aria-hidden
+                className={clsx(
+                  'h-1.5 w-1.5 shrink-0 rounded-full',
+                  state === 'approval' && 'bg-amber',
+                  state === 'done' && 'bg-emerald',
+                  (state === 'responding' || state === 'task') &&
+                    'animate-pulse bg-primary motion-reduce:animate-none',
+                )}
+              />
+              <span className="truncate">{THREAD_STATE_LABEL[state]}</span>
+            </span>
+          )}
+        </span>
       </Link>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
@@ -352,7 +404,21 @@ function ThreadList({
   const { data = [], isPending, isError, refetch } = useConversations();
   const [pinned, togglePin] = usePinned();
   const [query, setQuery] = useState('');
-  const groups = useMemo(() => groupThreads(data, { query, pinned }), [data, query, pinned]);
+  const [filter, setFilter] = useState<ThreadFilter>('all');
+  const liveChat = useLive();
+  const groups = useMemo(
+    () => groupThreads(data, { query, pinned, filter }),
+    [data, query, pinned, filter],
+  );
+  const hasActiveTask = data.some(
+    (r) =>
+      r.task_status === 'working' || r.task_status === 'queued' || r.task_status === 'needs_you',
+  );
+  const filters: { key: ThreadFilter; label: string }[] = [
+    { key: 'all', label: 'Todos' },
+    { key: 'pinned', label: 'Fijados' },
+    { key: 'tasks', label: 'Tareas' },
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -402,6 +468,28 @@ function ThreadList({
         </label>
       </div>
 
+      <fieldset aria-label="Filtrar chats" className="m-0 flex gap-1 border-0 px-3 pb-2">
+        {filters.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            aria-pressed={filter === f.key}
+            onClick={() => setFilter(f.key)}
+            className={clsx(
+              'inline-flex h-7 items-center gap-1.5 rounded-pill px-3 text-xs transition-colors duration-150 motion-reduce:transition-none',
+              filter === f.key
+                ? 'bg-ink font-semibold text-surface'
+                : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+            )}
+          >
+            {f.label}
+            {f.key === 'tasks' && hasActiveTask && (
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+            )}
+          </button>
+        ))}
+      </fieldset>
+
       <nav aria-label="Chats" className="scroll-slim min-h-0 flex-1 overflow-y-auto pb-3">
         {isPending ? (
           <div className="space-y-2 px-4 pt-2" aria-hidden>
@@ -436,7 +524,11 @@ function ThreadList({
           </div>
         ) : groups.length === 0 ? (
           <p className="px-4 pt-3 text-sm text-ink-muted">
-            Ningún chat se llama así. Prueba con otra palabra.
+            {filter === 'pinned' && !query
+              ? 'Aún no fijas ningún chat. Usa «…» en un chat para fijarlo.'
+              : filter === 'tasks' && !query
+                ? 'Ningún chat tiene tareas en segundo plano todavía.'
+                : 'Ningún chat se llama así. Prueba con otra palabra.'}
           </p>
         ) : (
           groups.map((g) => (
@@ -449,6 +541,7 @@ function ThreadList({
                     row={row as Conversation}
                     active={pathname === `/chat/${row.id}`}
                     pinned={pinned.has(row.id)}
+                    state={threadState(row, liveChat?.id === row.id ? liveChat.state : null)}
                     onTogglePin={() => togglePin(row.id)}
                     {...(onNavigate ? { onNavigate } : {})}
                   />

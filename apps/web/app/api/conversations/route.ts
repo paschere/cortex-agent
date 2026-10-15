@@ -19,7 +19,31 @@ export async function GET() {
     .neq('surface', 'mcp')
     .order('updated_at', { ascending: false })
     .limit(100);
-  const rows = data ?? [];
+  const baseRows = data ?? [];
+
+  // Estado de la tarea en segundo plano de cada chat (la más reciente), para los
+  // filtros y los puntos de la lista. Si la lectura falla, la lista sigue igual.
+  const taskByConversation = new Map<string, string>();
+  try {
+    const { data: tasks } = await db
+      .from('background_tasks')
+      .select('conversation_id, status, updated_at')
+      .eq('user_id', user.id)
+      .not('conversation_id', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(200);
+    for (const t of (tasks ?? []) as { conversation_id: string; status: string }[]) {
+      if (!taskByConversation.has(t.conversation_id)) {
+        taskByConversation.set(t.conversation_id, t.status);
+      }
+    }
+  } catch {
+    /* sin estados: la lista se pinta sin puntos */
+  }
+  const rows = baseRows.map((r) => ({
+    ...r,
+    task_status: taskByConversation.get((r as { id: string }).id) ?? null,
+  }));
 
   // Retitulado perezoso y barato: los chats con título en inglés, con markdown o
   // sacado de un mensaje de control («Aprobé…», «sigue») se corrigen en segundo

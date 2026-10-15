@@ -76,16 +76,27 @@ export function PlanCard({ plan }: { plan: PlanState }) {
       open={!finished}
       className="group rounded-card border border-border bg-surface shadow-card"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 [&::-webkit-details-marker]:hidden">
-        <ListChecks className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{plan.title}</span>
-        <span className="tabular shrink-0 text-xs text-ink-faint">
-          {done} de {total}
+      <summary className="flex cursor-pointer list-none flex-col gap-2 px-3.5 py-2.5 [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2">
+          <ListChecks className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+            {plan.title}
+          </span>
+          <span className="tabular shrink-0 text-xs text-ink-faint">
+            {finished ? `${done} de ${total} hechos` : `${done} de ${total}`}
+          </span>
+          <ChevronDown
+            className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-open:rotate-180"
+            aria-hidden
+          />
         </span>
-        <ChevronDown
-          className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-open:rotate-180"
-          aria-hidden
-        />
+        <span aria-hidden className="block h-1 overflow-hidden rounded-full bg-border"
+        >
+          <span
+            className="block h-full rounded-full bg-emerald transition-[width] duration-300 motion-reduce:transition-none"
+            style={{ width: `${total > 0 ? Math.round((done / total) * 100) : 0}%` }}
+          />
+        </span>
       </summary>
       <div className="border-t border-border px-3.5 py-1.5">
         <PlanSteps plan={plan} />

@@ -882,18 +882,6 @@ export function InputBar({
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
 
-            {background && onBackgroundChange && (
-              <button
-                type="button"
-                onClick={() => onBackgroundChange(false)}
-                title="Quitar «en segundo plano»"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-ink transition-colors duration-150 hover:bg-border motion-reduce:transition-none"
-              >
-                <Layers className="h-3.5 w-3.5" aria-hidden />
-                En segundo plano
-              </button>
-            )}
-
             {connected.length > 0 && (
               <ul
                 aria-label="Fuentes conectadas"
@@ -943,6 +931,28 @@ export function InputBar({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {onBackgroundChange && !disabled && (
+              <button
+                type="button"
+                onClick={() => onBackgroundChange(!background)}
+                aria-pressed={!!background}
+                aria-label="Segundo plano"
+                title={
+                  background
+                    ? 'Quitar «segundo plano»: Cortex responde aquí mismo'
+                    : 'Segundo plano: Cortex trabaja sin que tengas que quedarte en esta pestaña'
+                }
+                className={clsx(
+                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-pill px-2.5 text-xs font-semibold sm:px-3 transition-colors duration-150 motion-reduce:transition-none',
+                  background
+                    ? 'bg-primary-soft text-primary-ink hover:bg-border'
+                    : 'bg-surface-2 text-ink-muted hover:bg-border hover:text-ink',
+                )}
+              >
+                <Layers className="h-3.5 w-3.5" aria-hidden />
+                <span className="hidden sm:inline">Segundo plano</span>
+              </button>
+            )}
             <span ref={dictRef} className="contents">
               <VoiceDictation
                 disabled={disabled}

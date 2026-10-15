@@ -3,7 +3,7 @@
 import { Glyph } from '@/components/apps/AppGlyph';
 import { type AppRef, appRefOfSummary, appRefsFromList, statusLabel } from '@/lib/chat-app-panel';
 import { clsx } from 'clsx';
-import { Eye, Pencil } from 'lucide-react';
+import { Eye, PanelRightOpen, Pencil } from 'lucide-react';
 import { useChatArtifacts } from '../ChatArtifacts';
 import type { ResultViewProps } from './registry';
 
@@ -44,6 +44,7 @@ function StatusChip({ app }: { app: AppRef }) {
 }
 
 export function AppResultCard({ result }: ResultViewProps) {
+  const api = useChatArtifacts();
   const app = appRefOfSummary(
     field(result, 'app'),
     'read',
@@ -55,36 +56,62 @@ export function AppResultCard({ result }: ResultViewProps) {
   const list = Array.isArray(changes)
     ? (changes as unknown[]).filter((c) => typeof c === 'string')
     : [];
+  const draft = app.status !== 'published';
+  const open = !!api?.panelOpen && api.tab === 'app' && api.app?.id === app.id;
   return (
-    <div className="flex items-start gap-3 rounded-card border border-border bg-surface p-3.5 shadow-card">
-      <span
-        aria-hidden
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-primary-soft text-lg text-primary-ink"
-      >
-        <Glyph name={app.icon} className="h-5 w-5 text-lg" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="min-w-0 truncate text-sm font-extrabold tracking-tight text-ink">
-            {app.name}
-          </p>
-          <StatusChip app={app} />
-        </div>
-        {screens.length > 0 && (
+    <div className="flex flex-col gap-3 rounded-card border border-border bg-surface-2/60 p-3.5 sm:flex-row sm:items-center sm:gap-3.5">
+      <div className="flex min-w-0 flex-1 items-start gap-3.5">
+        <span
+          aria-hidden
+          className="grid h-12 w-12 shrink-0 place-items-center rounded-card bg-primary-soft text-lg text-primary-ink"
+        >
+          <Glyph name={app.icon} className="h-5 w-5 text-lg" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="min-w-0 truncate text-sm font-bold tracking-tight text-ink">{app.name}</p>
+            <StatusChip app={app} />
+          </div>
           <p className="mt-0.5 text-xs text-ink-muted">
-            {screens.length} {screens.length === 1 ? 'pantalla' : 'pantallas'}:{' '}
-            {screens.slice(0, 5).join(', ')}
-            {screens.length > 5 ? '…' : ''}
+            {screens.length > 0
+              ? `${screens.length} ${screens.length === 1 ? 'pantalla' : 'pantallas'}: ${screens
+                  .slice(0, 4)
+                  .join(', ')}${screens.length > 4 ? '…' : ''}`
+              : 'App de la empresa'}
+            {draft ? ' · nadie la ve hasta publicar' : ''}
           </p>
-        )}
-        {list.length > 0 && (
-          <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs text-ink-muted">
-            {(list as string[]).slice(0, 4).map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
-        )}
+          {list.length > 0 && (
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs text-ink-muted">
+              {(list as string[]).slice(0, 4).map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
+      {api && (
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => (open ? api.close() : api.openApp(app, 'vista'))}
+            aria-pressed={open}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-pill border border-border bg-surface px-3.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-surface-2 motion-reduce:transition-none"
+          >
+            <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
+            {open ? 'Abierta al lado' : 'Abrir al lado'}
+          </button>
+          {draft && (
+            <button
+              type="button"
+              onClick={() => api.openApp(app, 'vista')}
+              title="Se abre al lado para que la revises y la publiques desde ahí"
+              className="inline-flex min-h-9 items-center rounded-pill bg-primary px-4 text-xs font-semibold text-white transition-colors duration-150 hover:bg-primary-strong motion-reduce:transition-none"
+            >
+              Publicar
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

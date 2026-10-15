@@ -12,7 +12,7 @@ import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
 import { Menu } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { BackgroundBanner } from './BackgroundBanner';
 import { AppPill, ArtifactPanel, ChatArtifactsProvider, ComputerPill } from './ChatArtifacts';
@@ -25,7 +25,7 @@ import { MessageList } from './MessageList';
 import { Presence } from './Presence';
 import { useScreenView } from './ScreenView';
 import { StalledNotice } from './StalledNotice';
-import { ThreadAside, ThreadHistory } from './ThreadHistory';
+import { ThreadAside, ThreadHistory, setLiveChat } from './ThreadHistory';
 import { WaitingNotice } from './WaitingNotice';
 import { useBackgroundTask } from './useBackgroundTask';
 import { useTurnWatchdog } from './useTurnWatchdog';
@@ -330,6 +330,27 @@ export function ChatRoot({
     onConversation: setConversationId,
   });
   const working = isLoading || bg.running;
+
+  // La lista de chats pinta «respondiendo» / «esperando tu aprobación» para el
+  // chat abierto: es lo único que ella no puede saber sola.
+  const awaitingApproval = useMemo(() => {
+    const last = [...messages].reverse().find((m) => m.role === 'assistant');
+    return (last?.toolInvocations ?? []).some((inv) => {
+      const r = inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
+      return !!r && typeof r === 'object' && '__requires_confirmation' in r;
+    });
+  }, [messages]);
+  useEffect(() => {
+    if (!conversationId) return;
+    setLiveChat(
+      awaitingApproval && !isLoading
+        ? { id: conversationId, state: 'approval' }
+        : isLoading
+          ? { id: conversationId, state: 'responding' }
+          : null,
+    );
+  }, [conversationId, isLoading, awaitingApproval]);
+  useEffect(() => () => setLiveChat(null), []);
 
   // Un turno que se queda mudo no deja la pantalla esperando: aviso «sigue
   // trabajando» si no llega nada, y error con Reintentar / Continuar si el

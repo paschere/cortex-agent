@@ -7,6 +7,37 @@ export interface ThreadRow {
   title: string | null;
   updated_at?: string | null;
   created_at?: string | null;
+  /** Estado de la tarea en segundo plano más reciente de este chat (`background_tasks.status`). */
+  task_status?: string | null;
+}
+
+export type ThreadFilter = 'all' | 'pinned' | 'tasks';
+
+/** Lo que la lista dice de un chat además de su título. */
+export type ThreadState = 'responding' | 'approval' | 'task' | 'done';
+
+export const THREAD_STATE_LABEL: Record<ThreadState, string> = {
+  responding: 'Respondiendo…',
+  approval: 'Esperando tu aprobación',
+  task: 'Tarea en segundo plano · trabajando',
+  done: 'Tarea lista',
+};
+
+/**
+ * El estado de un chat con los datos que ya existen: lo que el chat abierto
+ * dice de sí mismo (`live`) y el estado de su tarea en segundo plano. Un chat
+ * sin nada que contar devuelve `null` y se pinta como siempre.
+ */
+export function threadState(
+  row: Pick<ThreadRow, 'task_status'>,
+  live?: 'responding' | 'approval' | null,
+): ThreadState | null {
+  if (live === 'approval') return 'approval';
+  if (row.task_status === 'needs_you') return 'approval';
+  if (live === 'responding') return 'responding';
+  if (row.task_status === 'working' || row.task_status === 'queued') return 'task';
+  if (row.task_status === 'done') return 'done';
+  return null;
 }
 
 export type ThreadGroupKey = 'pinned' | 'today' | 'yesterday' | 'week' | 'month' | 'older';
@@ -50,13 +81,20 @@ function fold(s: string): string {
 
 export function groupThreads(
   rows: ThreadRow[],
-  opts: { now?: Date; query?: string; pinned?: ReadonlySet<string> } = {},
+  opts: {
+    now?: Date;
+    query?: string;
+    pinned?: ReadonlySet<string>;
+    filter?: ThreadFilter;
+  } = {},
 ): { key: ThreadGroupKey; label: string; rows: ThreadRow[] }[] {
   const now = opts.now ?? new Date();
   const q = fold((opts.query ?? '').trim());
   const buckets = new Map<ThreadGroupKey, ThreadRow[]>();
   for (const row of rows) {
     if (q && !fold(threadTitle(row)).includes(q)) continue;
+    if (opts.filter === 'pinned' && !opts.pinned?.has(row.id)) continue;
+    if (opts.filter === 'tasks' && !row.task_status) continue;
     const key: ThreadGroupKey = opts.pinned?.has(row.id)
       ? 'pinned'
       : groupKeyFor(row.updated_at ?? row.created_at, now);

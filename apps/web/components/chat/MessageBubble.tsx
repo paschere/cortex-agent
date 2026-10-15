@@ -13,9 +13,11 @@ import {
 import { planNeedsApproval } from '@/lib/plan-approval';
 import { isPlanTool, planFromInvocations } from '@/lib/plan-state';
 import type { ScreenFrame } from '@/lib/screen-marks';
+import { toolDisplayName } from '@/lib/tool-labels';
 import { latestProgress } from '@/lib/tool-progress';
 import type { Message, ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
+import { ChevronDown } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { BrainSources, type CiteFocus } from './BrainSources';
 import { ArtifactFrame } from './ChatArtifacts';
@@ -32,6 +34,7 @@ import { ReasoningTrail } from './ReasoningTrail';
 import { GlanceNote } from './ScreenView';
 import { SelectionActions } from './SelectionActions';
 import { TaskRows, type TurnMetrics } from './TaskRows';
+import { CollapsibleResult } from './results/CollapsibleResult';
 import { DeclaredTable } from './results/DeclaredTable';
 import { resolveView } from './results/registry';
 
@@ -113,6 +116,24 @@ type ConfirmationSentinel = {
   toolId: string;
   input: unknown;
 };
+
+/**
+ * Lo que NUNCA se pliega en una fila: entregables y tarjetas vivas (navegador,
+ * reunión, propuestas, apps, gráficos). Todo lo demás —tablas, listas,
+ * registros, búsquedas— se pliega solo cuando es largo (CollapsibleResult).
+ */
+function neverFolds(toolName: string, kind?: string): boolean {
+  const id = toolName.replaceAll('.', '_');
+  return (
+    kind === 'app' ||
+    kind === 'chart' ||
+    kind === 'proposal' ||
+    /^(browser|meetings|apps|screen)_/.test(id) ||
+    id === 'actions_propose' ||
+    id === 'sales_draft_proposal' ||
+    id === 'reports_chart'
+  );
+}
 
 function isConfirmationSentinel(v: unknown): v is ConfirmationSentinel {
   if (!v || typeof v !== 'object') return false;
@@ -264,6 +285,7 @@ export function MessageBubble({
    * resaltar. Ver BrainSources.
    */
   const [citeFocus, setCiteFocus] = useState<CiteFocus | null>(null);
+  const [requestOpen, setRequestOpen] = useState(false);
   const onCiteClick =
     brainSources && brainSources.length > 0
       ? (cite: number) => setCiteFocus({ cite, nonce: Date.now() })
@@ -352,6 +374,7 @@ export function MessageBubble({
      */
     const when = saidAt(message);
     const headline = content.length <= HEADLINE_MAX_CHARS;
+    const longRequest = content.length > 320 || content.split('\n').length > 5;
 
     return (
       <header className="chat-person-message">
@@ -405,10 +428,30 @@ export function MessageBubble({
             // peso: la masa del bloque ya es todo el énfasis que necesita, y
             // lo que dice de quién es sigue siendo la sangría.
             headline ? 'text-lg font-semibold' : 'text-base font-medium',
+            // Un pedido largo (se pegó un brief entero) se muestra en cuatro
+            // renglones; «Ver pedido completo» lo abre.
+            longRequest && !requestOpen && 'line-clamp-4',
           )}
         >
           {content}
         </h2>
+        {longRequest && (
+          <button
+            type="button"
+            onClick={() => setRequestOpen((v) => !v)}
+            aria-expanded={requestOpen}
+            className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:text-ink motion-reduce:transition-none"
+          >
+            {requestOpen ? 'Ver menos' : 'Ver pedido completo'}
+            <ChevronDown
+              className={clsx(
+                'h-3.5 w-3.5 transition-transform duration-150',
+                requestOpen && 'rotate-180',
+              )}
+              aria-hidden
+            />
+          </button>
+        )}
         {/* Debajo de la pregunta, no dentro: la pregunta la escribió una
             persona y la foto la tomó Cortex, y meterlo en la misma línea
             pondría las palabras del producto en boca de otro. */}
@@ -551,16 +594,20 @@ export function MessageBubble({
                   // (confirmaciones, navegador vivo) se queda como estaba.
                   const meta = artifactMeta(inv.toolName, result);
                   cards.push(
-                    meta ? (
-                      <ArtifactFrame
-                        key={inv.toolCallId}
-                        artifact={{ id: inv.toolCallId, ...meta, render: draw }}
-                      >
-                        {draw()}
-                      </ArtifactFrame>
-                    ) : (
-                      <div key={inv.toolCallId}>{draw()}</div>
-                    ),
+                    <CollapsibleResult
+                      key={inv.toolCallId}
+                      title={meta?.title ?? toolDisplayName(inv.toolName)}
+                      count={meta?.csv?.rows.length ?? null}
+                      skip={neverFolds(inv.toolName, meta?.kind)}
+                    >
+                      {meta && meta.kind !== 'app' ? (
+                        <ArtifactFrame artifact={{ id: inv.toolCallId, ...meta, render: draw }}>
+                          {draw()}
+                        </ArtifactFrame>
+                      ) : (
+                        draw()
+                      )}
+                    </CollapsibleResult>,
                   );
                   continue;
                 }
@@ -569,16 +616,19 @@ export function MessageBubble({
                   const draw = () => <DeclaredTable spec={spec} result={result} />;
                   const meta = artifactMeta(inv.toolName, result, spec);
                   cards.push(
-                    meta ? (
-                      <ArtifactFrame
-                        key={inv.toolCallId}
-                        artifact={{ id: inv.toolCallId, ...meta, render: draw }}
-                      >
-                        {draw()}
-                      </ArtifactFrame>
-                    ) : (
-                      <div key={inv.toolCallId}>{draw()}</div>
-                    ),
+                    <CollapsibleResult
+                      key={inv.toolCallId}
+                      title={meta?.title ?? toolDisplayName(inv.toolName)}
+                      count={meta?.csv?.rows.length ?? null}
+                    >
+                      {meta ? (
+                        <ArtifactFrame artifact={{ id: inv.toolCallId, ...meta, render: draw }}>
+                          {draw()}
+                        </ArtifactFrame>
+                      ) : (
+                        draw()
+                      )}
+                    </CollapsibleResult>,
                   );
                   continue;
                 }
