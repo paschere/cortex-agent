@@ -4,12 +4,12 @@ import type { BrainSource } from '@/lib/brain-sources-shape';
 import { looksLikeUrl, shortLinkLabel } from '@/lib/chat-link';
 import { citationLabel, citationSource, rehypeCitations } from '@/lib/citations';
 import { clsx } from 'clsx';
-import { ChatTable, ChatTd, ChatTh, ChatThead, ChatTr } from './ChatTable';
 import { Check, Copy } from 'lucide-react';
 import { type ComponentPropsWithoutRef, type ReactNode, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
+import { ChatTable, ChatTd, ChatTh, ChatThead, ChatTr } from './ChatTable';
 
 /** El texto plano de lo que react-markdown entrega como hijos de un enlace. */
 function plainText(node: ReactNode): string {
@@ -150,6 +150,9 @@ export function ChatMarkdown({
         'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
         'prose-code:rounded-sm prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-medium prose-code:text-primary-ink prose-code:before:content-[""] prose-code:after:content-[""]',
         'prose-pre:rounded-card prose-pre:border prose-pre:border-border prose-pre:shadow-card',
+        // El estilo de `code` en línea no entra al bloque: sin esto cada renglón
+        // del bloque oscuro llevaba el fondo claro de la palabra suelta.
+        '[&_pre_code]:!bg-transparent [&_pre_code]:!p-0 [&_pre_code]:!text-inherit [&_pre_code]:!font-normal',
         'prose-table:text-sm prose-th:text-ink prose-td:text-ink-muted',
         'prose-th:whitespace-nowrap prose-td:min-w-[6rem] prose-td:max-w-[22rem] prose-td:align-top',
         /*

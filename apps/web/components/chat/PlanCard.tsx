@@ -97,3 +97,54 @@ export function PlanCard({ plan }: { plan: PlanState }) {
     </details>
   );
 }
+
+/**
+ * EL PLAN FIJO ARRIBA DEL CHAT.
+ *
+ * Mientras un plan está activo, la tarjeta se queda atrás en la conversación al
+ * llegar más texto y se pierde de vista. Esta franja se pega arriba del área de
+ * mensajes: el avance, el paso en curso y, al abrirla, todos los pasos. La
+ * tarjeta del chat sigue donde estaba.
+ */
+export function PlanDock({ plan, live }: { plan: PlanState; live: boolean }) {
+  const { done, total, finished } = planProgress(plan);
+  const current =
+    plan.steps.find((s) => s.status === 'in_progress') ??
+    plan.steps.find((s) => s.status === 'failed') ??
+    plan.steps.find((s) => s.status === 'pending');
+  return (
+    <div className="sticky top-0 z-20 px-4 pt-2 sm:px-6">
+      <details className="group mx-auto w-full max-w-[46rem] rounded-[14px] border border-border bg-surface/95 shadow-card backdrop-blur supports-[backdrop-filter]:bg-surface/80">
+        <summary className="flex cursor-pointer list-none flex-col gap-1.5 px-3.5 py-2 [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
+            {current && !finished ? (
+              <PlanStatusIcon status={live ? current.status : 'pending'} />
+            ) : (
+              <PlanStatusIcon status="done" />
+            )}
+            <span className="tabular shrink-0 text-micro font-bold text-ink-muted">
+              Plan · {done} de {total}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-xs text-ink">
+              {finished ? plan.title : (current?.label ?? plan.title)}
+            </span>
+            <ChevronDown
+              className="h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform group-open:rotate-180"
+              aria-hidden
+            />
+          </span>
+          <span aria-hidden className="block h-1 overflow-hidden rounded-full bg-border">
+            <span
+              className="block h-full rounded-full bg-emerald transition-[width] duration-300 motion-reduce:transition-none"
+              style={{ width: `${total > 0 ? Math.round((done / total) * 100) : 0}%` }}
+            />
+          </span>
+        </summary>
+        <div className="scroll-slim max-h-[50vh] overflow-y-auto px-3.5 pb-2.5">
+          <p className="mb-1 truncate text-xs font-semibold text-ink">{plan.title}</p>
+          <PlanSteps plan={plan} columns />
+        </div>
+      </details>
+    </div>
+  );
+}

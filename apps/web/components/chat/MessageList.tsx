@@ -4,6 +4,7 @@ import type { BrainSource } from '@/lib/brain-sources-shape';
 import { appSyncKey, latestAppRef } from '@/lib/chat-app-panel';
 import type { TurnInvocation } from '@/lib/chat-turn';
 import { type ExercisedMandate, planNotices } from '@/lib/mandates/delegation';
+import { planFromInvocations, planProgress } from '@/lib/plan-state';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { WaitingNoticeData } from '@/lib/waiting-shape';
@@ -13,6 +14,7 @@ import { useChatArtifacts } from './ChatArtifacts';
 import { EmptyState } from './EmptyState';
 import { LiveStatus } from './LiveStatus';
 import { MessageBubble } from './MessageBubble';
+import { PlanDock } from './PlanCard';
 import type { TurnMetrics } from './TaskRows';
 
 /**
@@ -274,6 +276,26 @@ export function MessageList({
    * así que existe también en una conversación reabierta: los resultados se
    * guardan enteros en `messages.tool_results`.
    */
+  /**
+   * El plan activo, para la franja fija de arriba: el del último mensaje de
+   * Cortex, mientras le falten pasos o el turno siga corriendo.
+   */
+  const activePlan = useMemo(() => {
+    const last = [...messages].reverse().find((m) => m.role === 'assistant');
+    if (!last) return null;
+    const plan = planFromInvocations(
+      (last.toolInvocations ?? []).map((i) => ({
+        toolCallId: i.toolCallId,
+        toolName: i.toolName,
+        state: i.state,
+        result: (i as { result?: unknown }).result,
+      })),
+    );
+    if (!plan || plan.steps.length === 0) return null;
+    if (!isLoading && planProgress(plan).finished) return null;
+    return plan;
+  }, [messages, isLoading]);
+
   const noticePlan = useMemo(
     () => planNotices(messages.map((m) => ({ id: m.id, invocations: m.toolInvocations ?? [] }))),
     [messages],
@@ -553,6 +575,7 @@ export function MessageList({
 
   return (
     <div ref={ref} className="scroll-slim flex-1 overflow-y-auto">
+      {activePlan && !empty && <PlanDock plan={activePlan} live={isLoading} />}
       {empty ? (
         <div className="mx-auto flex h-full w-full max-w-3xl">
           <EmptyState
