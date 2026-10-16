@@ -1,6 +1,7 @@
 import type { ComputedFlow, FlowActor, FlowHistoryEntry } from '../trackers/flow';
 import { type TrackerField, displayTrackerValue, parseLocation } from '../trackers/schema';
 import { computeCards } from './cards';
+import { type BlockDesign, hasDesign } from './design-shape';
 import { type EmbedProvider, embedSrc, httpsUrl, safeHref } from './embeds';
 import { buildDetail, findDetailTarget } from './record';
 import type { RecordHistoryRaw } from './record';
@@ -106,6 +107,8 @@ export type ValueFormat = 'number' | 'money' | 'percent';
 interface BlockBase {
   id: string;
   width: 'full' | 'half' | 'third';
+  /** El diseño que pidió el spec (superficie, tamaño, variante…); ausente = el de siempre. */
+  design?: BlockDesign;
 }
 
 /** Lo que comparten el tablero y el plano. */
@@ -1264,7 +1267,27 @@ function eventTime(row: ViewRow, key: string | undefined): string | null {
 /** Cuántos eventos entrega el calendario como mucho (tres meses de agenda apretada). */
 const CALENDAR_MAX_EVENTS = 300;
 
+/**
+ * El bloque calculado, con el diseño del spec pegado. El diseño no cambia lo
+ * que se calcula: viaja tal cual hasta el lienzo, que lo dibuja. La única
+ * excepción es el tono: si el diseño pide uno, manda sobre el del bloque.
+ */
 function computeBlock(
+  block: ViewBlock,
+  sources: Map<string, ViewSource>,
+  today: string,
+  opts: ComputeOptions,
+): ComputedBlock {
+  const out = computeBlockBody(block, sources, today, opts);
+  const design = block.design;
+  if (!hasDesign(design) || out.type === 'problem') return out;
+  const tone = design.tone;
+  return tone && 'tone' in out
+    ? ({ ...out, tone, design } as ComputedBlock)
+    : ({ ...out, design } as ComputedBlock);
+}
+
+function computeBlockBody(
   block: ViewBlock,
   sources: Map<string, ViewSource>,
   today: string,

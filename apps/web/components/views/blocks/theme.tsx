@@ -5,6 +5,8 @@ import type { ViewBrand } from '@/lib/branding/shape';
 import type { ComputedTheme, Tone } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { createContext, useContext } from 'react';
+import { Glyph } from '../../apps/AppGlyph';
+import { useBlockDesign } from './design';
 
 /**
  * EL ASPECTO DE UNA VISTA, REPARTIDO A SUS BLOQUES.
@@ -199,6 +201,9 @@ export function Card({
   action?: React.ReactNode;
 }) {
   const { density } = useViewTheme();
+  const { design, blockTitle } = useBlockDesign();
+  // El ícono del diseño va en el título del bloque, no en el de cada tarjeta de adentro.
+  const icon = design?.icon && title && title === blockTitle ? design.icon : null;
   return (
     <div
       className={clsx(
@@ -215,8 +220,16 @@ export function Card({
           )}
         >
           {title && (
-            <h2 className="min-w-0 text-base font-bold leading-snug tracking-tight text-ink">
-              {title}
+            <h2 className="flex min-w-0 items-center gap-2 text-base font-bold leading-snug tracking-tight text-ink">
+              {icon && (
+                <span
+                  aria-hidden
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary"
+                >
+                  <Glyph name={icon} className="h-4 w-4" />
+                </span>
+              )}
+              <span className="min-w-0">{title}</span>
             </h2>
           )}
           {action}

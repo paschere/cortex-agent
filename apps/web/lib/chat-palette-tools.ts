@@ -418,6 +418,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'accounting.sync_now': 'Trae ya lo nuevo del programa contable',
   'apps.list': 'Muéstrame las aplicaciones que tenemos',
   'apps.design': 'Diséñame una aplicación completa para ',
+  'apps.suggest_brand': 'Propón la marca de la aplicación desde el logo o la web: ',
   'apps.apply_draft': 'Crea la aplicación tal como está en la vista previa',
   'trackers.set_flow': 'Agrégale un flujo por estados a la tabla ',
   'tasks.start_background': 'Haz esto en segundo plano: ',

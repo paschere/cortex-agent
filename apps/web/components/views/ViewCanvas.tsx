@@ -8,6 +8,7 @@ import {
   violationsByKey,
   visibleKeys,
 } from '@cortex/agent-tools/src/trackers/validation';
+import { gridSpanClass } from '@cortex/agent-tools/src/views/design-shape';
 import { clsx } from 'clsx';
 import {
   AlertTriangle,
@@ -23,8 +24,6 @@ import {
   Send,
 } from 'lucide-react';
 import { useCallback, useId, useMemo, useState, useTransition } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { DictateRecord, type Dictated } from './DictateRecord';
 import { ViewChart } from './ViewChart';
 import { TvBoard } from './ViewTv';
@@ -46,6 +45,8 @@ import {
   useRecordOpener,
 } from './blocks/RecordDrawer';
 import { RichValue } from './blocks/RichValue';
+import { TextBlock } from './blocks/Text';
+import { DesignScope, useVariant } from './blocks/design';
 import { FilterBar, PageTabs } from './blocks/ViewChrome';
 import { useBrandScope } from './blocks/brand';
 import { type SubmitFn, submitterFor } from './blocks/form-transport';
@@ -106,12 +107,6 @@ export type SubmitTarget =
   | { kind: 'demo' };
 
 export type { SubmitFn } from './blocks/form-transport';
-
-const SPAN: Record<ComputedBlock['width'], string> = {
-  full: 'md:col-span-6',
-  half: 'md:col-span-3',
-  third: 'md:col-span-3 xl:col-span-2',
-};
 
 export interface CanvasFilters {
   state: FilterState;
@@ -195,9 +190,9 @@ export function ViewCanvas({
             <RecordNavProvider value={nav ?? null}>
               {openDetail ? (
                 <div className={clsx(scope.className)} style={scope.style}>
-                  <section className="view-block min-w-0">
+                  <DesignScope as="section" block={openDetail} className="view-block min-w-0">
                     <Block block={openDetail} target={target} submit={submit} />
-                  </section>
+                  </DesignScope>
                 </div>
               ) : tv ? (
                 <div
@@ -208,7 +203,11 @@ export function ViewCanvas({
                 >
                   <TvBoard
                     view={view}
-                    renderBlock={(b) => <Block block={b} target={target} submit={submit} />}
+                    renderBlock={(b) => (
+                      <DesignScope block={b} className="contents">
+                        <Block block={b} target={target} submit={submit} />
+                      </DesignScope>
+                    )}
                   />
                 </div>
               ) : (
@@ -252,8 +251,10 @@ export function ViewCanvas({
                     )}
                   >
                     {shown.map((block) => (
-                      <section
+                      <DesignScope
+                        as="section"
                         key={block.id}
+                        block={block}
                         className={clsx(
                           'view-block min-w-0',
                           // Planta: una columna; las métricas de a dos en el celular, de a tres arriba.
@@ -261,11 +262,11 @@ export function ViewCanvas({
                             ? block.type === 'metric'
                               ? 'view-metric-cell col-span-3 min-w-0 overflow-hidden sm:col-span-2'
                               : 'col-span-6'
-                            : SPAN[block.width],
+                            : gridSpanClass(block.width, block.design),
                         )}
                       >
                         <Block block={block} target={target} submit={submit} />
-                      </section>
+                      </DesignScope>
                     ))}
                     {shown.length === 0 && (
                       <EmptyState
@@ -306,7 +307,9 @@ export function ViewCanvas({
 export function ViewBlockPreview({ block }: { block: ComputedBlock }) {
   return (
     <ViewWriterProvider target={{ kind: 'preview' }}>
-      <Block block={block} target={{ kind: 'preview' }} />
+      <DesignScope block={block} className="contents">
+        <Block block={block} target={{ kind: 'preview' }} />
+      </DesignScope>
     </ViewWriterProvider>
   );
 }
@@ -318,23 +321,7 @@ function Block({
 }: { block: ComputedBlock; target: SubmitTarget; submit?: SubmitFn }) {
   switch (block.type) {
     case 'text':
-      return (
-        <div className="prose max-w-none px-1 text-ink prose-headings:mb-2 prose-headings:font-extrabold prose-headings:tracking-tight prose-headings:text-ink prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-p:text-sm prose-p:leading-relaxed prose-p:text-ink-muted prose-a:font-semibold prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-primary prose-blockquote:font-normal prose-blockquote:not-italic prose-blockquote:text-ink-muted prose-strong:text-ink prose-code:rounded prose-code:bg-surface-2 prose-code:px-1 prose-code:font-mono prose-code:text-xs prose-code:text-ink prose-code:before:content-none prose-code:after:content-none prose-ol:text-sm prose-ul:text-sm prose-li:text-ink-muted prose-li:marker:text-primary prose-hr:border-border prose-th:text-ink prose-td:text-ink-muted">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            disallowedElements={['img', 'iframe', 'script']}
-            components={{
-              a: ({ href, children }) => (
-                <a href={href} target="_blank" rel="noopener noreferrer nofollow">
-                  {children}
-                </a>
-              ),
-            }}
-          >
-            {block.markdown}
-          </ReactMarkdown>
-        </div>
-      );
+      return <TextBlock block={block} />;
     case 'metric':
       return <MetricBlock block={block} />;
     case 'table':
@@ -429,6 +416,9 @@ function Table({ block }: { block: TableBlock }) {
   const flash = useFlashClass();
   const { layout } = useViewTheme();
   const operator = layout === 'operator';
+  const variant = useVariant();
+  const zebra = variant === 'zebra';
+  const minimal = variant === 'minimal';
   const open = useRecordOpener(block.id, block.record);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
@@ -604,7 +594,10 @@ function Table({ block }: { block: TableBlock }) {
                     sort?.col === i ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined
                   }
                   className={clsx(
-                    'px-4 py-2.5 text-left text-micro font-semibold uppercase tracking-field text-ink-faint first:pl-6 last:pr-6',
+                    'px-4 text-left text-micro text-ink-faint first:pl-6 last:pr-6',
+                    minimal
+                      ? 'py-3 font-medium'
+                      : 'py-2.5 font-semibold uppercase tracking-field',
                     c.kind === 'number' && 'text-right',
                   )}
                 >
@@ -654,7 +647,12 @@ function Table({ block }: { block: TableBlock }) {
                 }
                 className={clsx(
                   flash(block.id, r.id),
-                  'group/row transition-colors duration-100 [&>td]:border-b [&>td]:border-border/60 [&:last-child>td]:border-0',
+                  'group/row transition-colors duration-100 [&:last-child>td]:border-0',
+                  minimal
+                    ? '[&>td]:border-b [&>td]:border-border/30'
+                    : zebra
+                      ? '[&>td]:border-b-0 even:[&>td]:bg-surface-2/40'
+                      : '[&>td]:border-b [&>td]:border-border/60',
                   // Fila con la marca de duplicado: tono de alerta para corregirla antes de despachar.
                   r.alert ? 'bg-rose-soft hover:bg-rose-soft/70' : 'hover:bg-surface-2/60',
                   open && 'cursor-pointer',
@@ -663,7 +661,8 @@ function Table({ block }: { block: TableBlock }) {
                 {r.cells.map((cell, i) => {
                   const column = block.columns[i];
                   const className = clsx(
-                    'px-4 py-3 align-middle first:pl-6 last:pr-6',
+                    'px-4 align-middle first:pl-6 last:pr-6',
+                    minimal ? 'py-4' : 'py-3',
                     i === 0 ? 'font-semibold text-ink' : 'text-ink-muted',
                     column?.kind !== 'text' && 'tabular font-mono text-xs',
                     column?.kind === 'number' && 'text-right text-ink',
@@ -742,6 +741,7 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
   const flash = useFlashClass();
   const writer = useViewWriter();
   const open = useRecordOpener(block.id, block.record);
+  const compact = useVariant() === 'compact';
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -754,7 +754,12 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
   }
   return (
     <Card title={block.title} source={block.source}>
-      <div className="scroll-slim -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">
+      <div
+        className={clsx(
+          'scroll-slim -mx-1 flex snap-x overflow-x-auto px-1 pb-2',
+          compact ? 'max-w-full gap-2' : 'gap-3',
+        )}
+      >
         {block.columns.map((col, ci) => (
           <div
             key={col.key}
@@ -772,7 +777,8 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
               if (id) void moveTo(id, col.key);
             }}
             className={clsx(
-              'flex w-[17rem] min-w-[16rem] flex-1 shrink-0 snap-start flex-col rounded-sm border border-border/60 bg-surface-2/70 p-2.5 transition-colors',
+              'flex shrink-0 snap-start flex-col rounded-sm border border-border/60 bg-surface-2/70 p-2.5 transition-colors',
+              compact ? 'w-[13rem] min-w-[12rem] flex-1' : 'w-[17rem] min-w-[16rem] flex-1',
               over === col.key && 'border-primary/50 bg-primary-soft/60 ring-2 ring-primary/40',
             )}
           >
@@ -788,7 +794,7 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                 {col.count}
               </span>
             </div>
-            <ul className="flex-1 space-y-2">
+            <ul className={clsx('flex-1', compact ? 'space-y-1.5' : 'space-y-2')}>
               {col.cards.map((card) => (
                 <li
                   key={card.id}
@@ -803,6 +809,7 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                     card.alert
                       ? 'rounded-sm border border-rose/50 bg-rose-soft p-3 shadow-card transition-all duration-150'
                       : 'rounded-sm border border-border bg-surface p-3 shadow-card transition-all duration-150 hover:border-border-strong',
+                    compact && '!p-2',
                     canDrag && 'cursor-grab hover:-translate-y-px active:cursor-grabbing',
                     dragging === card.id && 'rotate-1 opacity-50',
                   )}
@@ -811,14 +818,29 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                     <button
                       type="button"
                       onClick={() => open(card.id)}
-                      className="text-left text-sm font-semibold text-ink underline-offset-4 hover:underline"
+                      className={clsx(
+                        'text-left font-semibold text-ink underline-offset-4 hover:underline',
+                        compact ? 'block max-w-full truncate text-xs' : 'text-sm',
+                      )}
                     >
                       {card.label}
                     </button>
                   ) : (
-                    <p className="text-sm font-semibold text-ink">{card.label}</p>
+                    <p
+                      className={clsx(
+                        'font-semibold text-ink',
+                        compact ? 'truncate text-xs' : 'text-sm',
+                      )}
+                    >
+                      {card.label}
+                    </p>
                   )}
-                  {card.details.length > 0 && (
+                  {card.details.length > 0 && compact && (
+                    <p className="tabular mt-0.5 truncate font-mono text-micro text-ink-faint">
+                      {card.details.map((d) => d.value).join(' · ')}
+                    </p>
+                  )}
+                  {card.details.length > 0 && !compact && (
                     <dl className="mt-2 space-y-1">
                       {card.details.map((d) => (
                         <div key={d.label} className="flex justify-between gap-2 text-micro">

@@ -506,3 +506,210 @@ html:root
     animation: none;
   }
 }
+
+/* =============================================================================
+   EL DISEÑO DE CADA BLOQUE (spec: bloque.design). Sin CSS libre: el lienzo pone
+   atributos con nombre (`data-surface`, `data-tone`, `data-height`,
+   `data-emphasis`, `data-title`) en el envoltorio `.view-surf` de cada bloque y
+   esta hoja los traduce a los tokens del sistema. Sin esos atributos no se
+   aplica nada: los bloques de siempre se ven igual. La variante de cada tipo
+   no pasa por aquí: la lee el renderer (blocks/design.tsx).
+
+   Las superficies se aplican a `.view-card` (la tarjeta de cada bloque; el
+   detalle y el formulario tienen varias) y a `.view-lite` (los bloques sin
+   tarjeta propia: texto y enlaces).
+   ========================================================================== */
+
+/* --- El tono: el acento del bloque (`primary` pasa a ser ese color). -------- */
+.view-surf[data-tone="emerald"] {
+  --primary: var(--emerald);
+  --primary-strong: var(--emerald);
+  --primary-ink: var(--emerald);
+  --primary-soft: var(--emerald-soft);
+  --view-fill: var(--emerald);
+}
+.view-surf[data-tone="amber"] {
+  --primary: var(--amber);
+  --primary-strong: var(--amber);
+  --primary-ink: var(--amber);
+  --primary-soft: var(--amber-soft);
+  --view-fill: var(--amber);
+}
+.view-surf[data-tone="sky"] {
+  --primary: var(--sky);
+  --primary-strong: var(--sky);
+  --primary-ink: var(--sky);
+  --primary-soft: var(--sky-soft);
+  --view-fill: var(--sky);
+}
+.view-surf[data-tone="rose"] {
+  --primary: var(--rose);
+  --primary-strong: var(--rose);
+  --primary-ink: var(--rose);
+  --primary-soft: var(--rose-soft);
+  --view-fill: var(--rose);
+}
+
+/* --- Los colores de la superficie destacada (hero). -------------------------
+   Sin tono: el color de la marca (el del botón lleno, con su tinta ya resuelta
+   para el contraste) o, sin marca, el índigo de Cortex con texto blanco. Con
+   tono: un 700 del color, también con texto blanco (todos pasan AA, 4.5:1). */
+.view-surf {
+  --hero-bg: var(--brand-button, 59 52 196);
+  --hero-bg-2: var(--brand-button-hover, 79 70 214);
+  --hero-ink: var(--brand-button-ink, 255 255 255);
+}
+.view-surf[data-tone="emerald"] {
+  --hero-bg: 4 120 87;
+  --hero-bg-2: 6 95 70;
+  --hero-ink: 255 255 255;
+}
+.view-surf[data-tone="amber"] {
+  --hero-bg: 180 83 9;
+  --hero-bg-2: 146 64 14;
+  --hero-ink: 255 255 255;
+}
+.view-surf[data-tone="sky"] {
+  --hero-bg: 3 105 161;
+  --hero-bg-2: 7 89 133;
+  --hero-ink: 255 255 255;
+}
+.view-surf[data-tone="rose"] {
+  --hero-bg: 190 18 60;
+  --hero-bg-2: 159 18 57;
+  --hero-ink: 255 255 255;
+}
+
+/* --- Las superficies. -------------------------------------------------------- */
+.view-surf[data-surface="plain"] :is(.view-card, .view-lite) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.view-surf[data-surface="plain"] .view-card {
+  padding-inline: 0.25rem;
+}
+.view-surf[data-surface="card"] .view-lite {
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 1rem;
+}
+.view-surf[data-surface="tinted"] :is(.view-card, .view-lite) {
+  background: rgb(var(--primary-soft));
+  border: 1px solid rgb(var(--primary) / 0.2);
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+.view-surf[data-surface="tinted"] .view-lite {
+  padding: 1rem;
+}
+.view-surf[data-surface="outline"] :is(.view-card, .view-lite) {
+  background: transparent;
+  border: 2px solid rgb(var(--border-strong));
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+.view-surf[data-surface="outline"] .view-lite {
+  padding: 1rem;
+}
+.view-surf[data-surface="elevated"] :is(.view-card, .view-lite) {
+  background: rgb(var(--surface));
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+}
+.view-surf[data-surface="elevated"] .view-lite {
+  padding: 1rem;
+}
+
+/* hero: el fondo es la marca y TODO lo de adentro se lee sobre ella. Se
+   reasignan los tokens de tinta, superficie y acento dentro de la tarjeta, de
+   modo que gráficos, chips, barras y enlaces se adaptan solos; los textos
+   secundarios bajan un punto de opacidad en vez de un gris (que no existe
+   sobre un color). */
+.view-surf[data-surface="hero"] :is(.view-card, .view-lite) {
+  --ink: var(--hero-ink);
+  --ink-muted: var(--hero-ink);
+  --ink-faint: var(--hero-ink);
+  --surface: var(--hero-bg);
+  --surface-2: var(--hero-bg-2);
+  --border: var(--hero-bg-2);
+  --border-strong: var(--hero-ink);
+  --primary: var(--hero-ink);
+  --primary-strong: var(--hero-ink);
+  --primary-ink: var(--hero-ink);
+  --primary-soft: var(--hero-bg-2);
+  --view-fill: var(--hero-ink);
+  --view-fill-2: var(--hero-ink);
+  background: rgb(var(--hero-bg));
+  color: rgb(var(--hero-ink));
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+}
+.view-surf[data-surface="hero"] .view-lite {
+  padding: 1.25rem;
+}
+.view-surf[data-surface="hero"] .text-ink-muted {
+  opacity: 0.9;
+}
+.view-surf[data-surface="hero"] .text-ink-faint {
+  opacity: 0.8;
+}
+/* Estados sobre un fondo oscuro: tonos claros. Con una marca clara (tinta
+   oscura) se dejan los de siempre, que ya se leen sobre claro. */
+.view-surf[data-surface="hero"][data-hero-ink="light"] :is(.view-card, .view-lite) {
+  --emerald: 110 231 183;
+  --amber: 252 211 77;
+  --rose: 253 164 175;
+  --sky: 125 211 252;
+  --emerald-soft: 6 95 70;
+  --amber-soft: 146 64 14;
+  --rose-soft: 159 18 57;
+  --sky-soft: 7 89 133;
+}
+
+/* --- La altura. ---------------------------------------------------------------- */
+.view-surf[data-height="compact"] .view-card {
+  padding: 0.75rem 1rem;
+}
+.view-surf[data-height="compact"] .view-card > header {
+  margin-bottom: 0.5rem;
+}
+.view-surf[data-height="tall"] .view-card {
+  min-height: 22rem;
+}
+@media (max-width: 767px) {
+  /* En el celular alto no es un muro: baja a la mitad. */
+  .view-surf[data-height="tall"] .view-card {
+    min-height: 14rem;
+  }
+}
+
+/* --- El énfasis del título de la tarjeta (las cifras lo leen en su bloque). --- */
+.view-surf[data-emphasis="quiet"] .view-card h2 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--ink-muted));
+}
+.view-surf[data-emphasis="strong"] .view-card h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* --- Sin título: sigue en el árbol de lectura (lectores de pantalla), no a la vista. */
+.view-surf[data-title="hidden"] .view-card > header h2,
+.view-surf[data-title="hidden"] .view-lite > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -18,6 +18,7 @@ import { RowActions } from '../view-writes';
 import { CardFlow } from './FlowStepper';
 import { useRecordOpener } from './RecordDrawer';
 import { RichValue } from './RichValue';
+import { useVariant } from './design';
 import { Card, EmptyState, StatusChip, TONE_BAR, useViewTheme } from './theme';
 
 /**
@@ -83,14 +84,47 @@ function Chip({
   );
 }
 
-function CardHero({ card }: { card: CardItem }) {
+function imageUrlOf(card: CardItem): string | undefined {
+  return card.image?.kind === 'url'
+    ? card.image.url
+    : card.image?.kind === 'file'
+      ? parseFileValue(card.image.raw).find((f) => f.mime.startsWith('image/'))?.url
+      : undefined;
+}
+
+/** Avatar redondo: la foto si hay y carga; si no, las iniciales. */
+function Avatar({ card, size }: { card: CardItem; size: 'sm' | 'md' }) {
   const [failed, setFailed] = useState(false);
-  const url =
-    card.image?.kind === 'url'
-      ? card.image.url
-      : card.image?.kind === 'file'
-        ? parseFileValue(card.image.raw).find((f) => f.mime.startsWith('image/'))?.url
-        : undefined;
+  const url = imageUrlOf(card);
+  const box = size === 'md' ? 'h-11 w-11 text-sm' : 'h-8 w-8 text-micro';
+  if (url && !failed)
+    return (
+      <img
+        src={url}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className={clsx(box, 'shrink-0 rounded-pill bg-surface-2 object-cover')}
+      />
+    );
+  return (
+    <span
+      aria-hidden
+      className={clsx(
+        box,
+        'grid shrink-0 place-items-center rounded-pill bg-primary-soft font-extrabold tracking-tight text-primary-ink',
+      )}
+    >
+      {initialsOf(card.title)}
+    </span>
+  );
+}
+
+function CardHero({ card, tall }: { card: CardItem; tall?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const url = imageUrlOf(card);
   if (url && !failed)
     return (
       <div className="aspect-[16/9] w-full overflow-hidden bg-surface-2">
@@ -108,7 +142,10 @@ function CardHero({ card }: { card: CardItem }) {
   return (
     <div
       aria-hidden
-      className="grid h-24 w-full place-items-center bg-gradient-to-br from-primary-soft to-surface-2 text-xl font-extrabold tracking-tight text-primary-ink"
+      className={clsx(
+        'grid w-full place-items-center bg-gradient-to-br from-primary-soft to-surface-2 text-xl font-extrabold tracking-tight text-primary-ink',
+        tall ? 'aspect-[16/9]' : 'h-24',
+      )}
     >
       {initialsOf(card.title)}
     </div>
@@ -119,6 +156,7 @@ export function CardsBlock({ block }: { block: Cards }) {
   const open = useRecordOpener(block.id, block.record);
   const flash = useFlashClass();
   const { density, layout } = useViewTheme();
+  const variant = useVariant();
   const [state, setState] = useState<CardFilterState>(EMPTY_CARD_FILTER);
   const [sort, setSort] = useState<{ index: number; dir: 'asc' | 'desc' } | null>(
     block.defaultSort,
@@ -307,8 +345,14 @@ export function CardsBlock({ block }: { block: Cards }) {
               <ul
                 className={clsx(
                   'grid grid-cols-1',
-                  operator ? 'gap-3' : 'sm:grid-cols-2 xl:grid-cols-3',
-                  density === 'compact' ? 'gap-2.5' : 'gap-4',
+                  variant === 'row'
+                    ? 'gap-1.5'
+                    : variant === 'compact'
+                      ? clsx(operator ? 'gap-2' : 'gap-2.5 sm:grid-cols-2 xl:grid-cols-4')
+                      : clsx(
+                          operator ? 'gap-3' : 'sm:grid-cols-2 xl:grid-cols-3',
+                          density === 'compact' ? 'gap-2.5' : 'gap-4',
+                        ),
                 )}
               >
                 {g.cards.map((card) => (
@@ -316,7 +360,8 @@ export function CardsBlock({ block }: { block: Cards }) {
                     key={card.id}
                     className={clsx(
                       flash(block.id, card.id),
-                      'group relative flex flex-col overflow-hidden rounded-card border shadow-card transition-all duration-150',
+                      'group relative overflow-hidden rounded-card border shadow-card transition-all duration-150',
+                      variant === 'row' ? 'flex flex-row items-center' : 'flex flex-col',
                       open && 'active:scale-[0.985] motion-reduce:active:scale-100',
                       card.alert ? 'border-rose/50 bg-rose-soft' : 'border-border bg-surface',
                       open &&
@@ -332,20 +377,84 @@ export function CardsBlock({ block }: { block: Cards }) {
                         )}
                       />
                     )}
-                    {block.cards.some((c) => c.image) && <CardHero card={card} />}
-                    <div className="flex flex-1 flex-col p-4">
-                      <div className="flex items-start justify-between gap-3">
+                    {variant === 'row' || variant === 'compact' || variant === 'rich' ? null : variant ===
+                      'image' ? (
+                      <CardHero card={card} tall />
+                    ) : (
+                      block.cards.some((c) => c.image) && <CardHero card={card} />
+                    )}
+                    {variant === 'row' ? (
+                      <div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2">
+                        <Avatar card={card} size="sm" />
                         <div className="min-w-0 flex-1">
                           {open ? (
                             <button
                               type="button"
                               onClick={() => open(card.id)}
-                              className="block min-w-0 max-w-full text-left text-base font-bold leading-snug text-ink outline-none after:absolute after:inset-0 after:content-['']"
+                              className="block min-w-0 max-w-full truncate text-left text-sm font-bold text-ink outline-none after:absolute after:inset-0 after:content-['']"
                             >
                               {card.title}
                             </button>
                           ) : (
-                            <p className="min-w-0 text-base font-bold leading-snug text-ink">
+                            <p className="truncate text-sm font-bold text-ink">{card.title}</p>
+                          )}
+                          {(card.subtitle || card.data.length > 0) && (
+                            <p className="truncate text-micro text-ink-muted">
+                              {[card.subtitle, ...card.data.slice(0, 2).map((d) => d.value)]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </p>
+                          )}
+                        </div>
+                        {card.status && (
+                          <span className="hidden shrink-0 sm:inline-flex">
+                            <StatusChip value={card.status.label} tone={card.status.tone} />
+                          </span>
+                        )}
+                        {card.status && (
+                          <span className="shrink-0 text-micro font-semibold text-ink-muted sm:hidden">
+                            {card.status.label}
+                          </span>
+                        )}
+                        {block.actions.length > 0 && (
+                          <div className="relative z-10 shrink-0">
+                            <RowActions
+                              blockId={block.id}
+                              actions={block.actions}
+                              rowId={card.id}
+                              rowLabel={card.title}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                    <div
+                      className={clsx(
+                        'flex flex-1 flex-col',
+                        variant === 'compact' ? 'p-3' : 'p-4',
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        {variant === 'rich' && <Avatar card={card} size="md" />}
+                        <div className="min-w-0 flex-1">
+                          {open ? (
+                            <button
+                              type="button"
+                              onClick={() => open(card.id)}
+                              className={clsx(
+                                "block min-w-0 max-w-full text-left font-bold leading-snug text-ink outline-none after:absolute after:inset-0 after:content-['']",
+                                variant === 'compact' ? 'truncate text-sm' : 'text-base',
+                              )}
+                            >
+                              {card.title}
+                            </button>
+                          ) : (
+                            <p
+                              className={clsx(
+                                'min-w-0 font-bold leading-snug text-ink',
+                                variant === 'compact' ? 'truncate text-sm' : 'text-base',
+                              )}
+                            >
                               {card.title}
                             </p>
                           )}
@@ -360,8 +469,13 @@ export function CardsBlock({ block }: { block: Cards }) {
                         )}
                       </div>
                       {card.data.length > 0 && (
-                        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border/70 pt-3">
-                          {card.data.map((d) => (
+                        <dl
+                          className={clsx(
+                            'grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border/70',
+                            variant === 'compact' ? 'mt-2 pt-2' : 'mt-3 pt-3',
+                          )}
+                        >
+                          {(variant === 'compact' ? card.data.slice(0, 2) : card.data).map((d) => (
                             <div key={d.label} className="min-w-0">
                               <dt className="text-micro text-ink-faint">{d.label}</dt>
                               <dd className="truncate text-xs font-semibold text-ink">
@@ -391,6 +505,7 @@ export function CardsBlock({ block }: { block: Cards }) {
                         </div>
                       )}
                     </div>
+                    )}
                   </li>
                 ))}
               </ul>

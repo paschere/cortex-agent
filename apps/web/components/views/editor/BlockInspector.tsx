@@ -41,6 +41,7 @@ import { clsx } from 'clsx';
 import { AlertTriangle, Lock, Plus, SlidersHorizontal } from 'lucide-react';
 import { useId, useState } from 'react';
 import { ActionsEditor } from './ActionsEditor';
+import { DesignSection } from './DesignSection';
 import { FiltersEditor } from './FiltersEditor';
 import { FormOptions } from './FormOptions';
 import { CardsFields, DetailFields, MapFields } from './ScreenFields';
@@ -215,6 +216,8 @@ export function BlockInspector({
           onChange={(width) => onChange({ ...block, width } as ViewBlock)}
         />
       </Section>
+
+      <DesignSection block={block} onChange={onChange} />
 
       {ref && (
         <Section title="Datos">

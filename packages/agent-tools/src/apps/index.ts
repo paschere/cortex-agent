@@ -7,6 +7,7 @@
 
 import './tools';
 import './design';
+import './brand-tool';
 import './draft';
 import './automations/tools';
 
@@ -59,3 +60,10 @@ export { sampleRows, PREVIEW_USER_ID } from './sample-data';
 export type { SampleRow } from './sample-data';
 export { tableDraftSchema } from './design';
 export type { TableDraft } from './design';
+export { SCREEN_PATTERNS, PATTERN_IDS, buildScreenFromPattern, describePatterns, inferFieldRoles } from './screen-patterns';
+export type { ScreenPattern, PatternId, BuildResult, FieldRoles } from './screen-patterns';
+export { reviewAppDesign, humanizeTitle } from './design-review';
+export type { DesignNote, DesignReview } from './design-review';
+export { appsSuggestBrand, buildBrandProposal, inferAppKind } from './brand-tool';
+export type { BrandProposal } from './brand-tool';
+export { accessibleVariants, paletteFromPixels, suggestFont } from './brand-palette';

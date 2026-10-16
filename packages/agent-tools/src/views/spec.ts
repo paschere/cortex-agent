@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TRACKER_SLUG_RE, type TrackerField } from '../trackers/schema';
+import { designSchemaFor } from './design-shape';
 import { embedSrc, httpsUrl, safeHref } from './embeds';
 
 /**
@@ -180,6 +181,7 @@ const source = {
 export const textBlockSchema = z.object({
   ...base,
   type: z.literal('text'),
+  design: designSchemaFor('text').optional(),
   markdown: z.string().trim().min(1).max(4000),
 });
 
@@ -187,6 +189,7 @@ export const metricBlockSchema = z.object({
   ...base,
   ...source,
   type: z.literal('metric'),
+  design: designSchemaFor('metric').optional(),
   title,
   aggregate: z.enum(AGGREGATES).default('count'),
   field: fieldRef.optional(),
@@ -304,6 +307,7 @@ export const tableBlockSchema = z.object({
   ...source,
   ...record,
   type: z.literal('table'),
+  design: designSchemaFor('table').optional(),
   title,
   columns: z.array(fieldRef).max(10).default([]),
   sort: z.object({ field: fieldRef, dir: z.enum(['asc', 'desc']).default('desc') }).optional(),
@@ -321,6 +325,7 @@ export const chartBlockSchema = z.object({
   ...base,
   ...source,
   type: z.literal('chart'),
+  design: designSchemaFor('chart').optional(),
   title,
   /**
    * `funnel`: embudo por etapas — `groupBy` es un campo de opciones y las
@@ -346,6 +351,7 @@ export const boardBlockSchema = z.object({
   ...source,
   ...record,
   type: z.literal('board'),
+  design: designSchemaFor('board').optional(),
   title,
   /** Un campo de opciones: cada opción es una columna del tablero. */
   groupBy: fieldRef,
@@ -376,6 +382,7 @@ export const zonesBlockSchema = z.object({
   ...source,
   ...record,
   type: z.literal('zones'),
+  design: designSchemaFor('zones').optional(),
   title,
   groupBy: fieldRef,
   cardFields: z.array(fieldRef).max(2).default([]),
@@ -410,6 +417,7 @@ export const REJECT_ACTION_ID = '__reject';
 export const formBlockSchema = z.object({
   ...base,
   type: z.literal('form'),
+  design: designSchemaFor('form').optional(),
   // La forma admite las dos familias para que el rechazo de un formulario
   // sobre una fuente de la plataforma llegue con su explicación desde
   // `checkSpecAgainst`, y no como un «no cumple el patrón» que nadie entiende.
@@ -460,6 +468,7 @@ export function formVoiceOf(block: Pick<FormBlock, 'voice'>): FormVoiceMode {
 export const voiceBlockSchema = z.object({
   ...base,
   type: z.literal('voice'),
+  design: designSchemaFor('voice').optional(),
   title: title.optional(),
   /** El id de un bloque `form` de esta misma vista. */
   form: z.string().regex(BLOCK_ID_RE),
@@ -478,6 +487,7 @@ export const galleryBlockSchema = z.object({
   ...source,
   ...record,
   type: z.literal('gallery'),
+  design: designSchemaFor('gallery').optional(),
   title,
   titleField: fieldRef.default('label'),
   subtitleField: fieldRef.optional(),
@@ -504,6 +514,7 @@ export const calendarBlockSchema = z.object({
   ...source,
   ...record,
   type: z.literal('calendar'),
+  design: designSchemaFor('calendar').optional(),
   title,
   dateField: fieldRef,
   labelField: fieldRef.default('label'),
@@ -603,6 +614,7 @@ export const detailBlockSchema = z.object({
   ...source,
   recordEditable: record.recordEditable,
   type: z.literal('detail'),
+  design: designSchemaFor('detail').optional(),
   title: z.string().trim().max(120).optional(),
   titleField: fieldRef.default('label'),
   subtitleField: fieldRef.optional(),
@@ -633,6 +645,7 @@ export const cardsBlockSchema = z.object({
   ...source,
   ...record,
   type: z.literal('cards'),
+  design: designSchemaFor('cards').optional(),
   title,
   titleField: fieldRef.default('label'),
   subtitleField: fieldRef.optional(),
@@ -661,6 +674,7 @@ export const progressBlockSchema = z.object({
   ...base,
   ...source,
   type: z.literal('progress'),
+  design: designSchemaFor('progress').optional(),
   title,
   groupBy: fieldRef.optional(),
   aggregate: z.enum(AGGREGATES).default('count'),
@@ -696,6 +710,7 @@ export const MEDIA_ASPECTS = ['16:9', '4:3', '1:1', '3:4'] as const;
 export const mediaBlockSchema = z.object({
   ...base,
   type: z.literal('media'),
+  design: designSchemaFor('media').optional(),
   title: z.string().trim().max(120).optional(),
   kind: z.enum(['image', 'embed']).default('image'),
   url: httpsField.optional(),
@@ -719,6 +734,7 @@ export const viewLinkSchema = z.object({
 export const linksBlockSchema = z.object({
   ...base,
   type: z.literal('links'),
+  design: designSchemaFor('links').optional(),
   title: z.string().trim().max(120).optional(),
   links: z.array(viewLinkSchema).min(1).max(8),
   /** `buttons`: una fila de botones; `cards`: tarjetas con su descripción. */
@@ -773,6 +789,7 @@ export const mapBlockSchema = z.object({
   ...source,
   ...record,
   type: z.literal('map'),
+  design: designSchemaFor('map').optional(),
   title,
   locationField: fieldRef,
   titleField: fieldRef.default('label'),

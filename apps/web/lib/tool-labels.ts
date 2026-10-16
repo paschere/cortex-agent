@@ -492,6 +492,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   trackers_remove: { label: 'Borrar de la tabla', icon: 'Table2' },
   apps_list: { label: 'Ver las aplicaciones', icon: 'LayoutGrid' },
   apps_design: { label: 'Diseñar una aplicación (borrador)', icon: 'LayoutGrid' },
+  apps_suggest_brand: { label: 'Proponer la marca desde el logo o la web', icon: 'LayoutGrid' },
   apps_create: { label: 'Crear una aplicación', icon: 'LayoutGrid' },
   apps_apply_draft: { label: 'Crear la aplicación completa del borrador', icon: 'LayoutGrid' },
   trackers_set_flow: { label: 'Darle un flujo por estados a una tabla', icon: 'ListChecks' },

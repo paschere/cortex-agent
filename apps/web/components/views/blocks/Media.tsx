@@ -4,6 +4,8 @@ import type { ComputedBlock, Tone } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { ArrowUpRight, ExternalLink, ImageOff, PlayCircle } from 'lucide-react';
 import { useState } from 'react';
+import { Glyph } from '../../apps/AppGlyph';
+import { useBlockDesign } from './design';
 import { Card, TONE_RING, TONE_SOFT, useViewTheme } from './theme';
 
 /**
@@ -108,12 +110,83 @@ export function LinksBlock({ block }: { block: Links }) {
   const { density } = useViewTheme();
   const external = (l: Links['links'][number]) =>
     l.external ? { target: '_blank', rel: 'noopener noreferrer nofollow' } : {};
-  if (block.style === 'cards')
+  const { design } = useBlockDesign();
+  const asked = design?.variant;
+  // La variante del diseño gana sobre `style`; sin ella manda `style`.
+  const look =
+    asked === 'tiles' || asked === 'cards' || asked === 'buttons' ? asked : block.style === 'cards' ? 'cards' : 'buttons';
+  const heading = block.title ? (
+    <h2
+      className={clsx(
+        'flex items-center gap-2 text-base font-bold tracking-tight text-ink',
+        look === 'buttons' ? 'mb-3' : 'mb-3 px-1',
+        design?.title === 'hidden' && 'sr-only',
+      )}
+    >
+      {design?.icon && (
+        <span
+          aria-hidden
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary"
+        >
+          <Glyph name={design.icon} className="h-4 w-4" />
+        </span>
+      )}
+      <span className="min-w-0">{block.title}</span>
+    </h2>
+  ) : null;
+  if (look === 'tiles')
     return (
-      <div>
-        {block.title && (
-          <h2 className="mb-3 px-1 text-base font-bold tracking-tight text-ink">{block.title}</h2>
-        )}
+      <div className="view-lite">
+        {heading}
+        <ul
+          className={clsx(
+            'grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4',
+            density === 'compact' ? 'gap-2' : 'gap-3',
+          )}
+        >
+          {block.links.map((l) => (
+            <li key={`${l.label}-${l.href}`} className="min-w-0">
+              <a
+                href={l.href}
+                {...external(l)}
+                className={clsx(
+                  'group flex aspect-square h-full w-full min-w-0 flex-col justify-between gap-2 rounded-card border bg-surface p-3.5 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-pop sm:p-4',
+                  TONE_RING[l.tone],
+                )}
+              >
+                <span
+                  className={clsx(
+                    'grid h-11 w-11 shrink-0 place-items-center rounded-card transition-transform duration-150 group-hover:scale-105',
+                    TONE_SOFT[l.tone],
+                  )}
+                >
+                  {l.external ? (
+                    <ExternalLink className="h-6 w-6" aria-hidden />
+                  ) : (
+                    <ArrowUpRight className="h-6 w-6" aria-hidden />
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block break-words text-sm font-semibold leading-snug text-ink">
+                    {l.label}
+                  </span>
+                  {l.description && (
+                    <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-ink-muted">
+                      {l.description}
+                    </span>
+                  )}
+                  {l.external && <span className="sr-only"> (se abre en otra pestaña)</span>}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  if (look === 'cards')
+    return (
+      <div className="view-lite">
+        {heading}
         <ul
           className={clsx(
             'grid grid-cols-1 sm:grid-cols-2',
@@ -158,10 +231,8 @@ export function LinksBlock({ block }: { block: Links }) {
       </div>
     );
   return (
-    <div className="px-1">
-      {block.title && (
-        <h2 className="mb-3 text-base font-bold tracking-tight text-ink">{block.title}</h2>
-      )}
+    <div className="view-lite px-1">
+      {heading}
       <ul className="flex flex-wrap gap-2">
         {block.links.map((l) => (
           <li key={`${l.label}-${l.href}`}>

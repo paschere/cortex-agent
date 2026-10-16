@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useRecordOpener } from './RecordDrawer';
+import { useBlockDesign } from './design';
 import { Card, EmptyState, TONE_BAR, TONE_SOFT, shortDay, upperFirst } from './theme';
 
 /**
@@ -54,7 +55,8 @@ function monthCells(month: string): Array<string | null> {
   return cells;
 }
 
-const MODE_LABEL = { day: 'Día', week: 'Semana', month: 'Mes' } as const;
+const MODE_LABEL = { day: 'Día', week: 'Semana', month: 'Mes', agenda: 'Agenda' } as const;
+type AnyMode = keyof typeof MODE_LABEL;
 
 export function CalendarBlock({ block }: { block: Calendar }) {
   const open = useRecordOpener(block.id, block.record);
@@ -63,21 +65,22 @@ export function CalendarBlock({ block }: { block: Calendar }) {
     for (const e of block.events) map.set(e.day, [...(map.get(e.day) ?? []), e]);
     return map;
   }, [block.events]);
-  const modes = block.modes ?? [];
+  const { design } = useBlockDesign();
+  // Una variante pedida a propósito manda sobre el modo del bloque.
+  const asked = design?.variant === 'month' || design?.variant === 'agenda' ? design.variant : null;
+  const baseModes: AnyMode[] = block.modes ?? [];
+  const modes: AnyMode[] =
+    asked === 'agenda' && baseModes.length > 1 && !baseModes.includes('agenda')
+      ? [...baseModes, 'agenda']
+      : baseModes;
   const switchable = modes.length > 1;
-  const [chosen, setChosen] = useState<'day' | 'week' | 'month'>(
-    block.mode === 'day' || block.mode === 'week' || block.mode === 'month' ? block.mode : 'week',
+  const [chosen, setChosen] = useState<AnyMode>(
+    asked ??
+      (block.mode === 'day' || block.mode === 'week' || block.mode === 'month' ? block.mode : 'week'),
   );
-  const mode = switchable ? chosen : block.mode;
+  const mode: AnyMode = switchable ? chosen : (asked ?? block.mode);
   const [anchor, setAnchor] = useState(block.today);
 
-  if (mode === 'agenda')
-    return (
-      <Card title={block.title} source={block.source}>
-        <Agenda block={block} byDay={byDay} open={open} />
-        <Legend legend={block.legend} />
-      </Card>
-    );
   const switcher = switchable ? (
     // biome-ignore lint/a11y/useSemanticElements: un fieldset no se deja estilar como píldora.
     <div
@@ -101,6 +104,13 @@ export function CalendarBlock({ block }: { block: Calendar }) {
       ))}
     </div>
   ) : null;
+  if (mode === 'agenda')
+    return (
+      <Card title={block.title} source={block.source} action={switcher}>
+        <Agenda block={block} byDay={byDay} open={open} />
+        <Legend legend={block.legend} />
+      </Card>
+    );
   if (mode === 'month')
     return <MonthView block={block} byDay={byDay} open={open} switcher={switcher} />;
   return (
@@ -403,7 +413,7 @@ function MonthView({
               <div
                 key={day}
                 className={clsx(
-                  'relative flex min-h-11 flex-col rounded-sm border p-1 transition-colors duration-150 md:min-h-[5.75rem] md:p-1.5',
+                  'relative flex min-h-11 min-w-0 flex-col rounded-sm border p-1 transition-colors duration-150 md:min-h-[5.75rem] md:p-1.5',
                   isChosen
                     ? 'border-primary/60 bg-primary-soft/50 ring-1 ring-primary/30'
                     : weekend
@@ -496,6 +506,50 @@ function MonthView({
   );
 }
 
+function AgendaEvent({
+  event,
+  open,
+}: {
+  event: CalEvent;
+  open: ((id: string) => void) | null;
+}) {
+  const className = clsx(
+    'flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-sm border border-border/70 bg-surface py-2 pr-3 text-left shadow-card transition-colors duration-150',
+    open && 'hover:border-border-strong focus-visible:ring-2 focus-visible:ring-primary/40',
+  );
+  const body = (
+    <>
+      <span
+        aria-hidden
+        className={clsx('h-8 w-1 shrink-0', event.tone ? TONE_BAR[event.tone] : 'bg-ink-faint')}
+      />
+      <span className="tabular w-12 shrink-0 font-mono text-micro font-semibold text-ink-muted">
+        {event.time ?? 'Todo el día'}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{event.label}</span>
+      {event.tag && (
+        <span
+          className={clsx(
+            'max-w-[40%] shrink-0 truncate rounded-pill px-2 py-0.5 text-micro font-semibold',
+            event.tone ? TONE_SOFT[event.tone] : 'bg-surface-2 text-ink-muted',
+          )}
+        >
+          {event.tag}
+        </span>
+      )}
+    </>
+  );
+  return open ? (
+    <button type="button" onClick={() => open(event.id)} className={className} title={event.label}>
+      {body}
+    </button>
+  ) : (
+    <span className={className} title={event.label}>
+      {body}
+    </span>
+  );
+}
+
 function Agenda({
   block,
   byDay,
@@ -511,39 +565,45 @@ function Agenda({
       <EmptyState
         icon={<CalendarDays className="h-5 w-5" aria-hidden />}
         title="Nada en la agenda"
-        hint={`Nada entre hoy y el ${shortDay(block.range.to)}.`}
+        hint={`No hay nada agendado entre hoy y el ${shortDay(block.range.to)}.`}
       />
     );
+  const monthOf = (day: string) =>
+    new Intl.DateTimeFormat('es-CO', { month: 'short', timeZone: 'UTC' })
+      .format(new Date(`${day}T12:00:00Z`))
+      .replace('.', '');
   return (
-    <ol className="space-y-4">
-      {days.map((day) => (
-        <li key={day} className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3">
-          <span
-            className={clsx(
-              'flex h-14 flex-col items-center justify-center rounded-sm border text-center',
-              day === block.today
-                ? 'border-primary/40 bg-primary-soft text-primary-ink'
-                : 'border-border bg-surface-2/60 text-ink-muted',
-            )}
-          >
-            <span className="text-micro font-semibold uppercase leading-none tracking-field">
-              {day === block.today
-                ? 'Hoy'
-                : WEEKDAYS[(new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7]}
+    <ol aria-label={`Agenda de ${block.title}`} className="space-y-4">
+      {days.map((day) => {
+        const isToday = day === block.today;
+        return (
+          <li key={day} className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-3">
+            <span
+              className={clsx(
+                'flex h-16 flex-col items-center justify-center rounded-sm border text-center',
+                isToday
+                  ? 'border-primary/40 bg-primary-soft text-primary-ink'
+                  : 'border-border bg-surface-2/60 text-ink-muted',
+              )}
+            >
+              <span className="text-micro font-semibold uppercase leading-none tracking-field">
+                {isToday ? 'Hoy' : WEEKDAYS[(new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7]}
+              </span>
+              <span className="tabular mt-1 font-mono text-xl font-semibold leading-none text-ink">
+                {Number(day.slice(8))}
+              </span>
+              <span className="mt-0.5 text-micro leading-none">{monthOf(day)}</span>
             </span>
-            <span className="tabular mt-1 font-mono text-lg font-semibold leading-none text-ink">
-              {Number(day.slice(8))}
-            </span>
-          </span>
-          <ul className="space-y-1.5">
-            {(byDay.get(day) ?? []).map((e) => (
-              <li key={e.id}>
-                <EventButton event={e} open={open} />
-              </li>
-            ))}
-          </ul>
-        </li>
-      ))}
+            <ul className="min-w-0 space-y-1.5 self-center">
+              {(byDay.get(day) ?? []).map((e) => (
+                <li key={e.id}>
+                  <AgendaEvent event={e} open={open} />
+                </li>
+              ))}
+            </ul>
+          </li>
+        );
+      })}
     </ol>
   );
 }

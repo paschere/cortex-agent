@@ -8,6 +8,7 @@ import { AreaChart } from '../charts/AreaChart';
 import { RankBars } from '../charts/RankBars';
 import { axisFormatterFor } from '../charts/scales';
 import { useViewBrand } from './blocks/brand';
+import { useVariant } from './blocks/design';
 import { EmptyState, TONE_COLOR, seriesColors } from './blocks/theme';
 
 /**
@@ -35,6 +36,9 @@ import { EmptyState, TONE_COLOR, seriesColors } from './blocks/theme';
 type Chart = Extract<ComputedBlock, { type: 'chart' }>;
 
 export function ViewChart({ block }: { block: Chart }) {
+  // La variante pedida (si la hay) cambia el dibujo de los gráficos de PUNTOS;
+  // embudo y mapa de calor no tienen datos que lo permitan y la ignoran.
+  const variant = useVariant();
   if (block.points.length === 0) {
     return (
       <EmptyState
@@ -46,8 +50,13 @@ export function ViewChart({ block }: { block: Chart }) {
   }
   if (block.chart === 'funnel') return <Funnel block={block} />;
   if (block.chart === 'heatmap' && block.heat) return <Heatmap block={block} heat={block.heat} />;
-  if (block.chart === 'donut') return <Donut block={block} />;
-  if (block.chart === 'line') return <Line block={block} />;
+  const shape =
+    variant === 'bar' || variant === 'line' || variant === 'area' || variant === 'donut'
+      ? variant
+      : block.chart;
+  if (shape === 'donut') return <Donut block={block} />;
+  if (shape === 'area') return <Line block={block} fill />;
+  if (shape === 'line') return <Line block={block} fill={variant === undefined} />;
   return <Bars block={block} />;
 }
 
@@ -212,7 +221,7 @@ function Bars({ block }: { block: Chart }) {
   );
 }
 
-function Line({ block }: { block: Chart }) {
+function Line({ block, fill }: { block: Chart; fill: boolean }) {
   const points = block.points;
   const color = TONE_COLOR[block.tone];
   const fmt = useMemo(() => axisFormatterFor(points[0]?.display), [points]);
@@ -227,7 +236,7 @@ function Line({ block }: { block: Chart }) {
             id: 'v',
             label: block.title,
             color,
-            area: true,
+            area: fill,
             values: points.map((p) => p.value),
             display: points.map((p) => p.display),
           },

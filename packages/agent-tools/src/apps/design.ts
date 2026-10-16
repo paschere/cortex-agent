@@ -18,6 +18,7 @@ import {
 } from '../views/spec';
 import { validateSpec } from '../views/store';
 import { SPEC_GRAMMAR } from '../views/tools';
+import { type DesignNote, designNoteLines, reviewAppDesign } from './design-review';
 import { normalizeAppIcon } from './icon-names';
 import {
   type AppPermissions,
@@ -27,6 +28,12 @@ import {
   requiredAttributes,
   roleKeySchema,
 } from './permissions';
+import {
+  PATTERN_IDS,
+  type PatternTable,
+  buildScreenFromPattern,
+  describePatterns,
+} from './screen-patterns';
 import { MAX_APP_ROLES, MAX_APP_SCREENS, roleInputSchema } from './store';
 import { APP_TEMPLATES } from './templates';
 
@@ -507,7 +514,12 @@ type AppPermissionsLike = {
 };
 
 /** El resumen que se le muestra a la persona para aprobar: en español simple, sin JSON. */
-function summarize(draft: AppDraft, warnings: string[], automations: AutomationIdea[]): string {
+function summarize(
+  draft: AppDraft,
+  warnings: string[],
+  automations: AutomationIdea[],
+  designFixes: string[] = [],
+): string {
   const lines: string[] = [
     `**${draft.icon ?? '📱'} ${draft.name}** — borrador (nada se ha guardado).`,
   ];
@@ -540,6 +552,8 @@ function summarize(draft: AppDraft, warnings: string[], automations: AutomationI
     lines.push(
       `- **${s.title}** (${blockLabel(s.spec)}) — la ve ${s.roles.length ? s.roles.map((k) => draft.roles.find((r) => r.key === k)?.name ?? k).join(', ') : 'todo el mundo'}.`,
     );
+  if (designFixes.length)
+    lines.push('', '**Cuidé el diseño** (lo ajusté sola)', ...designFixes.map((w) => `- ${w}`));
   if (warnings.length) lines.push('', '**Para tener en cuenta**', ...warnings.map((w) => `- ${w}`));
   if (automations.length)
     lines.push(
@@ -558,7 +572,9 @@ function summarize(draft: AppDraft, warnings: string[], automations: AutomationI
 // La herramienta
 // ---------------------------------------------------------------------------
 
-const ROLE_DESIGN_HINT = `Design each role's screens for how that person works. Operator/field: theme.layout "operator" — voice-capable form first, "my list" as a cards block (chips today + mine) and a detail block to open each record. Supervisor: a board by status, cards with status chips, approvals (form with approval) and a detail with timeline. Management: metrics with goals and compare, charts, no forms, export on. Client portal: theme.header "hero", their rows as cards and a detail with short sections (automations never show to external users). Plant wall: layout "tv" with 2-4 pages. A cards/table/board/calendar block should come with a detail block of the same table when rows have more to tell. The tool warns when a role's screens miss this.`;
+const ROLE_DESIGN_HINT = `Design each role's screens for how that person works. START FROM THE PATTERN CATALOG (below): pick a pattern per screen, pass it in \`patterns\` with the table it runs on, and the tool builds the screen from the table's real fields (status, date, amount, owner, photo, location found by type and name); adapt it afterwards instead of drawing from scratch. Operator/field: theme.layout "operator" — voice-capable step form first, "my list" as a cards block (chips today + mine) and a detail block to open each record. Supervisor: a board by status, cards with status chips, approvals and a detail with timeline. Management: 2-4 metrics in one row at the top (with compare and goals), two charts, a ranking, no forms, export on. Client portal: theme.header "hero", their rows as cards and a detail with short sections (automations never show to external users). Plant wall: layout "tv" with 2-4 pages. Hierarchy: at most 1-2 strong blocks per screen (design.emphasis "strong"), the rest normal/quiet; a screen is never one giant block nor more than 8 blocks (use pages). Per block you may add \`design\` {surface, size, tone, emphasis, variant} as the pattern suggests (ignored if the engine does not know it yet). Money always format "money" (full pesos). Titles in plain Spanish (never snake_case or table ids). A cards/table/board/calendar block comes with a detail block of the same table.`;
+
+const DESIGN_REVIEW_HINT = `SELF-REVIEW: every call also runs a design reviewer. It fixes the safe things by itself (returned in designFixes: money format, human titles, a detail for each list, step forms over 8 fields, cards instead of long tables for field roles, operator layout, metrics on top in a row, pages for heavy screens) and returns what it could NOT fix in designNotes. If designNotes is not empty (showable false) you MUST fix each note in the draft and call apps.design again; NEVER show the person a draft that still has unresolved designNotes. Only when showable is true show the markdown. Brand: after the person sees the screens, offer apps.suggest_brand (from the logo or the company web page) and apply it with apps.update brand only after they approve.`;
 
 const PERMISSIONS_HINT = `Role permissions: {tables: {"<table slug>": {read: "all" | "own" | {field, equals: "$user.<attribute>"}, create: boolean, edit: "none"|"own"|"all", fields?: [field keys the role may write], actions?: ["__approve","__reject" or row action ids]}}, export: boolean, kiosk?: boolean}. A table NOT listed is invisible to that role. For a CLIENT PORTAL give the client role read {field: "<column holding the client name>", equals: "$user.cliente"}: it sees only its own rows (also in totals and exports).`;
 
@@ -567,6 +583,9 @@ export const appsDesign = registerTool({
   description: `Draft a COMPLETE application from a description WITHOUT saving anything, so the person can approve it before it exists: roles with plain-language permissions, screens with valid specs (checked against the real tables), and suggested automations as text. You compose the draft (name, roles, screens, homeScreen — the same shape apps.create takes, or start from template "${APP_TEMPLATES.map((t) => t.id).join('" / "')}" and the tool returns it ready) and this tool validates every screen against the workspace's real tables, cross-checks roles with screens and returns {ok, problems, warnings, draft, automations, markdown}. If ok is false, fix exactly the problems and call it again. If ok, show the markdown summary to the person; when they approve, call apps.create passing the draft's fields unchanged (name, description, icon, roles, screens, homeScreen). ALWAYS call this before apps.create for anything that is not the plain template. If the data lives in a Google Sheet or Drive folder, FIRST call trackers.propose_from_source / trackers.propose_from_drive_folder and wait for approval; a screen on a table that does not exist comes back as a problem. Read-only (no confirmation); company owners/admins only.
 ${PERMISSIONS_HINT}
 ${ROLE_DESIGN_HINT}
+${DESIGN_REVIEW_HINT}
+SCREEN PATTERN CATALOG (ids for \`patterns\`):
+${describePatterns()}
 ${SPEC_GRAMMAR}`,
   inputSchema: z
     .object({
@@ -593,6 +612,25 @@ ${SPEC_GRAMMAR}`,
         .describe(
           'New tables the app needs, created WITH the app on approval: [{slug, name, description, fields}] (same fields grammar as trackers.define; a select field may carry a `flow` of states). A table that already exists is used as is.',
         ),
+      patterns: z
+        .array(
+          z.object({
+            pattern: z.enum(PATTERN_IDS).describe('Pattern id from the SCREEN PATTERN CATALOG.'),
+            table: z
+              .string()
+              .trim()
+              .min(1)
+              .max(48)
+              .describe('Slug of the table it runs on (existing, or one of `tables` of this call).'),
+            title: z.string().trim().min(1).max(60).optional().describe('Screen title in plain Spanish.'),
+            roles: z.array(roleKeySchema).max(MAX_APP_ROLES).optional().describe('Role keys that see it.'),
+          }),
+        )
+        .max(MAX_APP_SCREENS)
+        .optional()
+        .describe(
+          'Screens to build FROM THE PATTERN CATALOG on real tables; they are added to `screens`. If a pattern needs a field the table lacks, the tool says which.',
+        ),
       automations: z
         .array(automationIdea)
         .max(8)
@@ -602,7 +640,7 @@ ${SPEC_GRAMMAR}`,
         ),
     })
     .superRefine((v, ctx) => {
-      if (!v.template && (!v.name || !v.screens?.length || !v.roles?.length))
+      if (!v.template && (!v.name || !(v.screens?.length || v.patterns?.length) || !v.roles?.length))
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'Sin plantilla hacen falta name, roles y screens.',
@@ -615,6 +653,12 @@ ${SPEC_GRAMMAR}`,
     draft: z.unknown().nullable(),
     automations: z.array(automationIdea),
     markdown: z.string(),
+    /** Lo que el revisor de diseño no pudo arreglar solo: hay que corregirlo antes de mostrar. */
+    designNotes: z.array(z.string()).default([]),
+    /** Lo que el revisor corrigió solo. */
+    designFixes: z.array(z.string()).default([]),
+    /** ok y sin notas de diseño: ya se puede mostrar el borrador. */
+    showable: z.boolean().default(false),
   }),
   rateLimit: { perMinute: 20 },
   handler: async (input, ctx) => {
@@ -623,19 +667,68 @@ ${SPEC_GRAMMAR}`,
         'Sólo quien administra la empresa o es su dueño puede diseñar una aplicación.',
       );
     const template = input.template ? APP_TEMPLATES.find((t) => t.id === input.template) : null;
+
+    // Pantallas del catálogo: se arman sobre las tablas reales (o las que este borrador crea).
+    const patternScreens: unknown[] = [];
+    const patternProblems: string[] = [];
+    if (input.patterns?.length) {
+      const known = new Map<string, PatternTable>();
+      for (const raw of input.tables ?? []) {
+        const t = tableDraftSchema.safeParse(raw);
+        if (t.success) known.set(t.data.slug, t.data);
+      }
+      for (const slug of new Set(input.patterns.map((p) => p.table)))
+        if (!known.has(slug)) {
+          const tracker = await getTrackerBySlug(ctx.db, slug);
+          if (tracker) known.set(slug, { slug, name: tracker.name, fields: tracker.fields });
+        }
+      for (const p of input.patterns) {
+        const table = known.get(p.table);
+        if (!table) {
+          patternProblems.push(
+            `El patrón «${p.pattern}» corre sobre la tabla «${p.table}», que no existe. Propón la tabla primero (trackers.define / propose_from_source) o ponla en \`tables\`.`,
+          );
+          continue;
+        }
+        const built = buildScreenFromPattern(p.pattern, table, {
+          title: p.title,
+          roles: p.roles,
+          relatedTables: [...known.values()],
+        });
+        if (!built.ok) patternProblems.push(built.reason);
+        else patternScreens.push(built.screen);
+      }
+    }
+    if (patternProblems.length)
+      return {
+        ok: false,
+        problems: patternProblems,
+        warnings: [],
+        draft: null,
+        automations: input.automations ?? [],
+        markdown: '',
+        designNotes: [],
+        designFixes: [],
+        showable: false,
+      };
+    const screensIn = [...(input.screens ?? []), ...patternScreens];
+
     const raw = template
       ? {
           name: input.name ?? template.name,
           description: input.appDescription ?? template.body,
           icon: input.icon ?? template.icon,
           roles: template.roles,
-          screens: template.screens.map((s) => ({
-            title: s.title,
-            slug: s.slug,
-            icon: s.icon,
-            roles: s.roles,
-            spec: s.spec,
-          })),
+          screens: [
+            ...template.screens.map((s) => ({
+              title: s.title,
+              slug: s.slug,
+              icon: s.icon,
+              roles: s.roles,
+              spec: s.spec,
+            })),
+            ...patternScreens,
+          ],
           homeScreen: template.homeScreen,
           tables: input.tables ?? [],
         }
@@ -644,7 +737,7 @@ ${SPEC_GRAMMAR}`,
           description: input.appDescription ?? '',
           icon: input.icon,
           roles: input.roles,
-          screens: input.screens,
+          screens: screensIn,
           homeScreen: input.homeScreen,
           tables: input.tables ?? [],
         };
@@ -656,6 +749,61 @@ ${SPEC_GRAMMAR}`,
         (template?.trackers ?? []).map((t) => [t.slug, t.fields.map((f) => f.key)] as const),
       ),
     });
-    return { ...review, draft: review.draft };
+    if (!review.ok || !review.draft)
+      return { ...review, designNotes: [], designFixes: [], showable: false };
+
+    // Autorrevisión del diseño: corrige lo seguro y deja las notas de lo que no.
+    let designNotes: DesignNote[] = [];
+    let designFixes: string[] = [];
+    let draft = review.draft;
+    let warnings = review.warnings;
+    try {
+      const catalog = await tablesForReview(ctx.db, draft, template?.trackers ?? []);
+      const reviewed = reviewAppDesign(draft, catalog);
+      const before = designWarnings(draft.screens, draft.roles);
+      draft = reviewed.draft;
+      designNotes = reviewed.notes;
+      designFixes = reviewed.fixes;
+      // Los avisos de diseño de antes se reemplazan por los del borrador ya corregido.
+      warnings = [
+        ...new Set([
+          ...review.warnings.filter((w) => !before.includes(w)),
+          ...designWarnings(draft.screens, draft.roles),
+        ]),
+      ];
+    } catch (err) {
+      console.warn('[apps.design] revisión de diseño omitida:', err instanceof Error ? err.message : err);
+    }
+    const showable = designNotes.length === 0;
+    const noteLines = designNoteLines(designNotes);
+    return {
+      ...review,
+      draft,
+      warnings,
+      designNotes: noteLines,
+      designFixes,
+      showable,
+      markdown: showable
+        ? summarize(draft, warnings, review.automations, designFixes)
+        : `NO se lo muestres a la persona todavía: el diseño tiene ${noteLines.length} nota(s) sin resolver. Corrígelas en el borrador y vuelve a llamar apps.design.\n${noteLines.map((n) => `- ${n}`).join('\n')}`,
+    };
   },
 });
+
+/** Las tablas que usa el borrador, con sus campos: las que existen y las que la app crea. */
+async function tablesForReview(
+  db: SupabaseClient,
+  draft: AppDraft,
+  templateTables: Array<{ slug: string; name: string; fields: PatternTable['fields'] }>,
+): Promise<PatternTable[]> {
+  const out = new Map<string, PatternTable>();
+  for (const t of templateTables) out.set(t.slug, { slug: t.slug, name: t.name, fields: t.fields });
+  for (const t of draft.tables) out.set(t.slug, { slug: t.slug, name: t.name, fields: t.fields });
+  const slugs = new Set(draft.screens.flatMap((s) => trackersOf(s.spec)));
+  for (const slug of slugs) {
+    if (slug.includes('.') || out.has(slug)) continue;
+    const tracker = await getTrackerBySlug(db, slug);
+    if (tracker) out.set(slug, { slug, name: tracker.name, fields: tracker.fields });
+  }
+  return [...out.values()];
+}

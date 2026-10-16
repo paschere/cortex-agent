@@ -353,6 +353,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   trackers_remove: 'Borrar de la tabla',
   apps_list: 'Ver las aplicaciones',
   apps_design: 'Diseñar una aplicación (borrador)',
+  apps_suggest_brand: 'Proponer la marca desde el logo o la web',
   apps_create: 'Crear una aplicación',
   apps_apply_draft: 'Crear la aplicación completa del borrador',
   trackers_set_flow: 'Darle un flujo por estados a una tabla',

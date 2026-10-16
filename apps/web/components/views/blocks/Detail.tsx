@@ -21,6 +21,7 @@ import { FileValue } from '../inputs/FileValue';
 import { EditableValue, RowActions } from '../view-writes';
 import { FlowHistory, FlowPanel } from './FlowStepper';
 import { RichValue } from './RichValue';
+import { useIsVariant } from './design';
 import { useRecordNav } from './record-nav';
 import { Card, EmptyState, StatusChip, formatWhen, useViewTheme } from './theme';
 
@@ -129,7 +130,11 @@ function CopyLink() {
 export function DetailBlock({ block, target }: { block: Detail; target?: SubmitTarget }) {
   const nav = useRecordNav();
   const { density } = useViewTheme();
-  const [tab, setTab] = useState<'data' | 'media' | 'related' | 'history'>('data');
+  // «Historia primero»: sólo cuenta si el bloque trae línea de tiempo; si no, se ve como `sections`.
+  const timelineFirst = useIsVariant('timeline-first') && Boolean(block.timeline);
+  const [tab, setTab] = useState<'data' | 'media' | 'related' | 'history'>(
+    timelineFirst ? 'history' : 'data',
+  );
 
   const back = nav ? (
     <button
@@ -169,13 +174,39 @@ export function DetailBlock({ block, target }: { block: Detail; target?: SubmitT
   const rowId = block.rowId ?? '';
   const edited = header.updatedAt !== header.createdAt;
   // En el celular, el detalle se parte en pestañas; en pantalla ancha se ve todo junto.
+  const historyTab = block.timeline ? [{ id: 'history' as const, label: 'Historial' }] : [];
   const tabs: Array<{ id: typeof tab; label: string }> = [
+    ...(timelineFirst ? historyTab : []),
     { id: 'data', label: 'Datos' },
     ...(block.gallery.length > 0 ? [{ id: 'media' as const, label: 'Fotos' }] : []),
     ...(block.related.length > 0 ? [{ id: 'related' as const, label: 'Relacionados' }] : []),
-    ...(block.timeline ? [{ id: 'history' as const, label: 'Historial' }] : []),
+    ...(timelineFirst ? [] : historyTab),
   ];
   const only = (id: typeof tab) => (tabs.length < 2 || tab === id ? '' : 'hidden lg:block');
+  const timelineCard = block.timeline ? (
+          <Card
+            title="Línea de tiempo"
+            className={clsx(
+              '!h-auto lg:sticky lg:top-4',
+              timelineFirst && 'ring-1 ring-primary/25',
+              only('history'),
+            )}
+          >
+            {block.timeline.length === 0 ? (
+              <p className="text-xs text-ink-muted">Todavía no hay movimientos.</p>
+            ) : (
+              <ol aria-label="Línea de tiempo del registro">
+                {block.timeline.map((entry, i) => (
+                  <TimelineItem
+                    key={entry.id}
+                    entry={entry}
+                    last={i === (block.timeline?.length ?? 0) - 1}
+                  />
+                ))}
+              </ol>
+            )}
+          </Card>
+  ) : null;
   return (
     <div className="space-y-4">
       {back}
@@ -261,7 +292,15 @@ export function DetailBlock({ block, target }: { block: Detail; target?: SubmitT
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+      <div
+        className={clsx(
+          'grid gap-4',
+          timelineFirst
+            ? 'lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]'
+            : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]',
+        )}
+      >
+        {timelineFirst && timelineCard}
         <div className={clsx('min-w-0', density === 'compact' ? 'space-y-3' : 'space-y-4')}>
           {block.sections.map((section) => (
             <Card
@@ -374,26 +413,7 @@ export function DetailBlock({ block, target }: { block: Detail; target?: SubmitT
           ))}
         </div>
 
-        {block.timeline && (
-          <Card
-            title="Línea de tiempo"
-            className={clsx('!h-auto lg:sticky lg:top-4', only('history'))}
-          >
-            {block.timeline.length === 0 ? (
-              <p className="text-xs text-ink-muted">Todavía no hay movimientos.</p>
-            ) : (
-              <ol aria-label="Línea de tiempo del registro">
-                {block.timeline.map((entry, i) => (
-                  <TimelineItem
-                    key={entry.id}
-                    entry={entry}
-                    last={i === (block.timeline?.length ?? 0) - 1}
-                  />
-                ))}
-              </ol>
-            )}
-          </Card>
-        )}
+        {!timelineFirst && timelineCard}
       </div>
     </div>
   );

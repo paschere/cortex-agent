@@ -319,3 +319,115 @@ describe('mapa y tareas en el diseño', () => {
     expect(ok[0]).toMatch(/Compartir ubicación del equipo/);
   });
 });
+
+describe('apps.design: catálogo de pantallas y autorrevisión', () => {
+  const rolesPlanta = [
+    {
+      key: 'operario',
+      name: 'Operario',
+      description: '',
+      permissions: {
+        tables: { guias: { read: 'own', create: true, edit: 'own', actions: [] } },
+        export: false,
+      },
+    },
+    {
+      key: 'gerencia',
+      name: 'Gerencia',
+      description: '',
+      permissions: {
+        tables: { guias: { read: 'all', create: false, edit: 'none', actions: [] } },
+        export: true,
+      },
+    },
+  ];
+
+  it('arma pantallas desde patrones sobre la tabla real y el borrador es mostrable', async () => {
+    const { ctx, fake } = world();
+    const res = await appsDesign.handler(
+      {
+        description: 'Control de guías en planta',
+        name: 'Planta',
+        roles: rolesPlanta,
+        patterns: [
+          { pattern: 'mi_lista_hoy', table: 'guias', title: 'Mi lista de hoy', roles: ['operario'] },
+          { pattern: 'registrar', table: 'guias', roles: ['operario'] },
+          { pattern: 'panel_gerencial', table: 'guias', title: 'Panel', roles: ['gerencia'] },
+        ],
+      } as never,
+      ctx(ADMIN),
+    );
+    expect(res.problems).toEqual([]);
+    expect(res.ok).toBe(true);
+    expect(res.designNotes).toEqual([]);
+    expect(res.showable).toBe(true);
+    const draft = res.draft as { screens: Array<{ title: string; spec: { theme?: { layout?: string } } }> };
+    expect(draft.screens.map((s) => s.title)).toEqual(['Mi lista de hoy', 'Registrar guías', 'Panel']);
+    expect(draft.screens[0]?.spec.theme?.layout).toBe('operator');
+    expect(fake.tables.custom_apps).toHaveLength(0);
+  });
+
+  it('un patrón sobre una tabla que no existe, o al que le falta un campo, vuelve como problema', async () => {
+    const { ctx } = world();
+    const missing = await appsDesign.handler(
+      { description: 'x', name: 'X', roles: rolesPlanta, patterns: [{ pattern: 'agenda', table: 'nada' }] } as never,
+      ctx(ADMIN),
+    );
+    expect(missing.ok).toBe(false);
+    expect(missing.problems.join(' ')).toMatch(/no existe/);
+    const noMap = await appsDesign.handler(
+      { description: 'x', name: 'X', roles: rolesPlanta, patterns: [{ pattern: 'mapa_con_lista', table: 'guias' }] } as never,
+      ctx(ADMIN),
+    );
+    expect(noMap.ok).toBe(false);
+    expect(noMap.problems.join(' ')).toMatch(/ubicación/);
+  });
+
+  it('un diseño con notas sin resolver NO es mostrable y dice qué corregir', async () => {
+    const { ctx } = world();
+    const strong = (id: string) => ({
+      id,
+      type: 'board',
+      tracker: 'guias',
+      title: `Tablero ${id}`,
+      groupBy: 'estado',
+    });
+    const spec = viewSpecSchema.parse({
+      version: 1,
+      blocks: [strong('a'), strong('b'), strong('c')],
+      pages: [{ id: 'p', title: 'Todo', blockIds: ['a', 'b', 'c'] }],
+    });
+    const res = await appsDesign.handler(
+      {
+        description: 'x',
+        name: 'X',
+        roles: rolesPlanta,
+        screens: [{ title: 'Tableros', roles: ['gerencia'], spec }],
+      } as never,
+      ctx(ADMIN),
+    );
+    expect(res.ok).toBe(true);
+    expect(res.showable).toBe(false);
+    expect((res.designNotes ?? []).join(' ')).toMatch(/bloques fuertes/);
+    expect(res.markdown).toMatch(/NO se lo muestres/);
+  });
+
+  it('el borrador con arreglos automáticos los cuenta en designFixes y en el resumen', async () => {
+    const { ctx } = world();
+    const spec = viewSpecSchema.parse({
+      version: 1,
+      blocks: [{ id: 't', type: 'table', tracker: 'guias', title: 'guias_hoy', columns: ['numero_guia', 'estado'] }],
+    });
+    const res = await appsDesign.handler(
+      { description: 'x', name: 'X', roles: rolesPlanta, screens: [{ title: 'ver_guias', roles: ['gerencia'], spec }] } as never,
+      ctx(ADMIN),
+    );
+    expect(res.showable).toBe(true);
+    expect((res.designFixes ?? []).length).toBeGreaterThan(0);
+    expect(res.markdown).toContain('Cuidé el diseño');
+    const draft = res.draft as { screens: Array<{ title: string }> };
+    expect(draft.screens[0]?.title).toBe('Ver guias');
+    // ya no queda el aviso de «lista sin detalle»: el revisor lo resolvió
+    expect(res.warnings.join(' ')).not.toMatch(/no tiene un detalle/);
+  });
+});

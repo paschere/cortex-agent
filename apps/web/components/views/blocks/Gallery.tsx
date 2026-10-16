@@ -8,6 +8,7 @@ import { useFlashClass } from '../flash-context';
 import { RowActions } from '../view-writes';
 import { useRecordOpener } from './RecordDrawer';
 import { RichValue } from './RichValue';
+import { useVariant } from './design';
 import { Card, EmptyState, StatusChip, useViewTheme } from './theme';
 
 /**
@@ -24,6 +25,13 @@ import { Card, EmptyState, StatusChip, useViewTheme } from './theme';
  */
 
 type Gallery = Extract<ComputedBlock, { type: 'gallery' }>;
+
+/** Mosaico: columnas CSS (1 en celular, 2 en tableta, `columns` en pantalla ancha). */
+const MASONRY: Record<Gallery['columns'], string> = {
+  2: 'columns-1 sm:columns-2',
+  3: 'columns-1 sm:columns-2 lg:columns-3',
+  4: 'columns-1 sm:columns-2 lg:columns-4',
+};
 
 const COLS: Record<Gallery['columns'], string> = {
   2: 'sm:grid-cols-2',
@@ -48,6 +56,7 @@ export function GalleryBlock({ block }: { block: Gallery }) {
   const open = useRecordOpener(block.id, block.record);
   const flash = useFlashClass();
   const { density } = useViewTheme();
+  const masonry = useVariant() === 'masonry';
   // Si ninguna tarjeta trae foto, cada una lleva sus iniciales: una rejilla de
   // huecos grises no es una galería.
   const anyImage = block.cards.some((c) => c.image);
@@ -65,9 +74,14 @@ export function GalleryBlock({ block }: { block: Gallery }) {
       ) : (
         <ul
           className={clsx(
-            'grid grid-cols-1',
-            COLS[block.columns],
-            density === 'compact' ? 'gap-2.5' : 'gap-4',
+            masonry ? MASONRY[block.columns] : clsx('grid grid-cols-1', COLS[block.columns]),
+            masonry
+              ? density === 'compact'
+                ? 'gap-x-2.5'
+                : 'gap-x-4'
+              : density === 'compact'
+                ? 'gap-2.5'
+                : 'gap-4',
           )}
         >
           {block.cards.map((card) => (
@@ -76,6 +90,8 @@ export function GalleryBlock({ block }: { block: Gallery }) {
               className={clsx(
                 flash(block.id, card.id),
                 'group relative flex flex-col overflow-hidden rounded-sm border shadow-card transition-all duration-150',
+                masonry && (density === 'compact' ? 'mb-2.5' : 'mb-4'),
+                masonry && 'break-inside-avoid',
                 card.alert ? 'border-rose/50 bg-rose-soft' : 'border-border bg-surface',
                 open &&
                   'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-pop focus-within:ring-2 focus-within:ring-primary/40',
@@ -83,11 +99,14 @@ export function GalleryBlock({ block }: { block: Gallery }) {
             >
               {anyImage &&
                 (card.image ? (
-                  <CardImage src={card.image} />
+                  <CardImage src={card.image} natural={masonry} />
                 ) : (
                   <div
                     aria-hidden
-                    className="grid aspect-[4/3] w-full place-items-center bg-primary-soft text-xl font-extrabold tracking-tight text-primary-ink"
+                    className={clsx(
+                      'grid w-full place-items-center bg-primary-soft text-xl font-extrabold tracking-tight text-primary-ink',
+                      masonry && card.title.length % 2 === 0 ? 'aspect-square' : 'aspect-[4/3]',
+                    )}
                   >
                     {initialsOf(card.title)}
                   </div>
@@ -107,12 +126,17 @@ export function GalleryBlock({ block }: { block: Gallery }) {
                       <button
                         type="button"
                         onClick={() => open(card.id)}
-                        className="block min-w-0 max-w-full truncate text-left text-sm font-bold text-ink outline-none after:absolute after:inset-0 after:content-['']"
+                        className={clsx(
+                          "block min-w-0 max-w-full text-left text-sm font-bold text-ink outline-none after:absolute after:inset-0 after:content-['']",
+                          !masonry && 'truncate',
+                        )}
                       >
                         {card.title}
                       </button>
                     ) : (
-                      <p className="min-w-0 truncate text-sm font-bold text-ink">{card.title}</p>
+                      <p className={clsx('min-w-0 text-sm font-bold text-ink', !masonry && 'truncate')}>
+                        {card.title}
+                      </p>
                     )}
                     {card.subtitle && (
                       <p className="mt-0.5 truncate text-xs text-ink-muted">{card.subtitle}</p>
@@ -160,11 +184,13 @@ export function GalleryBlock({ block }: { block: Gallery }) {
   );
 }
 
-function CardImage({ src }: { src: string }) {
+function CardImage({ src, natural }: { src: string; natural?: boolean }) {
   const [failed, setFailed] = useState(false);
   if (failed || !src.startsWith('https://')) return null;
   return (
-    <div className="aspect-[4/3] w-full overflow-hidden bg-surface-2">
+    <div
+      className={clsx('w-full overflow-hidden bg-surface-2', natural ? 'min-h-24' : 'aspect-[4/3]')}
+    >
       <img
         src={src}
         alt=""
@@ -172,7 +198,7 @@ function CardImage({ src }: { src: string }) {
         decoding="async"
         referrerPolicy="no-referrer"
         onError={() => setFailed(true)}
-        className="h-full w-full object-cover"
+        className={clsx('w-full', natural ? 'h-auto' : 'h-full object-cover')}
       />
     </div>
   );
