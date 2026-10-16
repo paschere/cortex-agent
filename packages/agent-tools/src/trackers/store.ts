@@ -2,6 +2,13 @@ import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitAutomationEvent, watchesTracker } from '../apps/automations/emit';
 import {
+  applyComputed,
+  changedComputedKeys,
+  fillLookups,
+  lookupSources,
+  relationParts,
+} from './computed';
+import {
   type DuplicateRule,
   type TouchedKey,
   applyDuplicateRule,
@@ -147,13 +154,17 @@ export async function defineTracker(
     if (problem) throw new ValidationError(`Regla de duplicados: ${problem}`);
   }
   const withRule = input.duplicates === undefined ? {} : { duplicates: input.duplicates };
+  await assertLookupTargets(db, input.slug, input.fields);
+  const existing = await getTrackerBySlug(db, input.slug);
   const reapply = async (tracker: TrackerRow) => {
     // Una regla nueva o cambiada se aplica a lo que la tabla ya tiene.
     if (input.duplicates) await applyDuplicateRule(db, tracker.id);
     else if (input.duplicates === null) await clearDuplicateFlags(db, tracker.id);
+    // Una fórmula nueva o cambiada se recalcula en las filas que ya existen.
+    const changed = changedComputedKeys(existing?.fields ?? [], tracker.fields);
+    if (changed.length > 0) await recomputeRows(db, tracker, changed);
     return tracker;
   };
-  const existing = await getTrackerBySlug(db, input.slug);
   if (existing) {
     const { data, error } = await db
       .from('trackers')
@@ -251,12 +262,20 @@ export function shapeValuesDetailed(
     ? withDefaults(fields, input, { viewer: options.viewer })
     : input;
   const visible = visibleKeys(fields, raw);
-  const values: Record<string, string | number> = {};
+  let values: Record<string, string | number> = {};
   for (const field of fields) {
     if (!visible.has(field.key)) continue;
+    // Un campo calculado no se escribe: lo pone la fórmula (abajo).
+    if (field.formula) continue;
     const coerced = coerceValue(field, raw[field.key]);
     if (!coerced.ok) throw new ValidationError(coerced.message);
     if (coerced.value !== '') values[field.key] = coerced.value;
+  }
+  if (fields.some((f) => f.formula)) {
+    // Los que están ocultos por showIf no se calculan ni se guardan.
+    const hidden = fields.filter((f) => f.formula && !visible.has(f.key));
+    values = applyComputed(fields, values).values as Record<string, string | number>;
+    for (const f of hidden) delete values[f.key];
   }
   let violations = validateRowValues(fields, values, {
     existing: options.existing,
@@ -363,7 +382,147 @@ export async function prepareValues(
       label: String((data as { label: string }).label),
     });
   }
+  // Lookups: lo que traen las filas relacionadas, y las fórmulas que los usan.
+  if (lookupSources(tracker.fields).length > 0) {
+    const related = await loadRelated(db, tracker.fields, values);
+    const changedVia = new Set(
+      lookupSources(tracker.fields)
+        .map((s) => s.via)
+        .filter((via) => options.only?.has(via)),
+    );
+    const filled = fillLookups(tracker.fields, values, related, { changedVia });
+    return recompute(tracker.fields, filled as Record<string, string | number>);
+  }
   return values;
+}
+
+/** Vuelve a calcular las fórmulas de unos valores ya armados (los lookups pueden haberlas cambiado). */
+function recompute(
+  fields: TrackerField[],
+  values: Record<string, string | number>,
+): Record<string, string | number> {
+  if (!fields.some((f) => f.formula)) return values;
+  const hidden = fields.filter((f) => f.formula && !visibleKeys(fields, values).has(f.key));
+  const next = applyComputed(fields, values).values as Record<string, string | number>;
+  for (const f of hidden) delete next[f.key];
+  return next;
+}
+
+/** Las filas relacionadas de cada lookup, leídas una vez por relación (null = ya no existe). */
+async function loadRelated(
+  db: SupabaseClient,
+  fields: TrackerField[],
+  values: Record<string, unknown>,
+  cache: Map<string, Record<string, unknown> | null> = new Map(),
+): Promise<Record<string, Record<string, unknown> | null | undefined>> {
+  const out: Record<string, Record<string, unknown> | null | undefined> = {};
+  for (const s of lookupSources(fields)) {
+    if (s.via in out) continue;
+    const rel = relationParts(values[s.via]);
+    if (!rel) continue;
+    if (!cache.has(rel.id)) {
+      const { data, error } = await db
+        .from('tracker_rows')
+        .select('values')
+        .eq('id', rel.id)
+        .maybeSingle();
+      if (error) {
+        out[s.via] = undefined;
+        continue;
+      }
+      cache.set(rel.id, data ? ((data as { values: Record<string, unknown> }).values ?? {}) : null);
+    }
+    out[s.via] = cache.get(rel.id);
+  }
+  return out;
+}
+
+/** Cada lookup tiene que apuntar a un campo que existe en la tabla relacionada. */
+async function assertLookupTargets(
+  db: SupabaseClient,
+  slug: string,
+  fields: TrackerField[],
+): Promise<void> {
+  for (const s of lookupSources(fields)) {
+    const rel = fields.find((f) => f.key === s.via);
+    if (!rel?.tracker) continue; // computedProblems ya lo rechazó
+    if (rel.tracker === slug) {
+      if (!fields.some((f) => f.key === s.target))
+        throw new ValidationError(
+          `Lookup de «${s.field.label}»: la tabla no tiene un campo «${s.target}».`,
+        );
+      continue;
+    }
+    const other = await getTrackerBySlug(db, rel.tracker);
+    if (!other)
+      throw new ValidationError(
+        `Lookup de «${s.field.label}»: la tabla «${rel.tracker}» no existe.`,
+      );
+    if (!other.fields.some((f) => f.key === s.target))
+      throw new ValidationError(
+        `Lookup de «${s.field.label}»: «${other.name}» no tiene un campo «${s.target}». Sus campos: ${other.fields.map((f) => f.key).join(', ')}.`,
+      );
+  }
+}
+
+const RECOMPUTE_MAX_ROWS = 5000;
+const RECOMPUTE_PAGE = 500;
+
+/**
+ * Cambió una fórmula (o un lookup): se recalcula en las filas que ya existen.
+ * Sólo se escribe donde el valor cambia, sin tocar `updated_at`. Tope de filas
+ * para que una tabla enorme no deje la petición colgada; lo que pase del tope
+ * se recalcula la próxima vez que se edite la fila.
+ */
+export async function recomputeRows(
+  db: SupabaseClient,
+  tracker: Pick<TrackerRow, 'id' | 'fields'>,
+  keys: string[],
+): Promise<{ checked: number; changed: number }> {
+  const only = new Set(keys);
+  const cache = new Map<string, Record<string, unknown> | null>();
+  const hasLookups = lookupSources(tracker.fields).some((s) => only.has(s.field.key));
+  let checked = 0;
+  let changed = 0;
+  for (let from = 0; from < RECOMPUTE_MAX_ROWS; from += RECOMPUTE_PAGE) {
+    const { data, error } = await db
+      .from('tracker_rows')
+      .select('id, values')
+      .eq('tracker_id', tracker.id)
+      .order('created_at', { ascending: true })
+      .range(from, from + RECOMPUTE_PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as Array<{ id: string; values: Record<string, string | number> }>;
+    const updates: Array<{ id: string; values: Record<string, string | number> }> = [];
+    for (const row of rows) {
+      checked += 1;
+      let next = { ...(row.values ?? {}) };
+      if (hasLookups) {
+        const related = await loadRelated(db, tracker.fields, next, cache);
+        next = fillLookups(tracker.fields, next, related, {
+          changedVia: new Set(lookupSources(tracker.fields).map((s) => s.via)),
+        }) as Record<string, string | number>;
+      }
+      next = applyComputed(tracker.fields, next).values as Record<string, string | number>;
+      if (keys.some((k) => String(next[k] ?? '') !== String(row.values?.[k] ?? '')))
+        updates.push({ id: row.id, values: next });
+    }
+    for (let i = 0; i < updates.length; i += 20) {
+      await Promise.all(
+        updates.slice(i, i + 20).map(async (u) => {
+          const { error: upErr } = await db
+            .from('tracker_rows')
+            .update({ values: u.values })
+            .eq('id', u.id)
+            .eq('tracker_id', tracker.id);
+          if (upErr) throw upErr;
+          changed += 1;
+        }),
+      );
+    }
+    if (rows.length < RECOMPUTE_PAGE) break;
+  }
+  return { checked, changed };
 }
 
 export async function upsertRow(

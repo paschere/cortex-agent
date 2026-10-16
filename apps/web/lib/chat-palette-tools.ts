@@ -483,6 +483,7 @@ export const TOOL_PHRASE: Record<string, string> = {
 
   'web.news': 'Busca noticias recientes sobre ',
   'web.scrape': 'Ábreme y resúmeme esta página: ',
+  'flights.lookup': 'Consulta el vuelo ',
   'web.search': 'Busca en internet ',
 };
 

@@ -80,6 +80,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   team_invite: { label: 'Invitar a alguien a la empresa', icon: 'UserPlus' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },
+  flights_lookup: { label: 'Consultar un vuelo', icon: 'Plane' },
   management_brief: { label: 'Revisar la gerencia de la empresa', icon: 'Briefcase' },
   management_inspect: { label: 'Consultar un asunto y su historial', icon: 'FileSearch' },
   management_record: { label: 'Organizar y seguir un asunto', icon: 'ClipboardList' },

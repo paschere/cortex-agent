@@ -34,7 +34,13 @@ export interface SchemaEditorData {
   rowCount: number;
   syncs: SchemaSyncInfo[];
   /** Las demás tablas, para elegir a cuál apunta una relación. */
-  otherTrackers: Array<{ slug: string; name: string }>;
+  otherTrackers: Array<{
+    slug: string;
+    name: string;
+    fields?: Array<{ key: string; label: string; type: string }>;
+  }>;
+  /** La primera fila de la tabla, para la vista previa de las fórmulas. */
+  sampleRow?: Record<string, string | number> | null;
   /** Su equipo le permite cambiar campos y reglas. */
   canEdit: boolean;
   /** Su equipo le permite correr y ajustar sincronizaciones. */

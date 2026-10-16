@@ -117,6 +117,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   team_leave_company: 'Salir de la empresa',
   web_search: 'Buscar en internet',
   web_scrape: 'Abrir página web',
+  flights_lookup: 'Consultar un vuelo',
   browser_list_flows: 'Ver los trámites aprendidos',
   browser_run_flow: 'Hacer el trámite en el portal',
   browser_submit_flow: 'Radicar el trámite en el portal',
@@ -630,6 +631,27 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       const screens = names(input.screens, 'title');
       const roles = names(input.roles, 'name');
       return `Crear la aplicación «${String(input.name ?? '')}» de una vez${tables.length ? ` — tablas nuevas: ${tables.join(', ')}` : ''}; pantallas: ${screens.join(', ') || 'ninguna'}; roles: ${roles.join(', ') || 'ninguno'}. Queda en borrador, sin publicar; si algo falla se deshace todo`;
+    }
+    case 'trackers_define': {
+      // Lo que se llena solo es lo que hay que leer antes de aprobar: la fórmula tal cual queda.
+      const fields = Array.isArray(input.fields)
+        ? (input.fields as Array<Record<string, unknown>>)
+        : [];
+      const auto = fields.flatMap((f) => {
+        const name = String(f?.label ?? f?.key ?? '');
+        const bits: string[] = [];
+        if (typeof f?.formula === 'string' && f.formula.trim())
+          bits.push(`«${name}» = ${f.formula.trim().replace(/^=\s*/, '')}`);
+        const lk = f?.lookup as { via?: string; field?: string } | undefined;
+        if (lk?.via) bits.push(`«${name}» se trae de ${lk.via} → ${lk.field ?? ''}`);
+        const af = f?.autofill as { instruction?: string; fills?: string[] } | undefined;
+        if (af?.instruction)
+          bits.push(
+            `«${name}»: Cortex llena ${(af.fills ?? []).join(', ')} (${String(af.instruction).slice(0, 100)})`,
+          );
+        return bits;
+      });
+      return `Crear o cambiar la tabla «${String(input.name ?? input.slug ?? '')}»${auto.length ? ` — se llenan solos: ${auto.join('; ')}. Las fórmulas se recalculan en las filas que ya hay` : ''}`;
     }
     case 'trackers_set_flow':
       return `${input.remove ? 'Quitar el flujo de' : 'Darle un flujo por estados a'} la tabla «${String(input.slug ?? '')}»${Array.isArray(input.states) && input.states.length ? `: ${input.states.map(String).join(' → ')}` : ''} — el servidor rechaza cualquier otro salto de estado`;

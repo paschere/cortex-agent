@@ -29,6 +29,40 @@ export {
 export type { DuplicateRule } from './duplicates';
 
 export {
+  FORMULA_RESULT_TYPES,
+  adaptLookupValue,
+  applyComputed,
+  changedComputedKeys,
+  computedProblems,
+  fillLookups,
+  fillableFields,
+  formulaDependencies,
+  formulaOrder,
+  fromFVal,
+  lookupSources,
+  relationParts,
+  resolveFieldRef,
+  toFVal,
+} from './computed';
+export type { ComputedFieldLike } from './computed';
+export {
+  FORMULA_FUNCTIONS,
+  FORMULA_MAX,
+  evaluateFormula,
+  evaluateParsed,
+  parseFormula,
+} from './formula';
+export type { FVal, FormulaResult } from './formula';
+export {
+  autofillConfigs,
+  autofillReady,
+  mergeSuggestions,
+  sanitizeSuggestion,
+  triggerSignature,
+} from './autofill-shape';
+export type { AutofillConfig, MergeResult as SuggestionMerge, Suggestion } from './autofill-shape';
+
+export {
   FLOW_REQUIREMENT_KINDS,
   FLOW_REQUIREMENT_LABEL,
   buildFlowView,
@@ -129,6 +163,7 @@ export {
   markForReview,
   prepareValues,
   queryRows,
+  recomputeRows,
   removeRow,
   removeTracker,
   shapeValues,

@@ -468,6 +468,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'emerald',
     icon: 'Car',
   },
+  flights: {
+    name: 'Vuelos',
+    blurb:
+      'Consulta de un vuelo por su número (aerolínea, origen, horas). Opcional: sin la llave Cortex usa la web.',
+    tone: 'emerald',
+    icon: 'Globe',
+  },
   web: {
     name: 'Internet',
     blurb: 'Búsqueda pública y lectura de páginas — lo único que no toca nada interno.',
@@ -809,6 +816,7 @@ const FAMILY_GROUP: Record<string, string> = {
   // Con Cortex mismo: es cómo se usa el producto, no un dato de la empresa.
   help: 'company',
   web: 'external',
+  flights: 'external',
   security: 'control',
   // Con seguridad y no con «Escribir y responder», donde está `actions`: lo que
   // hay aquí no es algo que Cortex redactó, es algo que la barrera detuvo. Se
@@ -913,6 +921,12 @@ export const FAMILY_CREDENTIALS: Record<string, CredentialRequirement> = {
     label: 'la aplicación de Cortex registrada en Azure',
     blocking: true,
     effect: 'Sin ella no se puede conectar el calendario de Microsoft 365.',
+  },
+  flights: {
+    vars: ['AERODATABOX_API_KEY'],
+    label: 'el proveedor de datos de vuelos (AeroDataBox)',
+    blocking: false,
+    effect: 'Sin él, Cortex busca el vuelo en la web.',
   },
   kb: {
     vars: ['VOYAGE_API_KEY'],

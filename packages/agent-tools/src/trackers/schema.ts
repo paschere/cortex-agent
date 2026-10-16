@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { computedProblems } from './computed';
 import { flowProblems, flowSchema, normalizeFlow } from './flow';
 import {
   FIELD_FORMATS,
@@ -7,6 +8,7 @@ import {
   isSafePattern,
   normalizeFormatted,
 } from './formats';
+import { FORMULA_MAX } from './formula';
 
 /**
  * El esquema de una tabla inventada, y por qué se valida aquí y no en Postgres.
@@ -103,6 +105,9 @@ export const DEFAULT_KEYWORDS = ['today', 'now', 'viewer'] as const;
 export function normalizeFieldInput<T>(raw: T): T {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
   const f = { ...(raw as Record<string, unknown>) };
+  const del = (key: string) => {
+    delete f[key];
+  };
   // Nombres que el modelo usa para los campos de captura: se guardan como un
   // archivo-firma y un texto con lector de códigos (sin tipo nuevo en la base).
   const alias = typeof f.type === 'string' ? f.type.trim().toLowerCase() : '';
@@ -113,7 +118,36 @@ export function normalizeFieldInput<T>(raw: T): T {
     f.type = 'text';
     f.scan = true;
   }
+  // «Porcentaje» y «fórmula» no son tipos nuevos: son un número que se muestra
+  // como porcentaje y un campo que se calcula. El modelo los pide por su nombre.
+  if (alias === 'percent' || alias === 'porcentaje' || alias === 'percentage') {
+    f.type = 'number';
+    f.percent = true;
+  } else if (['formula', 'fórmula', 'calculated', 'calculado', 'computed'].includes(alias)) {
+    const asked = typeof f.resultType === 'string' ? f.resultType.trim().toLowerCase() : 'number';
+    if (['percent', 'porcentaje', 'percentage'].includes(asked)) {
+      f.type = 'number';
+      f.percent = true;
+    } else
+      f.type = asked === 'boolean' || asked === 'bool' || asked === 'sino' ? 'checkbox' : asked;
+  }
+  del('resultType');
+  if (typeof f.formula === 'string') {
+    const clean = f.formula.trim().replace(/^=\s*/, '');
+    if (clean) f.formula = clean;
+    else del('formula');
+  } else if (f.formula !== undefined) del('formula');
+  // Un campo calculado nunca se pide ni se exige: lo pone la fórmula.
+  if (f.formula) {
+    f.required = false;
+    del('default');
+    del('unique');
+    del('scan');
+    del('scanMode');
+    del('autofill');
+  }
   const type = f.type;
+  if (type !== 'number') del('percent');
   const textual = type === 'text' || type === 'longtext';
   const numeric = type === 'number' || type === 'money';
   const temporal = type === 'date' || type === 'time';
@@ -186,6 +220,39 @@ export const trackerFieldSchema = z
     scanMode: z.enum(['single', 'continuous']).optional(),
     /** select: el flujo por estados (ver `flow.ts`). */
     flow: flowSchema.optional(),
+    // --- Campos que se llenan solos (ver `computed.ts` y `autofill-shape.ts`) ---
+    /**
+     * Campo calculado: una fórmula sobre otros campos de la misma fila, p. ej.
+     * «[Kilos] × [Tarifa]». El tipo del campo es el del resultado. Se calcula al
+     * guardar y no se edita a mano.
+     */
+    formula: z.string().trim().min(1).max(FORMULA_MAX).optional(),
+    /** number: se muestra como porcentaje (0,153 → 15,3 %). Se guarda la razón. */
+    percent: z.boolean().optional(),
+    /**
+     * Traer de otra tabla: `via` es un campo de relación de ESTA tabla y `field`
+     * la clave del campo de la tabla relacionada. Se llena al elegir la relación;
+     * con `editable` la persona puede cambiarlo después.
+     */
+    lookup: z
+      .object({
+        via: z.string().regex(FIELD_KEY_RE),
+        field: z.string().regex(FIELD_KEY_RE),
+        editable: z.boolean().optional(),
+      })
+      .optional(),
+    /**
+     * Cortex propone valores: al completarse los campos `from` (incluido este),
+     * un turno corto de modelo, con herramientas de sólo lectura, sugiere los
+     * campos `fills` siguiendo la `instruction`. Nunca pisa lo ya escrito.
+     */
+    autofill: z
+      .object({
+        instruction: z.string().trim().min(5).max(600),
+        from: z.array(z.string().regex(FIELD_KEY_RE)).min(1).max(4),
+        fills: z.array(z.string().regex(FIELD_KEY_RE)).min(1).max(8),
+      })
+      .optional(),
   })
   .superRefine((field, ctx) => {
     const bad = (message: string, path: string) =>
@@ -231,6 +298,8 @@ export const trackerFieldSchema = z
     }
     if (field.showIf && field.showIf.field === field.key)
       bad('Un campo no puede depender de sí mismo.', 'showIf');
+    if (field.percent && field.type !== 'number')
+      bad('`percent` sólo va en un campo de tipo number.', 'percent');
   });
 
 /** Un límite relativo o literal de fecha/hora bien escrito. */
@@ -291,6 +360,16 @@ export const trackerFieldsSchema = z
         continue;
       }
       dep.set(field.key, target);
+    }
+    // Campos que se llenan solos: fórmulas legibles, que apunten a campos que
+    // existen y sin ciclos; lookups sobre una relación; autofill con destinos válidos.
+    for (const p of computedProblems(fields)) {
+      const at = fields.findIndex((f) => f.key === p.key);
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: p.message,
+        path: [at < 0 ? 0 : at, p.path],
+      });
     }
     for (const [i, field] of fields.entries()) {
       const chain = new Set<string>([field.key]);
@@ -440,7 +519,10 @@ export function parseRelationValue(raw: unknown): RelationRef | null {
 }
 
 /** El valor de una celda como texto legible (para lectura, exportación y chat). */
-export function displayTrackerValue(field: Pick<TrackerField, 'type'>, value: unknown): string {
+export function displayTrackerValue(
+  field: Pick<TrackerField, 'type'> & { percent?: boolean },
+  value: unknown,
+): string {
   if (value === undefined || value === null || value === '') return '';
   switch (field.type) {
     case 'file': {
@@ -453,6 +535,12 @@ export function displayTrackerValue(field: Pick<TrackerField, 'type'>, value: un
     }
     case 'checkbox':
       return Number(value) === 1 ? 'Sí' : 'No';
+    case 'number': {
+      const n = Number(value);
+      if (field.percent && Number.isFinite(n))
+        return `${(Math.round(n * 1e6) / 1e4).toLocaleString('es-CO', { maximumFractionDigits: 2 })} %`;
+      return String(value);
+    }
     default:
       return String(value);
   }

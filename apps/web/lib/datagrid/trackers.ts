@@ -62,6 +62,10 @@ export interface TrackerFieldLike {
   required?: boolean;
   options?: string[];
   /** Otras opciones del campo (validaciones, ayudas…): la grilla no las usa, pasan de largo. */
+  /** number: se muestra como porcentaje (la tabla guarda la razón: 0,153 = 15,3 %). */
+  percent?: boolean;
+  /** Campo calculado: se llena solo. */
+  formula?: string;
   [extra: string]: unknown;
 }
 
@@ -145,8 +149,16 @@ export function trackerColumns(
       key: f.key,
       label: f.label,
       // La grilla no tiene «hora»: se ve y se edita como texto (HH:MM).
-      type: GRID_TYPE[f.type],
-      editable: editable && f.type !== 'file' && f.type !== 'relation' && f.type !== 'location',
+      // Un número «como porcentaje» se ve en puntos (la tabla guarda la razón).
+      type: f.type === 'number' && f.percent ? 'percent' : GRID_TYPE[f.type],
+      // Lo calculado y lo que viene de otra tabla se llena solo: no se escribe en la celda.
+      editable:
+        editable &&
+        f.type !== 'file' &&
+        f.type !== 'relation' &&
+        f.type !== 'location' &&
+        !f.formula &&
+        !(f.lookup && !(f.lookup as { editable?: boolean }).editable),
       required: Boolean(f.required),
       ...(isName ? { pinned: true, primary: true, width: 240 } : {}),
     };
@@ -184,6 +196,8 @@ export function trackerGridRow(entry: TrackerEntryLike, fields?: TrackerFieldLik
     if (v === undefined || v === '') continue;
     if (f.type === 'file' || f.type === 'relation') shown[f.key] = displayTrackerValue(f, v);
     else if (f.type === 'location') shown[f.key] = mapsUrl(v) ?? String(v);
+    else if (f.type === 'number' && f.percent && Number.isFinite(Number(v)))
+      shown[f.key] = Math.round(Number(v) * 1e8) / 1e6;
   }
   return {
     id: entry.id,

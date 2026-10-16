@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { Field, INPUT, Segmented, Toggle } from '../views/editor/controls';
+import { SelfFill } from './SelfFill';
 
 /**
  * UN CAMPO DE LA TABLA, EDITABLE: nombre, tipo y sus opciones arriba; debajo,
@@ -55,6 +56,7 @@ export function FieldCard({
   existing,
   hasData,
   otherTrackers,
+  sample,
   readOnly,
   lockType,
   onChange,
@@ -73,7 +75,13 @@ export function FieldCard({
   existing: { type: FieldType } | null;
   /** La tabla tiene filas: pedir confirmación al quitar y cuidar el cambio de tipo. */
   hasData: boolean;
-  otherTrackers: Array<{ slug: string; name: string }>;
+  otherTrackers: Array<{
+    slug: string;
+    name: string;
+    fields?: Array<{ key: string; label: string; type: string }>;
+  }>;
+  /** La primera fila de la tabla, para probar fórmulas. */
+  sample?: Record<string, string | number> | null;
   readOnly: boolean;
   /** Tabla desde una hoja: el tipo viene de la lectura de la hoja pero se puede corregir. */
   lockType?: boolean;
@@ -344,6 +352,8 @@ export function FieldCard({
           <RulesSection
             field={field}
             fields={fields}
+            otherTrackers={otherTrackers}
+            rowSample={sample ?? null}
             readOnly={readOnly}
             lockType={lockType}
             onChange={onChange}
@@ -511,11 +521,19 @@ function OptionsEditor({
 function RulesSection({
   field,
   fields,
+  otherTrackers,
+  rowSample,
   readOnly,
   onChange,
 }: {
   field: TrackerField;
   fields: TrackerField[];
+  otherTrackers: Array<{
+    slug: string;
+    name: string;
+    fields?: Array<{ key: string; label: string; type: string }>;
+  }>;
+  rowSample: Record<string, string | number> | null;
   readOnly: boolean;
   lockType?: boolean;
   onChange: (next: TrackerField) => void;
@@ -755,6 +773,15 @@ function RulesSection({
           />
         </Field>
       </div>
+
+      <SelfFill
+        field={field}
+        fields={fields}
+        otherTrackers={otherTrackers}
+        sample={rowSample}
+        readOnly={readOnly}
+        onChange={onChange}
+      />
 
       {/* Mostrar sólo si… */}
       <div className="space-y-2">

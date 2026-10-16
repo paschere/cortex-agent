@@ -654,6 +654,10 @@ export type ComputedFormField = Pick<
   | 'scanMode'
   | 'evidence'
   | 'watermark'
+  | 'formula'
+  | 'percent'
+  | 'lookup'
+  | 'autofill'
 > & { required: boolean; options: string[] };
 
 export interface ComputedView {
@@ -717,9 +721,11 @@ const MONEY = new Intl.NumberFormat('es-CO', {
   maximumFractionDigits: 0,
 });
 
-export function formatValue(value: number | null, format: ValueFormat): string {
+export function formatValue(value: number | null, format: ValueFormat | 'ratio'): string {
   if (value === null || !Number.isFinite(value)) return '—';
   if (format === 'money') return MONEY.format(value);
+  // Un campo número «como porcentaje» guarda la razón: 0,153 se ve «15,3 %».
+  if (format === 'ratio') return `${NUMBER.format(Math.round(value * 1e8) / 1e6)} %`;
   if (format === 'percent') return `${NUMBER.format(value)} %`;
   return NUMBER.format(value);
 }
@@ -739,7 +745,11 @@ function displayValue(tracker: CatalogTracker, row: ViewRow, key: string): strin
   if (type === 'checkbox') return Number(v) === 1 ? 'Sí' : 'No';
   if (type === 'file' || type === 'relation') return displayTrackerValue({ type }, v) || '—';
   if (type === 'money') return formatValue(Number(v), 'money');
-  if (type === 'number') return formatValue(Number(v), 'number');
+  if (type === 'number')
+    return formatValue(
+      Number(v),
+      tracker.fields.find((f) => f.key === key)?.percent ? 'ratio' : 'number',
+    );
   if (
     (type === 'date' || type === 'builtin_date') &&
     typeof v === 'string' &&
@@ -843,6 +853,7 @@ export function aggregate(rows: ViewRow[], agg: Aggregate, field?: string): numb
 
 function formatOf(tracker: CatalogTracker, field: string | undefined, fallback: ValueFormat) {
   if (fallback !== 'number' || !field) return fallback;
+  if (tracker.fields.find((f) => f.key === field)?.percent) return 'ratio' as const;
   return fieldType(tracker, field) === 'money' ? 'money' : 'number';
 }
 
@@ -1091,6 +1102,8 @@ function columnKind(tracker: CatalogTracker, key: string): 'text' | 'number' | '
 function editMeta(tracker: CatalogTracker, key: string) {
   const field = tracker.fields.find((f) => f.key === key);
   if (!field) return undefined;
+  // Lo que se llena solo (fórmula, lookup fijo) no se edita en la celda.
+  if (field.formula || (field.lookup && !field.lookup.editable)) return undefined;
   const meta: ComputedEditMeta = {
     type: field.type,
     options: field.options ?? [],
@@ -1166,7 +1179,7 @@ function buildRecords(
     key,
     label: fieldLabel(tracker, key),
     kind: columnKind(tracker, key),
-    ...(editable.has(key) ? { edit: editMeta(tracker, key) } : {}),
+    ...(editable.has(key) && editMeta(tracker, key) ? { edit: editMeta(tracker, key) } : {}),
   }));
   const out: ComputedRecords['rows'] = {};
   for (const r of rows) {
@@ -1207,7 +1220,7 @@ function compareMetric(
   block: Extract<ViewBlock, { type: 'metric' }>,
   rows: ViewRow[],
   today: string,
-  format: ValueFormat,
+  format: ValueFormat | 'ratio',
 ): { value: number | null; rows: number; compare: ComputedCompare } {
   const period = block.period ?? 'month';
   const dateField = block.dateField ?? 'created_at';
@@ -1492,7 +1505,7 @@ function computeBlockBody(
             label: fieldLabel(tracker, key),
             kind: columnKind(tracker, key),
             ...(richKind(tracker, key) ? { rich: richKind(tracker, key) as RichKind } : {}),
-            ...(opts.writable && field && block.editable.includes(key)
+            ...(opts.writable && field && block.editable.includes(key) && editMeta(tracker, key)
               ? { edit: editMeta(tracker, key) }
               : {}),
           };
@@ -2029,6 +2042,10 @@ const FORM_FIELD_EXTRAS = [
   'scanMode',
   'evidence',
   'watermark',
+  'formula',
+  'percent',
+  'lookup',
+  'autofill',
 ] as const;
 
 // ---------------------------------------------------------------------------

@@ -51,7 +51,11 @@ export interface SchemaSeed {
   description: string;
   fields: TrackerField[];
   duplicates: DuplicateDraft | null;
-  otherTrackers: Array<{ slug: string; name: string }>;
+  otherTrackers: Array<{
+    slug: string;
+    name: string;
+    fields?: Array<{ key: string; label: string; type: string }>;
+  }>;
 }
 
 export function SchemaEditor({
@@ -370,6 +374,7 @@ export function SchemaEditor({
               }
               hasData={(saved?.rowCount ?? 0) > 0}
               otherTrackers={otherTrackers}
+              sample={saved?.sampleRow ?? null}
               readOnly={readOnly}
               open={open === '*' || open === f.key}
               onToggle={() => setOpen(open === f.key ? null : f.key)}

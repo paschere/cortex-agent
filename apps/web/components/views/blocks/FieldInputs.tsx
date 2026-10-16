@@ -41,6 +41,11 @@ export interface FieldInputProps {
   className: string;
   target: SubmitTarget;
   blockId: string;
+  /**
+   * Relación: se avisa al elegir (con lo que traen los campos «traídos» de esa
+   * fila, `pick`) y al quitar (null), para que el formulario llene sus lookups.
+   */
+  onPick?: (pick: Record<string, string | number> | null) => void;
 }
 
 const SECONDARY_BTN =
@@ -174,10 +179,13 @@ export function RelationInput({
   className,
   target,
   blockId,
+  onPick,
 }: FieldInputProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [options, setOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [options, setOptions] = useState<
+    Array<{ id: string; label: string; pick?: Record<string, string | number> }>
+  >([]);
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const box = useRef<HTMLSpanElement>(null);
   const selected = value ? relationLabel(value) : '';
@@ -196,7 +204,7 @@ export function RelationInput({
       try {
         const res = await fetch(url);
         const body = (await res.json().catch(() => null)) as {
-          options?: Array<{ id: string; label: string }>;
+          options?: Array<{ id: string; label: string; pick?: Record<string, string | number> }>;
         } | null;
         if (cancelled) return;
         if (!res.ok || !body?.options) throw new Error('bad');
@@ -247,6 +255,7 @@ export function RelationInput({
             onClick={(e) => {
               e.stopPropagation();
               onChange('');
+              onPick?.(null);
             }}
             onKeyDown={() => {}}
             className="grid h-5 w-5 shrink-0 place-items-center rounded-pill text-ink-muted hover:bg-surface-2"
@@ -276,6 +285,7 @@ export function RelationInput({
                 aria-pressed={selected === o.label}
                 onClick={() => {
                   onChange(JSON.stringify({ id: o.id, label: o.label }));
+                  onPick?.(o.pick ?? {});
                   setOpen(false);
                   setQ('');
                 }}

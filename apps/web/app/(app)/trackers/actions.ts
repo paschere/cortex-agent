@@ -140,7 +140,10 @@ function merged(
 ): Record<string, string | number> {
   const out: Record<string, string | number> = {};
   for (const f of fields) {
-    const v = f.key in patch ? toTrackerValue(f.type, patch[f.key]) : current[f.key];
+    let v = f.key in patch ? toTrackerValue(f.type, patch[f.key]) : current[f.key];
+    // La grilla edita un porcentaje en puntos (15,3); la tabla guarda la razón (0,153).
+    if (f.key in patch && f.type === 'number' && f.percent && typeof v === 'number')
+      v = Math.round(v * 1e6) / 1e8;
     if (v !== undefined && v !== '') out[f.key] = v;
   }
   return out;
@@ -170,6 +173,8 @@ export async function editTrackerCell(
     const tracker = await mustTracker(db, trackerId);
     const field = tracker.fields.find((f) => f.key === key);
     if (!field) return { ok: false, error: 'Esa columna no se edita.' };
+    if (field.formula || (field.lookup && !field.lookup.editable))
+      return { ok: false, error: 'Esa columna se llena sola: no se escribe a mano.' };
     if (!UUID_RE.test(rowId)) return { ok: false, error: 'Esa fila ya no existe.' };
     const entry = await readTrackerEntry(db, tracker.id, rowId);
     if (!entry) return { ok: false, error: 'Esa fila ya no está en la tabla.' };
@@ -208,6 +213,8 @@ export async function bulkEditTrackerRows(
     const tracker = await mustTracker(db, trackerId);
     const field = tracker.fields.find((f) => f.key === key);
     if (!field) return { ok: false, error: 'Esa columna no se edita.' };
+    if (field.formula || (field.lookup && !field.lookup.editable))
+      return { ok: false, error: 'Esa columna se llena sola: no se escribe a mano.' };
     const ids = [
       ...new Set((Array.isArray(rowIds) ? rowIds : []).filter((id) => UUID_RE.test(id))),
     ];

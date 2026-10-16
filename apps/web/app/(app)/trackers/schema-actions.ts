@@ -152,6 +152,16 @@ export async function loadSchemaEditor(
         .eq('tracker_id', tracker.id)
         .then((r) => r.count ?? 0),
     ]);
+    const { data: first, error: firstError } = await db
+      .from('tracker_rows')
+      .select('values')
+      .eq('tracker_id', tracker.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (firstError) throw firstError;
+    const sampleRow = ((first as { values?: Record<string, string | number> } | null)?.values ??
+      null) as Record<string, string | number> | null;
     const badge = new Map(badges.map((b) => [b.id, b]));
     const syncs: SchemaSyncInfo[] = settings.map((s) => ({
       id: s.id,
@@ -189,7 +199,12 @@ export async function loadSchemaEditor(
         syncs,
         otherTrackers: others
           .filter((t) => t.slug !== tracker.slug)
-          .map((t) => ({ slug: t.slug, name: t.name })),
+          .map((t) => ({
+            slug: t.slug,
+            name: t.name,
+            fields: t.fields.map((f) => ({ key: f.key, label: f.label, type: f.type })),
+          })),
+        sampleRow,
         canEdit: !isToolDenied('trackers.define', denied),
         canSync:
           !isToolDenied('trackers.define', denied) && !isToolDenied('trackers.retry_sync', denied),

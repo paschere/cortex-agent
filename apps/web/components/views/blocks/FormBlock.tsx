@@ -1,8 +1,11 @@
 'use client';
 
+import { appApiBase } from '@/lib/apps/api-base';
+import { formatCompactMoney, formatNumber, formatPercent } from '@/lib/datagrid/format';
 import { forValidation, hasPending } from '@/lib/views/offline-files';
 import { type SentRecord, canCorrect, minutesLeft, newClientId } from '@/lib/views/offline-queue';
 import type { ComputedBlock, TrackerField } from '@cortex/agent-tools';
+import { applyComputed } from '@cortex/agent-tools/src/trackers/computed';
 import { displayTrackerValue } from '@cortex/agent-tools/src/trackers/schema';
 import {
   defaultValues,
@@ -15,12 +18,15 @@ import { clsx } from 'clsx';
 import {
   ArrowLeft,
   ArrowRight,
+  Calculator,
   Check,
   CloudOff,
+  Link2,
   Loader2,
   Pencil,
   RefreshCw,
   Send,
+  Sparkles,
   Trash2,
   WifiOff,
   X,
@@ -33,6 +39,7 @@ import { FileInput, LocationInput, RelationInput, ScanInput } from './FieldInput
 import { type SubmitFn, correctorFor, uploaderFor } from './form-transport';
 import { type VoiceSendOutcome, useFormVoiceStore } from './form-voice-bridge';
 import { Card, useViewTheme } from './theme';
+import { useAutofill } from './useAutofill';
 import { queueKeyFor, useFormQueue, useOnline } from './useFormQueue';
 
 /**
@@ -68,6 +75,17 @@ function readable(field: TrackerField, value: string): string {
   if (!value) return '';
   if (field.type === 'checkbox') return value === '1' || value === 'true' ? 'Sí' : 'No';
   return displayTrackerValue(field, value);
+}
+
+/** El resultado de una fórmula, como se lee: pesos completos, porcentaje con coma, sí/no. */
+function computedText(field: TrackerField, raw: string): string {
+  if (!raw) return '';
+  if (field.type === 'checkbox') return raw === '1' ? 'Sí' : 'No';
+  const n = Number(raw);
+  if (field.type === 'money' && Number.isFinite(n)) return formatCompactMoney(n);
+  if (field.type === 'number' && Number.isFinite(n))
+    return field.percent ? formatPercent(Math.round(n * 1e8) / 1e6) : formatNumber(n, 6);
+  return raw;
 }
 
 function ago(at: number, now: number): string {
@@ -108,7 +126,12 @@ export function FormBlock({
   const operator = useViewTheme().layout === 'operator';
   const INPUT = operator ? INPUT_OPERATOR : INPUT_BASE;
   const online = useOnline();
-  const visible = visibleKeys(fields, values);
+  // Campos calculados: la MISMA fórmula que corre el servidor, al instante.
+  const calc = applyComputed<string>(fields, values);
+  const effective: Record<string, string> = Object.fromEntries(
+    Object.entries(calc.values).map(([k, v]) => [k, String(v)]),
+  );
+  const visible = visibleKeys(fields, effective);
   const editWindow = block.editWindowMinutes ?? 10;
   const corrector = correctorFor(target);
 
@@ -154,7 +177,7 @@ export function FormBlock({
     violationsByKey(
       validateRowValues(
         fields.map((f) => (f.default === 'viewer' ? { ...f, required: false } : f)),
-        Object.fromEntries(Object.entries(values).map(([k, v]) => [k, forValidation(v)])),
+        Object.fromEntries(Object.entries(effective).map(([k, v]) => [k, forValidation(v)])),
       ),
     );
   // Uso (0225): la primera vez que alguien escribe se avisa «empezó», con la misma
@@ -172,12 +195,29 @@ export function FormBlock({
       }).catch(() => undefined);
     }
     setValues((v) => ({ ...v, [key]: next }));
+    autofill.markEdited(key);
     setErrors((e) => {
       if (!(key in e)) return e;
       const { [key]: _gone, ...rest } = e;
       return rest;
     });
   };
+  const patchValues = (patch: Record<string, string>) => setValues((v) => ({ ...v, ...patch }));
+  // «Llenar con Cortex»: sólo el equipo con sesión (vista o app interna), nunca el enlace público.
+  const autofillUrl =
+    target.kind === 'app'
+      ? `/api/views/${target.viewId}/autofill`
+      : target.kind === 'custom_app' && !target.external
+        ? `${appApiBase(target)}/screens/${target.screen}/autofill`
+        : null;
+  const autofill = useAutofill({
+    blockId: block.id,
+    fields,
+    values,
+    setValues: patchValues,
+    url: autofillUrl,
+    enabled: !disabled && !correcting,
+  });
   const blurField = (key: string) =>
     setErrors((e) => {
       const msg = check()[key];
@@ -199,6 +239,7 @@ export function FormBlock({
     setStep(0);
     setReviewing(false);
     setError(null);
+    autofill.reset();
   };
 
   /** Sólo lo que se muestra y tiene algo: lo oculto por `showIf` no viaja. Al corregir viajan también los vacíos (para poder borrar). */
@@ -453,14 +494,35 @@ export function FormBlock({
     const describedBy =
       [f.help ? `${id}-help` : null, msg ? `${id}-err` : null].filter(Boolean).join(' ') ||
       undefined;
-    const value = values[f.key] ?? '';
+    const value = f.formula ? (effective[f.key] ?? '') : (values[f.key] ?? '');
+    const isLookup = Boolean(f.lookup && !f.lookup.editable);
+    const sugg = autofill.suggested[f.key];
     const common = {
       id,
       'aria-invalid': msg ? (true as const) : undefined,
       'aria-describedby': describedBy,
       onBlur: () => blurField(f.key),
     };
-    const inputClass = clsx(INPUT, msg && 'border-rose focus:border-rose');
+    const inputClass = clsx(
+      INPUT,
+      msg && 'border-rose focus:border-rose',
+      sugg && 'border-amber bg-amber-soft/40 focus:border-amber',
+    );
+    const viaLabel = f.lookup ? fields.find((x) => x.key === f.lookup?.via)?.label : undefined;
+    const calcNote = f.formula
+      ? (calc.warnings[f.key]?.[0] ??
+        (value === '' && calc.errors[f.key] ? 'Se calcula al guardar.' : null))
+      : null;
+    const lookupPatch = (pick: Record<string, string | number> | null) => {
+      const patch: Record<string, string> = {};
+      for (const l of fields)
+        if (l.lookup?.via === f.key) {
+          const got = pick?.[l.key];
+          patch[l.key] = got === undefined ? '' : String(got);
+          autofill.markEdited(l.key);
+        }
+      if (Object.keys(patch).length) patchValues(patch);
+    };
     const placeholder =
       f.placeholder ?? (f.example ? `Ej. ${f.example}` : f.type === 'money' ? '$ 0' : undefined);
     const shared = {
@@ -474,6 +536,7 @@ export function FormBlock({
       className: inputClass,
       target,
       blockId: block.id,
+      onPick: lookupPatch,
     };
     return (
       <div
@@ -504,9 +567,36 @@ export function FormBlock({
               </span>
             )}
           </span>
-          {!f.required && <span className="text-micro font-normal text-ink-faint">Opcional</span>}
+          {f.formula ? (
+            <span className="text-micro font-normal text-ink-faint">Se calcula sola</span>
+          ) : isLookup ? (
+            <span className="text-micro font-normal text-ink-faint">
+              Viene de «{viaLabel ?? f.lookup?.via}»
+            </span>
+          ) : (
+            !f.required && <span className="text-micro font-normal text-ink-faint">Opcional</span>
+          )}
         </label>
-        {f.type === 'select' ? (
+        {f.formula || isLookup ? (
+          <output
+            id={id}
+            className={clsx(
+              INPUT,
+              'flex items-center gap-2 border-dashed bg-surface-2 text-ink',
+              f.type !== 'text' && 'tabular font-mono',
+            )}
+          >
+            {f.formula ? (
+              <Calculator className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden />
+            ) : (
+              <Link2 className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden />
+            )}
+            <span className={clsx('truncate', !value && 'text-ink-faint')}>
+              {(f.formula ? computedText(f, value) : readable(f, value)) ||
+                (f.formula ? '—' : `Elige ${viaLabel ?? 'la relación'}`)}
+            </span>
+          </output>
+        ) : f.type === 'select' ? (
           <select
             {...common}
             value={value}
@@ -594,6 +684,59 @@ export function FormBlock({
           >
             {f.help}
           </p>
+        )}
+        {calcNote && (
+          <p className={clsx('mt-1 text-amber', operator ? 'text-sm' : 'text-micro')}>{calcNote}</p>
+        )}
+        {sugg && (
+          <p
+            className={clsx(
+              'mt-1 flex items-center gap-1 font-semibold text-amber',
+              operator ? 'text-sm' : 'text-micro',
+            )}
+          >
+            <Sparkles className="h-3 w-3 shrink-0" aria-hidden />
+            Sugerido por Cortex — corrígelo si hace falta
+            {sugg.source && /^https?:\/\//.test(sugg.source) && (
+              <a
+                href={sugg.source}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="ml-1 font-normal underline"
+              >
+                fuente
+              </a>
+            )}
+          </p>
+        )}
+        {f.autofill && autofill.available && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={autofill.status[f.key]?.phase === 'loading'}
+              onClick={() => void autofill.run(f.key, true)}
+              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong px-3 py-1 text-xs font-semibold text-ink transition-colors hover:bg-surface-2 disabled:opacity-60"
+            >
+              {autofill.status[f.key]?.phase === 'loading' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              )}
+              {autofill.status[f.key]?.phase === 'loading'
+                ? 'Cortex está llenando…'
+                : 'Llenar con Cortex'}
+            </button>
+            {autofill.status[f.key]?.message && (
+              <output
+                className={clsx(
+                  'text-micro',
+                  autofill.status[f.key]?.phase === 'error' ? 'text-rose' : 'text-ink-muted',
+                )}
+              >
+                {autofill.status[f.key]?.message}
+              </output>
+            )}
+          </div>
         )}
         {msg && (
           <p
@@ -815,7 +958,9 @@ export function FormBlock({
                       .map((k) => {
                         const f = fields.find((x) => x.key === k);
                         if (!f) return null;
-                        const text = readable(f, values[k] ?? '');
+                        const text = f.formula
+                          ? computedText(f, effective[k] ?? '')
+                          : readable(f, values[k] ?? '');
                         return (
                           <div
                             key={k}

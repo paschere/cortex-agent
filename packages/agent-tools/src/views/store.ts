@@ -13,6 +13,7 @@ import { bogotaToday } from '../commitments/shape';
 import { moduleByKey } from '../modules/catalog';
 import { enabledModules, moduleOffMessage } from '../modules/store';
 import { appBaseUrl } from '../reports/store';
+import { adaptLookupValue, lookupSources } from '../trackers/computed';
 import { applyDuplicateRule, duplicateMessage, getDuplicateRule } from '../trackers/duplicates';
 import { flowOf } from '../trackers/flow';
 import {
@@ -1245,9 +1246,17 @@ export async function submitViewForm(
         allowed.add(f.key);
         defaultOnly.add(f.key);
       }
+  // Los campos que se llenan solos (fórmula, lookup) se calculan aunque el
+  // formulario no los muestre: la fila que se guarda es la de la tabla.
+  for (const f of tracker.fields)
+    if ((f.formula || (f.lookup && !f.lookup.editable)) && !allowed.has(f.key)) {
+      allowed.add(f.key);
+      defaultOnly.add(f.key);
+    }
   const asked = tracker.fields.filter((f) => allowed.has(f.key));
   const raw: Record<string, unknown> = {};
-  for (const f of asked) raw[f.key] = defaultOnly.has(f.key) ? undefined : input.values[f.key];
+  for (const f of asked)
+    raw[f.key] = defaultOnly.has(f.key) || f.formula ? undefined : input.values[f.key];
   for (const [key, value] of Object.entries(forced)) raw[key] = value;
   if (block.approval) raw[block.approval.field] = block.approval.pending;
   // Defaults, campos ocultos (showIf), reglas de cada campo y relaciones. Una
@@ -1445,7 +1454,7 @@ export async function searchRelationOptions(
   db: SupabaseClient,
   view: CustomViewRow,
   input: { blockId: string; field: string; q: string; audience: 'team' | 'public' },
-): Promise<Array<{ id: string; label: string }>> {
+): Promise<Array<{ id: string; label: string; pick?: Record<string, string | number> }>> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
@@ -1459,11 +1468,16 @@ export async function searchRelationOptions(
   const target = await trackerForBlock(db, field.tracker);
   const { data, error } = await db
     .from('tracker_rows')
-    .select('id, label')
+    .select('id, label, values')
     .eq('tracker_id', target.id)
     .order('updated_at', { ascending: false })
     .limit(400);
   if (error) throw error;
+  // Lookups: lo que cada fila trae para los campos «traídos» de esta relación,
+  // para que el formulario los llene al elegir (sólo los campos configurados).
+  const lookups = lookupSources(source.fields).filter(
+    (l) => l.via === field.key && asked.has(l.field.key),
+  );
   // Sin tildes ni mayúsculas, en memoria: «peña» encuentra «Pena» (ver clients/store.ts).
   const fold = (t: string) =>
     t
@@ -1471,10 +1485,21 @@ export async function searchRelationOptions(
       .replace(/\p{Diacritic}/gu, '')
       .toLowerCase();
   const needle = fold(input.q.trim().slice(0, 60));
-  return ((data ?? []) as Array<{ id: string; label: string }>)
+  return ((data ?? []) as Array<{ id: string; label: string; values?: Record<string, unknown> }>)
     .filter((r) => !needle || fold(String(r.label)).includes(needle))
     .slice(0, 20)
-    .map((r) => ({ id: String(r.id), label: String(r.label) }));
+    .map((r) => {
+      const pick: Record<string, string | number> = {};
+      for (const l of lookups) {
+        const v = adaptLookupValue(l.field, r.values?.[l.target]);
+        if (v !== undefined) pick[l.field.key] = v;
+      }
+      return {
+        id: String(r.id),
+        label: String(r.label),
+        ...(lookups.length ? { pick } : {}),
+      };
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1563,6 +1588,13 @@ async function patchRow(
   if (outside.length)
     throw new ValidationError(
       `Esta vista no deja cambiar ${outside.map((k) => `«${k}»`).join(', ')}.`,
+    );
+  const computed = input.tracker.fields.filter(
+    (f) => keys.includes(f.key) && (f.formula || (f.lookup && !f.lookup.editable)),
+  );
+  if (computed.length)
+    throw new ValidationError(
+      `${computed.map((f) => `«${f.label}»`).join(', ')} se llena${computed.length > 1 ? 'n' : ''} sola${computed.length > 1 ? 's' : ''}: no se cambia a mano.`,
     );
 
   const { data: current, error: readError } = await db
