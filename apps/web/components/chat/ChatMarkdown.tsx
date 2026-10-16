@@ -4,6 +4,7 @@ import type { BrainSource } from '@/lib/brain-sources-shape';
 import { looksLikeUrl, shortLinkLabel } from '@/lib/chat-link';
 import { citationLabel, citationSource, rehypeCitations } from '@/lib/citations';
 import { clsx } from 'clsx';
+import { ChatTable, ChatTd, ChatTh, ChatThead, ChatTr } from './ChatTable';
 import { Check, Copy } from 'lucide-react';
 import { type ComponentPropsWithoutRef, type ReactNode, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -169,20 +170,12 @@ export function ChatMarkdown({
         rehypePlugins={[rehypeHighlight, rehypeCitations]}
         components={{
           pre: CodeBlock,
-          /** Una tabla ancha se desplaza en su caja; la página y la burbuja no se mueven. */
-          table({
-            children,
-            node: _node,
-            ...props
-          }: ComponentPropsWithoutRef<'table'> & { node?: unknown }) {
-            return (
-              <div className="scroll-slim my-3 max-w-full overflow-x-auto rounded-card border border-border">
-                <table {...props} className="!my-0 w-max min-w-full">
-                  {children}
-                </table>
-              </div>
-            );
-          },
+          /** Tablas como reporte: ver ChatTable.tsx. */
+          table: ChatTable,
+          thead: ChatThead,
+          tr: ChatTr,
+          th: ChatTh,
+          td: ChatTd,
           /** Enlaces largos acortados a dominio + inicio de ruta; el destino completo queda en href y title. */
           a({
             children,

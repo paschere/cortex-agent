@@ -76,6 +76,16 @@ const ANSWER = `Revisé la carpeta ${DRIVE} y la hoja ${SHEET}. Te dejo el resum
 
 ${TABLE}
 
+| Mes | Nómina y prestaciones (total) |
+| --- | ---: |
+| mayo 2026 | $1.147.232 |
+| junio 2026 | $7.191.182 |
+| julio 2026 | $43.618.967 |
+| agosto 2026 | $81.692.767 |
+| septiembre 2026 | $103.191.662 |
+| octubre 2026 (en curso) | $6.832.966 |
+| **Total** | **$243.674.776** |
+
 \`\`\`ts
 ${CODE}
 \`\`\`
