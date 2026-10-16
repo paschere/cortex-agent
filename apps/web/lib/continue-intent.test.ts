@@ -3,6 +3,7 @@ import {
   continuationBlock,
   followOnBlock,
   isContinuationMessage,
+  isRetryMessage,
   planFromStoredResults,
 } from './continue-intent';
 
@@ -104,5 +105,16 @@ describe('qué se pega según el mensaje', () => {
   it('un mensaje normal no recibe nada', () => {
     expect(followOnBlock('¿cuánto vendimos?', rows, false)).toBe('');
     expect(followOnBlock('va', [], false)).toBe('');
+  });
+});
+
+describe('isRetryMessage', () => {
+  it('reconoce los pedidos de reintento', () => {
+    for (const m of ['Intenta nuevamente', 'inténtalo otra vez', 'reintenta', 'vuelve a consultar', 'prueba de nuevo porfa'])
+      expect(isRetryMessage(m)).toBe(true);
+  });
+  it('no confunde mensajes normales', () => {
+    for (const m of ['sigue', '¿cuánto cuesta la nómina?', ''])
+      expect(isRetryMessage(m)).toBe(false);
   });
 });

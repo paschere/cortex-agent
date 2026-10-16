@@ -13,7 +13,12 @@ import { humanChatError } from '@/lib/chat-error';
 import { CITATION_RULE } from '@/lib/citations';
 import { createProposalGuard } from '@/lib/confirmation-dedupe';
 import { isControlHandoffMessage } from '@/lib/confirmation-notes';
-import { followOnBlock, isContinuationMessage } from '@/lib/continue-intent';
+import {
+  RETRY_NOTE,
+  followOnBlock,
+  isContinuationMessage,
+  isRetryMessage,
+} from '@/lib/continue-intent';
 import { firstRealRequest, looksBadTitle, titleFromText } from '@/lib/conversation-title';
 import { generateConversationTitle } from '@/lib/conversation-title-gen';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
@@ -1387,6 +1392,15 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
   // detenía a mitad del plan. Se pega sólo para el modelo: lo ejecutado, el
   // estado del plan y lo pendiente. Ver lib/continue-intent.ts y
   // lib/approved-results.ts.
+  // «Intenta nuevamente»: datos frescos, no la respuesta de memoria.
+  if (lastUserMessage && isRetryMessage(lastUserMessage.content)) {
+    const last = coreMessages[coreMessages.length - 1];
+    if (last && last.role === 'user' && typeof last.content === 'string')
+      coreMessages = [
+        ...coreMessages.slice(0, -1),
+        { ...last, content: `${last.content}\n\n${RETRY_NOTE}` },
+      ];
+  }
   const followIsControl = Boolean(
     lastUserMessage && isControlHandoffMessage(lastUserMessage.content),
   );

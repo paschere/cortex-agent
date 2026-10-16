@@ -120,6 +120,26 @@ export function isContinuationMessage(message: string): boolean {
   return words.some((w) => CORE.has(w));
 }
 
+/**
+ * «INTENTA NUEVAMENTE»: VUELVE A CONSULTAR, NO REPITAS.
+ *
+ * Visto en producción (2026-10-16): tras un arreglo desplegado, la persona
+ * escribió «Intenta nuevamente» y Cortex contestó «ya lo intenté por los dos
+ * caminos» sin llamar ni una herramienta: repitió de memoria el resultado viejo.
+ * Un reintento pide datos frescos; el sistema o los datos pudieron cambiar.
+ */
+const RETRY =
+  /\b(intenta(lo)?|int[eé]ntalo|reintenta(lo)?|vuelve a (intentar|probar|consultar|revisar|mirar|buscar)|prueba(lo)? (de nuevo|otra vez|nuevamente)|otra vez|de nuevo|nuevamente|una vez m[aá]s|retry|try again)\b/i;
+
+export function isRetryMessage(message: string): boolean {
+  const t = message.trim();
+  if (!t || t.length > 140) return false;
+  return RETRY.test(t);
+}
+
+export const RETRY_NOTE =
+  '[Nota de Cortex, no la repitas] La persona pide reintentar. Vuelve a llamar AHORA las herramientas que hacen falta para responder, aunque antes hayan fallado o devuelto otra cosa: el sistema o los datos pudieron cambiar desde entonces. No respondas con los resultados anteriores ni digas «ya lo intenté» sin haber consultado de nuevo en este turno.';
+
 export interface ContinuationInput {
   /** El texto de la última respuesta del asistente (puede traer la nota de corte). */
   lastAssistantText: string;
