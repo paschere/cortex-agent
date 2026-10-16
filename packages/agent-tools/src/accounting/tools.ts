@@ -4,6 +4,9 @@ import { bogotaToday } from '../commitments/shape';
 import { registerTool } from '../index';
 import { COMP_SENSITIVITY_NOTE } from '../payroll/sensitive';
 import { PAYROLL_GROUP_LABEL } from './payroll';
+import { livePayrollMarkdown, livePayrollRanges, readLivePayroll } from './payroll-live';
+import { canSeePayrollDetail } from '../ledger/privacy';
+import { monthEnd } from '../statements/store';
 import { readPayrollView } from './payroll-store';
 import { getAccountingProvider, listAccountingProviders, providerName } from './providers';
 import {
@@ -163,7 +166,7 @@ const cop = (n: number) =>
 
 export const accountingPayrollSummary = registerTool({
   id: 'accounting.payroll_summary',
-  description: `Payroll read from the connected accounting program (Siigo) — NOT from Cortex's own payroll screen. Siigo has no payroll API, so Cortex reads the payroll accounting entries (comprobantes contables: gastos de personal 5105/5205/7205, salarios por pagar 2505, retenciones y aportes 2370, provisiones 2510–2525) when the company turned on «Nómina» in Integrations → Programa contable → Qué traer. Returns per month: devengado, prestaciones, aportes, total cost to the company, neto a pagar, deducciones, provisiones and the amount per concept. Per-person figures (by identification number) come back ONLY when the person asking is an admin or owner; anyone else gets company totals. Use it for «¿cuánto nos costó la nómina en agosto según Siigo?», «¿cuánto se provisionó de prima?». Figures are accrual (what was booked), not cash paid. ${COMP_SENSITIVITY_NOTE}`,
+  description: `What the payroll costs, read from the connected accounting program (Siigo) — works as soon as the program is connected, with no setup. If «Nómina» is turned on in Integrations → Programa contable → «Qué traer» and payroll entries have synced, it reads them (per month: devengado, prestaciones, aportes, total cost, neto a pagar, deducciones, provisiones; per person ONLY for admins/owners). Otherwise it computes the cost LIVE from Siigo's monthly trial balance: per month the total personnel expense (accounts 5105 administración + 5205 ventas + 7205 producción), the breakdown by concept (sueldos, horas extra, auxilio de transporte, cesantías, prima, vacaciones, aportes…), by area and totals — company totals only, never per person. Figures are accrual (what was booked), not cash paid. Use it for «¿cuánto cuesta la nómina?», «¿cuánto nos costó la nómina en agosto?», «¿cuánto se pagó en prima?». Range: months (last N), period (one month), or year + fromMonth/throughMonth. This is NOT Cortex's own liquidated payroll (payroll.period_summary): when the person asks about cost, show both if Cortex has liquidated periods. If it returns no personnel expense it says so for that range; never claim you cannot read payroll just because the option is off. For per-person pay (admins/owners only) read the journal entries with accounting.query (comprobantes, accounts 5105/5205/7205/2505 grouped by tercero). ${COMP_SENSITIVITY_NOTE}`,
   inputSchema: z.object({
     months: z.number().int().min(1).max(36).default(6).describe('How many recent months to show.'),
     period: z
@@ -171,6 +174,9 @@ export const accountingPayrollSummary = registerTool({
       .regex(/^\d{4}-\d{2}$/)
       .nullish()
       .describe('One month, YYYY-MM. Also asks for the per-person detail (admins only).'),
+    year: z.number().int().min(2000).max(2100).nullish().describe('A calendar year (live mode).'),
+    fromMonth: z.number().int().min(1).max(12).nullish().describe('First month 1-12 (with year).'),
+    throughMonth: z.number().int().min(1).max(12).nullish().describe('Last month 1-12 (with year).'),
   }),
   outputSchema: z.object({
     markdown: z.string(),
@@ -181,22 +187,51 @@ export const accountingPayrollSummary = registerTool({
   rateLimit: { perMinute: 20 },
   handler: async (input, ctx) => {
     const connections = await listAccountingConnections(ctx.db);
-    const conn = connections.find((c) => c.entities.includes('payroll'));
     const view = await readPayrollView(ctx.db, {
       viewerId: ctx.userId,
       months: input.months,
       period: input.period ?? undefined,
       today: bogotaToday(),
     });
-    if (!view.periods.length)
+    if (!view.periods.length) {
+      const live = connections.find((c) => c.enabled && c.provider === 'siigo');
+      if (live) {
+        const today = bogotaToday();
+        const ranges = livePayrollRanges(
+          {
+            months: input.months ?? 6,
+            period: input.period,
+            year: input.year,
+            fromMonth: input.fromMonth,
+            throughMonth: input.throughMonth,
+          },
+          today,
+        );
+        const r = await readLivePayroll(ctx.db, { ranges, today, viewerId: ctx.userId });
+        const first = ranges[0];
+        const last = ranges[ranges.length - 1];
+        const canSeePeople = await canSeePayrollDetail(ctx.db, ctx.userId);
+        return {
+          periods: r.months,
+          people: [],
+          detail: false,
+          markdown: livePayrollMarkdown(r, {
+            providerLabel: providerName(live.provider),
+            from: first ? `${first.year}-${String(first.fromMonth).padStart(2, '0')}-01` : '',
+            to: last ? monthEnd(last.year, last.throughMonth) : '',
+            canSeePeople,
+          }),
+        };
+      }
       return {
         periods: [],
         people: [],
         detail: view.detail,
-        markdown: conn
-          ? `${providerName(conn.provider)} tiene la nómina activada pero todavía no ha llegado ningún comprobante de nómina (la primera carga puede tardar unos minutos). Si Siigo no contabiliza la nómina con cuentas 5105/2505, no hay qué leer: en ese caso la nómina se liquida en la pantalla Nómina de Cortex. No inventes cifras.`
-          : 'Ningún programa contable tiene activada la nómina. Un administrador la enciende en Integraciones → Programa contable → «Qué traer» → Nómina. Siigo no tiene API de nómina: Cortex lee los comprobantes contables de nómina. No inventes cifras.',
+        markdown: connections.length
+          ? `${connections.map((c) => providerName(c.provider)).join(', ')} está conectado pero no permite leer el costo de personal en vivo. Un administrador puede activar «Nómina» en Integraciones → Programa contable → «Qué traer», o se liquida en la pantalla Nómina de Cortex. No inventes cifras.`
+          : 'No hay ningún programa contable conectado, así que no hay de dónde leer la nómina contable. Un administrador conecta Siigo en Integraciones → Programas contables, o la nómina se liquida en la pantalla Nómina de Cortex. No inventes cifras.',
       };
+    }
     const lines = view.periods.map(
       (p) =>
         `**${p.period}** — costo para la empresa ${cop(p.costoTotal)} (devengado ${cop(p.devengado)}, prestaciones ${cop(p.prestaciones)}, aportes ${cop(p.aportes)}${p.otrosPersonal ? `, otros ${cop(p.otrosPersonal)}` : ''}); neto a pagar ${cop(p.neto)}; deducciones ${cop(p.deducciones)}; provisiones ${cop(p.provisiones)}. ${p.comprobantes} comprobante(s).`,

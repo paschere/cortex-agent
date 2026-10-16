@@ -82,7 +82,20 @@ export interface ProviderPnl {
   incomeTax: number | null;
   netIncome: number;
   lines: ReportLine[];
+  /**
+   * Gasto de personal por cuenta (5105 administración, 5205 ventas, 7205
+   * producción), movimientos del período. Sólo cuando sale del balance de
+   * prueba; las copias guardadas antes de existir no lo traen.
+   */
+  personnel?: PersonnelAccount[];
   notes: string[];
+}
+
+export interface PersonnelAccount {
+  code: string;
+  name: string;
+  /** Débitos − créditos del período. */
+  amount: number;
 }
 
 /** Lo que una sesión de programa contable sabe leer de estados financieros. */
@@ -381,6 +394,10 @@ export function pnlFromTrialBalance(
     incomeTax: round2(tax),
     netIncome: round2(revenue + otherIncome - cost - opex - otherExp - tax),
     lines,
+    personnel: leaves
+      .filter((r) => /^(5105|5205|7205)/.test(r.code) && r.code.length > 4)
+      .map((r) => ({ code: r.code, name: r.name, amount: round2(debit(r)) }))
+      .filter((r) => Math.abs(r.amount) >= 0.005),
     notes: [
       'Armado desde los movimientos del balance de prueba: ingresos = clase 4; costos = clases 6 y 7; gastos operacionales = grupos 51 y 52.',
     ],

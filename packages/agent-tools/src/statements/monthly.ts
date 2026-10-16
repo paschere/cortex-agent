@@ -1,6 +1,6 @@
 import { logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ProviderPnl } from '../accounting/providers/reports';
+import type { PersonnelAccount, ProviderPnl } from '../accounting/providers/reports';
 import { listAccountingConnections, openAccountingSession } from '../accounting/store';
 import { monthlyPnl } from '../ledger/plans';
 import { canSeePayrollDetail } from '../ledger/privacy';
@@ -65,6 +65,8 @@ export interface MonthlyRow {
   cached: boolean;
   /** El programa contable no tuvo movimientos ese mes (ceros, no faltante). */
   noMovements?: boolean;
+  /** Gasto de personal por cuenta de ese mes (si la lectura lo trae). */
+  personnel?: PersonnelAccount[];
 }
 
 /** Un estado de resultados de un mes → la fila de la tabla. Puro. */
@@ -94,6 +96,7 @@ export function rowFromPnl(
     inProgress: opts.inProgress ?? false,
     cached: opts.cached ?? false,
     noMovements: (pnl.notes ?? []).some((n) => /^Sin movimientos/i.test(n)),
+    personnel: pnl.personnel,
   };
 }
 
@@ -189,6 +192,8 @@ export async function readMonthlyPnl(
     today: string;
     viewerId: string | null;
     refresh?: boolean;
+    /** Sólo sirven las copias que traen el gasto de personal por cuenta. */
+    requirePersonnel?: boolean;
     open?: typeof openAccountingSession;
     nowMs?: () => number;
   },
@@ -238,6 +243,7 @@ export async function readMonthlyPnl(
   const usable = (ym: string): Snapshot | null => {
     const s = saved.get(keyOf(ym));
     if (!s || opts.refresh) return null;
+    if (opts.requirePersonnel && !s.report.personnel) return null;
     if (isClosed(ym)) {
       // Una copia sacada ANTES de que el mes cerrara no sirve.
       return s.fetchedAt.slice(0, 10) > monthEnd(opts.year, Number(ym.slice(5, 7))) ? s : null;
