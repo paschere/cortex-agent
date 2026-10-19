@@ -1,6 +1,6 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getTrackerBySlug } from '../../trackers/store';
+import { type TrackerRow, getTrackerBySlug } from '../../trackers/store';
 import { isReadOnlySource } from '../../views/spec';
 import { listRoles, listScreens } from '../store';
 import { forgetAutomationWatch } from './emit';
@@ -219,6 +219,7 @@ export async function validateAutomation(
   const slug = triggerTracker(input.trigger);
   let trackerId: string | null = null;
   let triggerFields = new Set<string>();
+  let triggerTracker_: TrackerRow | null = null;
   if (slug) {
     if (isReadOnlySource(slug))
       problems.push(
@@ -228,6 +229,7 @@ export async function validateAutomation(
     if (!tracker && !isReadOnlySource(slug))
       problems.push(`La tabla «${slug}» no existe (mira trackers.list).`);
     if (tracker) {
+      triggerTracker_ = tracker;
       trackerId = tracker.id;
       triggerFields = new Set([
         ...tracker.fields.map((f) => f.key),
@@ -242,15 +244,26 @@ export async function validateAutomation(
     problems.push(`La pantalla «${t.screen}» no es de esta app.`);
   if (t.type === 'button' && !screenSlugs.has(t.screen))
     problems.push(`La pantalla «${t.screen}» no es de esta app.`);
+  if (t.type === 'button' && t.next && !screenSlugs.has(t.next.screen))
+    problems.push(`La pantalla «${t.next.screen}» a la que abre el botón no es de esta app.`);
   if (t.type === 'row_updated' && t.field && triggerFields.size && !triggerFields.has(t.field))
     problems.push(`«${t.field}» no es un campo de «${t.tracker}».`);
 
-  if (triggerFields.size)
-    for (const c of input.conditions) {
-      const f = isChanged(c) ? c.field : c.field;
-      if (!triggerFields.has(f))
-        problems.push(`La condición nombra «${f}», que no es un campo de «${slug}».`);
-    }
+  if (triggerFields.size) {
+    const named: Array<{ where: string; field: string }> = [
+      ...input.conditions.map((c) => ({ where: 'La condición', field: c.field })),
+      ...input.actions.flatMap((a, i) => [
+        ...(a.if ?? []).map((c) => ({ where: `El «si» de la acción ${i + 1}`, field: c.field })),
+        ...(a.type === 'wait' ? (a.stillIf ?? []) : []).map((c) => ({
+          where: `El «seguir si» de la acción ${i + 1}`,
+          field: c.field,
+        })),
+      ]),
+    ];
+    for (const n of named)
+      if (!triggerFields.has(n.field))
+        problems.push(`${n.where} nombra «${n.field}», que no es un campo de «${slug}».`);
+  }
 
   for (const a of input.actions) {
     if (a.type === 'set_field' && triggerFields.size && !triggerFields.has(a.field))
@@ -276,6 +289,9 @@ export async function validateAutomation(
       for (const r of a.roles)
         if (!roleKeys.has(r)) problems.push(`El rol «${r}» no existe en esta app.`);
   }
+
+  if (triggerTracker_)
+    problems.push(...(await relatedActionProblems(db, triggerTracker_, input.actions)));
 
   if (problems.length) throw new ValidationError([...new Set(problems)].join(' '));
   return { input, trackerId };
@@ -386,7 +402,14 @@ export async function screenButtons(
   db: SupabaseClient,
   appId: string,
   screenSlug: string,
-): Promise<Array<{ id: string; label: string; automationId: string }>> {
+): Promise<
+  Array<{
+    id: string;
+    label: string;
+    automationId: string;
+    next?: { screen: string; prefill?: Record<string, string | number> };
+  }>
+> {
   const { data, error } = await db
     .from('custom_app_automations')
     .select('id, trigger')
@@ -395,11 +418,21 @@ export async function screenButtons(
     .eq('trigger_kind', 'button')
     .limit(60);
   if (error) throw error;
-  const out: Array<{ id: string; label: string; automationId: string }> = [];
+  const out: Array<{
+    id: string;
+    label: string;
+    automationId: string;
+    next?: { screen: string; prefill?: Record<string, string | number> };
+  }> = [];
   for (const r of (data ?? []) as Array<{ id: string; trigger: unknown }>) {
     const t = automationTriggerSchema.safeParse(r.trigger);
     if (t.success && t.data.type === 'button' && t.data.screen === screenSlug)
-      out.push({ id: t.data.id, label: t.data.label, automationId: r.id });
+      out.push({
+        id: t.data.id,
+        label: t.data.label,
+        automationId: r.id,
+        ...(t.data.next ? { next: t.data.next } : {}),
+      });
   }
   return out;
 }
@@ -426,4 +459,106 @@ export async function runsToday(
     runs: rows.length,
     askCortex: rows.reduce((n, r) => n + Number(r.ask_cortex_calls ?? 0), 0),
   };
+}
+
+/**
+ * Las acciones sobre filas relacionadas, contra las tablas REALES: que la relación
+ * exista y apunte a donde dice, que los campos que se cambian existan (y no se
+ * calculen solos) y que el acumulado sea de números.
+ */
+async function relatedActionProblems(
+  db: SupabaseClient,
+  trigger: TrackerRow,
+  actions: AutomationAction[],
+): Promise<string[]> {
+  const out: string[] = [];
+  const settable = (t: Pick<TrackerRow, 'name' | 'fields'>, set: Record<string, unknown>) => {
+    for (const k of Object.keys(set)) {
+      const f = t.fields.find((x) => x.key === k);
+      if (!f)
+        out.push(
+          `«${k}» no es un campo de «${t.name}». Sus campos: ${t.fields.map((x) => x.key).join(', ')}.`,
+        );
+      else if (f.formula || (f.lookup && !f.lookup.editable))
+        out.push(`«${f.label}» de «${t.name}» se calcula solo: no se cambia a mano.`);
+      else if (f.type === 'file') out.push(`«${f.label}» (archivo) no se cambia desde una regla.`);
+    }
+  };
+  const filterFields = (
+    t: Pick<TrackerRow, 'name' | 'fields'>,
+    where: Array<{ field: string }> | undefined,
+  ) => {
+    const keys = new Set([...t.fields.map((f) => f.key), 'label', 'created_at', 'updated_at']);
+    for (const w of where ?? [])
+      if (!keys.has(w.field))
+        out.push(`El filtro nombra «${w.field}», que no es un campo de «${t.name}».`);
+  };
+  for (const a of actions) {
+    if (a.type === 'update_related') {
+      if (a.up) {
+        const rel = trigger.fields.find((f) => f.key === a.up);
+        if (!rel || rel.type !== 'relation' || !rel.tracker) {
+          out.push(`«${a.up}» no es un campo de relación de «${trigger.name}».`);
+          continue;
+        }
+        const target = await getTrackerBySlug(db, rel.tracker);
+        if (!target) out.push(`La tabla «${rel.tracker}» de la relación «${a.up}» no existe.`);
+        else settable(target, a.set);
+      } else if (a.down) {
+        const child = await getTrackerBySlug(db, a.down.tracker);
+        if (!child) {
+          out.push(`La tabla «${a.down.tracker}» no existe.`);
+          continue;
+        }
+        const via = child.fields.find((f) => f.key === a.down?.via);
+        if (!via || via.type !== 'relation' || via.tracker !== trigger.slug)
+          out.push(
+            `«${a.down.via}» de «${child.name}» tiene que ser un campo de relación que apunte a «${trigger.name}».`,
+          );
+        settable(child, a.set);
+        filterFields(child, a.where);
+      }
+    }
+    if (a.type === 'update_rows') {
+      if (isReadOnlySource(a.tracker)) {
+        out.push('No se cambian filas de una fuente de sólo lectura.');
+        continue;
+      }
+      const target = await getTrackerBySlug(db, a.tracker);
+      if (!target) {
+        out.push(`La tabla «${a.tracker}» no existe.`);
+        continue;
+      }
+      settable(target, a.set);
+      filterFields(target, a.where);
+    }
+    if (a.type === 'rollup') {
+      const rel = trigger.fields.find((f) => f.key === a.up);
+      if (!rel || rel.type !== 'relation' || !rel.tracker) {
+        out.push(`«${a.up}» no es un campo de relación de «${trigger.name}».`);
+        continue;
+      }
+      const parent = await getTrackerBySlug(db, rel.tracker);
+      if (!parent) {
+        out.push(`La tabla «${rel.tracker}» de la relación «${a.up}» no existe.`);
+        continue;
+      }
+      const target = parent.fields.find((f) => f.key === a.target);
+      if (!target) out.push(`«${a.target}» no es un campo de «${parent.name}».`);
+      else if (!['number', 'money'].includes(target.type) || target.formula)
+        out.push(
+          `«${target.label}» de «${parent.name}» tiene que ser un número o dinero sin fórmula para guardar un acumulado.`,
+        );
+      if (a.field) {
+        const f = trigger.fields.find((x) => x.key === a.field);
+        if (!f) out.push(`«${a.field}» no es un campo de «${trigger.name}».`);
+        else if (a.op !== 'count' && !['number', 'money'].includes(f.type))
+          out.push(
+            `«${f.label}» tiene que ser un número o dinero para ${a.op === 'sum' ? 'sumarse' : 'acumularse'}.`,
+          );
+      }
+      filterFields(trigger, a.where);
+    }
+  }
+  return out;
 }

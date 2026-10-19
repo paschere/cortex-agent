@@ -16,6 +16,7 @@ import {
   type Period,
   REJECT_ACTION_ID,
   type RowAction,
+  type ThenNav,
   type Tone,
   type ViewBlock,
   type ViewFilter,
@@ -211,6 +212,8 @@ export type ComputedBlock =
       steps?: Array<{ title: string; fields: string[] }> | null;
       /** Cómo se llena hablando: `off` | `dictate` (por defecto) | `conversation`. */
       voice?: FormVoiceMode;
+      /** Después de enviar, abrir otra pantalla de la app con valores prellenados. */
+      afterSubmit?: ThenNav;
       fields: ComputedFormField[];
     })
   | (BlockBase & {
@@ -601,6 +604,8 @@ export interface ComputedAction {
   rowIds?: string[];
   /** Pide un motivo (opcional) antes de ejecutar. */
   askReason?: boolean;
+  /** Al terminar bien, abre otra pantalla de la app con valores prellenados. */
+  next?: ThenNav;
 }
 
 /**
@@ -989,7 +994,14 @@ export function zoneLayout(
 }
 
 function toAction(a: RowAction): ComputedAction {
-  return { id: a.id, label: a.label, kind: a.kind, confirm: a.confirm, tone: a.tone };
+  return {
+    id: a.id,
+    label: a.label,
+    kind: a.kind,
+    confirm: a.confirm,
+    tone: a.tone,
+    ...(a.next ? { next: a.next } : {}),
+  };
 }
 
 /**
@@ -1997,6 +2009,7 @@ function computeBlockBody(
         editWindowMinutes: editWindowOf(block),
         steps: block.steps?.length ? block.steps : null,
         voice: formVoiceOf(block),
+        ...(block.afterSubmit ? { afterSubmit: block.afterSubmit } : {}),
         // El campo de estado de la aprobación lo pone el servidor: no se pide.
         fields: keys
           .filter((key) => key !== block.approval?.field)

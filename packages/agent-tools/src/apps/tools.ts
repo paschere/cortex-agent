@@ -5,7 +5,7 @@ import { isCompanyManager, listDirectory } from '../directory/store';
 import { registerTool } from '../index';
 import { internalSourcesOf } from '../views/sources';
 import { viewSpecSchema } from '../views/spec';
-import { updateView, validateSpec } from '../views/store';
+import { updateView, validateSpec, validateSpecDetailed } from '../views/store';
 import { viewCatalog } from '../views/store';
 import { SPEC_GRAMMAR } from '../views/tools';
 import { savePortal, saveTableros } from './app-extras';
@@ -400,6 +400,55 @@ ${SPEC_GRAMMAR}`,
   }),
   requiresConfirmation: true,
   rateLimit: { perMinute: 10 },
+  // La validación completa de las pantallas (la misma que correría al aprobar:
+  // forma, tablas y campos reales, fuentes internas en apps publicadas, roles
+  // con usuarios) ANTES de enseñar la tarjeta. El 2026-10-19 un bloque con
+  // «hora_inicio» como campo de fecha se aprobó y falló después; ahora el
+  // modelo lo ve primero y corrige sin molestar a la persona. Sólo lee.
+  preflight: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    const app = await mustGetApp(ctx.db, input.app);
+    const published = app.status === 'published';
+    const existing = new Set((await listScreens(ctx.db, app.id)).map((s) => s.slug));
+    for (const s of input.addScreens ?? []) if (s.slug) existing.add(s.slug);
+    for (const patch of input.updateScreens ?? [])
+      if (!existing.has(patch.slug))
+        throw new NotFoundError(
+          `No hay una pantalla «${patch.slug}» en esta app. Pantallas: ${[...existing].join(', ') || 'ninguna'}.`,
+        );
+    const specs = [
+      ...(input.addScreens ?? []).map((s) => ({ spec: s.spec, label: s.title })),
+      ...(input.updateScreens ?? []).flatMap((s) =>
+        s.spec ? [{ spec: s.spec, label: s.slug }] : [],
+      ),
+    ];
+    for (const { spec, label } of specs) {
+      let fixed: Awaited<ReturnType<typeof validateSpecDetailed>>;
+      try {
+        fixed = await validateSpecDetailed(ctx.db, spec, { viewerId: ctx.userId });
+      } catch (err) {
+        if (err instanceof ValidationError)
+          throw new ValidationError(`Pantalla «${label}»: ${err.message}`);
+        throw err;
+      }
+      if (published) {
+        const bad = internalSourcesOf(fixed.spec);
+        if (bad.length)
+          throw new ValidationError(
+            `La app está publicada y la pantalla «${label}» usaría información interna (${bad.map((b) => `«${b.name}»`).join(', ')}). Despublícala primero o usa otra fuente.`,
+          );
+      }
+    }
+    if (input.roles) {
+      const taken = (await listAppUsers(ctx.db, app.id)).filter(
+        (u) => !input.roles?.some((r) => r.key === u.role_key),
+      );
+      if (taken.length)
+        throw new ValidationError(
+          `Hay usuarios externos con un rol que quitarías (${[...new Set(taken.map((u) => u.role_key))].join(', ')}). Cámbiales el rol antes.`,
+        );
+    }
+  },
   handler: async (input, ctx) => {
     await requireAppAdmin(ctx);
     let app = await mustGetApp(ctx.db, input.app);
@@ -445,12 +494,15 @@ ${SPEC_GRAMMAR}`,
       changes.push(`pantalla quitada: ${slug}`);
     }
     for (const s of input.addScreens ?? []) {
+      // Lo trivial se corrige solo y se avisa (views/spec.ts autofixSpecAgainst).
+      const fixedAdd = await validateSpecDetailed(ctx.db, s.spec, { viewerId: ctx.userId });
+      for (const note of fixedAdd.fixes) changes.push(`aviso en «${s.title}»: ${note}`);
       const added = await addScreen(ctx.db, app, {
         title: s.title,
         slug: s.slug,
         icon: s.icon,
         roles: s.roles,
-        spec: s.spec,
+        spec: fixedAdd.spec,
         userId: ctx.userId,
         prompt: 'apps.update',
       });
@@ -460,7 +512,11 @@ ${SPEC_GRAMMAR}`,
       const screen = (await listScreens(ctx.db, app.id)).find((s) => s.slug === patch.slug);
       if (!screen) throw new NotFoundError(`No hay una pantalla «${patch.slug}» en esta app.`);
       if (patch.spec) {
-        const spec = await validateSpec(ctx.db, patch.spec, { viewerId: ctx.userId });
+        const fixedPatch = await validateSpecDetailed(ctx.db, patch.spec, {
+          viewerId: ctx.userId,
+        });
+        for (const note of fixedPatch.fixes) changes.push(`aviso en «${patch.slug}»: ${note}`);
+        const spec = fixedPatch.spec;
         await updateView(ctx.db, screen.view_id, {
           spec,
           userId: ctx.userId,

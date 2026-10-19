@@ -137,6 +137,7 @@ export async function loadAppEditorData(
           label: f.label,
           type: f.type,
           ...(f.options ? { options: f.options } : {}),
+          ...(f.type === 'relation' && f.tracker ? { tracker: f.tracker } : {}),
         })),
         actions: actionsByTracker[t.slug] ?? [],
         flow: (() => {
@@ -163,6 +164,7 @@ export async function loadAppEditorData(
         label: f.label,
         type: f.type,
         ...(f.options ? { options: f.options } : {}),
+        ...(f.type === 'relation' && f.tracker ? { tracker: f.tracker } : {}),
       })),
       actions: [],
     })),

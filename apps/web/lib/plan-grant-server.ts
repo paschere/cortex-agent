@@ -2,7 +2,7 @@ import 'server-only';
 import { confirmationResults } from '@/lib/confirmation-claim';
 import { type PlanState, planFromInvocations, planToolIds } from '@/lib/plan-state';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
-import { getTool, splitPlanTools, toolIdAllowed } from '@cortex/agent-tools';
+import { canonicalToolId, getTool, splitPlanTools, toolIdAllowed } from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
@@ -52,7 +52,10 @@ export async function planScope(
   const plan = await loadConversationPlan(db, args.conversationId);
   if (!plan) return null;
   const denied = await deniedToolPatterns(db, args.userId, { failClosed: true });
-  const split = splitPlanTools(planToolIds(plan), (id) => Boolean(getTool(id)));
+  // Ids reales: un plan escrito con «trackers_define» (guion bajo) también cuenta.
+  const split = splitPlanTools(planToolIds(plan).map(canonicalToolId), (id) =>
+    Boolean(getTool(id)),
+  );
   // Lo que el agente no puede usar o la persona tiene vetado no entra en el
   // alcance ni se promete: simplemente no se cubre.
   const usable = (id: string) => toolIdAllowed(args.agentToolIds, id) && !isToolDenied(id, denied);

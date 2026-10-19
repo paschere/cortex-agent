@@ -91,6 +91,55 @@ describe('runTool', () => {
     );
   });
 
+  it('el error de validación dice qué campos fallan, en español', async () => {
+    const ctx = makeCtx();
+    await expect(runTool(echoTool, { texto: 'x' }, ctx)).rejects.toThrow(
+      /Datos inválidos para test_echo.*msg: es obligatorio.*texto/s,
+    );
+  });
+
+  it('preflight: una propuesta que fallaría al ejecutarse NO llega a pedir confirmación', async () => {
+    const preflight = vi
+      .fn()
+      .mockRejectedValue(new ValidationError('«hora» no es un campo de fecha'));
+    const guarded: ToolDef<{ msg: string }, { echo: string }> = {
+      ...echoTool,
+      id: 'test.preflight_bad',
+      requiresConfirmation: true,
+      preflight,
+    };
+    await expect(runTool(guarded, { msg: 'hi' }, makeCtx())).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+    expect(preflight).toHaveBeenCalledOnce();
+  });
+
+  it('preflight: si pasa, la tarjeta de confirmación sale igual', async () => {
+    const preflight = vi.fn().mockResolvedValue(undefined);
+    const guarded: ToolDef<{ msg: string }, { echo: string }> = {
+      ...echoTool,
+      id: 'test.preflight_ok',
+      requiresConfirmation: true,
+      preflight,
+    };
+    await expect(runTool(guarded, { msg: 'hi' }, makeCtx())).rejects.toBeInstanceOf(
+      ConfirmationRequiredError,
+    );
+    expect(preflight).toHaveBeenCalledOnce();
+  });
+
+  it('preflight: ya aprobada, no se vuelve a correr', async () => {
+    const preflight = vi.fn().mockResolvedValue(undefined);
+    const guarded: ToolDef<{ msg: string }, { echo: string }> = {
+      ...echoTool,
+      id: 'test.preflight_confirmed',
+      requiresConfirmation: true,
+      preflight,
+    };
+    await runTool(guarded, { msg: 'hi' }, makeCtx(), { confirmed: true });
+    expect(preflight).not.toHaveBeenCalled();
+  });
+
   it('proceeds when confirmed: true is passed', async () => {
     const destructive: ToolDef<{ msg: string }, { echo: string }> = {
       ...echoTool,

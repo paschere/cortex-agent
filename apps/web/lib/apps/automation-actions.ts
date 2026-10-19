@@ -245,7 +245,7 @@ export async function testAutomationAction(
     conditionsOk: boolean;
     conditionsFailed: string | null;
     sample: string | null;
-    actions: Array<{ type: string; summary: string }>;
+    actions: Array<{ type: string; summary: string; skipped?: boolean; details?: string[] }>;
   }>
 > {
   try {

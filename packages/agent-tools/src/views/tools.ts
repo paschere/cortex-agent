@@ -10,6 +10,7 @@ import {
   deleteView,
   listArchivedViews,
   listViews,
+  loadViewSources,
   mustGetView,
   publicViewUrl,
   restoreView,
@@ -61,7 +62,7 @@ Interactive (custom tables only, never platform sources): table {editable?: [fie
 Live: spec.refreshSeconds 0|10|30|60 (default 30). Alerts: spec.alerts: [{id, source: table slug or platform source id, filters?, message?, sound?: bool (default true), desktop?: bool, bell?: bool (bell notification to the view owner when a row arrives through this view's form)}] — fires when a new row matching the filters appears while the view is open.
 Put the headline metrics first as thirds, then charts as halves, then the full-width table.
 Per-block design (optional on EVERY block, never CSS, omit it to keep the default look): design: {surface?: plain|card|tinted|outline|elevated|hero (hero = brand-colored background with light text: ONLY for the single headline figure), size?: auto|third|half|two-thirds|full (grid width; wins over width), height?: auto|compact|tall, tone?: primary|emerald|amber|sky|rose (the block's accent), emphasis?: normal|quiet|strong, title?: shown|hidden, icon?: an icon name such as BarChart3|DollarSign|Truck, variant?: per block type}. Variants — metric: number|number-sparkline|ring (progress to goal; needs goal)|compare (vs previous period; needs compare)|split (value next to goal or previous); cards: compact|rich (status chips + avatar)|image (photo on top)|row (dense list); table: lined|zebra|minimal; board: columns|compact; chart: bar|line|area|donut (point charts only); detail: sections|timeline-first; calendar: month|agenda; gallery: grid|masonry; progress: bar|steps|ring; links: buttons|cards|tiles; text: plain|callout|quote. map, form, voice, zones, media take no variant. Good design: one or two strong blocks per screen; metrics on top in one row (thirds); hero only on the main figure; fewer surfaces, not more. To change a block by words ("make that block bigger", "metrics as rings"), update only its design and keep the rest of the spec.
-Built-in platform sources (read-only, live company data; money fields are COP only, other currencies go to the *_otra_moneda number field). "Ventas" means cortex.ventas (confirmed sales invoices; cartera = its saldo/estado). PERSONAL sources read only the rows of whoever opens the view (their own activations, operations, routines):
+Built-in platform sources (read-only, live company data; money fields are COP only, other currencies go to the *_otra_moneda number field). "Ventas" means cortex.ventas (confirmed sales invoices PLUS the invoices synced from the connected accounting program, field «Origen»; cartera = its saldo/estado); payments/abonos = cortex.pagos (includes the program's cash receipts, each with its invoice number). PERSONAL sources read only the rows of whoever opens the view (their own activations, operations, routines):
 ${platformSourcesGrammar()}
 Feed tables (read-only, PRIVATE to the person who added them): feed.<attachment uuid>.<sheet index from 0> (a fixed Feed capture), feedsrc.<connected source uuid>.<sheet index> (always the latest sync of a connected Feed source; the open view refreshes by itself when the source syncs), feedview.<prepared view uuid>. Fields are the sheet headers without accents in lower_snake_case. Only the owner sees the rows; teammates see a notice on those blocks, and a view using them can never be shared by link. Prefer designing Feed views from /views, which lists the person's Feed tables with their fields.`;
 
@@ -138,9 +139,38 @@ export const viewsGet = registerTool({
   },
 });
 
+/**
+ * Chequeo de una vista recién guardada: ¿alguna fuente que usan sus bloques no
+ * trae ni una fila? Un tablero con bloques vacíos se ve «roto» y la persona
+ * cree que el sistema falló. Devuelve la advertencia para el modelo (vacío si
+ * todo trae datos). Nunca lanza: es una ayuda, no una condición para guardar.
+ */
+export async function emptySourceWarning(
+  db: Parameters<typeof loadViewSources>[0],
+  spec: Parameters<typeof loadViewSources>[1],
+  viewerId: string | null,
+): Promise<string> {
+  try {
+    const sources = await loadViewSources(db, spec, { viewerId: viewerId ?? undefined });
+    const lines: string[] = [];
+    for (const [id, src] of sources) {
+      if (src.rows.length > 0 || src.blocked) continue;
+      const blocks = spec.blocks
+        .filter((b) => 'tracker' in b && (b as { tracker?: string }).tracker === id)
+        .map((b) => b.id);
+      if (blocks.length)
+        lines.push(`«${id}» no tiene ninguna fila (bloques: ${blocks.join(', ')})`);
+    }
+    if (!lines.length) return '';
+    return `\n\nATENCIÓN, bloques vacíos: ${lines.join('; ')}. No entregues este tablero como terminado ni digas que funciona: dile a la persona que esos bloques salen vacíos y por qué, o cambia a una fuente que sí tenga datos (si hay un programa contable conectado, cortex.ventas ya incluye sus facturas y cortex.pagos sus recibos; si no, mira las tablas sincronizadas con trackers.list). Nunca copies a mano datos del programa contable a una tabla nueva.`;
+  } catch {
+    return '';
+  }
+}
+
 export const viewsCreate = registerTool({
   id: 'views.create',
-  description: `Create a custom view: a screen, dashboard, client portal or intake form built from this workspace's tables (trackers) and/or the platform's own data (sales invoices, payments, clients, deadlines, goals… listed below as cortex.* sources). Use it when someone asks for a dashboard, panel, tablero, portal, interface or form over data they keep in a table or that Cortex already holds. Call trackers.list first to know the table slugs and field keys; prefer a cortex.* source over copying platform data into a table; if the data exists nowhere yet, create a table with trackers.define first. The view opens at /views/<slug>. It stays internal to the team until someone shares it (views.share).
+  description: `Create a custom view: a screen, dashboard, client portal or intake form built from this workspace's tables (trackers) and/or the platform's own data (sales invoices, payments, clients, deadlines, goals… listed below as cortex.* sources). Use it when someone asks for a dashboard, panel, tablero, portal, interface or form over data they keep in a table or that Cortex already holds. Call trackers.list first to know the table slugs and field keys; prefer a cortex.* source over copying platform data into a table, and NEVER rebuild accounting-program data (Siigo/Alegra/QuickBooks invoices, receipts) by hand into a new table: with a program connected, cortex.ventas already includes its invoices (field «Origen») and cortex.pagos its receipts, so «ventas por mes / por cliente / abonos con su factura» are blocks over those sources; pick the source that HAS rows (the result warns when a block's source is empty) and never hand over a dashboard with empty blocks without saying so; if the data exists nowhere yet, create a table with trackers.define first. The view opens at /views/<slug>. It stays internal to the team until someone shares it (views.share).
 ${SPEC_GRAMMAR}`,
   inputSchema: z.object({
     name: z.string().trim().min(1).max(80).describe('What people call the view.'),
@@ -167,9 +197,10 @@ ${SPEC_GRAMMAR}`,
     if (input.pinned)
       view = await setViewAccess(ctx.db, view.id, { pinned: true, userId: ctx.userId });
     const summary = viewSummary(view);
+    const empty = await emptySourceWarning(ctx.db, spec, ctx.userId);
     return {
       view: summary,
-      markdown: `Vista **[${view.name}](${summary.url})** creada con ${spec.blocks.length} bloques. Por ahora la ve sólo el equipo; desde la vista se puede compartir por enlace o con contraseña, y editar escribiendo lo que quieras cambiar.`,
+      markdown: `Vista **[${view.name}](${summary.url})** creada con ${spec.blocks.length} bloques. Por ahora la ve sólo el equipo; desde la vista se puede compartir por enlace o con contraseña, y editar escribiendo lo que quieras cambiar.${empty}`,
     };
   },
 });
@@ -214,9 +245,10 @@ ${SPEC_GRAMMAR}`,
     if (input.pinned !== undefined && input.pinned !== view.pinned)
       view = await setViewAccess(ctx.db, view.id, { pinned: input.pinned, userId: ctx.userId });
     const summary = viewSummary(view);
+    const empty = input.spec ? await emptySourceWarning(ctx.db, view.spec, ctx.userId) : '';
     return {
       view: summary,
-      markdown: `Vista **[${view.name}](${summary.url})** actualizada (versión ${view.version}).${view.pinned ? ' Está fijada en Inicio.' : ''}`,
+      markdown: `Vista **[${view.name}](${summary.url})** actualizada (versión ${view.version}).${view.pinned ? ' Está fijada en Inicio.' : ''}${empty}`,
     };
   },
 });

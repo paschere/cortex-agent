@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { notFoundWithHints } from '../not-found-hints';
 import { duplicateRuleSchema, getDuplicateRule } from './duplicates';
 import {
   displayTrackerValue,
@@ -190,7 +191,12 @@ export const trackersQuery = registerTool({
     const tracker = await getTrackerBySlug(ctx.db, input.tracker);
     if (!tracker) {
       throw new NotFoundError(
-        `No hay una tabla «${input.tracker}» en este espacio. Mira trackers.list o créala con trackers.define.`,
+        await notFoundWithHints(
+          ctx.db,
+          `No hay una tabla «${input.tracker}» en este espacio. Mira trackers.list o créala con trackers.define.`,
+          input.tracker,
+          'tabla',
+        ),
       );
     }
     if (input.equals && !tracker.fields.some((f) => f.key === input.equals?.key)) {
@@ -239,7 +245,7 @@ export const trackersQuery = registerTool({
 export const trackersUpsert = registerTool({
   id: 'trackers.upsert',
   description:
-    'Add or update a row in a company-specific table. Use it when the person gives you a new item for a board you already defined, or a correction to one. Pass the slug, the field values, and optionally the row id to update. Do not invent fields that are not in the schema — change the schema with trackers.define first.',
+    'Add or update a row in a company-specific table. Use it when the person gives you a new item for a board you already defined, or a correction to one. Pass the slug, the field values, and optionally the row id to update. Do not invent fields that are not in the schema — change the schema with trackers.define first. ONE row per call: for two or more rows use trackers.upsert_many (rows: [...], up to 200, one call).',
   inputSchema: z.object({
     tracker: trackerSlugSchema,
     rowId: z.string().uuid().optional().describe('If set, updates that row instead of inserting.'),
@@ -290,7 +296,12 @@ export const trackersUpsert = registerTool({
     const tracker = await getTrackerBySlug(ctx.db, input.tracker);
     if (!tracker) {
       throw new NotFoundError(
-        `No hay una tabla «${input.tracker}» en este espacio. Créala con trackers.define antes de llenarla.`,
+        await notFoundWithHints(
+          ctx.db,
+          `No hay una tabla «${input.tracker}» en este espacio. Créala con trackers.define antes de llenarla.`,
+          input.tracker,
+          'tabla',
+        ),
       );
     }
     const row = await upsertRow(ctx.db, {
@@ -315,6 +326,103 @@ export const trackersUpsert = registerTool({
         (created
           ? `Anotado en **${tracker.name}**: ${row.label}.`
           : `Actualizado en **${tracker.name}**: ${row.label}.`) + warning,
+    };
+  },
+});
+
+export const MAX_UPSERT_MANY_ROWS = 200;
+
+export const trackersUpsertMany = registerTool({
+  id: 'trackers.upsert_many',
+  description: `Add (or update) MANY rows of a company-specific table in ONE call (up to ${MAX_UPSERT_MANY_ROWS}). Use it whenever there is more than one row to write — loading a price list, a spreadsheet, a month of receipts. Do NOT call trackers.upsert once per row: it hits the per-minute limit and wastes turns. Pass the slug and rows: [{ values: {fieldKey: value, ...}, label?, rowId? }]. Same rules as trackers.upsert for each row (keys must exist on the table; types, options, required, unique and showIf are enforced). Rows are written in order; a row that is rejected does NOT stop the others: the result lists which ones failed and why, so fix only those and send them again. If the call runs out of time it reports how many rows are left: send the rest in another call. Counts as ONE call for the rate limit.`,
+  inputSchema: z.object({
+    tracker: trackerSlugSchema,
+    rows: z
+      .array(
+        z.object({
+          values: z.record(z.union([z.string(), z.number(), z.boolean()])),
+          label: z.string().max(200).optional(),
+          rowId: z
+            .string()
+            .uuid()
+            .optional()
+            .describe('If set, updates that row instead of inserting.'),
+        }),
+      )
+      .min(1)
+      .max(MAX_UPSERT_MANY_ROWS),
+  }),
+  outputSchema: z.object({
+    tracker: z.object({ slug: z.string(), name: z.string() }),
+    created: z.number().int(),
+    updated: z.number().int(),
+    failed: z.array(z.object({ index: z.number().int(), label: z.string(), error: z.string() })),
+    remaining: z.number().int(),
+    markdown: z.string(),
+  }),
+  rateLimit: { perMinute: 6 },
+  handler: async (input, ctx) => {
+    const tracker = await getTrackerBySlug(ctx.db, input.tracker);
+    if (!tracker) {
+      throw new NotFoundError(
+        await notFoundWithHints(
+          ctx.db,
+          `No hay una tabla «${input.tracker}» en este espacio. Créala con trackers.define antes de llenarla.`,
+          input.tracker,
+          'tabla',
+        ),
+      );
+    }
+    // Un tope propio para no agotar el turno: lo que no alcance se informa y se
+    // reenvía en otra llamada (cada fila son varias idas a la base).
+    const budgetMs = Math.max(15_000, Math.min(120_000, (ctx.turnMsLeft?.() ?? 120_000) - 20_000));
+    const deadline = Date.now() + budgetMs;
+    let created = 0;
+    let updated = 0;
+    let processed = 0;
+    const failed: Array<{ index: number; label: string; error: string }> = [];
+    for (const [index, item] of input.rows.entries()) {
+      if (Date.now() > deadline || ctx.signal?.aborted) break;
+      processed = index + 1;
+      try {
+        await upsertRow(ctx.db, {
+          tracker,
+          rowId: item.rowId,
+          values: item.values,
+          label: item.label,
+          userId: ctx.userId,
+        });
+        if (item.rowId) updated += 1;
+        else created += 1;
+      } catch (err) {
+        failed.push({
+          index,
+          label: item.label ?? String(Object.values(item.values)[0] ?? `fila ${index + 1}`),
+          error: err instanceof Error ? err.message.slice(0, 240) : 'No se pudo guardar.',
+        });
+      }
+    }
+    const remaining = input.rows.length - processed;
+    const parts = [
+      `En **${tracker.name}**: ${created} fila${created === 1 ? '' : 's'} nueva${created === 1 ? '' : 's'}`,
+      updated ? `${updated} actualizada${updated === 1 ? '' : 's'}` : null,
+      failed.length ? `${failed.length} con error` : null,
+    ].filter(Boolean);
+    const lines = failed
+      .slice(0, 15)
+      .map((f) => `- fila ${f.index + 1} (${f.label}): ${f.error}`)
+      .join('\n');
+    return {
+      tracker: { slug: tracker.slug, name: tracker.name },
+      created,
+      updated,
+      failed: failed.slice(0, 50),
+      remaining,
+      markdown: `${parts.join(', ')}.${lines ? `\n\nNo se guardaron:\n${lines}` : ''}${
+        remaining > 0
+          ? `\n\nQuedaron ${remaining} sin procesar por tiempo: envía las filas desde la ${processed + 1} en otra llamada.`
+          : ''
+      }`,
     };
   },
 });

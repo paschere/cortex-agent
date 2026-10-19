@@ -688,16 +688,70 @@ export async function removeRow(
   db: SupabaseClient,
   trackerId: string,
   rowId: string,
+  options: { slug?: string; userId?: string | null } = {},
 ): Promise<boolean> {
+  const removed = await removeRows(db, { id: trackerId, slug: options.slug }, [rowId], options);
+  return removed.length > 0;
+}
+
+/**
+ * Borra filas (por id) y avisa a las automatizaciones («Se borra una fila»):
+ * el suceso lleva los valores que tenía la fila, que ya no existe. Devuelve los
+ * ids que de verdad se borraron. Una consulta indexada, y sin reglas que miren
+ * la tabla no se lee nada más.
+ */
+export async function removeRows(
+  db: SupabaseClient,
+  tracker: { id: string; slug?: string },
+  rowIds: string[],
+  options: { userId?: string | null } = {},
+): Promise<string[]> {
+  if (!rowIds.length) return [];
+  const watched = await watchesTracker(db, tracker.id);
+  let prior = new Map<string, { label: string; values: Record<string, string | number> }>();
+  if (watched) {
+    const { data } = await db
+      .from('tracker_rows')
+      .select('id, label, values')
+      .eq('tracker_id', tracker.id)
+      .in('id', rowIds);
+    prior = new Map(
+      (
+        (data ?? []) as Array<{
+          id: string;
+          label: string;
+          values: Record<string, string | number>;
+        }>
+      ).map((r) => [r.id, { label: r.label, values: r.values ?? {} }]),
+    );
+  }
   const { data, error } = await db
     .from('tracker_rows')
     .delete()
-    .eq('id', rowId)
-    .eq('tracker_id', trackerId)
-    .select('id')
-    .maybeSingle();
+    .eq('tracker_id', tracker.id)
+    .in('id', rowIds)
+    .select('id');
   if (error) throw error;
+  const removed = ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
   // Borrar una de las dos guías repetidas resuelve el conflicto de la otra.
-  if (data) await applyDuplicateRule(db, trackerId);
-  return Boolean(data);
+  if (removed.length) await applyDuplicateRule(db, tracker.id);
+  if (watched) {
+    const version = new Date().toISOString();
+    for (const id of removed) {
+      const p = prior.get(id);
+      if (!p) continue;
+      await emitAutomationEvent(db, {
+        kind: 'row_deleted',
+        trackerId: tracker.id,
+        trackerSlug: tracker.slug,
+        rowId: id,
+        before: p.values,
+        after: p.values,
+        label: p.label,
+        version,
+        actor: { kind: 'member', id: options.userId ?? null },
+      });
+    }
+  }
+  return removed;
 }

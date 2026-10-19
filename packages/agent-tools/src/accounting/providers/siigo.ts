@@ -392,12 +392,22 @@ export function siigoQueries(entity: AccountingEntity, input: QueryPlanInput): P
     const since = siigoDateTime(input.since);
     // Lo nuevo y lo cambiado son dos listados: un registro recién creado puede
     // traer `last_updated` vacío y no salir en el filtro de modificados.
+    // Los recibos de caja: `created_start`/`updated_start` no los trajeron
+    // (2026-10-19: Siigo tenía 11 y la tabla 4, cada corrida «+0»). Además se
+    // pide siempre una ventana por fecha del documento, que es el filtro con
+    // el que `accounting.query` sí los ve; son pocas páginas.
+    if (entity === 'payments')
+      return [
+        { created_start: since },
+        { updated_start: since },
+        { date_start: monthsAgo(input.now, 3) },
+      ];
     return [{ created_start: since }, { updated_start: since }];
   }
   // The first load has no date cutoff. The sync engine paginates and resumes
   // across runs, so an old unpaid invoice or its receipt cannot be omitted.
-  if (entity === 'invoices' && input.mode === 'sweep')
-    return [{ date_start: monthsAgo(input.now, SWEEP_MONTHS) }];
+  if ((entity === 'invoices' || entity === 'payments') && input.mode === 'sweep')
+    return [{ date_start: monthsAgo(input.now, entity === 'payments' ? 12 : SWEEP_MONTHS) }];
   return [{}];
 }
 
@@ -466,6 +476,13 @@ export const siigoProvider: AccountingProvider = {
       reports: siigoReports(client, { fetch: runtime.fetch }),
       live: (req) => siigoLive(client, req),
       writer: siigoWriter(client),
+      async remoteTotal(entity) {
+        // Sólo las que se piden sin filtros: clientes y productos se piden por
+        // alcance (tipo, activo), así que su total no es una sola cifra.
+        if (entity !== 'invoices' && entity !== 'payments') return null;
+        const result = await client.page<unknown>(PATHS[entity], {}, 1, 1);
+        return result.total > 0 ? result.total : result.results.length;
+      },
       async listPage(entity, query, page) {
         const result = await pageRelaxing(client, PATHS[entity], query, page);
         const records = result.results

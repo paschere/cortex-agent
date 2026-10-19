@@ -2,7 +2,15 @@ import { NoSuchToolError, generateText, jsonSchema, tool } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { DISPATCH_TOOL_NAME, resolveDispatch, withNoSuchToolRedirect } from './tool-dispatch';
+import {
+  DISPATCH_TOOL_NAME,
+  INVALID_ARGS_MARK,
+  brokenJsonMessage,
+  mergeDispatchArgs,
+  resolveDispatch,
+  withInvalidArgsRedirect,
+  withNoSuchToolRedirect,
+} from './tool-dispatch';
 
 const allowed = [
   { id: 'trackers.propose_from_source', kind: 'registry' },
@@ -105,6 +113,133 @@ describe('NoSuchToolError no tumba el turno', () => {
       system: undefined,
       messages: [],
     } as never);
+    expect(out).toBeNull();
+  });
+});
+
+describe('mergeDispatchArgs: la entrada de use_tool es la de la herramienta', () => {
+  it('args anidados, sueltos al lado de tool, o como texto JSON', () => {
+    expect(
+      mergeDispatchArgs({ tool: 'trackers.upsert', args: { tracker: 'a', values: {} } }),
+    ).toEqual({ tracker: 'a', values: {} });
+    expect(mergeDispatchArgs({ tool: 'trackers.upsert', tracker: 'a', values: { x: 1 } })).toEqual({
+      tracker: 'a',
+      values: { x: 1 },
+    });
+    expect(mergeDispatchArgs({ tool: 't', args: '{"tracker":"a"}' })).toEqual({ tracker: 'a' });
+    expect(mergeDispatchArgs({ tool: 't', args: 'no es json', tracker: 'a' })).toEqual({
+      tracker: 'a',
+    });
+  });
+  it('lo de args manda sobre lo suelto y la marca de invalidez no viaja', () => {
+    expect(
+      mergeDispatchArgs({
+        tool: 't',
+        tracker: 'x',
+        args: { tracker: 'y' },
+        [INVALID_ARGS_MARK]: 'schema',
+      }),
+    ).toEqual({ tracker: 'y' });
+  });
+});
+
+describe('resolveDispatch con una familia', () => {
+  it('pasar sólo «trackers» devuelve la lista de herramientas de la familia', () => {
+    const r = resolveDispatch('trackers', allowed);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.message).toContain('es una familia');
+      expect(r.message).toContain('trackers_list');
+      expect(r.message).toContain('trackers_propose_from_source');
+    }
+  });
+});
+
+describe('argumentos rotos no tumban el turno', () => {
+  const noRepair = async () => null;
+  /** Un modelo cuya llamada trae `args` que no pasan el esquema de su herramienta. */
+  function runBroken(args: string) {
+    let step = 0;
+    const model = new MockLanguageModelV1({
+      doGenerate: async () => {
+        step++;
+        return step === 1
+          ? {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { promptTokens: 1, completionTokens: 1 },
+              toolCalls: [
+                {
+                  toolCallType: 'function' as const,
+                  toolCallId: 'c1',
+                  toolName: 'trackers_query',
+                  args,
+                },
+              ],
+            }
+          : {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { promptTokens: 1, completionTokens: 1 },
+              text: 'sigo',
+            };
+      },
+    });
+    const seen: unknown[] = [];
+    const tools = {
+      trackers_query: tool({
+        parameters: z.object({ tracker: z.string().regex(/^[a-z_]+$/) }),
+        execute: async () => ({ ok: true }),
+      }),
+      [DISPATCH_TOOL_NAME]: tool({
+        parameters: z
+          .object({ tool: z.string(), args: z.record(z.unknown()).optional() })
+          .passthrough(),
+        execute: async (raw) => {
+          seen.push(raw);
+          return raw[INVALID_ARGS_MARK] === 'json'
+            ? { __error: true, message: brokenJsonMessage(String(raw.tool)) }
+            : { __error: true, message: 'Datos inválidos para trackers_query — tracker' };
+        },
+      }),
+    };
+    return generateText({
+      model,
+      tools,
+      maxSteps: 3,
+      prompt: 'x',
+      experimental_repairToolCall: withInvalidArgsRedirect(withNoSuchToolRedirect(noRepair)),
+    }).then((r) => ({ r, seen }));
+  }
+
+  it('esquema inválido: el modelo recibe el error de la herramienta y el turno sigue', async () => {
+    const { r, seen } = await runBroken('{"tracker":"cortex.ventas"}');
+    expect(r.text).toBe('sigo');
+    expect(seen[0]).toMatchObject({
+      tool: 'trackers_query',
+      args: { tracker: 'cortex.ventas' },
+      [INVALID_ARGS_MARK]: 'schema',
+    });
+  });
+
+  it('JSON roto: lo dice con claridad y el turno sigue', async () => {
+    const { r, seen } = await runBroken('{"tracker":"cor');
+    expect(r.text).toBe('sigo');
+    expect(seen[0]).toMatchObject({ tool: 'trackers_query', [INVALID_ARGS_MARK]: 'json' });
+    const result = r.steps[0]?.toolResults[0]?.result as { message?: string };
+    expect(result.message).toContain('JSON roto');
+  });
+
+  it('sin despachador declarado no inventa nada (el SDK lanza como antes)', async () => {
+    const fn = withInvalidArgsRedirect(noRepair);
+    const out = await fn({
+      toolCall: { toolCallType: 'function', toolCallId: 'x', toolName: 'a', args: '{}' },
+      tools: {},
+      error: { name: 'AI_InvalidToolArgumentsError' } as never,
+      parameterSchema: () => ({}) as never,
+      system: undefined,
+      messages: [],
+    });
     expect(out).toBeNull();
   });
 });

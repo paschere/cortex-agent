@@ -34,6 +34,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { embedQuery, embeddingModelId } from '../kb/embedder';
+import { tableWorkAdditions } from './affinity';
 import { intentFamilies } from './intent';
 import {
   SELECTION_THRESHOLD,
@@ -44,6 +45,11 @@ import {
 import { backfillToolVectors, prepareToolVectors } from './store';
 
 export { INTENT_RULES, intentFamilies } from './intent';
+export {
+  TABLE_WORK_CORE_IDS,
+  TABLE_WORK_FAMILIES,
+  tableWorkAdditions,
+} from './affinity';
 export {
   type SelectableTool,
   type SelectionCalibration,
@@ -143,6 +149,12 @@ export interface ToolSelectionRequest<T extends SelectableTool> {
   query: string;
   /** Overrides BASE_FAMILIES. Pass to add a surface-specific always-on family. */
   alwaysFamilies?: readonly string[];
+  /**
+   * Familias que esta conversación ya usó (las de los ids pegajosos). Si
+   * alguna es de tablas/apps/vistas, el turno trae el paquete completo de
+   * trabajo sobre ellas aunque la frase («sigue») no se parezca a nada.
+   */
+  contextFamilies?: readonly string[];
 }
 
 export interface ToolSelectionResult<T> {
@@ -226,8 +238,11 @@ export async function selectToolsForTurn<T extends SelectableTool>(
     calibration: selectionCalibrationFor(embeddingModelId()),
   });
 
+  // Trabajo sobre tablas, apps y vistas: nunca sólo una de las tres (affinity.ts).
+  const extra = tableWorkAdditions(ranked.tools, tools, request.contextFamilies);
+
   return {
-    tools: ranked.tools,
+    tools: extra.length > 0 ? [...ranked.tools, ...extra] : ranked.tools,
     reason: 'semantic',
     selectedFamilies: ranked.selectedFamilies,
     unrankedFamilies: ranked.unrankedFamilies,

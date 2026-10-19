@@ -1,9 +1,11 @@
 'use client';
 
+import type { ThenNav } from '@/lib/apps/after-submit';
 import { pressAppButtonAction } from '@/lib/apps/button-actions';
 import { clsx } from 'clsx';
 import { Bell, BellOff, Loader2, Play } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
+import { useAppNav } from './AppNav';
 import { useAppToast } from './AppToast';
 
 /**
@@ -22,6 +24,8 @@ import { useAppToast } from './AppToast';
 export interface AppButton {
   automationId: string;
   label: string;
+  /** Al tocarlo bien, abre otra pantalla de la app (valores fijos prellenados). */
+  next?: ThenNav;
 }
 
 export function AppButtons({
@@ -35,6 +39,7 @@ export function AppButtons({
 }) {
   const [pending, start] = useTransition();
   const toast = useAppToast();
+  const nav = useAppNav();
   if (!buttons.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -49,6 +54,7 @@ export function AppButtons({
               toast(
                 res.ok ? { tone: 'ok', text: res.message } : { tone: 'error', text: res.error },
               );
+              if (res.ok && b.next) nav?.goThen(b.next, {});
             })
           }
           className="inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-border bg-surface px-4 text-xs font-semibold text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"

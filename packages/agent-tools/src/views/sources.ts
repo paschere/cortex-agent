@@ -273,7 +273,7 @@ const ventas: PlatformSource = {
   id: 'cortex.ventas',
   name: 'Ventas (facturas emitidas)',
   description:
-    'Facturas de venta confirmadas y clasificadas como por cobrar, con lo cobrado, el saldo y si están vencidas. Es la base de la cartera.',
+    'Facturas de venta: las leídas de documentos y confirmadas, MÁS las que trae el programa contable conectado (Siigo, Alegra, QuickBooks), sin repetir las que están en los dos. Con lo cobrado, el saldo y si están vencidas; «Origen» dice de dónde viene cada una. Es la base de la cartera. Si hay programa contable, es la fuente para «ventas por mes / por cliente».',
   sensitivity: 'shareable',
   fields: [
     field('numero', 'Número', 'text'),
@@ -289,6 +289,7 @@ const ventas: PlatformSource = {
     field('dias_mora', 'Días vencida', 'number'),
     field('moneda', 'Moneda', 'text'),
     field('total_otra_moneda', 'Total en otra moneda', 'number'),
+    field('origen', 'Origen', 'text'),
   ],
   async read(db, cap, today) {
     const { data, error } = await db
@@ -385,9 +386,92 @@ const ventas: PlatformSource = {
         inv.updated_at,
       );
     });
-    return { rows, truncated: all.length > cap };
+    for (const r of rows) put(r.values, 'origen', 'Documento leído');
+
+    // Las facturas del programa contable conectado (accounting_invoices): la
+    // misma venta, con el saldo que dice el programa. Una que ya está arriba
+    // (mismo número y NIT) no se cuenta dos veces.
+    const seen = new Set(
+      invoices.map(
+        (i) => `${normDoc(i.doc_number)}|${(i.counterparty_nit ?? '').replace(/\D/g, '')}`,
+      ),
+    );
+    const acc = await db
+      .from('accounting_invoices')
+      .select(
+        'id, source_system, doc_number, client_id, client_nit, counterparty_name, currency, total, balance, issued_on, due_on, created_at, updated_at',
+      )
+      .eq('annulled', false)
+      .order('issued_on', { ascending: false })
+      .limit(cap + 1);
+    if (acc.error) throw acc.error;
+    const accAll = (acc.data ?? []) as Array<{
+      id: string;
+      source_system: string;
+      doc_number: string;
+      client_id: string | null;
+      client_nit: string | null;
+      counterparty_name: string | null;
+      currency: string;
+      total: number | string;
+      balance: number | string;
+      issued_on: string;
+      due_on: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    const accNames = await clientNames(
+      db,
+      accAll.map((i) => i.client_id ?? ''),
+    );
+    for (const inv of accAll) {
+      if (seen.has(`${normDoc(inv.doc_number)}|${inv.client_nit ?? ''}`)) continue;
+      const values: Values = {};
+      const total = num(inv.total);
+      const saldo = num(inv.balance) ?? 0;
+      const open = saldo > 0.005;
+      const late = open && inv.due_on ? daysBetween(inv.due_on, today) : null;
+      put(values, 'numero', inv.doc_number);
+      put(
+        values,
+        'cliente',
+        (inv.client_id ? accNames.get(inv.client_id) : null) ?? inv.counterparty_name,
+      );
+      put(values, 'nit', inv.client_nit);
+      put(values, 'emitida', inv.issued_on);
+      put(values, 'vence', inv.due_on);
+      put(values, 'moneda', inv.currency);
+      if (inv.currency === COP) {
+        put(values, 'total', total);
+        put(values, 'pagado', total === null ? null : Math.max(total - saldo, 0));
+        put(values, 'saldo', saldo);
+      } else put(values, 'total_otra_moneda', total);
+      put(
+        values,
+        'estado',
+        !open ? 'Pagada' : late !== null && late > 0 ? 'Vencida' : 'Por cobrar',
+      );
+      if (late !== null && late > 0) put(values, 'dias_mora', late);
+      put(values, 'origen', providerLabel(inv.source_system));
+      rows.push(row(inv.id, inv.doc_number, values, inv.created_at, inv.updated_at));
+    }
+    return { rows, truncated: all.length > cap || accAll.length > cap };
   },
 };
+
+function normDoc(n: string | null | undefined): string {
+  return (n ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function providerLabel(system: string): string {
+  return system === 'siigo'
+    ? 'Siigo'
+    : system === 'alegra'
+      ? 'Alegra'
+      : system === 'quickbooks'
+        ? 'QuickBooks'
+        : system;
+}
 
 // ---------------------------------------------------------------------------
 // Pagos recibidos
@@ -400,7 +484,7 @@ const pagos: PlatformSource = {
   id: 'cortex.pagos',
   name: 'Pagos recibidos',
   description:
-    'Abonos, anulaciones y ajustes que cuentan (reportados o confirmados). Los pagos en disputa o descartados no están, igual que en la cartera.',
+    'Abonos, anulaciones y ajustes que cuentan (reportados o confirmados), incluidos los recibos de caja que trae el programa contable conectado, cada uno con su factura. Los pagos en disputa o descartados no están, igual que en la cartera.',
   sensitivity: 'shareable',
   fields: [
     field('fecha', 'Fecha de pago', 'date'),

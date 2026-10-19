@@ -75,6 +75,13 @@ const SWEEP_EVERY_MS = 24 * 60 * 60_000;
 const MAX_PAGES_PER_RUN = 500;
 const CHUNK = 200;
 
+const ENTITY_LABEL: Record<AccountingEntity, string> = {
+  customers: 'clientes',
+  products: 'productos',
+  invoices: 'facturas',
+  payments: 'recibos de caja',
+};
+
 export const ENTITY_ORDER: readonly AccountingEntity[] = ACCOUNTING_ENTITIES;
 
 export interface EntityPlan {
@@ -105,7 +112,7 @@ export function planEntity(
   const since = new Date(Date.parse(cursor.since) - OVERLAP_MS).toISOString();
   const incremental = provider.queries(entity, { mode: 'incremental', since, now });
   const sweepDue =
-    entity === 'invoices' &&
+    (entity === 'invoices' || entity === 'payments') &&
     (!cursor.full_at || now.getTime() - Date.parse(cursor.full_at) >= SWEEP_EVERY_MS);
   if (sweepDue)
     return {
@@ -132,6 +139,44 @@ export function finishedCursor(plan: EntityPlan, previous: EntityCursor | undefi
       : previous?.full_at
         ? { full_at: previous.full_at }
         : {}),
+    ...(previous?.audit ? { audit: previous.audit } : {}),
+  };
+}
+
+/**
+ * Compara lo que dice el programa con lo que hay en la tabla. Si el programa
+ * tiene más y la corrida no era una carga completa, se pide una carga completa
+ * (se suelta `since`) y se anota la diferencia; si ya se hizo con la misma
+ * diferencia —registros que no se pueden leer—, sólo se avisa. Puro.
+ */
+export function auditCoverage(input: {
+  label: string;
+  remote: number;
+  local: number;
+  cursor: EntityCursor;
+  skipped: number;
+  fullPass: boolean;
+}): { cursor: EntityCursor; warning?: string; reload: boolean } {
+  const { remote, local, cursor, label } = input;
+  const gap = remote - local;
+  if (gap <= 0) {
+    const { audit: _drop, ...rest } = cursor;
+    return { cursor: rest, reload: false };
+  }
+  const known = cursor.audit?.remote === remote && cursor.audit?.local === local;
+  if (!input.fullPass && !known)
+    return {
+      cursor: {
+        ...(cursor.coverage_version ? { coverage_version: cursor.coverage_version } : {}),
+        audit: { remote, local },
+      },
+      warning: `El programa tiene ${remote} ${label} y la tabla ${local}: faltan ${gap}. Repito la carga completa en la próxima corrida.`,
+      reload: true,
+    };
+  return {
+    cursor: { ...cursor, audit: { remote, local } },
+    warning: `El programa tiene ${remote} ${label} y la tabla ${local}: faltan ${gap}${input.skipped ? ` (${input.skipped} no se pudieron leer)` : ' y no logré traerlos'}. Revísalo antes de confiar en los totales.`,
+    reload: false,
   };
 }
 
@@ -422,6 +467,7 @@ export async function runAccountingSync(
   let clientIds: Map<string, string> | null = null;
   let partial = false;
   let ranInitial = false;
+  const warnings: string[] = [];
   const entities = ENTITY_ORDER.filter(
     (e) => conn.entities.includes(e) && provider.entities.includes(e),
   );
@@ -529,8 +575,35 @@ export async function runAccountingSync(
           if (!result.hasMore) break;
         }
       }
-      if (finished) cursors[entity] = finishedCursor(plan, cursors[entity]);
-      else {
+      if (finished) {
+        cursors[entity] = finishedCursor(plan, cursors[entity]);
+        // ¿Quedó corta? Se compara con el total que dice el programa.
+        if (deps.session.remoteTotal && (entity === 'invoices' || entity === 'payments')) {
+          try {
+            const remote = await deps.session.remoteTotal(entity);
+            if (remote !== null) {
+              const { count, error } = await db
+                .from('tracker_rows')
+                .select('id', { count: 'exact', head: true })
+                .eq('tracker_id', table.id);
+              if (error) throw error;
+              const audited = auditCoverage({
+                label: ENTITY_LABEL[entity],
+                remote,
+                local: count ?? 0,
+                cursor: cursors[entity] ?? {},
+                skipped: entityCounts.skipped,
+                fullPass: plan.mode === 'initial',
+              });
+              cursors[entity] = audited.cursor;
+              if (audited.warning) warnings.push(audited.warning);
+              if (audited.reload) partial = true;
+            }
+          } catch {
+            // La comprobación no tumba la sincronización.
+          }
+        }
+      } else {
         partial = true;
         // Lo que sigue en la lista espera a la próxima corrida, en orden.
         break;
@@ -551,6 +624,7 @@ export async function runAccountingSync(
   }
 
   counts.requests = deps.session.requests;
+  if (warnings.length) counts.warnings = warnings;
   const stillLoading = entities.some((e) => !cursors[e]?.since || cursors[e]?.resume);
   return {
     result: { status: partial ? 'partial' : 'ok', counts, cursors, trackers },

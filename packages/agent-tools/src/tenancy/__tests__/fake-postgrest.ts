@@ -34,7 +34,8 @@ type Op =
   | 'is'
   | 'not-is'
   | 'contains'
-  | 'like';
+  | 'like'
+  | 'ilike';
 
 interface Filter {
   column: string;
@@ -43,7 +44,13 @@ interface Filter {
 }
 
 function matches(row: Row, f: Filter): boolean {
-  const actual = row[f.column];
+  // `values->>clave`: un campo de texto dentro de una columna jsonb (como PostgREST).
+  const arrow = f.column.split('->>');
+  let actual: unknown = row[arrow[0] as string];
+  if (arrow.length === 2 && actual && typeof actual === 'object') {
+    const inner = (actual as Record<string, unknown>)[arrow[1] as string];
+    actual = inner === undefined || inner === null ? null : String(inner);
+  }
   switch (f.op) {
     case 'eq':
       return actual === f.value;
@@ -70,7 +77,8 @@ function matches(row: Row, f: Filter): boolean {
       return actual == null || !(f.value as unknown[]).includes(actual);
     case 'contains':
       return (f.value as unknown[]).every((v) => (actual as unknown[] | null)?.includes(v));
-    case 'like': {
+    case 'like':
+    case 'ilike': {
       if (typeof actual !== 'string') return false;
       const pattern = String(f.value)
         .split('')
@@ -78,7 +86,7 @@ function matches(row: Row, f: Filter): boolean {
           ch === '%' ? '.*' : ch === '_' ? '.' : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
         )
         .join('');
-      return new RegExp(`^${pattern}$`, 's').test(actual);
+      return new RegExp(`^${pattern}$`, f.op === 'ilike' ? 'is' : 's').test(actual);
     }
     default:
       throw new Error(`fake-postgrest: unsupported operator ${f.op}`);
@@ -241,6 +249,10 @@ class Query implements PromiseLike<Result<unknown>> {
   }
   like(column: string, pattern: string) {
     this.filters.push({ column, op: 'like', value: pattern });
+    return this;
+  }
+  ilike(column: string, pattern: string) {
+    this.filters.push({ column, op: 'ilike', value: pattern });
     return this;
   }
   not(column: string, op: string, value: unknown) {

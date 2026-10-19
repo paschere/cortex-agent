@@ -9,7 +9,7 @@ Un administrador conecta el programa de contabilidad de la empresa una vez y Cor
   - En las dos, **Probar y conectar** prueba la llave contra el programa y lee una fila antes de guardar: una llave que no sirve no se guarda.
   - **QuickBooks Online**: no hay llave que pegar. **Conectar con QuickBooks** lleva a Intuit (OAuth), la persona elige la empresa y da permiso de sólo lectura (`com.intuit.quickbooks.accounting`), y la vuelta lee el nombre de la empresa y guarda el permiso. Si la instalación no tiene la app de Intuit configurada, la tarjeta dice «Falta configurar la app de QuickBooks…» y el botón queda apagado.
 - Después: estado (al día / trayendo la primera carga / error en español), qué trajo la última corrida con enlace a cada tabla, **Sincronizar ahora**, **Ajustes** (qué traer, frecuencia, avisos, pausa), **Cambiar llave** (en QuickBooks, **Volver a conectar**) y **Desconectar** (borra la llave; en QuickBooks además le pide a Intuit revocar el permiso; las tablas, la cartera y los pagos se quedan).
-- En el chat: `accounting.status` (cómo va, qué tablas llena, último error) y `accounting.sync_now` (trae ya, pide confirmación; sin decir cuál, el único conectado). Conectar no se hace desde el chat: la llave nunca pasa por el modelo.
+- En el chat: `accounting.status` (cómo va, qué tablas llena, último error) y `accounting.sync_now` (trae ya, sin pedir confirmación porque sólo lee de una conexión ya autorizada; sin decir cuál, el único conectado). Conectar no se hace desde el chat: la llave nunca pasa por el modelo.
 - El autoservicio (Inicio / primeros diez minutos) ofrece «Tu programa contable», que lleva a esta sección.
 
 ## Qué llega a dónde

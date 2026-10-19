@@ -389,7 +389,13 @@ export const trackerFieldsSchema = z
     }
   });
 
-export const trackerSlugSchema = z.string().trim().regex(TRACKER_SLUG_RE);
+export const trackerSlugSchema = z
+  .string()
+  .trim()
+  .regex(
+    TRACKER_SLUG_RE,
+    'no es el slug de una tabla (minúsculas, números y guion bajo, p. ej. "tarifas_proveedores"). Un nombre con punto como «cortex.ventas» es una FUENTE de la plataforma, no una tabla: se lee como fuente de una vista, no con las herramientas de tablas. Mira trackers_list para ver las tablas.',
+  );
 
 export function fieldByKey(fields: TrackerField[], key: string): TrackerField | undefined {
   return fields.find((f) => f.key === key);

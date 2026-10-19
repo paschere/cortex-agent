@@ -76,6 +76,7 @@ export function matchesTrigger(
   switch (trigger.type) {
     case 'row_created':
     case 'row_flagged_duplicate':
+    case 'row_deleted':
       return true;
     case 'row_updated': {
       if (trigger.field && !fieldChanged(event, trigger.field)) return false;

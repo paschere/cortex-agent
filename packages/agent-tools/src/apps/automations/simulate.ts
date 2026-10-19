@@ -3,9 +3,17 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getTrackerBySlug } from '../../trackers/store';
 import type { CatalogTracker } from '../../views/spec';
 import type { CustomAppRow } from '../store';
-import { type Simulation, simulateRule } from './engine';
+import { type ActionPreview, type Simulation, type TemplateContext, simulateRule } from './engine';
 import type { AutomationEvent, Values } from './match';
 import { matchesTrigger } from './match';
+import {
+  describeRelatedPlan,
+  describeRollupPlan,
+  planRollup,
+  planUpdateRelated,
+  planUpdateRows,
+  summarizeChanges,
+} from './related';
 import type { AutomationInput } from './spec';
 
 /**
@@ -83,21 +91,71 @@ export async function simulateAutomation(
     ? { slug: tracker.slug, name: tracker.name, fields: tracker.fields }
     : null;
   const base = options.baseUrl ?? '';
+  const ctx: TemplateContext = {
+    after,
+    before,
+    label,
+    appName: app.name,
+    link: `${base}/a/${app.id}`,
+    reason: '(el motivo que escriba quien rechaza)',
+    labels: tracker ? Object.fromEntries(tracker.fields.map((f) => [f.key, f.label])) : {},
+  };
   const sim = simulateRule(
     input,
     event,
-    {
-      after,
-      before,
-      label,
-      appName: app.name,
-      link: `${base}/a/${app.id}`,
-      reason: '(el motivo que escriba quien rechaza)',
-      labels: tracker ? Object.fromEntries(tracker.fields.map((f) => [f.key, f.label])) : {},
-    },
+    ctx,
     catalog,
     now,
     matchesTrigger(trigger, event, tracker?.slug ?? null),
   );
-  return { ...sim, sample: id ? { id, label } : null };
+  // Filas relacionadas y acumulados: se LEE lo que hay y se dice qué cambiaría,
+  // fila por fila, con el mismo plan que usa la corrida de verdad. No se escribe nada.
+  const actions: ActionPreview[] = [];
+  for (let i = 0; i < input.actions.length; i++) {
+    const a = input.actions[i];
+    const preview = sim.actions[i] as ActionPreview;
+    if (!a || preview.skipped || !tracker) {
+      actions.push(preview);
+      continue;
+    }
+    try {
+      if (a.type === 'update_related') {
+        const plan = await planUpdateRelated(db, { tracker, rowId: id, action: a, ctx, now });
+        actions.push({
+          type: a.type,
+          summary: describeRelatedPlan(plan),
+          details: plan.rows
+            .filter((r) => r.changes.length)
+            .slice(0, 10)
+            .map((r) => `${r.label}: ${summarizeChanges(r.changes)}`),
+        });
+        continue;
+      }
+      if (a.type === 'update_rows') {
+        const plan = await planUpdateRows(db, { action: a, ctx, now });
+        actions.push({
+          type: a.type,
+          summary: describeRelatedPlan(plan),
+          details: plan.rows
+            .filter((r) => r.changes.length)
+            .slice(0, 10)
+            .map((r) => `${r.label}: ${summarizeChanges(r.changes)}`),
+        });
+        continue;
+      }
+      if (a.type === 'rollup') {
+        const plan = await planRollup(db, { tracker, action: a, ctx, before, now });
+        actions.push({ type: a.type, summary: describeRollupPlan(a, plan) });
+        continue;
+      }
+    } catch (err) {
+      actions.push({
+        type: preview.type,
+        summary: `${preview.summary} (No se pudo revisar la tabla: ${err instanceof Error ? err.message : String(err)})`,
+      });
+      continue;
+    }
+    actions.push(preview);
+  }
+  return { ...sim, actions, sample: id ? { id, label } : null };
 }

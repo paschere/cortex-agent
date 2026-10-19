@@ -1,3 +1,4 @@
+import { relationParts } from '../../trackers/computed';
 import { type ViewRow, matches } from '../../views/compute';
 import type { CatalogTracker } from '../../views/spec';
 import { type AutomationEvent, type Values, fieldChanged, rowValue } from './match';
@@ -6,6 +7,8 @@ import {
   type AutomationCondition,
   type AutomationTrigger,
   type ChangedCondition,
+  DEFAULT_RELATED_ROWS,
+  ROLLUP_OP_LABEL,
   TRIGGER_LABEL,
 } from './spec';
 
@@ -62,7 +65,7 @@ export function isChanged(c: AutomationCondition): c is ChangedCondition {
   return 'type' in c && c.type === 'changed';
 }
 
-function dayInBogota(now: Date): string {
+export function dayInBogota(now: Date): string {
   return new Date(now.getTime() - 5 * 3_600_000).toISOString().slice(0, 10);
 }
 
@@ -132,7 +135,7 @@ export interface TemplateContext {
 
 const VAR_RE = /\{\{\s*([^{}]{1,48}?)\s*\}\}/g;
 
-function lookup(name: string, ctx: TemplateContext): string {
+function lookupRaw(name: string, ctx: TemplateContext): unknown {
   const n = name.trim();
   const lower = n.toLowerCase();
   if (lower === 'nombre') return ctx.label ?? '';
@@ -149,7 +152,37 @@ function lookup(name: string, ctx: TemplateContext): string {
     );
     if (byLabel) value = source[byLabel[0]];
   }
-  return value === undefined || value === null ? '' : String(value);
+  return value;
+}
+
+/** Cómo se lee un valor en un texto: una relación (JSON con id y nombre) se lee por su nombre. */
+function readable(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string' && value.startsWith('{')) {
+    const rel = relationParts(value);
+    if (rel?.label) return rel.label;
+  }
+  return String(value);
+}
+
+function lookup(name: string, ctx: TemplateContext): string {
+  return readable(lookupRaw(name, ctx));
+}
+
+const WHOLE_VAR_RE = /^\s*\{\{\s*([^{}]{1,48}?)\s*\}\}\s*$/;
+
+/**
+ * Como `renderTemplate`, pero una plantilla de UNA sola variable conserva el
+ * valor crudo (una relación sigue siendo el JSON con su id, para copiarla a
+ * otro campo de relación); con texto alrededor se lee por su nombre.
+ */
+export function renderRaw(template: string, ctx: TemplateContext): string {
+  const m = WHOLE_VAR_RE.exec(template);
+  if (m) {
+    const raw = lookupRaw(m[1] ?? '', ctx);
+    return raw === undefined || raw === null ? '' : String(raw);
+  }
+  return renderTemplate(template, ctx);
 }
 
 /** Pinta `{{campo}}`. Un nombre desconocido queda vacío; nunca lanza. */
@@ -171,7 +204,7 @@ export function renderValues(
   for (const [k, v] of Object.entries(values)) {
     if (typeof v === 'number') out[k] = v;
     else {
-      const rendered = renderTemplate(v, ctx);
+      const rendered = renderRaw(v, ctx);
       // Una plantilla de una sola variable que da un número sigue siendo número.
       out[k] =
         /^\s*\{\{[^{}]+\}\}\s*$/.test(v) && rendered !== '' && Number.isFinite(Number(rendered))
@@ -257,6 +290,164 @@ export function isTransient(err: unknown): boolean {
 export interface ActionPreview {
   type: AutomationAction['type'];
   summary: string;
+  /** Con «si» / «si no»: con esta fila NO se haría. */
+  skipped?: boolean;
+  /** Lo que cambiaría, línea por línea (filas relacionadas, acumulados). */
+  details?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// «Si» y «si no» por acción
+// ---------------------------------------------------------------------------
+
+export interface BranchState {
+  /** El resultado de la última acción con condición (la que mira un «si no»). */
+  lastIf: ConditionResult | null;
+}
+
+export function newBranchState(): BranchState {
+  return { lastIf: null };
+}
+
+/**
+ * ¿Toca hacer esta acción? Sin `if` ni `otherwise`, siempre. Con `if`, si la
+ * fila cumple las condiciones. Con `otherwise` (la rama «si no»), justo cuando
+ * la última acción con `if` NO se hizo por no cumplirse. Se llama en orden,
+ * para TODAS las acciones (también las que ya salieron bien en un intento
+ * anterior), así el estado de «si no» se rehace igual en cada reintento.
+ */
+export function branchDecision(
+  action: Pick<AutomationAction, 'if' | 'otherwise'>,
+  state: BranchState,
+  evaluate: (conditions: AutomationCondition[]) => ConditionResult,
+): { run: boolean; reason?: string } {
+  if (action.otherwise) {
+    if (!state.lastIf) return { run: false, reason: 'no hay una condición anterior' };
+    if (state.lastIf.ok) return { run: false, reason: 'la condición anterior sí se cumplió' };
+    return { run: true };
+  }
+  if (action.if?.length) {
+    const r = evaluate(action.if);
+    state.lastIf = r;
+    return r.ok ? { run: true } : { run: false, reason: r.failed ?? 'la condición no se cumple' };
+  }
+  return { run: true };
+}
+
+const setText = (set: Record<string, string | number>, ctx: TemplateContext) =>
+  Object.entries(renderValues(set, ctx))
+    .map(([k, x]) => `${k} = ${x === '' ? '(vacío)' : x}`)
+    .join(', ');
+
+/** Qué diría o haría cada acción con esta fila: texto, sin tocar nada. */
+export function previewActions(
+  actions: AutomationAction[],
+  ctx: TemplateContext,
+  opts?: { event: AutomationEvent; tracker: CatalogTracker | null; now: Date },
+): ActionPreview[] {
+  const state = newBranchState();
+  const evaluate = (conds: AutomationCondition[]) =>
+    opts
+      ? evaluateConditions(conds, { ...opts.event, after: ctx.after }, opts.tracker, opts.now)
+      : ({ ok: true } as ConditionResult);
+  return actions.map((a): ActionPreview => {
+    const decision = branchDecision(a, state, evaluate);
+    const base = previewAction(a, ctx);
+    if (!decision.run)
+      return {
+        type: a.type,
+        skipped: true,
+        summary: `No se haría con esta fila (${decision.reason}). Si se hiciera: ${base.summary}`,
+      };
+    if (!opts && (a.if?.length || a.otherwise))
+      return {
+        ...base,
+        summary: `${a.otherwise ? 'Si NO se cumple la condición anterior' : 'Si se cumple su condición'}: ${base.summary}`,
+      };
+    return base;
+  });
+}
+
+function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview {
+  switch (a.type) {
+    case 'set_field':
+      return {
+        type: a.type,
+        summary: `Pondría «${a.field}» en «${typeof a.value === 'number' ? a.value : renderRaw(a.value, ctx)}».`,
+      };
+    case 'create_row': {
+      const v = renderValues(a.values, ctx);
+      return {
+        type: a.type,
+        summary: `Crearía una fila en «${a.tracker}» con ${Object.entries(v)
+          .map(([k, x]) => `${k} = ${x}`)
+          .join(', ')}.`,
+      };
+    }
+    case 'notify_member':
+      return {
+        type: a.type,
+        summary: `Avisaría en la campana: «${renderTemplate(a.title, ctx)}».`,
+      };
+    case 'notify_app_user':
+      return {
+        type: a.type,
+        summary: `Mandaría a ${a.to === 'creator' ? 'quien creó la fila' : `los del rol ${a.to.role}`} (push, o correo si no tiene push): «${renderTemplate(a.title, ctx)}».`,
+      };
+    case 'email':
+      return {
+        type: a.type,
+        summary: `Mandaría un correo a ${[...a.to, ...a.roles.map((r) => `rol ${r}`)].join(', ')}: «${renderTemplate(a.subject, ctx)}».`,
+      };
+    case 'webhook':
+      return { type: a.type, summary: `Haría un POST firmado a ${a.url}.` };
+    case 'ask_cortex':
+      return {
+        type: a.type,
+        summary: `Le pediría a Cortex: «${renderTemplate(a.instruction, ctx).slice(0, 300)}». ${
+          a.writes === undefined
+            ? 'Lo que escriba fuera de esta tabla pasa por aprobación.'
+            : a.writes === 'row'
+              ? 'Podría cambiar cualquier campo de esta fila sin aprobación; lo demás pasa por aprobación.'
+              : `Podría cambiar sólo ${a.writes.join(', ')} de esta fila sin aprobación; lo demás pasa por aprobación.`
+        }`,
+      };
+    case 'update_related':
+      return {
+        type: a.type,
+        summary: a.up
+          ? `Cambiaría la fila a la que apunta «${a.up}»: ${setText(a.set, ctx)}.`
+          : `Cambiaría las filas de «${a.down?.tracker}» cuyo «${a.down?.via}» apunta a esta fila${a.where?.length ? ' (y cumplan el filtro)' : ''}, hasta ${a.max ?? DEFAULT_RELATED_ROWS}: ${setText(a.set, ctx)}.`,
+      };
+    case 'update_rows':
+      return {
+        type: a.type,
+        summary: `Cambiaría hasta ${a.max ?? DEFAULT_RELATED_ROWS} filas de «${a.tracker}» que cumplan ${a.where.length} filtro${a.where.length === 1 ? '' : 's'}: ${setText(a.set, ctx)}.`,
+      };
+    case 'rollup':
+      return {
+        type: a.type,
+        summary: `Dejaría en «${a.target}» de la fila padre (por «${a.up}») ${ROLLUP_OP_LABEL[a.op]}${a.field ? ` de «${a.field}»` : ''} de todas sus filas hijas.`,
+      };
+    case 'wait':
+      return {
+        type: a.type,
+        summary: `Esperaría ${waitText(a.minutes)} y volvería a revisar la fila${
+          a.stillIf?.length === 0
+            ? ' (seguiría siempre)'
+            : a.stillIf
+              ? ` (seguiría sólo si cumple ${a.stillIf.length} condición${a.stillIf.length === 1 ? '' : 'es'})`
+              : ' (seguiría sólo si sigue cumpliendo las condiciones de la regla)'
+        }; si no, la regla termina ahí.`,
+      };
+  }
+}
+
+export function waitText(minutes: number): string {
+  if (minutes % 1440 === 0) return `${minutes / 1440} día${minutes === 1440 ? '' : 's'}`;
+  if (minutes % 60 === 0 && minutes >= 60)
+    return `${minutes / 60} hora${minutes === 60 ? '' : 's'}`;
+  return `${minutes} minuto${minutes === 1 ? '' : 's'}`;
 }
 
 export interface Simulation {
@@ -265,56 +456,6 @@ export interface Simulation {
   conditions: ConditionResult;
   /** Lo que haría si corriera: nunca lo hace. */
   actions: ActionPreview[];
-}
-
-/** Qué diría o haría cada acción con esta fila: texto, sin tocar nada. */
-export function previewActions(actions: AutomationAction[], ctx: TemplateContext): ActionPreview[] {
-  return actions.map((a): ActionPreview => {
-    switch (a.type) {
-      case 'set_field':
-        return {
-          type: a.type,
-          summary: `Pondría «${a.field}» en «${typeof a.value === 'number' ? a.value : renderTemplate(a.value, ctx)}».`,
-        };
-      case 'create_row': {
-        const v = renderValues(a.values, ctx);
-        return {
-          type: a.type,
-          summary: `Crearía una fila en «${a.tracker}» con ${Object.entries(v)
-            .map(([k, x]) => `${k} = ${x}`)
-            .join(', ')}.`,
-        };
-      }
-      case 'notify_member':
-        return {
-          type: a.type,
-          summary: `Avisaría en la campana: «${renderTemplate(a.title, ctx)}».`,
-        };
-      case 'notify_app_user':
-        return {
-          type: a.type,
-          summary: `Mandaría a ${a.to === 'creator' ? 'quien creó la fila' : `los del rol ${a.to.role}`} (push, o correo si no tiene push): «${renderTemplate(a.title, ctx)}».`,
-        };
-      case 'email':
-        return {
-          type: a.type,
-          summary: `Mandaría un correo a ${[...a.to, ...a.roles.map((r) => `rol ${r}`)].join(', ')}: «${renderTemplate(a.subject, ctx)}».`,
-        };
-      case 'webhook':
-        return { type: a.type, summary: `Haría un POST firmado a ${a.url}.` };
-      case 'ask_cortex':
-        return {
-          type: a.type,
-          summary: `Le pediría a Cortex: «${renderTemplate(a.instruction, ctx).slice(0, 300)}». ${
-            a.writes === undefined
-              ? 'Lo que escriba fuera de esta tabla pasa por aprobación.'
-              : a.writes === 'row'
-                ? 'Podría cambiar cualquier campo de esta fila sin aprobación; lo demás pasa por aprobación.'
-                : `Podría cambiar sólo ${a.writes.join(', ')} de esta fila sin aprobación; lo demás pasa por aprobación.`
-          }`,
-        };
-    }
-  });
 }
 
 export function simulateRule(
@@ -333,6 +474,6 @@ export function simulateRule(
     triggerLabel: TRIGGER_LABEL[input.trigger.type],
     triggers,
     conditions: evaluateConditions(input.conditions, event, tracker, now),
-    actions: previewActions(input.actions, ctx),
+    actions: previewActions(input.actions, ctx, { event, tracker, now }),
   };
 }

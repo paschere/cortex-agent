@@ -30,6 +30,14 @@ const TABULAR_WORDS =
 const BREADTH_WORDS =
   /\b(?:compar(?:a|ar|e|emos)|investiga(?:r|ci(?:ó|o)n)?|revisa(?:r)?|resume|resumir|busca(?:r)?|analiza(?:r)?)\b[^.\n]{0,80}\b(?:\d{2,3}|cada|todos? los|todas las|estos|estas|decenas|docenas|varios|varias|muchos|muchas)\b|\b(?:uno por uno|una por una|en paralelo|investigaci(?:ó|o)n amplia|wide research)\b/i;
 
+/**
+ * Trabajo sobre tablas y apps dicho de mil maneras (con typos incluidos:
+ * «aplicaicón», «tarfiario» llegaron así). Sólo agrega las tres familias de ese
+ * trabajo, no feed/drive/sheets.
+ */
+const TABLE_WORK_WORDS =
+  /\b(?:apps?|aplic\w{3,}|tarif\w*|tarfi\w*|filas?|columnas?|campos?|dropdown|desplegables?|selector(?:es)?|pantallas?|operarios?|formularios?)\b/i;
+
 export const INTENT_RULES: readonly IntentRule[] = [
   {
     name: 'google-links',
@@ -42,6 +50,11 @@ export const INTENT_RULES: readonly IntentRule[] = [
     name: 'breadth-research',
     test: BREADTH_WORDS,
     families: ['research'],
+  },
+  {
+    name: 'table-work',
+    test: TABLE_WORK_WORDS,
+    families: ['trackers', 'apps', 'views'],
   },
   {
     name: 'tabular-words',

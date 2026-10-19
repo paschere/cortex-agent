@@ -15,6 +15,7 @@ export {
   trackersQuery,
   trackersRemove,
   trackersUpsert,
+  trackersUpsertMany,
 } from './tools';
 
 export {
@@ -165,6 +166,7 @@ export {
   queryRows,
   recomputeRows,
   removeRow,
+  removeRows,
   removeTracker,
   shapeValues,
   shapeValuesDetailed,

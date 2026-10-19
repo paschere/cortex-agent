@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { notFoundWithHints } from '../not-found-hints';
 import type { FlowActor } from '../trackers/flow';
 import { withFlowActor } from '../trackers/flow-guard';
 import { TRACKER_COLUMNS, type TrackerRow } from '../trackers/store';
@@ -280,7 +281,15 @@ export async function mustGetApp(
   options: { includeArchived?: boolean } = {},
 ): Promise<CustomAppRow> {
   const app = await getApp(db, ref, options);
-  if (!app) throw new NotFoundError(`No hay una aplicación «${ref}» en este espacio.`);
+  if (!app)
+    throw new NotFoundError(
+      await notFoundWithHints(
+        db,
+        `No hay una aplicación «${ref}» en este espacio. Mira apps_list.`,
+        ref,
+        'aplicación',
+      ),
+    );
   return app;
 }
 

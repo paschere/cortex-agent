@@ -51,7 +51,15 @@ import {
 } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { createToolCallRepair } from '@/lib/tool-call-repair';
-import { DISPATCH_TOOL_NAME, resolveDispatch, withNoSuchToolRedirect } from '@/lib/tool-dispatch';
+import {
+  DISPATCH_TOOL_NAME,
+  INVALID_ARGS_MARK,
+  brokenJsonMessage,
+  mergeDispatchArgs,
+  resolveDispatch,
+  withInvalidArgsRedirect,
+  withNoSuchToolRedirect,
+} from '@/lib/tool-dispatch';
 import { TOOL_PROGRESS_TYPE, createProgressThrottle } from '@/lib/tool-progress';
 import { modelToolContent } from '@/lib/tool-result-cap';
 import { createTurnBudget, hardMarginMs, runWithinBudget, turnLimitMs } from '@/lib/turn-budget';
@@ -124,6 +132,15 @@ export const runtime = 'nodejs';
 // propio presupuesto (lib/turn-budget.ts) deja de empezar herramientas al 70 %
 // y corta limpio antes del límite, para que guardar lo producido quepa siempre.
 // Si cambia, cambia también CHAT_MAX_DURATION_S (Next exige aquí un literal).
+/**
+ * Lo que el modelo lee cuando una herramienta quedó PROPUESTA y no ejecutada.
+ * El 2026-10-19 escribió «Ya quedó: convertí dolis_usados…» con la tarjeta
+ * todavía sin aprobar: este texto va en el resultado mismo para que no pueda
+ * leerlo como hecho.
+ */
+const PENDING_APPROVAL_NOTE =
+  'PROPUESTA pendiente: la persona todavía no la aprobó y NO se ejecutó. No digas «listo» ni «ya quedó»; di que dejaste la propuesta para que la apruebe y espera su respuesta antes de seguir con lo que depende de ella.';
+
 export const maxDuration = 800;
 
 /**
@@ -793,6 +810,9 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
       db,
       tools: allCandidates,
       query: recentText,
+      // Lo que la conversación ya usó: si trabajó sobre apps/tablas/vistas,
+      // el turno trae el paquete completo aunque la frase sea «sigue».
+      contextFamilies: stickyIds.map((id) => id.split('.')[0] ?? id),
     });
     return { selection, allCandidates, stickyIds };
   })().finally(closeSelection);
@@ -999,6 +1019,7 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
             __requires_confirmation: true,
             toolId: t.id,
             input: err.input,
+            message: PENDING_APPROVAL_NOTE,
           } as unknown as never;
         }
         // Never throw: a failed tool must not kill the turn. Return a
@@ -1059,6 +1080,7 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
             __requires_confirmation: true,
             toolId: sdkName,
             input: args,
+            message: PENDING_APPROVAL_NOTE,
           } as unknown as never;
         }
         // A connected MCP server is somebody else's network, and it is the most
@@ -1107,13 +1129,25 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
   const dispatchStuck = new Set<string>();
   aiTools[DISPATCH_TOOL_NAME] = tool({
     description:
-      'Úsala SOLO si una herramienta que necesitas no aparece en tu lista: pasa su nombre exacto en `tool` y sus argumentos en `args`. Se ejecuta con los mismos permisos y confirmaciones.',
+      'Llama CUALQUIER herramienta del catálogo, aunque no aparezca en tu lista: pasa su nombre exacto en `tool` y sus argumentos EXACTAMENTE como los recibe esa herramienta, en `args` (también valen al lado de `tool`). Se ejecuta con los mismos permisos y confirmaciones. Si necesitas una herramienta que no ves (leer o escribir filas de una tabla, cambiar una app, crear una vista…), NO digas que no tienes herramienta: llámala por aquí; si el nombre falla, pasa sólo la familia (p. ej. «trackers») y te devuelvo la lista.',
     experimental_toToolResultContent: modelToolContent,
-    parameters: z.object({
-      tool: z.string().min(1).max(120),
-      args: z.record(z.unknown()).default({}),
-    }),
-    execute: async ({ tool: requested, args }, { abortSignal, toolCallId }) => {
+    parameters: z
+      .object({
+        tool: z.string().min(1).max(120),
+        args: z.union([z.record(z.unknown()), z.string()]).optional(),
+      })
+      .passthrough(),
+    execute: async (raw, { abortSignal, toolCallId }) => {
+      const requested = raw.tool;
+      const args = mergeDispatchArgs(raw);
+      // Argumentos rotos reenviados desde la reparación (tool-dispatch.ts).
+      if (raw[INVALID_ARGS_MARK] === 'json') {
+        return {
+          __error: true,
+          tool: requested,
+          message: brokenJsonMessage(requested),
+        } as unknown as never;
+      }
       const resolved = resolveDispatch(requested, dispatchAllowed);
       if (!resolved.ok || resolved.candidate.kind !== 'registry') {
         return {
@@ -1501,8 +1535,8 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
       // corte duro del presupuesto, antes de que Vercel mate la función.
       abortSignal: budget.signal,
       // Argumentos rotos de una herramienta no tumban el turno: ver lib/tool-call-repair.ts.
-      experimental_repairToolCall: withNoSuchToolRedirect(
-        createToolCallRepair({ signal: budget.signal, surface: 'chat' }),
+      experimental_repairToolCall: withInvalidArgsRedirect(
+        withNoSuchToolRedirect(createToolCallRepair({ signal: budget.signal, surface: 'chat' })),
       ),
       // The one measurement that has to happen mid-stream, because it is the only
       // moment that matters and it is over before `onFinish` runs. Reasoning

@@ -251,6 +251,15 @@ export interface ToolDef<I, O> {
    */
   conversationGrace?: number;
   /**
+   * VALIDAR ANTES DE PEDIR APROBACIÓN. Para una herramienta que pide
+   * confirmación: la misma comprobación que correría al ejecutarla, pero sin
+   * escribir nada. `runTool` la llama justo antes de devolver la tarjeta de
+   * confirmación; si lanza (p. ej. `ValidationError`), el error vuelve AL
+   * MODELO —que corrige y vuelve a proponer— y la persona no recibe una
+   * tarjeta que iba a fallar después de aprobarla. Debe ser solo lectura.
+   */
+  preflight?: (input: I, ctx: ToolContext) => Promise<void>;
+  /**
    * Dónde están el importe y su moneda dentro de `inputSchema`, cuando esta
    * herramienta mueve dinero (migración 0099).
    *

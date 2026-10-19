@@ -28,6 +28,7 @@ import {
   getTrackerById,
   parseDocument,
   readWorkSettings,
+  removeRows,
   rowLabel,
   shapeValues,
   syncWork,
@@ -297,15 +298,8 @@ export async function deleteTrackerRows(
     if (!ids.length) return { ok: false, error: 'Marca al menos una fila.' };
     if (ids.length > MAX_BULK)
       return { ok: false, error: `Son demasiadas de una vez (máximo ${MAX_BULK}).` };
-    const { data, error } = await db
-      .from('tracker_rows')
-      .delete()
-      .eq('tracker_id', tracker.id)
-      .in('id', ids)
-      .select('id');
-    if (error) throw error;
-    const removed = (data ?? []).length;
-    if (removed) await applyDuplicateRule(db, tracker.id);
+    // También avisa a las automatizaciones («Se borra una fila») y aplica la regla de duplicados.
+    const removed = (await removeRows(db, tracker, ids, { userId: user.id })).length;
     await audit(db, user.id, 'trackers.remove', started, {
       tracker: tracker.slug,
       rowIds: ids.slice(0, 200),

@@ -321,7 +321,7 @@ describe('a custom tool inside runTool', () => {
 
   it('validates its arguments against the schema built from the definition', async () => {
     const tool = customToolDef(row(), { resolve });
-    await expect(runTool(tool, { guia: 123 }, makeCtx(recorded))).rejects.toThrow(/Invalid input/);
+    await expect(runTool(tool, { guia: 123 }, makeCtx(recorded))).rejects.toThrow(/Datos inválidos/);
   });
 
   it('runs, and leaves an audit row that does not contain the secret', async () => {

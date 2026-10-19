@@ -1,5 +1,7 @@
 'use client';
 
+import { useAppNav } from '@/components/apps/AppNav';
+import { PREFILL_PARAM, applyPrefill, decodePrefill } from '@/lib/apps/after-submit';
 import { appApiBase } from '@/lib/apps/api-base';
 import { formatCompactMoney, formatNumber, formatPercent } from '@/lib/datagrid/format';
 import { forValidation, hasPending } from '@/lib/views/offline-files';
@@ -123,6 +125,7 @@ export function FormBlock({
   const [full, setFull] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const disabled = target.kind === 'preview' || !submit;
+  const appNav = useAppNav();
   const operator = useViewTheme().layout === 'operator';
   const INPUT = operator ? INPUT_OPERATOR : INPUT_BASE;
   const online = useOnline();
@@ -229,6 +232,34 @@ export function FormBlock({
   const focusField = (key: string | undefined) => {
     if (key) document.getElementById(`${baseId}-${key}`)?.focus();
   };
+
+  // Encadenar pantallas: si llegamos con valores prellenados (?pre=…) desde otro
+  // formulario o botón, se ponen como valor inicial de los campos que éste tenga.
+  // La dirección se limpia después para que recargar no vuelva a pisar lo escrito.
+  // Sólo al abrir la pantalla: los campos del bloque no cambian mientras está abierta.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ver arriba
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const pre = decodePrefill(new URLSearchParams(window.location.search).get(PREFILL_PARAM));
+    if (!Object.keys(pre).length) return;
+    setValues((cur) =>
+      applyPrefill(
+        fields.map((f) => ({
+          key: f.key,
+          formula: Boolean(f.formula || (f.lookup && !f.lookup.editable)),
+        })),
+        cur,
+        pre,
+      ),
+    );
+    const t = setTimeout(() => {
+      const u = new URL(window.location.href);
+      if (!u.searchParams.has(PREFILL_PARAM)) return;
+      u.searchParams.delete(PREFILL_PARAM);
+      window.history.replaceState(window.history.state, '', u.toString());
+    }, 800);
+    return () => clearTimeout(t);
+  }, []);
 
   const reset = () => {
     setDone(null);
@@ -343,6 +374,17 @@ export function FormBlock({
         offline: false,
         rowId: rec?.rowId ?? null,
       });
+      // Encadenar: «y luego, abre esta otra pantalla con lo que acabo de enviar».
+      if (block.afterSubmit && appNav && res.rowId) {
+        const nameField = fields.find((f) => f.type === 'text' || f.type === 'select');
+        appNav.goThen(block.afterSubmit, {
+          values: outgoing,
+          row: {
+            id: res.rowId,
+            label: (nameField && outgoing[nameField.key]) || rec?.summary || '',
+          },
+        });
+      }
       return { ok: true, offline: false, message: res.message, duplicate: res.duplicate ?? null };
     }
     if (res.offline && canQueue) return keepLocal();

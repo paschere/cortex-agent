@@ -146,6 +146,14 @@ const BUILDERS: Record<string, Builder> = {
       },
     };
   },
+  trackers_upsert_many: ({ input, result }) => {
+    const tracker = result.tracker as Record<string, unknown> | undefined;
+    const name = str(tracker?.name, 50) ?? str(input.tracker, 50) ?? 'una tabla';
+    const made = typeof result.created === 'number' ? result.created : 0;
+    const changed = typeof result.updated === 'number' ? result.updated : 0;
+    const n = made + changed;
+    return plain(n === 1 ? `Anoté una fila en ${name}` : `Anoté ${n} filas en ${name}`, 'rows');
+  },
   trackers_remove: ({ input }) => {
     const name = str(input.tracker, 50) ?? 'una tabla';
     return plain(input.rowId ? `Borré una fila de ${name}` : `Eliminé la tabla ${name}`, 'rows');

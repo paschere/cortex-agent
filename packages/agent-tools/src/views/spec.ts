@@ -223,6 +223,31 @@ export const metricBlockSchema = z.object({
 });
 
 /**
+ * ENCADENAR PANTALLAS (opcional, sin valor por defecto: lo guardado no cambia).
+ * «Y luego, abre esta pantalla de la misma app con estos valores ya puestos»:
+ * registrar un vuelo y que se abra «Nueva atención» con ese vuelo elegido. Lo
+ * lleva un formulario (`afterSubmit`), un botón de fila (`next`) o un botón de
+ * pantalla de una automatización.
+ *
+ * `screen` es el slug de la pantalla destino (la misma app). `prefill`: llave de
+ * un campo del formulario de la pantalla destino → valor fijo o con variables:
+ * `{{campo}}` = lo que se acaba de enviar en ese campo (formulario), `{{fila}}` =
+ * la fila recién creada o la fila del botón, lista para un campo de RELACIÓN
+ * (el vuelo elegido), `{{nombre}}` = el nombre de esa fila. Un campo que la
+ * pantalla destino no tenga se ignora; la persona puede corregir lo prellenado.
+ */
+export const thenSchema = z.object({
+  screen: z
+    .string()
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{1,47}$/),
+  prefill: z
+    .record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.union([z.string().max(300), z.number()]))
+    .optional(),
+});
+export type ThenNav = z.infer<typeof thenSchema>;
+
+/**
  * UN BOTÓN POR FILA. Dos clases y ninguna más:
  *   - `set_field`: pone un valor fijo en un campo de ESA fila («Marcar pagada»
  *     → estado = Pagada). Sólo en tablas propias; se valida con el esquema de
@@ -242,6 +267,8 @@ export const rowActionSchema = z
     value: z.union([z.string().max(200), z.number()]).optional(),
     confirm: z.boolean().default(false),
     tone: z.enum(TONES).default('primary'),
+    /** Al terminar bien, abrir otra pantalla de la app con valores prellenados (ver `thenSchema`). */
+    next: thenSchema.optional(),
     /**
      * `set_field`: campos que la fila ya tiene que traer llenos para que el
      * botón funcione («Terminar» pide foto y nota de cierre). El servidor lo
@@ -449,6 +476,11 @@ export const formBlockSchema = z.object({
    * en voz alta, valida y lo envía al confirmar. Ver `VOICE_MODES`.
    */
   voice: z.enum(['off', 'dictate', 'conversation']).optional(),
+  /**
+   * Después de enviar, abre otra pantalla de la app con valores prellenados desde
+   * lo enviado (registrar vuelo → «Nueva atención» con ese vuelo). Ver `thenSchema`.
+   */
+  afterSubmit: thenSchema.optional(),
 });
 
 /** Cómo se llena un formulario hablando (por defecto: dictar). */
@@ -1174,6 +1206,41 @@ export function checkFormExtras(
       }
     }
   }
+}
+
+/**
+ * LO TRIVIAL SE ARREGLA SOLO, CON AVISO. Un bloque de tarjetas cuyo `dateField`
+ * apunta a un campo que existe pero NO es de fecha (una hora, un texto) no
+ * puede servir a los chips «hoy» / «semana»: en vez de rechazar toda la
+ * pantalla (y de que el error aparezca DESPUÉS de que la persona aprobó, como
+ * pasó el 2026-10-19 con `hora_inicio`), se quitan esos chips y el campo, y se
+ * avisa. Lo que de verdad no existe sigue siendo un problema que
+ * `checkSpecAgainst` devuelve. Pura: no muta el spec que recibe.
+ */
+export function autofixSpecAgainst(
+  spec: ViewSpec,
+  catalog: CatalogTracker[],
+): { spec: ViewSpec; fixes: string[] } {
+  const bySlug = new Map(catalog.map((t) => [t.slug, t]));
+  const fixes: string[] = [];
+  let changed = false;
+  const blocks = spec.blocks.map((block) => {
+    if (block.type !== 'cards' || !block.dateField) return block;
+    const tracker = bySlug.get(block.tracker);
+    if (!tracker || tracker.opaque) return block;
+    const type = fieldType(tracker, block.dateField);
+    if (!type || type === 'date' || type === 'builtin_date') return block;
+    changed = true;
+    const dropped = block.chips.filter((c) => c === 'today' || c === 'week');
+    fixes.push(
+      `Bloque «${block.id}»: «${block.dateField}» no es un campo de fecha, así que quité${
+        dropped.length ? ` los chips «${dropped.join('» y «')}» y` : ''
+      } ese campo de las tarjetas.`,
+    );
+    const { dateField: _dropped, ...rest } = block;
+    return { ...rest, chips: block.chips.filter((c) => c !== 'today' && c !== 'week') };
+  });
+  return { spec: changed ? { ...spec, blocks } : spec, fixes };
 }
 
 /**

@@ -149,7 +149,16 @@ describe('alcance: lo que un plan nunca cubre', () => {
       'schedule.create',
     ])
       expect(neverUnderPlanGrant(id), id).toBe(true);
-    for (const id of ['trackers.upsert', 'views.create', 'trackers.define', 'browser.open_page'])
+    for (const id of [
+      'trackers.upsert',
+      'trackers.upsert_many',
+      'views.create',
+      'trackers.define',
+      'browser.open_page',
+      // Publicar una app es para el equipo de la propia empresa: el plan lo cubre.
+      'apps.update',
+      'apps.publish',
+    ])
       expect(neverUnderPlanGrant(id), id).toBe(false);
   });
 

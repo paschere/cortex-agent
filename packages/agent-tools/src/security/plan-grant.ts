@@ -45,12 +45,13 @@ export const PLAN_GRANT_TOOL_ID = 'cortex.plan_grant';
 export const PLAN_GRANT_REVOKE_TOOL_ID = 'cortex.plan_grant_revoke';
 export const PLAN_GRANT_USE_TOOL_ID = 'cortex.plan_grant_use';
 export const PLAN_GRANT_TTL_MS = 30 * 60_000;
-export const PLAN_GRANT_MAX_CALLS = 20;
+export const PLAN_GRANT_MAX_CALLS = 40;
 /** Por encima de esto la llamada vuelve a preguntar aunque el plan la nombrara. */
 export const PLAN_GRANT_RISK_CEILING = ['low', 'medium'] as const;
 
 const OUTBOUND =
   /(^|[._])(send|send_draft|send_message|reply|group_send|post_message|publish|submit|submit_flow|pay|transfer|approve|invite|share|emit|charge|refund|void|cancel|disburse|file)([._]|$)/;
+const PLAN_GRANTABLE_DESPITE_OUTBOUND = new Set(['apps.publish']);
 const NEVER_FAMILIES =
   /^(payments|banking|payroll|accounting|close|team|security|mandates|schedule)\./;
 
@@ -60,11 +61,13 @@ const NEVER_FAMILIES =
  * desatendidas. Una tarjeta normal, siempre.
  */
 export function neverUnderPlanGrant(toolId: string): boolean {
+  if (mandatoryHumanConfirmation(toolId)) return true;
+  // Publicar una app deja los cambios a la vista del equipo de la propia
+  // empresa (no sale a terceros): si el plan lo nombra («Publicar los
+  // cambios») y la persona lo aprobó, no se vuelve a preguntar.
+  if (PLAN_GRANTABLE_DESPITE_OUTBOUND.has(toolId)) return false;
   return (
-    mandatoryHumanConfirmation(toolId) ||
-    OUTBOUND.test(toolId) ||
-    NEVER_FAMILIES.test(toolId) ||
-    toolId === 'gcal.create_event' // invita a gente de fuera por correo
+    OUTBOUND.test(toolId) || NEVER_FAMILIES.test(toolId) || toolId === 'gcal.create_event' // invita a gente de fuera por correo
   );
 }
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { filterSchema } from '../../views/spec';
+import { filterSchema, thenSchema } from '../../views/spec';
 import { roleKeySchema } from '../permissions';
 
 /**
@@ -27,6 +27,7 @@ export const TRIGGER_KINDS = [
   'schedule',
   'button',
   'rows_poll',
+  'row_deleted',
 ] as const;
 export type TriggerKind = (typeof TRIGGER_KINDS)[number];
 
@@ -38,6 +39,7 @@ export const ROW_TRIGGER_KINDS: ReadonlySet<TriggerKind> = new Set([
   'form_submitted',
   'approval_decided',
   'rows_poll',
+  'row_deleted',
 ]);
 
 const slug = z
@@ -78,6 +80,8 @@ export const automationTriggerSchema = z.discriminatedUnion('type', [
     to: plain.optional(),
   }),
   z.object({ type: z.literal('row_flagged_duplicate'), tracker: slug }),
+  /** Se borra una fila (la fila ya no existe: sus valores van en el suceso). */
+  z.object({ type: z.literal('row_deleted'), tracker: slug }),
   z.object({
     type: z.literal('form_submitted'),
     tracker: slug,
@@ -124,6 +128,8 @@ export const automationTriggerSchema = z.discriminatedUnion('type', [
       .trim()
       .regex(/^[a-z][a-z0-9_]{1,31}$/),
     label: z.string().trim().min(1).max(40),
+    /** Al tocarlo, además abre otra pantalla de la app (con valores fijos prellenados). */
+    next: thenSchema.optional(),
   }),
 ]);
 export type AutomationTrigger = z.infer<typeof automationTriggerSchema>;
@@ -151,17 +157,49 @@ export const ASK_ALLOW_LABEL: Record<(typeof ASK_ALLOWABLE_TOOLS)[number], strin
 };
 
 export const MAX_ACTIONS = 8;
+/** Filas que una sola acción puede cambiar en otra tabla (y lo que se cambia si no se dice). */
+export const MAX_RELATED_ROWS = 200;
+export const DEFAULT_RELATED_ROWS = 50;
+/** Espera dentro de una regla: de 1 minuto a 7 días. */
+export const WAIT_MIN_MINUTES = 1;
+export const WAIT_MAX_MINUTES = 10080;
+export const ROLLUP_OPS = ['sum', 'count', 'avg', 'min', 'max'] as const;
+export type RollupOp = (typeof ROLLUP_OPS)[number];
+export const ROLLUP_OP_LABEL: Record<RollupOp, string> = {
+  sum: 'la suma',
+  count: 'el conteo',
+  avg: 'el promedio',
+  min: 'el mínimo',
+  max: 'el máximo',
+};
+
+const fixedOrTemplate = z.union([z.string().max(300), z.number()]);
+const setValues = z.record(fieldKey, fixedOrTemplate);
+
+/**
+ * Lo que cualquier acción puede traer además de lo suyo (todo opcional: las
+ * reglas guardadas antes no lo tienen):
+ *   - `if`: sólo se hace si la fila cumple estas condiciones (las mismas de la regla).
+ *   - `otherwise`: es la RAMA «si no» de la acción anterior que tiene `if`: se hace
+ *     justo cuando esa no se hizo por no cumplirse su condición.
+ */
+const branch = {
+  if: z.array(automationConditionSchema).min(1).max(4).optional(),
+  otherwise: z.boolean().optional(),
+};
 export const MAX_CONDITIONS = 8;
 export const MAX_EMAIL_RECIPIENTS = 10;
 
 export const automationActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_field'),
+    ...branch,
     field: fieldKey,
     value: z.union([z.string().max(300), z.number()]),
   }),
   z.object({
     type: z.literal('create_row'),
+    ...branch,
     /** Otra tabla (o la misma) donde se crea la fila. */
     tracker: slug,
     /** Valores fijos o con variables `{{campo}}` de la fila que disparó. */
@@ -169,6 +207,7 @@ export const automationActionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('notify_member'),
+    ...branch,
     /** Miembros de Cortex (ids). */
     members: z.array(z.string().uuid()).max(20).default([]),
     /** Roles de la app: avisa a los miembros de Cortex asignados a esos roles. */
@@ -180,6 +219,7 @@ export const automationActionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('notify_app_user'),
+    ...branch,
     /** El creador de la fila, o los usuarios de la app con un rol. */
     to: z.union([z.literal('creator'), z.object({ role: roleKeySchema })]),
     title: text(120),
@@ -189,6 +229,7 @@ export const automationActionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('email'),
+    ...branch,
     to: z.array(emailSchema).max(MAX_EMAIL_RECIPIENTS).default([]),
     /** Usuarios de la app con estos roles. */
     roles: z.array(roleKeySchema).max(8).default([]),
@@ -197,10 +238,12 @@ export const automationActionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('webhook'),
+    ...branch,
     url: z.string().trim().url().max(500),
   }),
   z.object({
     type: z.literal('ask_cortex'),
+    ...branch,
     /** Lo que Cortex debe hacer, en texto; puede usar `{{campo}}`. */
     instruction: text(3000),
     /**
@@ -219,6 +262,63 @@ export const automationActionSchema = z.discriminatedUnion('type', [
      */
     allow: z.array(z.enum(ASK_ALLOWABLE_TOOLS)).max(2).optional(),
   }),
+  z.object({
+    type: z.literal('update_related'),
+    ...branch,
+    /**
+     * SUBIR: campo de relación de la tabla de esta fila; se cambia la fila a la
+     * que apunta (la atención → su vuelo).
+     */
+    up: fieldKey.optional(),
+    /**
+     * BAJAR: las filas de `tracker` cuyo campo de relación `via` apunta a ESTA
+     * fila (el vuelo → todas sus atenciones). `where` acota cuáles.
+     */
+    down: z.object({ tracker: slug, via: fieldKey }).optional(),
+    where: z.array(filterSchema).max(4).optional(),
+    /** Campos de la fila relacionada → valor fijo o con `{{campo}}` de la fila que disparó. */
+    set: setValues,
+    /** Tope de filas al bajar (por defecto 50, máx. 200); si hay más, se avisa. */
+    max: z.number().int().min(1).max(MAX_RELATED_ROWS).optional(),
+  }),
+  z.object({
+    type: z.literal('update_rows'),
+    ...branch,
+    /** Otra tabla (o la misma) donde se buscan las filas. */
+    tracker: slug,
+    /** Qué filas: filtros como los de las vistas; los valores pueden llevar `{{campo}}`. */
+    where: z.array(filterSchema).min(1).max(6),
+    set: setValues,
+    max: z.number().int().min(1).max(MAX_RELATED_ROWS).optional(),
+  }),
+  z.object({
+    type: z.literal('rollup'),
+    ...branch,
+    /**
+     * Campo de relación de la tabla de esta fila (la hija) hacia la fila padre
+     * (la atención → su vuelo). Se recalcula en la fila padre, con TODAS sus hijas.
+     */
+    up: fieldKey,
+    /** Campo (number/money) de la fila padre donde queda el resultado. */
+    target: fieldKey,
+    op: z.enum(ROLLUP_OPS),
+    /** Campo (number/money) de las hijas que se acumula; el conteo no lo necesita. */
+    field: fieldKey.optional(),
+    /** Sólo cuentan las hijas que cumplan estos filtros. */
+    where: z.array(filterSchema).max(4).optional(),
+  }),
+  z.object({
+    type: z.literal('wait'),
+    ...branch,
+    /** Cuánto esperar antes de seguir con las acciones que vienen después. */
+    minutes: z.number().int().min(WAIT_MIN_MINUTES).max(WAIT_MAX_MINUTES),
+    /**
+     * Al volver, la fila se lee de nuevo y tiene que cumplir esto para seguir; si no,
+     * la regla termina ahí («omitida»). Sin decirlo = las condiciones de la propia regla
+     * (menos «cambió de X a Y»); lista vacía = seguir siempre.
+     */
+    stillIf: z.array(automationConditionSchema).max(MAX_CONDITIONS).optional(),
+  }),
 ]);
 export type AutomationAction = z.infer<typeof automationActionSchema>;
 export type ActionType = AutomationAction['type'];
@@ -231,6 +331,10 @@ export const ACTION_LABEL: Record<ActionType, string> = {
   email: 'Mandar un correo',
   webhook: 'Llamar a otro sistema (webhook)',
   ask_cortex: 'Pedirle algo a Cortex',
+  update_related: 'Cambiar filas relacionadas (subir o bajar por una relación)',
+  update_rows: 'Cambiar filas de otra tabla por filtro',
+  rollup: 'Acumular en la fila padre (suma, conteo, promedio…)',
+  wait: 'Esperar y volver a revisar',
 };
 
 export const TRIGGER_LABEL: Record<TriggerKind, string> = {
@@ -242,6 +346,7 @@ export const TRIGGER_LABEL: Record<TriggerKind, string> = {
   schedule: 'A una hora',
   button: 'Alguien toca un botón',
   rows_poll: 'Cada cierto tiempo, para cada fila que cumpla',
+  row_deleted: 'Se borra una fila',
 };
 
 export const automationInputSchema = z.object({
@@ -284,14 +389,23 @@ export function structuralProblems(input: AutomationInput): string[] {
     if (t.perRowMinutes !== undefined && t.perRowMinutes < t.everyMinutes)
       out.push('La frecuencia por fila no puede ser menor que «cada cuántos minutos» se mira.');
   }
-  for (const c of input.conditions) {
+  const allConditions: AutomationCondition[] = [
+    ...input.conditions,
+    ...input.actions.flatMap((a) => [
+      ...(a.if ?? []),
+      ...(a.type === 'wait' ? (a.stillIf ?? []) : []),
+    ]),
+  ];
+  for (const c of allConditions) {
     if (
       'type' in c &&
       c.type === 'changed' &&
       input.trigger.type !== 'row_updated' &&
       input.trigger.type !== 'approval_decided'
-    )
+    ) {
       out.push('«Cambió de X a Y» sólo tiene sentido cuando el disparador es «Cambia una fila».');
+      break;
+    }
   }
   for (const a of input.actions) {
     if (a.type === 'email' && !a.to.length && !a.roles.length)
@@ -303,5 +417,71 @@ export function structuralProblems(input: AutomationInput): string[] {
     if (a.type === 'webhook' && !a.url.toLowerCase().startsWith('https://'))
       out.push('El webhook sólo acepta direcciones https.');
   }
+  if (input.trigger.type === 'row_deleted') {
+    if (input.actions.some((a) => a.type === 'set_field'))
+      out.push(
+        '«Cambiar un campo» no sirve cuando la fila se borró; cambia otra fila con «filas relacionadas».',
+      );
+    if (input.actions.some((a) => a.type === 'notify_app_user' && a.to === 'creator'))
+      out.push('«Al creador de la fila» no sirve cuando la fila se borró; elige un rol.');
+  }
+  out.push(...flowProblems(input, rowless));
   return [...new Set(out)];
+}
+
+/** Los problemas de las ramas («si» / «si no»), la espera y las acciones sobre filas relacionadas. */
+function flowProblems(input: AutomationInput, rowless: boolean): string[] {
+  const out: string[] = [];
+  let lastConditional = -1;
+  input.actions.forEach((a, i) => {
+    const n = i + 1;
+    if (a.otherwise) {
+      if (a.if) out.push(`Acción ${n}: una rama «si no» no lleva su propia condición.`);
+      if (lastConditional < 0)
+        out.push(`Acción ${n}: «si no» necesita una acción anterior con condición («si»).`);
+    }
+    if (a.if) lastConditional = i;
+    if (rowless && a.if)
+      out.push(`Acción ${n}: una condición compara campos de una fila; sin fila no hay con qué.`);
+    switch (a.type) {
+      case 'update_related':
+        if (!!a.up === !!a.down)
+          out.push(
+            `Acción ${n}: «cambiar filas relacionadas» necesita UNA dirección: \`up\` (subir a la fila a la que apunta) o \`down\` (bajar a las filas que apuntan a esta).`,
+          );
+        if (!Object.keys(a.set).length)
+          out.push(`Acción ${n}: falta qué campos cambiar (\`set\`).`);
+        if (a.up && a.where?.length)
+          out.push(`Acción ${n}: al subir hay una sola fila; \`where\` sólo sirve al bajar.`);
+        if (a.up && a.max !== undefined)
+          out.push(`Acción ${n}: al subir hay una sola fila; \`max\` sólo sirve al bajar.`);
+        if (rowless) out.push(`Acción ${n}: «filas relacionadas» necesita una fila de partida.`);
+        break;
+      case 'update_rows':
+        if (!Object.keys(a.set).length)
+          out.push(`Acción ${n}: falta qué campos cambiar (\`set\`).`);
+        break;
+      case 'rollup':
+        if (a.op !== 'count' && !a.field)
+          out.push(
+            `Acción ${n}: ${ROLLUP_OP_LABEL[a.op]} necesita \`field\` (el campo de las hijas).`,
+          );
+        if (rowless) out.push(`Acción ${n}: acumular necesita una fila de partida (la hija).`);
+        break;
+      case 'wait':
+        if (a.stillIf?.length && rowless)
+          out.push(
+            `Acción ${n}: «seguir si…» compara campos de una fila; sin fila no hay con qué.`,
+          );
+        break;
+      default:
+        break;
+    }
+  });
+  if (!input.actions.some((a) => !a.otherwise && a.type !== 'wait') && input.actions.length)
+    out.push('La regla sólo espera: agrega qué hacer después.');
+  const lastIsWait = input.actions[input.actions.length - 1]?.type === 'wait';
+  if (lastIsWait)
+    out.push('La espera no puede ser lo último: agrega qué hacer después de esperar.');
+  return out;
 }

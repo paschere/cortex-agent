@@ -11,13 +11,27 @@ import {
   type TemplateContext,
   TransientActionError,
   backoffMs,
+  branchDecision,
   evaluateConditions,
+  isChanged,
   isTransient,
+  newBranchState,
+  renderRaw,
   renderTemplate,
   renderValues,
+  waitText,
 } from './engine';
 import { getAppLimits } from './limits';
 import type { AutomationEvent, Values } from './match';
+import {
+  applyRelatedPlan,
+  applyRollupPlan,
+  describeRelatedPlan,
+  describeRollupPlan,
+  planRollup,
+  planUpdateRelated,
+  planUpdateRows,
+} from './related';
 import type { AutomationAction } from './spec';
 import {
   AUTOMATION_COLUMNS,
@@ -124,6 +138,9 @@ export function signWebhook(secret: string, timestamp: string, body: string): st
 }
 
 const STALE_RUNNING_MS = 10 * 60_000;
+
+/** Marca, en el resultado de una acción «esperar», que la corrida está dormida hasta esa hora. */
+export const WAIT_PENDING = 'ESPERANDO hasta ';
 
 /** Corridas que quedaron «running» (el proceso murió) vuelven a la cola. */
 export async function releaseStaleRuns(db: SupabaseClient, now: Date): Promise<number> {
@@ -282,11 +299,99 @@ export async function executeRun(
   let askCalls = run.ask_cortex_calls;
   let transientFailure: string | null = null;
   let waiting: { index: number; type: string; error: WaitingForPersonError } | null = null;
+  let pausedUntil: Date | null = null;
+  let endedEarly: string | null = null;
   const origin = { chain: [...(event.chain ?? []), automation.id], depth: (event.depth ?? 0) + 1 };
 
+  // Tras una espera la fila se lee de nuevo: lo que sigue ve cómo está ahora, no
+  // cómo estaba cuando se disparó la regla.
+  const hadWait = results.some((r) => r.ok && r.type === 'wait');
+  if (hadWait && trackerRow && event.rowId) {
+    const fresh = await currentRow(db, trackerRow.id, event.rowId);
+    if (fresh) {
+      ctx.after = fresh.values;
+      ctx.label = fresh.label;
+    }
+  }
+  const rowEvent = (): AutomationEvent => ({ ...event, after: ctx.after, label: ctx.label });
+  const branch = newBranchState();
+
   for (let index = 0; index < automation.actions.length; index++) {
-    if (results.some((r) => r.index === index && r.ok)) continue;
     const action = automation.actions[index] as AutomationAction;
+    // El «si» / «si no» se juzga en orden para todas (también las ya hechas).
+    const decision = branchDecision(action, branch, (conds) =>
+      evaluateConditions(conds, rowEvent(), tracker, now),
+    );
+    const prev = results.find((r) => r.index === index);
+    const pendingUntil =
+      action.type === 'wait' && prev && !prev.ok && prev.detail.startsWith(WAIT_PENDING)
+        ? new Date(prev.detail.slice(WAIT_PENDING.length))
+        : null;
+    if (prev?.ok) continue;
+    if (!decision.run) {
+      upsertResult(results, {
+        index,
+        type: action.type,
+        ok: true,
+        detail: `Omitida: ${decision.reason}.`,
+      });
+      continue;
+    }
+    if (action.type === 'wait') {
+      if (!pendingUntil) {
+        const at = new Date(now.getTime() + action.minutes * 60_000);
+        upsertResult(results, {
+          index,
+          type: 'wait',
+          ok: false,
+          detail: `${WAIT_PENDING}${at.toISOString()}`,
+        });
+        pausedUntil = at;
+        break;
+      }
+      if (pendingUntil.getTime() > now.getTime()) {
+        pausedUntil = pendingUntil;
+        break;
+      }
+      // Ya pasó el tiempo: ¿la fila sigue cumpliendo?
+      let still = true;
+      let why = '';
+      if (trackerRow && event.rowId) {
+        const fresh = await currentRow(db, trackerRow.id, event.rowId);
+        if (!fresh) {
+          still = false;
+          why = 'la fila ya no existe';
+        } else {
+          ctx.after = fresh.values;
+          ctx.label = fresh.label;
+          const conds = action.stillIf ?? automation.conditions.filter((c) => !isChanged(c));
+          if (conds.length) {
+            const r = evaluateConditions(conds, rowEvent(), tracker, now);
+            if (!r.ok) {
+              still = false;
+              why = r.failed ?? 'ya no cumple';
+            }
+          }
+        }
+      }
+      if (!still) {
+        upsertResult(results, {
+          index,
+          type: 'wait',
+          ok: true,
+          detail: `Esperó ${waitText(action.minutes)}; ya no se cumple (${why}).`,
+        });
+        endedEarly = `Tras esperar ${waitText(action.minutes)} ya no se cumple: ${why}.`;
+        break;
+      }
+      upsertResult(results, {
+        index,
+        type: 'wait',
+        ok: true,
+        detail: `Esperó ${waitText(action.minutes)}; la fila sigue cumpliendo.`,
+      });
+      continue;
+    }
     try {
       const detail = await withAutomationOrigin(origin, () =>
         runAction({
@@ -302,6 +407,7 @@ export async function executeRun(
           action,
           index,
           trackerRow,
+          now,
           askAllowed: used.askCortex + askCalls < limits.askCortexPerDay,
           askCap: limits.askCortexPerDay,
           onAsk: () => {
@@ -331,6 +437,32 @@ export async function executeRun(
       }
       upsertResult(results, { index, type: action.type, ok: false, detail: message });
     }
+  }
+
+  // «Esperar»: la corrida se duerme (en cola, con su hora) y despierta sola.
+  if (pausedUntil) {
+    await db
+      .from('custom_app_automation_runs')
+      .update({
+        status: 'queued',
+        next_attempt_at: pausedUntil.toISOString(),
+        error: null,
+        attempts: 0,
+        result: results,
+        ask_cortex_calls: askCalls,
+      })
+      .eq('id', run.id);
+    return { status: 'retry', at: pausedUntil.toISOString() };
+  }
+  if (endedEarly) {
+    await finish(
+      db,
+      run,
+      automation.id,
+      { status: 'skipped', error: endedEarly, result: results, askCalls },
+      now,
+    );
+    return { status: 'skipped', reason: endedEarly };
   }
 
   if (waiting) {
@@ -427,6 +559,7 @@ interface ActionRun {
   action: AutomationAction;
   index: number;
   trackerRow: Awaited<ReturnType<typeof getTrackerBySlug>>;
+  now: Date;
   askAllowed: boolean;
   askCap: number;
   onAsk: () => void;
@@ -497,8 +630,7 @@ async function runAction(a: ActionRun): Promise<string> {
       if (!a.trackerRow || !event.rowId) throw new Error('Sin fila donde cambiar el campo.');
       const row = await currentRow(db, a.trackerRow.id, event.rowId);
       if (!row) throw new Error('La fila ya no existe.');
-      const value =
-        typeof action.value === 'number' ? action.value : renderTemplate(action.value, ctx);
+      const value = typeof action.value === 'number' ? action.value : renderRaw(action.value, ctx);
       if (String(row.values[action.field] ?? '') === String(value))
         return `«${action.field}» ya estaba en «${value}».`;
       await upsertRow(db, {
@@ -673,6 +805,47 @@ async function runAction(a: ActionRun): Promise<string> {
       if (status >= 400) throw new Error(`El destino rechazó el aviso (${status}).`);
       return `POST firmado a ${new URL(action.url).host}: ${status}.`;
     }
+    case 'update_related': {
+      if (!a.trackerRow) throw new Error('Sin tabla de partida.');
+      const plan = await planUpdateRelated(db, {
+        tracker: a.trackerRow,
+        rowId: event.rowId,
+        action,
+        ctx,
+        now: a.now,
+      });
+      const out = await applyRelatedPlan(db, plan, automation.created_by);
+      if (out.failures.length)
+        throw new Error(
+          `No se pudo cambiar ${out.failures.length} fila${out.failures.length === 1 ? '' : 's'}: ${out.failures.slice(0, 2).join(' · ')}`,
+        );
+      return describeRelatedPlan(plan, true);
+    }
+    case 'update_rows': {
+      const plan = await planUpdateRows(db, { action, ctx, now: a.now });
+      const out = await applyRelatedPlan(db, plan, automation.created_by);
+      if (out.failures.length)
+        throw new Error(
+          `No se pudo cambiar ${out.failures.length} fila${out.failures.length === 1 ? '' : 's'}: ${out.failures.slice(0, 2).join(' · ')}`,
+        );
+      return describeRelatedPlan(plan, true);
+    }
+    case 'rollup': {
+      if (!a.trackerRow) throw new Error('Sin tabla de partida.');
+      const plan = await planRollup(db, {
+        tracker: a.trackerRow,
+        action,
+        ctx,
+        before: event.before,
+        now: a.now,
+      });
+      const out = await applyRollupPlan(db, plan, automation.created_by);
+      if (out.failures.length) throw new Error(out.failures.slice(0, 2).join(' · '));
+      return describeRollupPlan(action, plan, true);
+    }
+    case 'wait':
+      // Se maneja en el ciclo de executeRun (la espera duerme la corrida).
+      return 'Espera.';
     case 'ask_cortex': {
       if (!a.askAllowed)
         throw new Error(

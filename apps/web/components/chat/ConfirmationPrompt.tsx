@@ -379,6 +379,9 @@ export function ConfirmationPrompt({
           <p className="mt-1 text-xs leading-snug text-ink-muted [overflow-wrap:anywhere]">
             {confirmationReason(toolId)}
           </p>
+          <p className="mt-1 text-xs font-medium leading-snug text-amber [overflow-wrap:anywhere]">
+            Todavía no se hizo nada: queda pendiente hasta que la apruebes.
+          </p>
         </div>
       </div>
 

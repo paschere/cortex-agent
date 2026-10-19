@@ -4,12 +4,16 @@ import { z } from 'zod';
 import { isCompanyManager } from '../../directory/store';
 import { registerTool } from '../../index';
 import { mustGetApp } from '../store';
+import { simulateAutomation } from './simulate';
 import {
   ACTION_LABEL,
+  type AutomationInput,
   TRIGGER_LABEL,
   automationActionSchema,
   automationConditionSchema,
+  automationInputSchema,
   automationTriggerSchema,
+  structuralProblems,
 } from './spec';
 import {
   type AutomationRow,
@@ -54,9 +58,16 @@ export function describeAutomation(
 }
 
 const GRAMMAR = `Automation = {name, enabled?, trigger, conditions[], actions[]}.
-trigger (Cuando): {type:"row_created",tracker} | {type:"row_updated",tracker,field?,to?} | {type:"row_flagged_duplicate",tracker} | {type:"form_submitted",tracker,screen?,block?} | {type:"approval_decided",tracker,decision:"approved"|"rejected"|"any"} | {type:"schedule",cadence:"daily"|"weekly",hour:0-23 (Bogota),weekday?:1-7} | {type:"button",screen,id,label} | {type:"rows_poll",tracker,everyMinutes:>=10,perRowMinutes?,maxRows?:1-25 (default 10),window?:{field,timeField?,beforeHours?,afterHours?}} (every N minutes, one run per row that meets the conditions and is inside the window of its date field; e.g. follow a flight from 6h before to 24h after).
+trigger (Cuando): {type:"row_created",tracker} | {type:"row_updated",tracker,field?,to?} | {type:"row_flagged_duplicate",tracker} | {type:"form_submitted",tracker,screen?,block?} | {type:"approval_decided",tracker,decision:"approved"|"rejected"|"any"} | {type:"schedule",cadence:"daily"|"weekly",hour:0-23 (Bogota),weekday?:1-7} | {type:"button",screen,id,label,next?:{screen,prefill?:{field:fixedValue}}} (next = also open another screen of the app after the click) | {type:"row_deleted",tracker} (a row was deleted; the event carries the values it had) | {type:"rows_poll",tracker,everyMinutes:>=10,perRowMinutes?,maxRows?:1-25 (default 10),window?:{field,timeField?,beforeHours?,afterHours?}} (every N minutes, one run per row that meets the conditions and is inside the window of its date field; e.g. follow a flight from 6h before to 24h after).
 conditions (Si): view filters {field,op,value?} plus {type:"changed",field,from?,to?}. Only for triggers with a row.
 actions (Entonces, max 8): {type:"set_field",field,value} | {type:"create_row",tracker,values:{field:value}} | {type:"notify_member",members?:[userId],roles?:[roleKey],admins?,title,body?} | {type:"notify_app_user",to:"creator"|{role},title,body?,screen?} (push, or email if the person has no active push) | {type:"email",to?:[addresses],roles?:[roleKey],subject,body} | {type:"webhook",url:https} (HMAC-signed POST) | {type:"ask_cortex",instruction,writes?:"row"|[fieldKey],allow?:["gdrive.upload_file"|"whatsapp.group_send"]} (allow = outside-Cortex tools the instruction may use WITHOUT approval: save a file into an existing Drive folder, write to an enabled WhatsApp group; Cortex then finds folders with gdrive.find_folder and reads group replies with whatsapp.group_messages) (free-text instruction with {{fields}}; Cortex reads the web, the company brain and tables, and with writes it may change the row's own fields without approval — it does not write when unsure and cites its source in the run history; anything else it writes goes to approval). Example: "Busca en la web el estado del vuelo {{vuelo}} del {{fecha}} y actualiza estado, ETA y llegada; cita la fuente" or "Calcula el precio de esta atención con el documento «Reglas de precios» del cerebro; si falta un dato, no escribas el precio y di qué falta".
+Every action also accepts two optional branch fields: "if":[conditions] (do it only when the row meets them; same shape as conditions, max 4) and "otherwise":true (the ELSE branch of the nearest earlier action that has "if": it runs exactly when that one was skipped). Example: [{type:"notify_member",...,if:[{field:"costo",op:"gt",value:1000000}]},{type:"email",...,otherwise:true}].
+Connecting events between tables (all optional, all take {{fields}} of the row that fired the rule; relation fields store {id,label} and are copied whole by "{{relation_field}}"):
+- {type:"update_related",up:"relation_field",set:{field:value}}: CHANGE THE ROW THIS ONE POINTS TO (the service record -> its flight). Or {type:"update_related",down:{tracker,via:"relation_field_of_that_table_pointing_here"},where?:[filters],set:{...},max?:1-200 (default 50)}: CHANGE ALL THE ROWS THAT POINT TO THIS ONE (the flight -> all its service records). Exactly one of up/down. Rows that already have the value are not touched (no loops).
+- {type:"update_rows",tracker,where:[filters 1-6; values may use {{fields}}],set:{...},max?:1-200 (default 50)}: change rows of any table by filter. If more rows match than max, only the first max are changed and the run history says so.
+- {type:"rollup",up:"relation_field_of_this_table",target:"number_or_money_field_of_the_parent",op:"sum"|"count"|"avg"|"min"|"max",field?:"child_number_field" (not needed for count),where?:[filters on the children]}: RECOMPUTE a total in the parent row from ALL its children (never "add one", so it is safe to run twice). Use it with triggers row_created + row_updated + row_deleted on the CHILD table (three rules, or one per event) so the total follows creates, edits and deletes. Example: "flight total cost = sum of each used item's total cost": child table "equipos_usados", up:"vuelo", target:"costo_total", op:"sum", field:"costo_total".
+- {type:"wait",minutes:1-10080,stillIf?:[conditions]}: SLEEP the run, then re-read the row; if it still meets stillIf (omitted = the rule's own conditions; [] = always continue) the actions AFTER the wait run (with the row as it is then), otherwise the run ends as skipped. Not the last action. Example for "if in 2 hours the flight is still not Attended, warn the supervisor": trigger row_created on flights, conditions [], actions [{type:"wait",minutes:120,stillIf:[{field:"estado",op:"neq",value:"Atendido"}]},{type:"notify_member",...}].
+Chains: a change made by one rule can fire other rules; a rule never fires itself, not even through a loop A -> B -> A, and chains stop at depth 3. Example "when a service record closes, mark the flight as attended and add up the cost": trigger row_updated on atenciones field estado to "Cerrada"; actions [{type:"update_related",up:"vuelo",set:{estado:"Atendido"}},{type:"rollup",up:"vuelo",target:"costo_total",op:"sum",field:"costo"}]. Use apps.automations.test to see what a rule would change on a real row before turning it on.
 Templates in text use {{field_key}}, {{antes.field_key}}, {{nombre}}, {{app}}, {{enlace}}, {{motivo}}. An automation never re-triggers itself (max depth 3). No WhatsApp: notices go by push and email only.`;
 
 const summarySchema = z.object({
@@ -227,6 +238,74 @@ export const appsAutomationsPause = registerTool({
       id: row.id,
       enabled: row.enabled,
       markdown: `**${row.name}** quedó ${row.enabled ? 'activa' : 'en pausa'}.`,
+    };
+  },
+});
+
+export const appsAutomationsTest = registerTool({
+  id: 'apps.automations.test',
+  description:
+    'Try an automation of an application on a REAL row WITHOUT doing anything: says whether the trigger would fire, which conditions pass, and what each action would do (including, for update_related / update_rows / rollup, the rows it would change and from what value to what value, with the row cap warning; for wait, how long it would sleep). Give an existing automation id, or a draft (trigger + conditions + actions, same grammar as apps.automations.create). Optional rowId picks the row; otherwise the most recently changed one. Read-only; company owners/admins only. Use it before enabling a rule that changes other tables.',
+  inputSchema: z
+    .object({
+      app: z.string().trim().min(1).max(80).describe('App id or slug.'),
+      id: z.string().uuid().optional().describe('An existing automation of the app.'),
+      trigger: automationTriggerSchema.optional(),
+      conditions: z.array(automationConditionSchema).max(8).default([]),
+      actions: z.array(automationActionSchema).min(1).max(8).optional(),
+      rowId: z.string().uuid().optional().describe('Row to test with; default the latest changed.'),
+    })
+    .refine((v) => Boolean(v.id) !== Boolean(v.trigger && v.actions?.length), {
+      message:
+        'Da el id de una automatización, o un disparador con sus acciones (no las dos cosas).',
+    }),
+  outputSchema: z.object({
+    triggers: z.boolean(),
+    conditionsOk: z.boolean(),
+    sample: z.string().nullable(),
+    markdown: z.string(),
+  }),
+  rateLimit: { perMinute: 20 },
+  handler: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    const app = await mustGetApp(ctx.db, input.app);
+    let spec: Pick<AutomationInput, 'trigger' | 'conditions' | 'actions'>;
+    if (input.id) {
+      const a = await mustGetAutomation(ctx.db, app.id, input.id);
+      spec = { trigger: a.trigger, conditions: a.conditions, actions: a.actions };
+    } else {
+      const parsed = automationInputSchema.safeParse({
+        name: 'Prueba',
+        trigger: input.trigger,
+        conditions: input.conditions ?? [],
+        actions: input.actions,
+      });
+      if (!parsed.success)
+        throw new ValidationError(
+          `La regla no es válida (${parsed.error.issues
+            .slice(0, 3)
+            .map((i) => `${i.path.join('.') || 'regla'}: ${i.message}`)
+            .join('; ')}).`,
+        );
+      const problems = structuralProblems(parsed.data);
+      if (problems.length) throw new ValidationError(problems.join(' '));
+      spec = parsed.data;
+    }
+    const sim = await simulateAutomation(ctx.db, app, spec, { rowId: input.rowId });
+    const lines = [
+      `Prueba${sim.sample ? ` con la fila «${sim.sample.label}»` : ''} (no se hizo nada):`,
+      `- Cuándo: ${sim.triggerLabel}${sim.triggers ? '' : ' (con esta fila el disparador NO se activaría)'}.`,
+      `- Si: ${sim.conditions.ok ? 'se cumple' : `NO se cumple (${sim.conditions.failed})`}.`,
+      ...sim.actions.flatMap((a, i) => [
+        `- ${i + 1}. ${a.summary}`,
+        ...(a.details ?? []).map((d) => `    - ${d}`),
+      ]),
+    ];
+    return {
+      triggers: sim.triggers,
+      conditionsOk: sim.conditions.ok,
+      sample: sim.sample?.label ?? null,
+      markdown: lines.join('\n'),
     };
   },
 });

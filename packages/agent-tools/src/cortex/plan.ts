@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { canonicalToolId } from '../registry';
 
 /**
  * cortex.plan / cortex.plan_update — el plan POR ADELANTADO, como el de Manus.
@@ -133,7 +134,13 @@ export const cortexPlan = registerTool({
     steps: z.array(stepOut),
   }),
   rateLimit: { perMinute: 30 },
-  handler: async (input) => normalizePlan({ title: input.title, steps: input.steps }),
+  handler: async (input) =>
+    normalizePlan({
+      title: input.title,
+      // Ids reales: «trackers_define» pasa a «trackers.define» para que la
+      // aprobación del plan pueda cubrirlos.
+      steps: input.steps.map((s) => ({ ...s, tools: s.tools?.map(canonicalToolId) })),
+    }),
 });
 
 export const cortexPlanUpdate = registerTool({

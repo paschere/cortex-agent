@@ -1,5 +1,6 @@
 'use client';
 
+import { useAppNav } from '@/components/apps/AppNav';
 import { activeOutbox } from '@/lib/apps/app-outbox';
 import { assignRowAction, assignablePeopleAction } from '@/lib/apps/location-actions';
 import { editAppRowAction, runAppActionAction } from '@/lib/apps/write-actions';
@@ -480,6 +481,7 @@ export function RowActions({
   rowLabel: string;
 }) {
   const writer = useViewWriter();
+  const appNav = useAppNav();
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [picking, setPicking] = useState<ComputedAction | null>(null);
@@ -531,6 +533,8 @@ export function RowActions({
             if (res.ok || res.error !== 'Cancelado.')
               setNote(res.ok ? { ok: true, text: res.message } : { ok: false, text: res.error });
             setTimeout(() => setNote(null), 3000);
+            // Encadenar: tras el cambio, abre otra pantalla con ESTA fila prellenada.
+            if (res.ok && a.next) appNav?.goThen(a.next, { row: { id: rowId, label: rowLabel } });
           }}
           className={clsx(
             'view-press inline-flex items-center gap-1 rounded-pill border border-border px-2 py-0.5 text-micro font-semibold transition-colors disabled:opacity-45 max-sm:min-h-11 max-sm:px-4 max-sm:text-xs',

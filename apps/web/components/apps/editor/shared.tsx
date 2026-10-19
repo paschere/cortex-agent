@@ -121,7 +121,14 @@ export interface EditorPerson {
 export interface EditorTracker {
   slug: string;
   name: string;
-  fields: Array<{ key: string; label: string; type: string; options?: string[] }>;
+  fields: Array<{
+    key: string;
+    label: string;
+    type: string;
+    options?: string[];
+    /** Relación: el slug de la tabla a la que apunta. */
+    tracker?: string;
+  }>;
   /** Los botones de fila que las pantallas declaran sobre esta tabla. */
   actions: Array<{ id: string; label: string }>;
   /** El flujo por estados de la tabla (campo + definición), o null si no tiene. */

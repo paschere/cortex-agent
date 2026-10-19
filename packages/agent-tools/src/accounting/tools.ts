@@ -47,7 +47,9 @@ function describeConnection(c: AccountingConnectionRow): string {
       : c.last_status === 'partial'
         ? 'trayendo la primera carga (sigue sola)'
         : c.last_status === 'ok'
-          ? 'al día'
+          ? c.last_counts?.warnings?.length
+            ? 'sincroniza, pero NO está completo (ver avisos)'
+            : 'al día'
           : 'esperando la primera sincronización';
   const lines = [
     `**${name}** (cuenta ${c.account_label}) — ${state}. Cada ${c.interval_minutes} min; última corrida: ${when(c.last_run_at)} (UTC).`,
@@ -60,9 +62,10 @@ function describeConnection(c: AccountingConnectionRow): string {
     );
     const n = c.last_counts?.[entity];
     lines.push(
-      `- ${ENTITY_LABEL[entity]} → tabla «${spec.name}» (\`${spec.slug}\`)${n ? `: última corrida ${n.inserted} nuevas, ${n.updated} actualizadas` : ''}`,
+      `- ${ENTITY_LABEL[entity]} → tabla «${spec.name}» (\`${spec.slug}\`)${n ? `: última corrida ${n.fetched} leídas, ${n.inserted} nuevas, ${n.updated} actualizadas` : ''}`,
     );
   }
+  for (const w of c.last_counts?.warnings ?? []) lines.push(`- ATENCIÓN: ${w}`);
   if (c.entities.includes('payroll'))
     lines.push(
       '- nómina → comprobantes contables de nómina (no hay API de nómina en Siigo), confidenciales; se consultan con accounting.payroll_summary.',
@@ -112,7 +115,7 @@ export const accountingStatus = registerTool({
 export const accountingSyncNow = registerTool({
   id: 'accounting.sync_now',
   description:
-    'Bring data from a connected accounting program (Siigo, Alegra or QuickBooks) right now instead of waiting for the next scheduled sync: new and changed customers, products, invoices and payments go into their company tables and invoices with a balance into receivables. Requires confirmation. It cannot connect a program — that is done by an admin in Integrations.',
+    'Bring data from a connected accounting program (Siigo, Alegra or QuickBooks) right now instead of waiting for the next scheduled sync: new and changed customers, products, invoices and payments go into their company tables and invoices with a balance into receivables. It runs without asking for confirmation (the connection is already authorized and it only reads). It cannot connect a program — that is done by an admin in Integrations.',
   inputSchema: z.object({
     provider: z
       .enum(ACCOUNTING_PROVIDER_IDS as unknown as [string, ...string[]])
@@ -122,7 +125,6 @@ export const accountingSyncNow = registerTool({
       ),
   }),
   outputSchema: z.object({ queued: z.boolean(), markdown: z.string() }),
-  requiresConfirmation: true,
   rateLimit: { perMinute: 4 },
   handler: async (input, ctx) => {
     let provider = input.provider;
@@ -176,7 +178,13 @@ export const accountingPayrollSummary = registerTool({
       .describe('One month, YYYY-MM. Also asks for the per-person detail (admins only).'),
     year: z.number().int().min(2000).max(2100).nullish().describe('A calendar year (live mode).'),
     fromMonth: z.number().int().min(1).max(12).nullish().describe('First month 1-12 (with year).'),
-    throughMonth: z.number().int().min(1).max(12).nullish().describe('Last month 1-12 (with year).'),
+    throughMonth: z
+      .number()
+      .int()
+      .min(1)
+      .max(12)
+      .nullish()
+      .describe('Last month 1-12 (with year).'),
   }),
   outputSchema: z.object({
     markdown: z.string(),

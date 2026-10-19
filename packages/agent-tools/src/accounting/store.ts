@@ -39,6 +39,12 @@ export interface EntityCursor {
   since?: string;
   /** Último repaso de las facturas recientes (por los abonos). */
   full_at?: string;
+  /**
+   * Última comprobación contra el total que dice el programa: si tenía más
+   * registros de los que hay en la tabla. Evita repetir sin fin la recarga
+   * cuando la diferencia es de registros que no se pueden leer.
+   */
+  audit?: { remote: number; local: number };
   /** Una corrida que se quedó sin tiempo sigue desde aquí. */
   resume?: {
     queries: Array<Record<string, string>>;
@@ -70,6 +76,12 @@ export interface RunCounts extends Partial<Record<AccountingEntity, EntityCounts
   inventory_adjusted?: number;
   /** 0183: páginas de productos que no se pudieron pasar al inventario. */
   inventory_errors?: number;
+  /**
+   * Avisos de la corrida: la tabla trae menos registros de los que el programa
+   * dice tener, o una carga completa quedó corta. Mientras haya, el estado NO
+   * es «al día».
+   */
+  warnings?: string[];
 }
 
 export interface AccountingConnectionRow {

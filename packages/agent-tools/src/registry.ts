@@ -6,6 +6,7 @@ import {
 } from '@cortex/core';
 import { buildAuditDetail, captureBefore } from './audit-detail.js';
 import { hashInput, writeAuditEvent } from './audit.js';
+import { describeInputIssues } from './input-issues.js';
 import { ModuleDisabledError, disabledModuleForTool } from './modules/store.js';
 import { consumeToken } from './rate-limit.js';
 import { SAFE_ACTION_CATALOG } from './safe-actions/catalog.js';
@@ -69,6 +70,21 @@ export function getTool(id: string): AnyTool | undefined {
 
 export function listTools(): AnyTool[] {
   return [...REGISTRY.values()];
+}
+
+/**
+ * El id real de una herramienta a partir de como la escribió el modelo: con
+ * punto (`trackers.define`) o con el guion bajo que ve en su lista
+ * (`trackers_define`, `apps_automations_create`). Si no existe, el texto tal
+ * cual. El plan aprobado se compara con ids reales: un `trackers_upsert` en
+ * `tools` dejaba la aprobación vacía y la persona aprobaba paso por paso.
+ */
+export function canonicalToolId(id: string): string {
+  const trimmed = id.trim();
+  if (REGISTRY.has(trimmed)) return trimmed;
+  const flat = trimmed.replaceAll('.', '_');
+  for (const known of REGISTRY.keys()) if (known.replaceAll('.', '_') === flat) return known;
+  return trimmed;
 }
 
 /** ¿Se puede ofrecer? (`available` de la herramienta; si lanza, no.) */
@@ -141,7 +157,10 @@ export async function runTool<I, O>(
       latencyMs: Math.round(performance.now() - t0),
       metadata: { reason: 'validation', issues: parsed.error.flatten() },
     });
-    throw new ValidationError(`Invalid input for ${tool.id}`, parsed.error.flatten());
+    throw new ValidationError(
+      describeInputIssues(tool.id, tool.inputSchema, input, parsed.error),
+      parsed.error.flatten(),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -351,10 +370,36 @@ export async function runTool<I, O>(
       toolId: tool.id,
       riskLevel: evaluation.classification.riskLevel,
     });
+  /**
+   * Antes de devolver una tarjeta de confirmación se corre la validación de la
+   * herramienta (`preflight`): si la propuesta no se puede ejecutar, el modelo
+   * lo sabe ahora y no la persona después de aprobar.
+   */
+  const preflightBeforeAsking = async () => {
+    if (!tool.preflight) return;
+    try {
+      await tool.preflight(data, ctx);
+    } catch (err) {
+      await writeAuditEvent({
+        db: ctx.db,
+        userId: ctx.userId,
+        agentId: ctx.agentId,
+        conversationId: ctx.conversationId,
+        toolId: tool.id,
+        input,
+        status: 'error',
+        latencyMs: Math.round(performance.now() - t0),
+        metadata: { reason: 'preflight', error: err instanceof Error ? err.message : String(err) },
+        ...risk,
+      });
+      throw err;
+    }
+  };
   const gatedBySecurity =
     (evaluation.decision === 'confirm' || mandatoryHumanConfirmation(tool.id)) && !opts.confirmed;
   if (gatedBySecurity && !mandatoryHumanConfirmation(tool.id)) planGrantUse = await askPlanGrant();
   if (gatedBySecurity && !planGrantUse) {
+    await preflightBeforeAsking();
     await Promise.all([
       writeSecurityEvent({ ...securityEventBase, decision: 'confirm_required' }),
       writeAuditEvent({
@@ -468,6 +513,7 @@ export async function runTool<I, O>(
         })),
     );
     if (!viaConversationGrace) {
+      await preflightBeforeAsking();
       await writeAuditEvent({
         db: ctx.db,
         userId: ctx.userId,

@@ -72,6 +72,26 @@ interface Act {
   writesMode: WritesMode;
   writesFields: string[];
   allow: string[];
+  // --- Ramas: «sólo si…» y «si no» ---
+  ifOn: boolean;
+  ifConds: Cond[];
+  otherwise: boolean;
+  // --- Filas relacionadas, por filtro y acumulados ---
+  /** update_related: subir (la fila a la que apunta) o bajar (las filas que apuntan a esta). */
+  dir: 'up' | 'down';
+  /** update_related ↑ y rollup: campo de relación de ESTA tabla. update_related ↓: campo de la otra tabla que apunta aquí. */
+  via: string;
+  where: Cond[];
+  max: string;
+  /** rollup */
+  target: string;
+  op: string;
+  rollField: string;
+  // --- Esperar ---
+  waitAmount: string;
+  waitUnit: 'm' | 'h' | 'd';
+  stillMode: 'rule' | 'always' | 'custom';
+  stillConds: Cond[];
 }
 
 interface Draft {
@@ -96,6 +116,9 @@ interface Draft {
     winTimeField: string;
     winBefore: number;
     winAfter: number;
+    /** Botón: pantalla que se abre después y valores fijos que lleva. */
+    thenScreen: string;
+    thenPairs: Array<{ key: string; value: string }>;
   };
   conditions: Cond[];
   actions: Act[];
@@ -104,6 +127,7 @@ interface Draft {
 const TRIGGERS: Array<{ type: string; label: string }> = [
   { type: 'row_created', label: 'Se crea una fila' },
   { type: 'row_updated', label: 'Cambia una fila' },
+  { type: 'row_deleted', label: 'Se borra una fila' },
   { type: 'row_flagged_duplicate', label: 'Una fila queda marcada como duplicada' },
   { type: 'form_submitted', label: 'Se envía un formulario' },
   { type: 'approval_decided', label: 'Se aprueba o se rechaza' },
@@ -124,6 +148,19 @@ const ACTIONS: Array<{ type: string; label: string }> = [
   { type: 'create_row', label: 'Crear una fila en otra tabla' },
   { type: 'webhook', label: 'Llamar a otro sistema (webhook firmado)' },
   { type: 'ask_cortex', label: 'Pedirle algo a Cortex' },
+  { type: 'update_related', label: 'Cambiar filas relacionadas (subir o bajar por una relación)' },
+  { type: 'update_rows', label: 'Cambiar filas de otra tabla que cumplan un filtro' },
+  { type: 'rollup', label: 'Acumular en la fila padre (suma, conteo, promedio…)' },
+  { type: 'wait', label: 'Esperar y volver a revisar la fila' },
+];
+/** Acciones que necesitan una fila de partida. */
+const NEEDS_ROW = new Set(['set_field', 'update_related', 'rollup']);
+const ROLLUP_OPS = [
+  { op: 'sum', label: 'La suma de…' },
+  { op: 'count', label: 'El conteo de filas' },
+  { op: 'avg', label: 'El promedio de…' },
+  { op: 'min', label: 'El mínimo de…' },
+  { op: 'max', label: 'El máximo de…' },
 ];
 
 const OPS: Array<{ op: string; label: string; needsValue: boolean }> = [
@@ -174,7 +211,88 @@ const emptyAct = (type: string): Act => ({
   writesMode: 'legacy',
   writesFields: [],
   allow: [],
+  ifOn: false,
+  ifConds: [],
+  otherwise: false,
+  dir: 'up',
+  via: '',
+  where: [],
+  max: '',
+  target: '',
+  op: 'sum',
+  rollField: '',
+  waitAmount: '30',
+  waitUnit: 'm',
+  stillMode: 'rule',
+  stillConds: [],
 });
+
+const emptyCond = (): Cond => ({
+  kind: 'filter',
+  field: '',
+  op: 'eq',
+  value: '',
+  from: '',
+  to: '',
+});
+
+/** Una condición del formulario a lo que valida el servidor. */
+function condInput(c: Cond): Record<string, unknown> {
+  return c.kind === 'changed'
+    ? {
+        type: 'changed',
+        field: c.field,
+        ...(c.from ? { from: c.from } : {}),
+        ...(c.to ? { to: c.to } : {}),
+      }
+    : {
+        field: c.field,
+        op: c.op,
+        ...(OPS.find((o) => o.op === c.op)?.needsValue
+          ? {
+              value:
+                Number.isFinite(Number(c.value)) &&
+                c.value.trim() !== '' &&
+                ['gt', 'gte', 'lt', 'lte'].includes(c.op)
+                  ? Number(c.value)
+                  : c.value,
+            }
+          : {}),
+      };
+}
+
+/** Una condición guardada al formulario. */
+function condDraft(c: Record<string, unknown>): Cond {
+  return c.type === 'changed'
+    ? {
+        kind: 'changed',
+        field: String(c.field),
+        op: 'eq',
+        value: '',
+        from: String(c.from ?? ''),
+        to: String(c.to ?? ''),
+      }
+    : {
+        kind: 'filter',
+        field: String(c.field),
+        op: String(c.op),
+        value: c.value === undefined ? '' : String(c.value),
+        from: '',
+        to: '',
+      };
+}
+
+const pairsInput = (pairs: Array<{ key: string; value: string }>) =>
+  Object.fromEntries(pairs.filter((p) => p.key).map((p) => [p.key, p.value]));
+const pairsDraft = (v: unknown): Array<{ key: string; value: string }> =>
+  v && typeof v === 'object'
+    ? Object.entries(v as Record<string, unknown>).map(([key, value]) => ({
+        key,
+        value: String(value),
+      }))
+    : [{ key: '', value: '' }];
+
+const WAIT_UNIT_MINUTES = { m: 1, h: 60, d: 1440 } as const;
 
 const emptyDraft = (): Draft => ({
   name: '',
@@ -198,6 +316,8 @@ const emptyDraft = (): Draft => ({
     winTimeField: '',
     winBefore: 6,
     winAfter: 24,
+    thenScreen: '',
+    thenPairs: [{ key: '', value: '' }],
   },
   conditions: [],
   actions: [emptyAct('notify_app_user')],
@@ -242,7 +362,22 @@ function toInput(d: Draft): unknown {
                 ...(t.cadence === 'weekly' ? { weekday: Number(t.weekday) } : {}),
               }
             : t.type === 'button'
-              ? { type: t.type, screen: t.screen, id: t.id || slugOf(t.label), label: t.label }
+              ? {
+                  type: t.type,
+                  screen: t.screen,
+                  id: t.id || slugOf(t.label),
+                  label: t.label,
+                  ...(t.thenScreen
+                    ? {
+                        next: {
+                          screen: t.thenScreen,
+                          ...(t.thenPairs.some((p) => p.key)
+                            ? { prefill: pairsInput(t.thenPairs) }
+                            : {}),
+                        },
+                      }
+                    : {}),
+                }
               : t.type === 'rows_poll'
                 ? {
                     type: t.type,
@@ -264,30 +399,12 @@ function toInput(d: Draft): unknown {
                       : {}),
                   }
                 : { type: t.type, tracker: t.tracker };
-  const conditions = d.conditions.map((c) =>
-    c.kind === 'changed'
-      ? {
-          type: 'changed',
-          field: c.field,
-          ...(c.from ? { from: c.from } : {}),
-          ...(c.to ? { to: c.to } : {}),
-        }
-      : {
-          field: c.field,
-          op: c.op,
-          ...(OPS.find((o) => o.op === c.op)?.needsValue
-            ? {
-                value:
-                  Number.isFinite(Number(c.value)) &&
-                  c.value.trim() !== '' &&
-                  ['gt', 'gte', 'lt', 'lte'].includes(c.op)
-                    ? Number(c.value)
-                    : c.value,
-              }
-            : {}),
-        },
-  );
-  const actions = d.actions.map((a) => {
+  const conditions = d.conditions.map(condInput);
+  const branchInput = (a: Act) => ({
+    ...(a.ifOn && a.ifConds.length ? { if: a.ifConds.map(condInput) } : {}),
+    ...(a.otherwise ? { otherwise: true } : {}),
+  });
+  const actionBody = (a: Act): Record<string, unknown> => {
     switch (a.type) {
       case 'set_field':
         return { type: a.type, field: a.field, value: a.value };
@@ -324,6 +441,42 @@ function toInput(d: Draft): unknown {
         };
       case 'webhook':
         return { type: a.type, url: a.url };
+      case 'update_related':
+        return {
+          type: a.type,
+          ...(a.dir === 'up' ? { up: a.via } : { down: { tracker: a.tracker, via: a.via } }),
+          ...(a.dir === 'down' && a.where.length ? { where: a.where.map(condInput) } : {}),
+          set: pairsInput(a.pairs),
+          ...(a.dir === 'down' && Number(a.max) > 0 ? { max: Number(a.max) } : {}),
+        };
+      case 'update_rows':
+        return {
+          type: a.type,
+          tracker: a.tracker,
+          where: a.where.map(condInput),
+          set: pairsInput(a.pairs),
+          ...(Number(a.max) > 0 ? { max: Number(a.max) } : {}),
+        };
+      case 'rollup':
+        return {
+          type: a.type,
+          up: a.via,
+          target: a.target,
+          op: a.op,
+          ...(a.op !== 'count' && a.rollField ? { field: a.rollField } : {}),
+          ...(a.where.length ? { where: a.where.map(condInput) } : {}),
+        };
+      case 'wait':
+        return {
+          type: a.type,
+          minutes:
+            Math.max(1, Math.round(Number(a.waitAmount) || 1)) * WAIT_UNIT_MINUTES[a.waitUnit],
+          ...(a.stillMode === 'always'
+            ? { stillIf: [] }
+            : a.stillMode === 'custom'
+              ? { stillIf: a.stillConds.map(condInput) }
+              : {}),
+        };
       default:
         return {
           type: a.type,
@@ -336,7 +489,8 @@ function toInput(d: Draft): unknown {
           ...(a.allow.length ? { allow: a.allow } : {}),
         };
     }
-  });
+  };
+  const actions = d.actions.map((a) => ({ ...actionBody(a), ...branchInput(a) }));
   return { name: d.name, enabled: true, trigger, conditions, actions };
 }
 
@@ -372,26 +526,10 @@ function toDraft(v: AutomationView): Draft {
     winTimeField: String((t.window as { timeField?: string } | undefined)?.timeField ?? ''),
     winBefore: Number((t.window as { beforeHours?: number } | undefined)?.beforeHours ?? 6),
     winAfter: Number((t.window as { afterHours?: number } | undefined)?.afterHours ?? 24),
+    thenScreen: String((t.next as { screen?: string } | undefined)?.screen ?? ''),
+    thenPairs: pairsDraft((t.next as { prefill?: unknown } | undefined)?.prefill),
   };
-  d.conditions = inp.conditions.map((c) =>
-    c.type === 'changed'
-      ? {
-          kind: 'changed',
-          field: String(c.field),
-          op: 'eq',
-          value: '',
-          from: String(c.from ?? ''),
-          to: String(c.to ?? ''),
-        }
-      : {
-          kind: 'filter',
-          field: String(c.field),
-          op: String(c.op),
-          value: c.value === undefined ? '' : String(c.value),
-          from: '',
-          to: '',
-        },
-  );
+  d.conditions = inp.conditions.map(condDraft);
   d.actions = inp.actions.map((a) => {
     const x = emptyAct(String(a.type));
     x.field = String(a.field ?? '');
@@ -421,6 +559,41 @@ function toDraft(v: AutomationView): Draft {
       x.writesFields = a.writes as string[];
     }
     x.allow = Array.isArray(a.allow) ? (a.allow as string[]) : [];
+    // Ramas
+    if (Array.isArray(a.if) && a.if.length) {
+      x.ifOn = true;
+      x.ifConds = (a.if as Array<Record<string, unknown>>).map(condDraft);
+    }
+    x.otherwise = a.otherwise === true;
+    // Filas relacionadas, por filtro y acumulados
+    const where = Array.isArray(a.where) ? (a.where as Array<Record<string, unknown>>) : [];
+    x.where = where.map(condDraft);
+    x.max = a.max === undefined ? '' : String(a.max);
+    if (a.type === 'update_related') {
+      const down = a.down as { tracker?: string; via?: string } | undefined;
+      x.dir = down ? 'down' : 'up';
+      x.via = String(down ? (down.via ?? '') : (a.up ?? ''));
+      x.tracker = String(down?.tracker ?? '');
+      x.pairs = pairsDraft(a.set);
+    }
+    if (a.type === 'update_rows') x.pairs = pairsDraft(a.set);
+    if (a.type === 'rollup') {
+      x.via = String(a.up ?? '');
+      x.target = String(a.target ?? '');
+      x.op = String(a.op ?? 'sum');
+      x.rollField = String(a.field ?? '');
+    }
+    if (a.type === 'wait') {
+      const m = Number(a.minutes ?? 30);
+      x.waitUnit = m % 1440 === 0 ? 'd' : m % 60 === 0 ? 'h' : 'm';
+      x.waitAmount = String(m / WAIT_UNIT_MINUTES[x.waitUnit]);
+      if (Array.isArray(a.stillIf)) {
+        if (a.stillIf.length) {
+          x.stillMode = 'custom';
+          x.stillConds = (a.stillIf as Array<Record<string, unknown>>).map(condDraft);
+        } else x.stillMode = 'always';
+      }
+    }
     return x;
   });
   return d;
@@ -829,6 +1002,190 @@ function TemplatePicker({
   );
 }
 
+type FieldLite = Row['fields'][number];
+
+/** Condiciones editables (las del «Si» de la regla, las de una acción y las de «seguir si…»). */
+function CondEditor({
+  conds,
+  onChange,
+  fields,
+  allowChanged = false,
+  addLabel = '+ Condición',
+}: {
+  conds: Cond[];
+  onChange: (next: Cond[]) => void;
+  fields: ReadonlyArray<FieldLite>;
+  allowChanged?: boolean;
+  addLabel?: string;
+}) {
+  const set = (i: number, patch: Partial<Cond>) =>
+    onChange(conds.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const fieldSelect = (value: string, on: (v: string) => void) =>
+    fields.length ? (
+      <select value={value} onChange={(e) => on(e.target.value)} className={INPUT}>
+        <option value="">Campo…</option>
+        {fields.map((f) => (
+          <option key={f.key} value={f.key}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+    ) : (
+      <input
+        value={value}
+        onChange={(e) => on(e.target.value)}
+        placeholder="llave del campo"
+        className={INPUT}
+      />
+    );
+  return (
+    <div className="space-y-2">
+      {conds.map((c, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: filas de formulario sin id propio
+        <div key={i} className="flex flex-wrap items-center gap-2">
+          {fieldSelect(c.field, (v) => set(i, { field: v }))}
+          {c.kind === 'filter' ? (
+            <>
+              <select
+                value={c.op}
+                onChange={(e) => set(i, { op: e.target.value })}
+                className={INPUT}
+              >
+                {OPS.map((o) => (
+                  <option key={o.op} value={o.op}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {OPS.find((o) => o.op === c.op)?.needsValue && (
+                <input
+                  value={c.value}
+                  onChange={(e) => set(i, { value: e.target.value })}
+                  placeholder="valor o {{campo}}"
+                  className={INPUT}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <span className="text-xs text-ink-muted">cambió de</span>
+              <input
+                value={c.from}
+                onChange={(e) => set(i, { from: e.target.value })}
+                placeholder="(cualquiera)"
+                className={INPUT}
+              />
+              <span className="text-xs text-ink-muted">a</span>
+              <input
+                value={c.to}
+                onChange={(e) => set(i, { to: e.target.value })}
+                placeholder="(cualquiera)"
+                className={INPUT}
+              />
+            </>
+          )}
+          <button
+            type="button"
+            className={BTN_DANGER}
+            aria-label="Quitar condición"
+            onClick={() => onChange(conds.filter((_, j) => j !== i))}
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={BTN_SECONDARY}
+          onClick={() => onChange([...conds, emptyCond()])}
+        >
+          {addLabel}
+        </button>
+        {allowChanged && (
+          <button
+            type="button"
+            className={BTN_SECONDARY}
+            onClick={() => onChange([...conds, { ...emptyCond(), kind: 'changed' }])}
+          >
+            + «Cambió de X a Y»
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Pares «campo = valor» (con {{campo}} de la fila que disparó la regla). */
+function PairsEditor({
+  pairs,
+  onChange,
+  fields,
+  valuePlaceholder = 'valor o {{campo}}',
+}: {
+  pairs: Array<{ key: string; value: string }>;
+  onChange: (next: Array<{ key: string; value: string }>) => void;
+  fields: ReadonlyArray<FieldLite>;
+  valuePlaceholder?: string;
+}) {
+  const set = (i: number, patch: Partial<{ key: string; value: string }>) =>
+    onChange(pairs.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  return (
+    <div className="space-y-2">
+      {pairs.map((p, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: pares de formulario
+        <div key={i} className="flex flex-wrap items-center gap-2">
+          {fields.length ? (
+            <select
+              value={p.key}
+              onChange={(e) => set(i, { key: e.target.value })}
+              className={INPUT}
+            >
+              <option value="">Campo…</option>
+              {fields.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={p.key}
+              onChange={(e) => set(i, { key: e.target.value })}
+              placeholder="llave del campo"
+              className={INPUT}
+            />
+          )}
+          <span className="text-xs text-ink-muted">queda en</span>
+          <input
+            value={p.value}
+            onChange={(e) => set(i, { value: e.target.value })}
+            placeholder={valuePlaceholder}
+            className={INPUT}
+          />
+          {pairs.length > 1 && (
+            <button
+              type="button"
+              className={BTN_DANGER}
+              aria-label="Quitar campo"
+              onClick={() => onChange(pairs.filter((_, j) => j !== i))}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        className={BTN_SECONDARY}
+        onClick={() => onChange([...pairs, { key: '', value: '' }])}
+      >
+        + Campo
+      </button>
+    </div>
+  );
+}
+
 function RuleEditor({
   data,
   initial,
@@ -856,8 +1213,6 @@ function RuleEditor({
   const setT = (patch: Partial<Draft['trigger']>) => setD({ ...d, trigger: { ...t, ...patch } });
   const setA = (i: number, patch: Partial<Act>) =>
     setD({ ...d, actions: d.actions.map((a, j) => (j === i ? { ...a, ...patch } : a)) });
-  const setC = (i: number, patch: Partial<Cond>) =>
-    setD({ ...d, conditions: d.conditions.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
   const FieldSelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={INPUT}>
       <option value="">Campo…</option>
@@ -1082,6 +1437,32 @@ function RuleEditor({
               maxLength={40}
               className={INPUT}
             />
+            <select
+              value={t.thenScreen}
+              onChange={(e) => setT({ thenScreen: e.target.value })}
+              className={INPUT}
+              aria-label="Pantalla que se abre después"
+            >
+              <option value="">Después no abre otra pantalla</option>
+              {data.screens.map((s) => (
+                <option key={s.slug} value={s.slug}>
+                  Después abre «{s.title}»
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {t.type === 'button' && t.thenScreen && (
+          <div className="space-y-1.5 rounded-card border border-dashed border-border p-2">
+            <p className="text-micro text-ink-muted">
+              Valores que ya lleva escritos el formulario de esa pantalla (opcional):
+            </p>
+            <PairsEditor
+              pairs={t.thenPairs}
+              onChange={(next) => setT({ thenPairs: next })}
+              fields={[]}
+              valuePlaceholder="valor fijo"
+            />
           </div>
         )}
       </div>
@@ -1092,93 +1473,12 @@ function RuleEditor({
           {d.conditions.length === 0 && (
             <p className="text-xs text-ink-muted">Sin condiciones: corre siempre.</p>
           )}
-          {d.conditions.map((c, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: filas de formulario sin id propio
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <FieldSelect value={c.field} onChange={(v) => setC(i, { field: v })} />
-              {c.kind === 'filter' ? (
-                <>
-                  <select
-                    value={c.op}
-                    onChange={(e) => setC(i, { op: e.target.value })}
-                    className={INPUT}
-                  >
-                    {OPS.map((o) => (
-                      <option key={o.op} value={o.op}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  {OPS.find((o) => o.op === c.op)?.needsValue && (
-                    <input
-                      value={c.value}
-                      onChange={(e) => setC(i, { value: e.target.value })}
-                      className={INPUT}
-                    />
-                  )}
-                </>
-              ) : (
-                <>
-                  <span className="text-xs text-ink-muted">cambió de</span>
-                  <input
-                    value={c.from}
-                    onChange={(e) => setC(i, { from: e.target.value })}
-                    placeholder="(cualquiera)"
-                    className={INPUT}
-                  />
-                  <span className="text-xs text-ink-muted">a</span>
-                  <input
-                    value={c.to}
-                    onChange={(e) => setC(i, { to: e.target.value })}
-                    placeholder="(cualquiera)"
-                    className={INPUT}
-                  />
-                </>
-              )}
-              <button
-                type="button"
-                className={BTN_DANGER}
-                aria-label="Quitar condición"
-                onClick={() => setD({ ...d, conditions: d.conditions.filter((_, j) => j !== i) })}
-              >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            </div>
-          ))}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className={BTN_SECONDARY}
-              onClick={() =>
-                setD({
-                  ...d,
-                  conditions: [
-                    ...d.conditions,
-                    { kind: 'filter', field: '', op: 'eq', value: '', from: '', to: '' },
-                  ],
-                })
-              }
-            >
-              + Condición
-            </button>
-            {(t.type === 'row_updated' || t.type === 'approval_decided') && (
-              <button
-                type="button"
-                className={BTN_SECONDARY}
-                onClick={() =>
-                  setD({
-                    ...d,
-                    conditions: [
-                      ...d.conditions,
-                      { kind: 'changed', field: '', op: 'eq', value: '', from: '', to: '' },
-                    ],
-                  })
-                }
-              >
-                + «Cambió de X a Y»
-              </button>
-            )}
-          </div>
+          <CondEditor
+            conds={d.conditions}
+            onChange={(next) => setD({ ...d, conditions: next })}
+            fields={fields}
+            allowChanged={t.type === 'row_updated' || t.type === 'approval_decided'}
+          />
         </div>
       )}
 
@@ -1204,7 +1504,11 @@ function RuleEditor({
                 }
                 className={clsx(INPUT, 'flex-1')}
               >
-                {ACTIONS.filter((x) => !(rowless && x.type === 'set_field')).map((x) => (
+                {ACTIONS.filter(
+                  (x) =>
+                    !(rowless && NEEDS_ROW.has(x.type)) &&
+                    !(t.type === 'row_deleted' && x.type === 'set_field'),
+                ).map((x) => (
                   <option key={x.type} value={x.type}>
                     {x.label}
                   </option>
@@ -1226,7 +1530,46 @@ function RuleEditor({
               data={data}
               fields={fields}
               rowless={rowless}
+              triggerSlug={t.tracker}
             />
+            {a.type !== 'wait' && (
+              <div className="space-y-2 border-t border-border/60 pt-2">
+                {i > 0 && !a.ifOn && (
+                  <label className="flex items-center gap-2 text-xs text-ink">
+                    <input
+                      type="checkbox"
+                      checked={a.otherwise}
+                      onChange={(e) => setA(i, { otherwise: e.target.checked })}
+                    />
+                    Hacerla sólo si NO se cumplió la condición de la acción anterior («si no»)
+                  </label>
+                )}
+                {!a.otherwise && !rowless && (
+                  <label className="flex items-center gap-2 text-xs text-ink">
+                    <input
+                      type="checkbox"
+                      checked={a.ifOn}
+                      onChange={(e) =>
+                        setA(i, {
+                          ifOn: e.target.checked,
+                          ifConds:
+                            e.target.checked && !a.ifConds.length ? [emptyCond()] : a.ifConds,
+                        })
+                      }
+                    />
+                    Hacerla sólo si la fila cumple…
+                  </label>
+                )}
+                {a.ifOn && !a.otherwise && (
+                  <CondEditor
+                    conds={a.ifConds}
+                    onChange={(next) => setA(i, { ifConds: next, ifOn: next.length > 0 })}
+                    fields={fields}
+                    allowChanged={t.type === 'row_updated' || t.type === 'approval_decided'}
+                  />
+                )}
+              </div>
+            )}
           </div>
         ))}
         <button
@@ -1256,9 +1599,17 @@ function RuleEditor({
               </p>
               {sim.actions.map((x, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: resultado de simulación
-                <p key={i} className="text-ink-muted">
-                  → {x.summary}
-                </p>
+                <div key={i} className={x.skipped ? 'text-ink-faint' : 'text-ink-muted'}>
+                  <p>
+                    {x.skipped ? '○' : '→'} {x.summary}
+                  </p>
+                  {x.details?.map((line, j) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: líneas de simulación
+                    <p key={j} className="pl-4">
+                      · {line}
+                    </p>
+                  ))}
+                </div>
               ))}
             </>
           ) : (
@@ -1321,13 +1672,25 @@ function ActionFields({
   data,
   fields,
   rowless,
+  triggerSlug,
 }: {
   a: Act;
   set: (p: Partial<Act>) => void;
   data: AppEditorData;
   fields: Row['fields'];
   rowless: boolean;
+  /** La tabla de la regla (de donde se sube o se baja). */
+  triggerSlug: string;
 }) {
+  // Todas las tablas del espacio (no sólo las que usa una pantalla): una relación puede apuntar a cualquiera.
+  const everyTracker = data.homeTrackers.length ? data.homeTrackers : data.trackers;
+  const fieldsOf = (slug: string): ReadonlyArray<FieldLite> =>
+    everyTracker.find((x) => x.slug === slug)?.fields ??
+    data.trackers.find((x) => x.slug === slug)?.fields ??
+    [];
+  const relationFields = fields.filter((f) => f.type === 'relation');
+  const numericOf = (list: ReadonlyArray<FieldLite>) =>
+    list.filter((f) => f.type === 'number' || f.type === 'money');
   const text = (v: string, on: (s: string) => void, placeholder: string, rows = 0) =>
     rows ? (
       <textarea
@@ -1552,6 +1915,334 @@ function ActionFields({
           <p className="text-micro text-ink-muted">
             Se envía un POST con la fila en JSON, firmado con HMAC. Se reintenta si el otro sistema
             cae.
+          </p>
+        </div>
+      );
+    case 'update_related': {
+      // Subir: el campo de relación de esta tabla → la tabla a la que apunta.
+      // Bajar: otra tabla que tiene un campo de relación que apunta a ESTA tabla.
+      const upField = relationFields.find((f) => f.key === a.via);
+      const downTracker = everyTracker.find((x) => x.slug === a.tracker);
+      const downVia = (downTracker?.fields ?? []).filter(
+        (f) => f.type === 'relation' && f.tracker === triggerSlug,
+      );
+      const targetSlug = a.dir === 'up' ? (upField?.tracker ?? '') : a.tracker;
+      return (
+        <div className="space-y-2">
+          <select
+            value={a.dir}
+            onChange={(e) =>
+              set({
+                dir: e.target.value as 'up' | 'down',
+                via: '',
+                tracker: '',
+                pairs: [{ key: '', value: '' }],
+                where: [],
+              })
+            }
+            className={clsx(INPUT, 'w-full')}
+          >
+            <option value="up">
+              Subir: la fila a la que apunta esta fila (la atención → su vuelo)
+            </option>
+            <option value="down">
+              Bajar: todas las filas que apuntan a esta fila (el vuelo → sus atenciones)
+            </option>
+          </select>
+          {a.dir === 'up' ? (
+            <select
+              value={a.via}
+              onChange={(e) => set({ via: e.target.value, pairs: [{ key: '', value: '' }] })}
+              className={clsx(INPUT, 'w-full')}
+            >
+              <option value="">¿Por cuál relación se sube?</option>
+              {relationFields.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                  {f.tracker
+                    ? ` → ${everyTracker.find((x) => x.slug === f.tracker)?.name ?? f.tracker}`
+                    : ''}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={a.tracker}
+                onChange={(e) =>
+                  set({
+                    tracker: e.target.value,
+                    via: '',
+                    pairs: [{ key: '', value: '' }],
+                    where: [],
+                  })
+                }
+                className={INPUT}
+              >
+                <option value="">¿Qué tabla baja?</option>
+                {everyTracker
+                  .filter((x) =>
+                    x.fields.some((f) => f.type === 'relation' && f.tracker === triggerSlug),
+                  )
+                  .map((x) => (
+                    <option key={x.slug} value={x.slug}>
+                      {x.name}
+                    </option>
+                  ))}
+              </select>
+              {a.tracker && (
+                <select
+                  value={a.via}
+                  onChange={(e) => set({ via: e.target.value })}
+                  className={INPUT}
+                >
+                  <option value="">¿Qué campo apunta aquí?</option>
+                  {downVia.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+          {a.dir === 'down' && a.tracker && (
+            <div className="space-y-1.5">
+              <p className="text-micro text-ink-muted">
+                Sólo las que cumplan (opcional; vacío = todas las que apuntan a esta fila):
+              </p>
+              <CondEditor
+                conds={a.where}
+                onChange={(next) => set({ where: next })}
+                fields={fieldsOf(a.tracker)}
+              />
+            </div>
+          )}
+          {targetSlug && (
+            <>
+              <p className="text-micro text-ink-muted">En esas filas, cambiar:</p>
+              <PairsEditor
+                pairs={a.pairs}
+                onChange={(next) => set({ pairs: next })}
+                fields={fieldsOf(targetSlug)}
+              />
+            </>
+          )}
+          {a.dir === 'down' && (
+            <label className="flex items-center gap-2 text-xs text-ink">
+              Tope de filas
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={a.max}
+                placeholder="50"
+                onChange={(e) => set({ max: e.target.value })}
+                className={clsx(INPUT, 'w-20')}
+              />
+              (si hay más, se cambian las primeras y el historial avisa)
+            </label>
+          )}
+          <p className="text-micro text-ink-muted">
+            Lo que ya está como pides no se toca. Valores fijos o {'{{campo}}'} de la fila que
+            disparó la regla.
+          </p>
+        </div>
+      );
+    }
+    case 'update_rows': {
+      const target = fieldsOf(a.tracker);
+      return (
+        <div className="space-y-2">
+          <select
+            value={a.tracker}
+            onChange={(e) =>
+              set({
+                tracker: e.target.value,
+                pairs: [{ key: '', value: '' }],
+                where: [emptyCond()],
+              })
+            }
+            className={clsx(INPUT, 'w-full')}
+          >
+            <option value="">¿En qué tabla?</option>
+            {everyTracker.map((x) => (
+              <option key={x.slug} value={x.slug}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+          {a.tracker && (
+            <>
+              <p className="text-micro text-ink-muted">
+                Las filas que cumplan (puedes comparar con {'{{campo}}'} de la fila que disparó):
+              </p>
+              <CondEditor
+                conds={a.where}
+                onChange={(next) => set({ where: next })}
+                fields={target}
+              />
+              <p className="text-micro text-ink-muted">En esas filas, cambiar:</p>
+              <PairsEditor
+                pairs={a.pairs}
+                onChange={(next) => set({ pairs: next })}
+                fields={target}
+              />
+              <label className="flex items-center gap-2 text-xs text-ink">
+                Tope de filas
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={a.max}
+                  placeholder="50"
+                  onChange={(e) => set({ max: e.target.value })}
+                  className={clsx(INPUT, 'w-20')}
+                />
+                (si hay más, se cambian las primeras y el historial avisa)
+              </label>
+            </>
+          )}
+        </div>
+      );
+    }
+    case 'rollup': {
+      const rel = relationFields.find((f) => f.key === a.via);
+      const parent = rel?.tracker ? fieldsOf(rel.tracker) : [];
+      const parentName = rel?.tracker
+        ? (everyTracker.find((x) => x.slug === rel.tracker)?.name ?? rel.tracker)
+        : 'la fila padre';
+      const parentNumeric = numericOf(parent);
+      return (
+        <div className="space-y-2">
+          <select
+            value={a.via}
+            onChange={(e) => set({ via: e.target.value, target: '' })}
+            className={clsx(INPUT, 'w-full')}
+          >
+            <option value="">¿A qué fila padre se acumula? (relación de esta fila)</option>
+            {relationFields.map((f) => (
+              <option key={f.key} value={f.key}>
+                {f.label}
+                {f.tracker
+                  ? ` → ${everyTracker.find((x) => x.slug === f.tracker)?.name ?? f.tracker}`
+                  : ''}
+              </option>
+            ))}
+          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={a.op} onChange={(e) => set({ op: e.target.value })} className={INPUT}>
+              {ROLLUP_OPS.map((o) => (
+                <option key={o.op} value={o.op}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {a.op !== 'count' && (
+              <select
+                value={a.rollField}
+                onChange={(e) => set({ rollField: e.target.value })}
+                className={INPUT}
+              >
+                <option value="">Campo de número o dinero de esta tabla…</option>
+                {numericOf(fields).map((f) => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            <span className="text-xs text-ink-muted">de todas sus filas hijas, y guardarlo en</span>
+            {parentNumeric.length || !rel ? (
+              <select
+                value={a.target}
+                onChange={(e) => set({ target: e.target.value })}
+                className={INPUT}
+              >
+                <option value="">Campo de {parentName}…</option>
+                {parentNumeric.map((f) => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={a.target}
+                onChange={(e) => set({ target: e.target.value })}
+                placeholder="llave del campo (número o dinero)"
+                className={INPUT}
+              />
+            )}
+          </div>
+          <p className="text-micro text-ink-muted">
+            Sólo cuentan las hijas que cumplan (opcional):
+          </p>
+          <CondEditor conds={a.where} onChange={(next) => set({ where: next })} fields={fields} />
+          <p className="text-micro text-ink-muted">
+            Se recalcula siempre desde todas las hijas, así que correrla dos veces da lo mismo. Para
+            que el total siga todos los cambios, crea la misma regla para «Se crea», «Cambia» y «Se
+            borra» una fila.
+          </p>
+        </div>
+      );
+    }
+    case 'wait':
+      return (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+            Esperar
+            <input
+              type="number"
+              min={1}
+              value={a.waitAmount}
+              onChange={(e) => set({ waitAmount: e.target.value })}
+              className={clsx(INPUT, 'w-20')}
+            />
+            <select
+              value={a.waitUnit}
+              onChange={(e) => set({ waitUnit: e.target.value as 'm' | 'h' | 'd' })}
+              className={INPUT}
+            >
+              <option value="m">minutos</option>
+              <option value="h">horas</option>
+              <option value="d">días</option>
+            </select>
+            y volver a leer la fila.
+          </div>
+          {!rowless && (
+            <>
+              <select
+                value={a.stillMode}
+                onChange={(e) =>
+                  set({
+                    stillMode: e.target.value as 'rule' | 'always' | 'custom',
+                    stillConds:
+                      e.target.value === 'custom' && !a.stillConds.length
+                        ? [emptyCond()]
+                        : a.stillConds,
+                  })
+                }
+                className={clsx(INPUT, 'w-full')}
+              >
+                <option value="rule">
+                  Seguir sólo si todavía cumple las condiciones de la regla
+                </option>
+                <option value="custom">Seguir sólo si cumple estas otras condiciones</option>
+                <option value="always">Seguir siempre</option>
+              </select>
+              {a.stillMode === 'custom' && (
+                <CondEditor
+                  conds={a.stillConds}
+                  onChange={(next) => set({ stillConds: next })}
+                  fields={fields}
+                />
+              )}
+            </>
+          )}
+          <p className="text-micro text-ink-muted">
+            Lo que pongas DESPUÉS de esta espera corre cuando pase el tiempo, con la fila como esté
+            entonces. Si ya no cumple, la regla termina ahí y el historial lo dice.
           </p>
         </div>
       );

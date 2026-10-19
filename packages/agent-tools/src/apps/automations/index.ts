@@ -53,9 +53,19 @@ export * from './run';
 export * from './templates';
 export { simulateAutomation } from './simulate';
 export {
+  describeRelatedPlan,
+  describeRollupPlan,
+  parentIdsToRecompute,
+  planRollup,
+  planUpdateRelated,
+  planUpdateRows,
+  rollupValue,
+} from './related';
+export {
   appsAutomationsCreate,
   appsAutomationsList,
   appsAutomationsPause,
+  appsAutomationsTest,
   appsAutomationsUpdate,
   describeAutomation,
 } from './tools';

@@ -7,7 +7,7 @@ import { alegraProvider } from './providers/alegra';
 import { quickbooksProvider } from './providers/quickbooks';
 import { siigoProvider } from './providers/siigo';
 import type { AccountingConnectionRow } from './store';
-import { finishedCursor, noticeFor, planEntity, runAccountingSync } from './sync';
+import { auditCoverage, finishedCursor, noticeFor, planEntity, runAccountingSync } from './sync';
 import type {
   AccountingEntity,
   NormalizedRecord,
@@ -596,5 +596,67 @@ describe('el mismo motor para Alegra y QuickBooks', () => {
     } finally {
       process.env = env;
     }
+  });
+});
+
+describe('auditCoverage: la tabla no se queda corta en silencio', () => {
+  const base = { label: 'recibos de caja', skipped: 0 };
+  it('el programa tiene más y no fue carga completa: pide recargar y avisa', () => {
+    const r = auditCoverage({
+      ...base,
+      remote: 11,
+      local: 4,
+      cursor: { since: '2026-10-19T00:00:00Z', coverage_version: 2 },
+      fullPass: false,
+    });
+    expect(r.reload).toBe(true);
+    expect(r.cursor.since).toBeUndefined();
+    expect(r.cursor.audit).toEqual({ remote: 11, local: 4 });
+    expect(r.warning).toContain('faltan 7');
+  });
+  it('la misma diferencia después de una carga completa: sólo avisa, no repite sin fin', () => {
+    const r = auditCoverage({
+      ...base,
+      remote: 11,
+      local: 10,
+      cursor: { since: 'x', audit: { remote: 11, local: 10 } },
+      fullPass: false,
+    });
+    expect(r.reload).toBe(false);
+    expect(r.warning).toContain('faltan 1');
+  });
+  it('al día: sin aviso y sin marca', () => {
+    const r = auditCoverage({
+      ...base,
+      remote: 4,
+      local: 4,
+      cursor: { since: 'x', audit: { remote: 11, local: 4 } },
+      fullPass: false,
+    });
+    expect(r.reload).toBe(false);
+    expect(r.warning).toBeUndefined();
+    expect(r.cursor.audit).toBeUndefined();
+  });
+});
+
+describe('Siigo: los recibos de caja se piden también por fecha del documento', () => {
+  it('incremental trae la ventana por fecha además de created/updated', () => {
+    const q = siigoProvider.queries('payments', {
+      mode: 'incremental',
+      since: '2026-10-19T00:00:00Z',
+      now: new Date('2026-10-19T12:00:00Z'),
+    });
+    expect(q).toContainEqual({ date_start: '2026-07-19' });
+    expect(q).toHaveLength(3);
+  });
+  it('el repaso diario también cubre los recibos', () => {
+    const plan = planEntity(
+      siigoProvider,
+      'payments',
+      { since: '2026-10-19T00:00:00Z', coverage_version: 2, full_at: '2026-10-01T00:00:00Z' },
+      new Date('2026-10-19T12:00:00Z'),
+    );
+    expect(plan.mode).toBe('sweep');
+    expect(plan.queries[0]).toEqual({ date_start: '2025-10-19' });
   });
 });

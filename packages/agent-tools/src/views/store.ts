@@ -12,6 +12,7 @@ import {
 import { bogotaToday } from '../commitments/shape';
 import { moduleByKey } from '../modules/catalog';
 import { enabledModules, moduleOffMessage } from '../modules/store';
+import { notFoundWithHints } from '../not-found-hints';
 import { appBaseUrl } from '../reports/store';
 import { adaptLookupValue, lookupSources } from '../trackers/computed';
 import { applyDuplicateRule, duplicateMessage, getDuplicateRule } from '../trackers/duplicates';
@@ -50,6 +51,7 @@ import {
   REJECT_ACTION_ID,
   type ViewSpec,
   approvalFor,
+  autofixSpecAgainst,
   checkSpecAgainst,
   editWindowOf,
   findWriteBlock,
@@ -667,7 +669,15 @@ export async function mustGetView(
   options: { appScreens?: boolean; includeArchived?: boolean } = {},
 ): Promise<CustomViewRow> {
   const view = await getView(db, ref, options);
-  if (!view) throw new NotFoundError(`No hay una vista «${ref}» en este espacio.`);
+  if (!view)
+    throw new NotFoundError(
+      await notFoundWithHints(
+        db,
+        `No hay una vista «${ref}» en este espacio. Mira views_list.`,
+        ref,
+        'vista',
+      ),
+    );
   return view;
 }
 
@@ -692,11 +702,11 @@ async function freeSlug(db: SupabaseClient, wanted: string): Promise<string> {
  * `viewerId` deja comprobar las tablas del Feed de quien guarda; `keep` son
  * las fuentes de la versión guardada (ver `ViewCatalogOptions.keep`).
  */
-export async function validateSpec(
+export async function validateSpecDetailed(
   db: SupabaseClient,
   raw: unknown,
   options: { viewerId?: string | null; keep?: string[] } = {},
-): Promise<ViewSpec> {
+): Promise<{ spec: ViewSpec; fixes: string[] }> {
   const parsed = viewSpecSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ValidationError(
@@ -711,9 +721,19 @@ export async function validateSpec(
     keep: options.keep,
     feedRefs: trackersOf(parsed.data),
   });
-  const problems = checkSpecAgainst(parsed.data, catalog);
+  // Lo trivial se corrige antes de comprobar (y se avisa): ver autofixSpecAgainst.
+  const fixed = autofixSpecAgainst(parsed.data, catalog);
+  const problems = checkSpecAgainst(fixed.spec, catalog);
   if (problems.length) throw new ValidationError(problems.slice(0, 8).join(' '));
-  return parsed.data;
+  return fixed;
+}
+
+export async function validateSpec(
+  db: SupabaseClient,
+  raw: unknown,
+  options: { viewerId?: string | null; keep?: string[] } = {},
+): Promise<ViewSpec> {
+  return (await validateSpecDetailed(db, raw, options)).spec;
 }
 
 async function writeVersion(

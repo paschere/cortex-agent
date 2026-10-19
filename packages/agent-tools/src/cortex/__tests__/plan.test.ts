@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getTool } from '../../registry';
+import { canonicalToolId, getTool } from '../../registry';
 import { cortexPlan, cortexPlanUpdate, normalizePlan } from '../plan';
 
 describe('cortex.plan', () => {
@@ -43,5 +43,21 @@ describe('cortex.plan', () => {
     expect(
       cortexPlanUpdate.inputSchema.safeParse({ updates: [{ id: '1', status: 'volando' }] }).success,
     ).toBe(false);
+  });
+
+  it('los ids de herramienta del plan se guardan con punto aunque lleguen con guion bajo', async () => {
+    expect(canonicalToolId('trackers_define')).toBe('trackers.define');
+    expect(canonicalToolId('apps_publish')).toBe('apps.publish');
+    expect(canonicalToolId('trackers.upsert_many')).toBe('trackers.upsert_many');
+    expect(canonicalToolId('trackers_upsert_many')).toBe('trackers.upsert_many');
+    expect(canonicalToolId('nada_nada')).toBe('nada_nada');
+    const out = await cortexPlan.handler(
+      {
+        title: 'Agregar tarifario',
+        steps: [{ id: '1', label: 'Crear la tabla', tools: ['trackers_define', 'apps_update'] }],
+      },
+      {} as never,
+    );
+    expect(out.steps[0]?.tools).toEqual(['trackers.define', 'apps.update']);
   });
 });

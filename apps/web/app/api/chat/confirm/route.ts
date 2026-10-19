@@ -121,7 +121,8 @@ export async function POST(req: NextRequest) {
           result: {
             __confirmation_in_progress: true,
             toolId,
-            message: 'Ejecución solicitada. Verifica el resultado antes de volver a intentarlo.',
+            message:
+              'La persona aprobó esta acción y se está ejecutando; su resultado todavía no está guardado. No la repitas: lee el estado real (trackers_list, apps_get…) para saber si ya quedó.',
           },
         }
       : entry,
@@ -211,13 +212,28 @@ export async function POST(req: NextRequest) {
             }
           : entry,
     );
-    const { data: saved } = await db
-      .from('messages')
-      .update({ tool_results: next })
-      .eq('id', row.id)
-      .eq('tool_results', JSON.stringify(latest.tool_results))
-      .select('id')
-      .maybeSingle();
+    // La guarda compara SÓLO la entrada que se está cerrando (por su ruta en el
+    // JSON), nunca `tool_results` entero: con un mensaje de decenas de llamadas
+    // (74 KB en la conversación del 2026-10-19) la comparación entera viajaba en
+    // la URL de PostgREST, la consulta fallaba SIN avisar, el resultado real no
+    // se guardaba y la fila quedaba para siempre en «Ejecución solicitada.
+    // Verifica el resultado…», que el modelo leía como un resultado ambiguo.
+    let mergeQuery = db.from('messages').update({ tool_results: next }).eq('id', row.id);
+    const closingId = (latest.tool_results[index] as { toolCallId?: unknown } | undefined)
+      ?.toolCallId;
+    if (typeof closingId === 'string') {
+      mergeQuery = mergeQuery
+        .eq(`tool_results->${index}->>toolCallId`, closingId)
+        .eq(`tool_results->${index}->result->>__confirmation_in_progress`, 'true');
+    } else {
+      mergeQuery = mergeQuery.eq('tool_results', JSON.stringify(latest.tool_results));
+    }
+    const { data: saved, error: mergeError } = await mergeQuery.select('id').maybeSingle();
+    if (mergeError)
+      logger.warn(
+        { err: mergeError, conversationId, toolId },
+        'chat confirm: could not store the executed result',
+      );
     if (saved) break;
   }
   if (failed)

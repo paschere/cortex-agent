@@ -45,7 +45,21 @@ export function statementsMarkdown(
   const out: string[] = [];
   const period = `enero a ${monthName(r.throughMonth)} de ${r.year}${r.income.partialMonth ? ' (el mes va en curso)' : ''}`;
   if (section === 'todo' || section === 'resultados') {
-    out.push(`### Estado de resultados — ${period} (de caja)`);
+    const acc = r.accounting.pnl?.report;
+    if (acc)
+      out.push(
+        `### Según ${providerName(acc.provider)} (contabilidad, ${acc.from} a ${acc.to}) — ESTA ES LA CIFRA OFICIAL`,
+        `Ingresos ${money(acc.revenue)}, costo ${money(acc.costOfSales)}, gastos operacionales ${money(acc.operatingExpenses)}, utilidad neta ${money(acc.netIncome)}.`,
+      );
+    else if (r.accounting.connected)
+      out.push(
+        `Hay ${providerName(r.accounting.provider)} conectado pero no tengo copia de su estado de resultados: vuelve a pedir los estados con refresh para leerlo del programa. Lo de abajo es sólo el libro interno de Cortex.`,
+      );
+    out.push(
+      r.accounting.connected
+        ? `### Libro interno de Cortex — ${period} (caja; NO es la contabilidad: sólo lo que se registró en Cortex, puede no tener gastos). Si hay cifras de ${providerName(r.accounting.provider)} arriba, usa ésas y di que vienen del programa contable.`
+        : `### Estado de resultados — ${period} (de caja)`,
+    );
     out.push(
       `| Renglón | ${monthName(r.throughMonth)} | Acumulado ${r.year} | Acumulado ${r.year - 1} | Cambio |`,
       '|---|---:|---:|---:|---:|',
@@ -78,11 +92,6 @@ export function statementsMarkdown(
     out.push(
       'Si piden estos resultados mes a mes, vuelve a pedirlos con la sección «mensual» (viene del programa contable, un renglón por mes). No le nombres herramientas a la persona.',
     );
-    const acc = r.accounting.pnl?.report;
-    if (acc)
-      out.push(
-        `Según ${providerName(acc.provider)} (contable, ${acc.from} a ${acc.to}): ingresos ${money(acc.revenue)}, costo ${money(acc.costOfSales)}, gastos operacionales ${money(acc.operatingExpenses)}, utilidad neta ${money(acc.netIncome)}.`,
-      );
   }
   if (section === 'todo' || section === 'balance') {
     const b = r.balance;
@@ -123,7 +132,7 @@ export function statementsMarkdown(
 export const statementsGet = registerTool({
   id: 'statements.get',
   description:
-    'Los estados financieros de la empresa: estado de resultados (mes, acumulado del año y contra el año anterior: ventas, costo, utilidad bruta, gastos variables y fijos, utilidad operacional/EBITDA aproximado, utilidad neta), balance general (del programa contable si está conectado; si no, un balance aproximado rotulado como tal con lo que no incluye) e indicadores (márgenes bruto/operacional/neto, razón corriente, endeudamiento, días de cartera, inventario y proveedores, ciclo de caja, punto de equilibrio). Cada cifra trae de dónde sale. Para el estado de resultados MES A MES usa section «mensual» (contable, desde el programa contable, con la caja al lado). Úsala para «¿cómo nos fue este año?», «estado de resultados», «balance general», «¿cuál es nuestro margen?», «punto de equilibrio», «indicadores financieros». Sólo lectura. `refresh` le pide al programa contable el balance y los resultados (Siigo, Alegra, QuickBooks).',
+    'Los estados financieros de la empresa: estado de resultados (mes, acumulado del año y contra el año anterior: ventas, costo, utilidad bruta, gastos variables y fijos, utilidad operacional/EBITDA aproximado, utilidad neta), balance general (del programa contable si está conectado; si no, un balance aproximado rotulado como tal con lo que no incluye) e indicadores (márgenes bruto/operacional/neto, razón corriente, endeudamiento, días de cartera, inventario y proveedores, ciclo de caja, punto de equilibrio). Cada cifra trae de dónde sale. Para el estado de resultados MES A MES usa section «mensual» (contable, desde el programa contable, con la caja al lado). Úsala para «¿cómo nos fue este año?», «estado de resultados», «balance general», «¿cuál es nuestro margen?», «punto de equilibrio», «indicadores financieros». Cuando hay un programa contable conectado (Siigo, Alegra, QuickBooks), sus cifras son las oficiales y se muestran primero; el libro interno de Cortex va aparte, rotulado, y no se mezcla con ellas: dilo así. Sólo lectura. `refresh` le pide al programa contable el balance y los resultados (Siigo, Alegra, QuickBooks).',
   inputSchema: z.object({
     year: z.number().int().min(2020).max(2100).nullish().describe('Año. Por defecto, el actual.'),
     month: z
@@ -137,7 +146,7 @@ export const statementsGet = registerTool({
       .enum(['todo', 'resultados', 'balance', 'indicadores', 'mensual'])
       .default('todo')
       .describe(
-        "«mensual» = estado de resultados contable MES A MES (ventas, costo, utilidad bruta, gastos operacionales, no operacionales, utilidad operacional y neta de cada mes del rango), del programa contable, con la caja al lado. Úsala siempre que pidan los resultados «mes a mes», «por mes» o «cada mes».",
+        '«mensual» = estado de resultados contable MES A MES (ventas, costo, utilidad bruta, gastos operacionales, no operacionales, utilidad operacional y neta de cada mes del rango), del programa contable, con la caja al lado. Úsala siempre que pidan los resultados «mes a mes», «por mes» o «cada mes».',
       ),
     fromMonth: z
       .number()
@@ -170,7 +179,10 @@ export const statementsGet = registerTool({
       const thisYear = Number(today.slice(0, 4));
       const thisMonth = Number(today.slice(5, 7));
       const year = Math.min(Math.max(input.year ?? thisYear, thisYear - 2), thisYear);
-      const through = Math.min(input.month ?? (year === thisYear ? thisMonth : 12), year === thisYear ? thisMonth : 12);
+      const through = Math.min(
+        input.month ?? (year === thisYear ? thisMonth : 12),
+        year === thisYear ? thisMonth : 12,
+      );
       const from = Math.min(input.fromMonth ?? 1, through);
       const m = await readMonthlyPnl(ctx.db, {
         year,

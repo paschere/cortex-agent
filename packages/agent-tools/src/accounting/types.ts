@@ -170,6 +170,12 @@ export interface ProviderSession {
   /** «Probar y conectar»: autentica y lee una fila. Lanza con un mensaje en español. */
   verify(): Promise<{ token: ProviderToken | null }>;
   listPage(entity: AccountingEntity, query: ProviderQuery, page: number): Promise<ProviderPage>;
+  /**
+   * Cuántos registros dice tener el programa de una cosa, sin filtros (una sola
+   * petición de una fila). Sirve para comprobar que la tabla sincronizada no
+   * se quedó corta. `null` si el programa no lo puede decir.
+   */
+  remoteTotal?(entity: AccountingEntity): Promise<number | null>;
   /** Peticiones HTTP hechas (para el registro de la corrida). */
   readonly requests: number;
   /** Al desconectar: avisarle al programa que la llave ya no se usa (OAuth). Nunca lanza. */
