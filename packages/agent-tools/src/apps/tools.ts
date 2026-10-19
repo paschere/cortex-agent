@@ -42,7 +42,9 @@ import {
 import { describeTableros, suggestTableros, tableroSchema } from './tablero';
 import { APP_TEMPLATES, type AppTemplate } from './templates';
 import { formatDuration, loadUsage } from './usage';
+import { renderComparison } from './versions-compare';
 import {
+  compareVersions,
   draftStatus,
   listVersions,
   publishVersion,
@@ -332,7 +334,7 @@ const PORTAL_GRAMMAR = `PORTAL (field "portal", partial patch, null removes a se
 
 export const appsUpdate = registerTool({
   id: 'apps.update',
-  description: `Change an existing application (get its slugs first with apps.get): rename it, change its description/icon/home screen, its own appearance (colors, short name, font, welcome text) and its "Inicio" cards screen, add, edit, remove or reorder screens, and replace its set of roles with their permissions. Every piece is validated exactly like the visual editor: screen specs against the real tables (same grammar as views.create / views.update), roles against the permission contract. Removing a role also removes the Cortex members and keeps NO external users on it (change their role first). Removing a screen archives its view (data in the tables is untouched). Does NOT publish (apps.publish) nor assign people (apps.assign_members / apps.invite_users). If the app is published, a screen cannot read internal sources (Feed, personal, platform-internal). Requires confirmation; company owners/admins only.
+  description: `Change an existing application (get its slugs first with apps.get): rename it, change its description/icon/home screen, its own appearance (colors, short name, font, welcome text) and its "Inicio" cards screen, add, edit, remove or reorder screens, and replace its set of roles with their permissions. Every piece is validated exactly like the visual editor: screen specs against the real tables (same grammar as views.create / views.update), roles against the permission contract. Removing a role also removes the Cortex members and keeps NO external users on it (change their role first). Removing a screen archives its view (data in the tables is untouched). Does NOT publish (apps.publish) nor assign people (apps.assign_members / apps.invite_users). AFTER IT you MUST call apps.inspect for the role the change is about (with expect = the field/block names the person asked for) and report «listo» only if it shows up working for that role; otherwise fix it and inspect again. If the app is published, a screen cannot read internal sources (Feed, personal, platform-internal). Requires confirmation; company owners/admins only.
 ${PERMISSIONS_GRAMMAR}
 ${APPEARANCE_GRAMMAR}
 ${DASHBOARD_GRAMMAR}
@@ -738,7 +740,7 @@ export const appsGeofences = registerTool({
 export const appsPublish = registerTool({
   id: 'apps.publish',
   description:
-    'Publish the DRAFT of an application as a new numbered version (what its members and invited external users see), or unpublish it back to draft. Changes made with apps.update, the editor or templates stay in the draft until this runs; people using the app keep seeing the last published version meanwhile. Optional note describes the version. Publishing is refused, with the list, if any screen reads an internal source (Feed, personal, platform-internal). Requires confirmation; company owners/admins only.',
+    'Publish the DRAFT of an application as a new numbered version (what its members and invited external users see), or unpublish it back to draft. Changes made with apps.update, the editor or templates stay in the draft until this runs; people using the app keep seeing the last published version meanwhile. Optional note describes the version. Publishing is refused, with the list, if any screen reads an internal source (Feed, personal, platform-internal). Before publishing, run apps.inspect with version "draft" for the roles that use the app and fix what it reports; after publishing, inspect version "published" for the role that matters before saying it is ready for users. Requires confirmation; company owners/admins only.',
   inputSchema: z.object({
     app: z.string().trim().min(1).max(80).describe('App id or slug.'),
     publish: z.boolean().default(true).describe('false = unpublish (back to draft).'),
@@ -782,28 +784,29 @@ export const appsPublish = registerTool({
   },
 });
 
+const versionRefSchema = z.union([z.number().int().min(1), z.enum(['draft', 'published'])]);
+
 export const appsVersions = registerTool({
   id: 'apps.versions',
   description:
-    'List the published versions of an application with a summary of what each changed, whether the draft has unpublished changes, or restore a version (the DRAFT goes back to what that version said; with publish:true it is also published as a new version). Restoring never deletes roles that have people. Restore requires confirmation; company owners/admins only.',
+    'Read-only. List the published versions of an application with a summary of what each changed and whether the draft has unpublished changes; or COMPARE two versions in plain Spanish with `compare: {from, to}` (each one a version number, "published" or "draft"): which screens, blocks, form fields, permissions per role and look were added, removed or changed. Use compare before restoring, or when someone asks «¿qué cambió entre la versión 3 y la 5?» / «¿qué cambié desde que publiqué?». Automations and table data are not part of a version and are not compared. To go back to a version use apps.restore_version. Company owners/admins only.',
   inputSchema: z.object({
     app: z.string().trim().min(1).max(80).describe('App id or slug.'),
-    restore: z.number().int().min(1).optional().describe('Version number to go back to.'),
-    publish: z.boolean().default(false).describe('With restore: also publish the restored draft.'),
+    compare: z
+      .object({ from: versionRefSchema, to: versionRefSchema.default('draft') })
+      .optional()
+      .describe('Compare two versions. `to` defaults to the current draft.'),
   }),
-  outputSchema: z.object({ markdown: z.string() }),
-  requiresConfirmation: true,
-  rateLimit: { perMinute: 10 },
+  outputSchema: z.object({ markdown: z.string(), changes: z.array(z.string()).optional() }),
+  rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     await requireAppAdmin(ctx);
     const app = await mustGetApp(ctx.db, input.app);
-    if (input.restore) {
-      const res = await restoreVersion(ctx.db, app.id, input.restore, {
-        userId: ctx.userId,
-        publish: input.publish,
-      });
+    if (input.compare) {
+      const res = await compareVersions(ctx.db, app.id, input.compare.from, input.compare.to ?? 'draft');
       return {
-        markdown: `Devolví **${res.app.name}** a la versión ${input.restore}${res.published ? ` y la publiqué como versión ${res.published.number}` : ' (queda en borrador; publícala con apps.publish)'}.${res.skipped.length ? ` No pude devolver: ${res.skipped.join(' · ')}` : ''}`,
+        markdown: renderComparison(res.lines, `**${app.name}**: de ${res.from} a ${res.to}.`),
+        changes: res.lines.map((l) => l.text),
       };
     }
     const [versions, status] = await Promise.all([
@@ -812,10 +815,53 @@ export const appsVersions = registerTool({
     ]);
     const lines = versions.map(
       (v) =>
-        `- v${v.number}${v.current ? ' (publicada)' : ''} · ${v.createdAt.slice(0, 10)} · ${v.note || v.summary}`,
+        `- v${v.number}${v.current ? ' (publicada)' : ''} · ${(v.createdAt ?? '').slice(0, 10)} · ${v.note || v.summary}`,
     );
     return {
       markdown: `**${app.name}**: ${status.hasChanges ? `borrador con cambios sin publicar (${status.summary})` : 'el borrador coincide con lo publicado'}.\n${lines.join('\n') || 'Aún no hay versiones publicadas.'}`,
+    };
+  },
+});
+
+export const appsRestoreVersion = registerTool({
+  id: 'apps.restore_version',
+  description:
+    'Go back to a previous published version of an application: the DRAFT goes back to exactly what that version said (screens with their content, roles and permissions, home, look, dashboards, portal); with publish:true it is also published as a NEW version (history is never rewritten). Roles that have people are kept, rows and automations are not touched. Before asking, call apps.versions with compare {from: <version>, to: "draft"} so the person sees in plain words what will change. The result lists what came back and what could not (a table that changed). Then call apps.inspect for the affected role. The editor has the same «Volver a esta versión» button. Requires confirmation; company owners/admins only.',
+  inputSchema: z.object({
+    app: z.string().trim().min(1).max(80).describe('App id or slug.'),
+    version: z.number().int().min(1).describe('Version number to go back to.'),
+    publish: z
+      .boolean()
+      .default(false)
+      .describe('Also publish the restored draft as a new version.'),
+  }),
+  outputSchema: z.object({
+    app: summarySchema,
+    changes: z.array(z.string()),
+    skipped: z.array(z.string()),
+    published: z.number().nullable(),
+    markdown: z.string(),
+  }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    const app = await mustGetApp(ctx.db, input.app);
+    // Lo que va a cambiar en el borrador, antes de tocarlo.
+    const preview = await compareVersions(ctx.db, app.id, 'draft', input.version).catch(
+      () => null,
+    );
+    const res = await restoreVersion(ctx.db, app.id, input.version, {
+      userId: ctx.userId,
+      publish: input.publish,
+    });
+    const changes = (preview?.lines ?? []).map((l) => l.text);
+    return {
+      app: appSummary(res.app, await listScreens(ctx.db, res.app.id)),
+      changes,
+      skipped: res.skipped,
+      published: res.published?.number ?? null,
+      markdown: `Devolví **${res.app.name}** a la versión ${input.version}${res.published ? ` y la publiqué como versión ${res.published.number}` : ' (queda en borrador; publícala con apps.publish)'}.${changes.length ? ` Cambió: ${changes.slice(0, 8).join('; ')}${changes.length > 8 ? ` y ${changes.length - 8} más` : ''}.` : ''}${res.skipped.length ? ` No pude devolver: ${res.skipped.join(' · ')}` : ''} Revisa el resultado con apps.inspect para el rol afectado.`,
     };
   },
 });

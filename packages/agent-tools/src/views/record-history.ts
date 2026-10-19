@@ -2,6 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { bogotaToday } from '../commitments/shape';
 import type { ViewSource } from './compute';
 import { type RecordHistoryRaw, findDetailTarget } from './record';
+import {
+  type AuditRowLike,
+  type ChangeOrigin,
+  UNDO_ACTION_ID,
+  auditEventChanges,
+  auditOrigin,
+} from './row-history-shape';
 import type { TimelinePart, ViewSpec } from './spec';
 
 /**
@@ -34,6 +41,7 @@ export type RecordViewer =
 
 const EVENT_LIMIT = 200;
 const RUN_LIMIT = 20;
+const CHAT_LIMIT = 60;
 
 interface EventRow {
   id: string;
@@ -89,9 +97,17 @@ export async function loadRecordHistory(
     viewer: RecordViewer;
     /** Dentro de una aplicación: para las corridas de sus automatizaciones. */
     appId?: string | null;
+    /**
+     * Sumar lo que Cortex cambió desde el chat o una rutina (`audit_events` de
+     * `trackers.upsert`). Sólo para quien administra: el rastro de auditoría de
+     * la empresa no es de cualquier rol.
+     */
+    includeChat?: boolean;
   },
 ): Promise<RecordHistoryRaw> {
   const { rowId, row, viewer } = input;
+  const memberIds = new Set<string>();
+  const appUserIds = new Set<string>();
   const wantsRuns =
     input.show.has('automations') && viewer.kind === 'member' && Boolean(input.appId);
   const [{ data: eventData }, runData] = await Promise.all([
@@ -114,6 +130,42 @@ export async function loadRecordHistory(
       : Promise.resolve(null),
   ]);
   const events = (eventData ?? []) as unknown as EventRow[];
+  // Lo que Cortex cambió desde el chat o una rutina, con el antes → después.
+  const chatEvents: Array<{
+    id: string;
+    at: string;
+    by: string | null;
+    source: ChangeOrigin;
+    changes: Record<string, { from?: unknown; to?: unknown }>;
+  }> = [];
+  if (input.includeChat && viewer.kind === 'member') {
+    try {
+      const { data: auditData } = await db
+        .from('audit_events')
+        .select('id, user_id, tool_id, status, decision, surface, mandate_id, created_at, metadata')
+        .eq('tool_id', 'trackers.upsert')
+        .eq('status', 'ok')
+        .eq('metadata->detail->result->row->>id', rowId)
+        .order('created_at', { ascending: false })
+        .limit(CHAT_LIMIT);
+      for (const a of (auditData ?? []) as unknown as Array<
+        AuditRowLike & { user_id: string | null; created_at: string }
+      >) {
+        const changes = auditEventChanges(a, rowId);
+        if (!changes) continue;
+        chatEvents.push({
+          id: `audit:${a.id}`,
+          at: a.created_at,
+          by: a.user_id,
+          source: auditOrigin(a),
+          changes,
+        });
+        if (a.user_id) memberIds.add(a.user_id);
+      }
+    } catch {
+      // Sin acceso al rastro de auditoría la historia sigue con lo demás.
+    }
+  }
   const runs = (runData ?? []) as Array<{
     id: string;
     automation_id: string;
@@ -122,8 +174,6 @@ export async function loadRecordHistory(
     created_at: string;
   }>;
 
-  const memberIds = new Set<string>();
-  const appUserIds = new Set<string>();
   const note = (id: string | null | undefined, kind: 'member' | 'app_user') => {
     if (id) (kind === 'member' ? memberIds : appUserIds).add(id);
   };
@@ -158,18 +208,34 @@ export async function loadRecordHistory(
 
   return {
     created: { at: row.created_at, by: createdBy ? actorLabel(createdBy, viewer, names) : null },
-    events: events.map((e) => ({
-      id: e.id,
-      at: e.created_at,
-      kind: e.kind,
-      actionId: e.action_id,
-      changes: e.changes ?? {},
-      by: actorLabel(
-        { id: e.actor, kind: e.actor_kind === 'app_user' ? 'app_user' : 'member' },
-        viewer,
-        names,
-      ),
-    })),
+    events: [
+      ...events.map((e) => ({
+        id: e.id,
+        at: e.created_at,
+        kind: e.kind,
+        actionId: e.action_id,
+        changes: e.changes ?? {},
+        by: actorLabel(
+          { id: e.actor, kind: e.actor_kind === 'app_user' ? 'app_user' : 'member' },
+          viewer,
+          names,
+        ),
+        source: (e.action_id === UNDO_ACTION_ID
+          ? 'undo'
+          : e.actor
+            ? 'app'
+            : 'link') as ChangeOrigin,
+      })),
+      ...chatEvents.map((c) => ({
+        id: c.id,
+        at: c.at,
+        kind: 'edit' as const,
+        actionId: null,
+        changes: c.changes,
+        by: actorLabel({ id: c.by, kind: 'member' }, viewer, names),
+        source: c.source,
+      })),
+    ].sort((a, b) => b.at.localeCompare(a.at)),
     runs: runs.map((r) => ({
       id: r.id,
       at: r.finished_at ?? r.created_at,
@@ -189,7 +255,13 @@ export async function loadRecordContext(
   spec: Pick<ViewSpec, 'blocks'>,
   sources: Map<string, ViewSource>,
   request: { rowId: string | null | undefined; blockId?: string | null },
-  options: { viewer: RecordViewer; appId?: string | null; now?: Date } = {
+  options: {
+    viewer: RecordViewer;
+    appId?: string | null;
+    now?: Date;
+    /** Sumar lo hecho desde el chat o por rutinas (sólo para quien administra). */
+    includeChat?: boolean;
+  } = {
     viewer: { kind: 'public' },
   },
 ): Promise<{ rowId: string; blockId: string | null; history: RecordHistoryRaw | null } | null> {
@@ -209,6 +281,7 @@ export async function loadRecordContext(
     show,
     viewer: options.viewer,
     appId: options.appId,
+    includeChat: options.includeChat,
   }).catch(() => null);
   return { rowId, blockId: target.block.id, history };
 }

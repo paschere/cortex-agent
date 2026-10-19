@@ -1,5 +1,5 @@
 import { previewAttributesOf, requireApp } from '@/lib/apps/access';
-import { previewQuery } from '@/lib/apps/preview-query';
+import { previewModeOf, previewQuery } from '@/lib/apps/preview-query';
 import {
   HOME_SLUG,
   PORTAL_SLUG,
@@ -18,7 +18,7 @@ export default async function PanelAppViewIndex({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ como?: string; atr?: string | string[]; tema?: string }>;
+  searchParams: Promise<{ como?: string; atr?: string | string[]; tema?: string; modo?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { access } = await requireApp(decodeURIComponent(id), {
@@ -32,7 +32,7 @@ export default async function PanelAppViewIndex({
       ? HOME_SLUG
       : (screen?.slug ?? tableroNav(access)[0]?.slug);
   if (!first) notFound();
-  const como = query.como ? previewQuery(query.como, access.user.attributes) : '';
+  const como = query.como ? previewQuery(query.como, access.user.attributes, previewModeOf(query.modo)) : '';
   const tema = query.tema ? `${como ? '&' : '?'}tema=${encodeURIComponent(query.tema)}` : '';
   redirect(`/panel/apps/${access.app.slug}/vista/${first}${como}${tema}`);
 }

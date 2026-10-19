@@ -1,5 +1,11 @@
 import { openScreenForApi, previewAttributesOf } from '@/lib/apps/access';
-import { parseViewFilterParam, readScreen, screenView } from '@cortex/agent-tools';
+import { previewModeOf } from '@/lib/apps/preview-query';
+import {
+  parseViewFilterParam,
+  readScreen,
+  readScreenSample,
+  screenView,
+} from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -26,6 +32,18 @@ export async function GET(
   if (opened instanceof NextResponse) return opened;
   const { db, access, screen, readOnly } = opened;
   const view = await screenView(db, screen);
+  // «Ver como…» en modo prueba: el refresco también trae filas de ejemplo, nunca las reales.
+  if (readOnly && previewModeOf(sp.get('modo')) === 'prueba') {
+    const sample = await readScreenSample(db, access, screen, {
+      fila: sp.get('fila'),
+      detail: sp.get('d'),
+      filters: parseViewFilterParam(view.spec, sp.get('f')),
+    });
+    return NextResponse.json(
+      { version: view.version, view: sample.computed },
+      { headers: { 'cache-control': 'no-store' } },
+    );
+  }
   const { computed } = await readScreen(db, access, screen, {
     spec: view.spec,
     filters: parseViewFilterParam(view.spec, sp.get('f')),

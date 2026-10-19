@@ -7,6 +7,7 @@ import { type FlowActor, flowOf } from '../trackers/flow';
 import { defineTracker, getTrackerBySlug, removeTracker } from '../trackers/store';
 import { type ComputedView, type ViewSource, computeView, todayIn } from '../views/compute';
 import { type CatalogTracker, type ViewSpec, trackersOf } from '../views/spec';
+import type { ViewFilterState } from '../views/view-filters';
 import { type AppDraft, appDraftSchema, reviewAppDraft } from './design';
 import {
   type AppUser,
@@ -300,6 +301,10 @@ export function buildAppPreview(
     now?: Date;
     /** Abre el detalle de una fila de ejemplo en una pantalla. */
     record?: { screen: string; blockId: string; rowId: string } | null;
+    /** Filtros de la barra de la pantalla (`?f=`), para «Ver como…» con datos de prueba. */
+    filters?: ViewFilterState;
+    /** Calcular sólo estas pantallas (por slug); las demás no se arman. */
+    only?: readonly string[];
   } = {},
 ): AppPreview {
   const now = options.now ?? new Date();
@@ -358,7 +363,9 @@ export function buildAppPreview(
   };
 
   const flowActor = (): FlowActor => ({ roles: [role.key], admin: role.admin, unscoped: false });
-  const visible = draft.screens.filter((s) => canSeeScreen(role, s.roles));
+  const visible = draft.screens.filter(
+    (s) => canSeeScreen(role, s.roles) && (!options.only || options.only.includes(s.slug ?? '')),
+  );
   const views: Record<string, ComputedView> = {};
   for (const s of visible) {
     const slug = s.slug ?? '';
@@ -369,6 +376,7 @@ export function buildAppPreview(
     views[slug] = computeView(s.spec, sourcesFor(s.spec), now, {
       writable: roleWrites(role, s.spec),
       audience: 'team',
+      filters: options.filters ?? {},
       viewer: { id: PREVIEW_USER_ID, kind: 'member' },
       flowActor: flowActor(),
       record,
@@ -425,7 +433,7 @@ export function flowStatesOf(draft: AppDraft): Record<string, string[]> {
 export const appsApplyDraft = registerTool({
   id: 'apps.apply_draft',
   description:
-    'Create the WHOLE application of an approved draft in ONE step: the new tables, the app (as a draft, unpublished), its roles and all its screens, in order. If any step fails everything created so far is undone (the app and any table it just created are removed) and the error says which step failed. Pass the draft EXACTLY as apps.design returned it (name, description, icon, roles, screens, homeScreen, tables) — it is validated again here. The person approves ONCE with a card that lists what will be created. Tables that already exist are used as they are, never altered. Use this for any custom app after apps.design; for plain templates apps.create is still fine. Company owners/admins only. Requires confirmation.',
+    'Create the WHOLE application of an approved draft in ONE step: the new tables, the app (as a draft, unpublished), its roles and all its screens, in order. If any step fails everything created so far is undone (the app and any table it just created are removed) and the error says which step failed. Pass the draft EXACTLY as apps.design returned it (name, description, icon, roles, screens, homeScreen, tables) — it is validated again here. The person approves ONCE with a card that lists what will be created. Tables that already exist are used as they are, never altered. Use this for any custom app after apps.design; afterwards call apps.inspect for each role before saying it is ready; for plain templates apps.create is still fine. Company owners/admins only. Requires confirmation.',
   inputSchema: appDraftSchema,
   outputSchema: z.object({
     app: z.unknown(),

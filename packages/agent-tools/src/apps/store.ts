@@ -27,12 +27,21 @@ import {
   editViewRow,
   editViewSubmission,
   loadViewSources,
+  previewViewForm,
   restoreView,
   runViewAction,
+  undoViewRowChange,
   submitViewForm,
   updateView,
   validateSpec,
 } from '../views/store';
+import {
+  type AuditRowLike,
+  type FieldChanges,
+  UNDO_ACTION_ID,
+  auditEventChanges,
+  planUndo,
+} from '../views/row-history-shape';
 import type { ViewFilterState } from '../views/view-filters';
 import { type AppBrand, type AppHome, parseBrand, parseHome } from './appearance';
 import { type ClientPortal, parsePortal } from './client-portal';
@@ -59,6 +68,7 @@ import {
   canViewLocations,
   editAccessFor,
   fieldsOutside,
+  writableFieldsFor,
   isOwnRow,
   parsePermissions,
   roleKeySchema,
@@ -1038,6 +1048,8 @@ export async function readScreen(
         : { kind: 'member', id: access.user.id },
       appId: access.app.id,
       now: options.now,
+      // Quien administra también ve lo que Cortex cambió desde el chat o por rutinas.
+      includeChat: access.role.admin && !access.user.external,
     },
   );
   const computed = computeView(spec, sources, options.now ?? new Date(), {
@@ -1235,6 +1247,43 @@ export async function submitAppForm(
   return sent;
 }
 
+/**
+ * «Modo prueba» de un formulario (Ver como… con datos de prueba): las mismas
+ * comprobaciones de rol y de campos que `submitAppForm`, las mismas reglas del
+ * formulario, y devuelve lo que SE HABRÍA guardado sin escribir nada (ni la
+ * fila, ni el registro de envío, ni automatizaciones, ni el conteo de uso).
+ */
+export async function previewAppForm(
+  db: SupabaseClient,
+  access: AppAccess,
+  view: CustomViewRow,
+  input: { blockId: string; values: Record<string, unknown> },
+) {
+  const slug = trackerOfBlock(view, input.blockId);
+  if (!canCreateIn(access.role, slug))
+    throw new ValidationError('Tu rol en esta aplicación no registra en esta tabla.');
+  const values = { ...input.values };
+  assertFields(
+    access,
+    slug,
+    Object.keys(values).filter((k) => values[k] !== undefined && values[k] !== ''),
+  );
+  // Un rol con filtro por atributo («Cliente») escribe SIEMPRE su valor; en la
+  // prueba, si quien mira no tiene ese atributo, simplemente no se fuerza.
+  const scope = rowAccessFor(access.role, access.user, slug);
+  const forced =
+    scope.kind === 'equals' && scope.value !== null ? { [scope.field]: scope.value } : undefined;
+  return previewViewForm(db, view, {
+    blockId: input.blockId,
+    values,
+    forced,
+    fillDefaults: true,
+    submittedBy: access.user.id,
+    submittedByKind: actorKindOf(access),
+    viewer: access.user.name,
+  });
+}
+
 /** Corregir lo enviado (dentro de la ventana): quien pudo crear puede corregir lo suyo. */
 export async function editAppSubmission(
   db: SupabaseClient,
@@ -1311,6 +1360,81 @@ export async function editAppRow(
   return withFlowActor(flowActorOf(access), () =>
     editViewRow(db, view, { ...rest, actor: access.user.id, actorKind: actorKindOf(access) }),
   );
+}
+
+/**
+ * «Deshacer este cambio» del historial de un registro: devuelve a su valor de
+ * antes los campos que ese cambio tocó, con los permisos de quien lo pide
+ * (edita la tabla, sólo lo suyo si es «own», sólo los campos que su rol
+ * escribe). Un campo que alguien cambió DESPUÉS no se pisa. El cambio de vuelta
+ * queda en la historia como «Al deshacer un cambio». `entryId` es el id del
+ * renglón (un evento de la pantalla, o `audit:<id>` de lo que Cortex cambió
+ * desde el chat, que sólo ve quien administra).
+ */
+export async function undoAppRowChange(
+  db: SupabaseClient,
+  access: AppAccess,
+  view: CustomViewRow,
+  input: { blockId: string; rowId: string; entryId: string },
+): Promise<{ label: string; applied: string[]; conflicts: string[] }> {
+  const slug = trackerOfBlock(view, input.blockId);
+  const edit = editAccessFor(access.role, slug);
+  if (edit === 'none') throw new ValidationError('Tu rol en esta aplicación no edita esta tabla.');
+  const row = await assertRowVisible(db, access, slug, input.rowId);
+  if (edit === 'own' && !isOwnRow(access.user, row))
+    throw new ValidationError('Sólo puedes editar lo que registraste tú.');
+  const tracker = await trackerRow(db, slug);
+
+  let changes: FieldChanges | null = null;
+  if (input.entryId.startsWith('audit:')) {
+    if (!access.role.admin)
+      throw new ValidationError('Sólo quien administra la empresa deshace lo hecho desde el chat.');
+    const { data, error } = await db
+      .from('audit_events')
+      .select('id, tool_id, status, decision, surface, mandate_id, metadata')
+      .eq('id', input.entryId.slice('audit:'.length))
+      .maybeSingle();
+    if (error) throw error;
+    changes = data ? auditEventChanges(data as unknown as AuditRowLike, input.rowId) : null;
+  } else {
+    const { data, error } = await db
+      .from('custom_view_events')
+      .select('changes, kind, action_id')
+      .eq('id', input.entryId)
+      .eq('tracker_row_id', input.rowId)
+      .maybeSingle();
+    if (error) throw error;
+    const ev = data as { changes: FieldChanges | null; kind: string; action_id: string | null } | null;
+    changes = ev && ev.kind !== 'action' && ev.action_id !== UNDO_ACTION_ID ? ev.changes : null;
+  }
+  if (!changes || !Object.keys(changes).length)
+    throw new NotFoundError('Ese cambio ya no está en el historial o no se puede deshacer.');
+
+  const plan = planUndo(changes, row.values, tracker.fields, writableFieldsFor(access.role, slug));
+  const keys = Object.keys(plan.patch);
+  if (!keys.length) {
+    const named = (ks: string[]) =>
+      ks.map((k) => `«${tracker.fields.find((f) => f.key === k)?.label ?? k}»`).join(', ');
+    throw new ValidationError(
+      plan.conflicts.length
+        ? `No se puede deshacer: ${named(plan.conflicts)} cambió${plan.conflicts.length > 1 ? 'ron' : ''} otra vez después. Corrígelo a mano.`
+        : plan.already.length
+          ? 'Ese cambio ya estaba deshecho.'
+          : 'Tu rol no puede escribir los campos de ese cambio.',
+    );
+  }
+  assertFields(access, slug, keys);
+  await assertExternalBudget(db, access, 'write');
+  const res = await withFlowActor(flowActorOf(access), () =>
+    undoViewRowChange(db, view, {
+      blockId: input.blockId,
+      rowId: input.rowId,
+      patch: plan.patch,
+      actor: access.user.id,
+      actorKind: actorKindOf(access),
+    }),
+  );
+  return { label: res.label, applied: keys, conflicts: plan.conflicts };
 }
 
 /** Un botón de fila, incluidos Aprobar y Rechazar: el rol lo tiene que tener. */

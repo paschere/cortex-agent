@@ -2,6 +2,7 @@
 
 import { activeOutbox } from '@/lib/apps/app-outbox';
 import { assignRowAction, assignablePeopleAction } from '@/lib/apps/location-actions';
+import { undoRowChangeAction } from '@/lib/apps/history-actions';
 import { editAppRowAction, runAppActionAction } from '@/lib/apps/write-actions';
 import { editViewRowAction, runViewActionAction } from '@/lib/views/actions';
 import { hasPending, resolvePending } from '@/lib/views/offline-files';
@@ -49,6 +50,11 @@ export interface ViewWriter {
     opts?: EditOptions,
   ): Promise<Result>;
   act(blockId: string, action: ComputedAction, rowId: string, rowLabel: string): Promise<Result>;
+  /**
+   * «Deshacer este cambio» del historial de un registro (sólo dentro de una
+   * aplicación): el servidor decide si este rol puede y si el campo no cambió después.
+   */
+  undo?(blockId: string, rowId: string, entryId: string): Promise<Result>;
   /**
    * «Asignar a…»: sólo dentro de una aplicación. Sin esto (vistas del equipo,
    * enlaces públicos) un botón de asignar no se pinta.
@@ -123,6 +129,15 @@ export function ViewWriterProvider({
     };
   } else if (target.kind === 'custom_app') {
     writer = {
+      async undo(blockId, rowId, entryId) {
+        try {
+          const res = await undoRowChangeAction(target.appId, target.screen, blockId, rowId, entryId);
+          if (res.ok) onChanged?.();
+          return res;
+        } catch {
+          return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
+        }
+      },
       assign: {
         people: (blockId, actionId) =>
           assignablePeopleAction(target.appId, target.screen, blockId, actionId),
@@ -237,7 +252,12 @@ export function ViewWriterProvider({
     // El escaparate de desarrollo: todo «sale bien» sin tocar nada.
     const fake = async (): Promise<Result> => {
       await new Promise((r) => setTimeout(r, 400));
-      return { ok: true, message: 'Hecho (de mentira).' };
+      return {
+        ok: true,
+        message: target.dryRun
+          ? 'Modo prueba: no se guardó nada.'
+          : 'Hecho (de mentira).',
+      };
     };
     writer = { edit: fake, act: fake };
   }

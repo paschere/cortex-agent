@@ -1,3 +1,4 @@
+import { dryRunAppFormAction } from '@/lib/apps/dry-run-actions';
 import { editAppSubmissionAction, submitAppFormAction } from '@/lib/apps/write-actions';
 import { editViewSubmissionAction, submitViewFormAction } from '@/lib/views/actions';
 import { isOfflineFailure } from '@/lib/views/offline-queue';
@@ -103,11 +104,24 @@ export function submitterFor(target: SubmitTarget): SubmitFn | undefined {
         ? { ok: false, error: 'No se pudo enviar. Inténtalo otra vez.' }
         : { ok: false, error: res.error, offline: res.offline };
     };
-  if (target.kind === 'demo')
+  if (target.kind === 'demo') {
+    const dry = target.dryRun;
+    if (dry)
+      return async (blockId, values) => {
+        try {
+          const res = await dryRunAppFormAction(dry.appId, dry.screen, dry.roleKey, blockId, values);
+          return res.ok
+            ? { ok: true, message: res.message, rowId: res.rowId, editToken: null }
+            : { ok: false, error: res.error };
+        } catch {
+          return { ok: false, error: 'Sin conexión. Inténtalo otra vez.', offline: true };
+        }
+      };
     return async () => {
       await new Promise((r) => setTimeout(r, 500));
       return { ok: true, message: 'Recibido. Gracias.', rowId: 'demo', editToken: null };
     };
+  }
   return undefined;
 }
 
