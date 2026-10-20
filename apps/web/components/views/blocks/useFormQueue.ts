@@ -31,6 +31,8 @@ export function queueKeyFor(target: SubmitTarget, blockId: string): string | nul
   if (target.kind === 'app') return `app:${target.viewId}:${blockId}`;
   if (target.kind === 'custom_app') return `capp:${target.appId}:${target.screen}:${blockId}`;
   if (target.kind === 'public') return `pub:${target.token.slice(0, 20)}:${blockId}`;
+  // El escaparate (/v/formularios-showcase) prueba la cola de verdad, con un servidor de mentira.
+  if (target.kind === 'demo') return `demo:${blockId}`;
   return null;
 }
 
@@ -87,6 +89,7 @@ export function useFormQueue({
 }) {
   const [items, setItems] = useState<QueuedSubmission[]>([]);
   const [sent, setSent] = useState<SentRecord[]>([]);
+  const [syncing, setSyncing] = useState(false);
   const busy = useRef(false);
   // Siempre la versión más nueva, para que el reloj no use una vieja.
   const live = useRef({ submit, uploader, summarize, editWindow, queueKey });
@@ -136,6 +139,7 @@ export function useFormQueue({
       try {
         const all = await refresh();
         if (!pendingOf(all, key).length) return;
+        setSyncing(true);
         const result = await drainQueue(
           all,
           async (item): Promise<SendOutcome> => {
@@ -166,6 +170,7 @@ export function useFormQueue({
         window.dispatchEvent(new Event('cortex:outbox-changed'));
       } finally {
         busy.current = false;
+        setSyncing(false);
       }
     },
     [refresh, recordSent],
@@ -177,9 +182,12 @@ export function useFormQueue({
     void drain(true);
     const on = () => void drain(true);
     window.addEventListener('online', on);
+    // El servidor volvió a contestar (ver useConnection): se envía ya, sin esperar al reloj.
+    window.addEventListener('cortex:reconnected', on);
     const timer = window.setInterval(() => void drain(false), RETRY_EVERY_MS);
     return () => {
       window.removeEventListener('online', on);
+      window.removeEventListener('cortex:reconnected', on);
       window.clearInterval(timer);
     };
   }, [queueKey, drain]);
@@ -225,6 +233,7 @@ export function useFormQueue({
     items,
     pending: pendingOf(items, queueKey ?? undefined),
     rejected: items.filter((q) => q.rejected),
+    syncing,
     sent,
     add,
     drain,

@@ -1,5 +1,6 @@
 'use client';
 
+import { pollBackoffMs } from '@/lib/forms/connection-state';
 import { LIVE_FLASH_MS, beep, desktopNotify, unlockAudio } from '@/lib/live-signal';
 import {
   WATCH_MODES,
@@ -134,6 +135,11 @@ export function LiveViewCanvas({
   const [updatedAt, setUpdatedAt] = useState(() => Date.now());
   const [, tick] = useState(0);
   const [failing, setFailing] = useState(false);
+  // Sin red el sondeo se PAUSA (no gasta batería ni llena la consola de errores) y
+  // al volver se actualiza ya. Si el servidor falla con red, el sondeo se espacia.
+  const [offline, setOffline] = useState(false);
+  const failures = useRef(0);
+  const nextPollAt = useRef(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [mode, setMode] = useState<WatchMode | null>(null);
   const [flashing, setFlashing] = useState<ReadonlySet<string>>(new Set());
@@ -242,10 +248,15 @@ export function LiveViewCanvas({
         setView(body.view);
         setUpdatedAt(Date.now());
         setFailing(false);
+        failures.current = 0;
         flashChanges(body.view);
         announce(body.view);
       } catch {
-        if (mine === seq.current) setFailing(true);
+        if (mine === seq.current) {
+          setFailing(true);
+          failures.current += 1;
+          nextPollAt.current = Date.now() + pollBackoffMs(failures.current);
+        }
       } finally {
         if (mine === seq.current) {
           inFlight.current = false;
@@ -342,10 +353,12 @@ export function LiveViewCanvas({
     const every = view.refreshSeconds * 1000;
     if (!every) return;
     const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh();
+      if (document.visibilityState !== 'visible') return;
+      if (navigator.onLine === false || Date.now() < nextPollAt.current) return;
+      void refresh();
     }, every);
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void refresh();
+      if (document.visibilityState === 'visible' && navigator.onLine !== false) void refresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -353,6 +366,26 @@ export function LiveViewCanvas({
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [view.refreshSeconds, refresh]);
+
+  // Pausa sin red y reanuda al volver (se actualiza de inmediato).
+  useEffect(() => {
+    setOffline(navigator.onLine === false);
+    const off = () => setOffline(true);
+    const on = () => {
+      setOffline(false);
+      failures.current = 0;
+      nextPollAt.current = 0;
+      void refresh(true);
+    };
+    window.addEventListener('offline', off);
+    window.addEventListener('online', on);
+    window.addEventListener('cortex:reconnected', on);
+    return () => {
+      window.removeEventListener('offline', off);
+      window.removeEventListener('online', on);
+      window.removeEventListener('cortex:reconnected', on);
+    };
+  }, [refresh]);
 
   // «Tirar para actualizar» del marco de una app (AppRunner): vuelve a pedir la vista ya.
   useEffect(() => {
@@ -394,9 +427,13 @@ export function LiveViewCanvas({
     <>
       {view.refreshSeconds > 0 && (
         <LiveStatus
-          failing={failing}
+          failing={failing || offline}
           label={
-            failing ? 'Sin conexión, reintentando' : `En vivo · ${ago(Date.now() - updatedAt)}`
+            offline
+              ? `Sin conexión · en pausa, datos de ${ago(Date.now() - updatedAt)}`
+              : failing
+                ? 'Reconectando…'
+                : `En vivo · ${ago(Date.now() - updatedAt)}`
           }
         />
       )}

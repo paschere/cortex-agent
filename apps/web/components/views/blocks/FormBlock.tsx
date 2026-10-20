@@ -15,9 +15,12 @@ import {
   violationsByKey,
   visibleKeys,
 } from '@cortex/agent-tools/src/trackers/validation';
+import { scannableFields } from '@cortex/agent-tools/src/trackers/scan-shape';
 import { stepErrors, stepFields, visibleSteps } from '@cortex/agent-tools/src/views/form-extras';
+import { LINES_KEY, checkLines, parseLinesValue } from '@cortex/agent-tools/src/views/form-lines';
 import { clsx } from 'clsx';
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Calculator,
@@ -37,11 +40,16 @@ import { useEffect, useId, useRef, useState, useTransition } from 'react';
 import { DictateRecord, type Dictated } from '../DictateRecord';
 import type { SubmitTarget } from '../ViewCanvas';
 import { VoiceFormAssistant } from '../VoiceFormAssistant';
+import { ConnectionPill } from './ConnectionPill';
 import { FileInput, LocationInput, RelationInput, ScanInput } from './FieldInputs';
+import { LinesInput } from './LinesInput';
+import { NumberInput } from './NumberInput';
+import { ScanDocument, attachedImages, useDocumentScan } from './ScanDocument';
 import { type SubmitFn, correctorFor, uploaderFor } from './form-transport';
 import { type VoiceSendOutcome, useFormVoiceStore } from './form-voice-bridge';
 import { Card, useViewTheme } from './theme';
 import { useAutofill } from './useAutofill';
+import { useConnection } from './useConnection';
 import { queueKeyFor, useFormQueue, useOnline } from './useFormQueue';
 
 /**
@@ -124,11 +132,15 @@ export function FormBlock({
   const [reviewing, setReviewing] = useState(false);
   const [full, setFull] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  // Validación amable: no se señala un campo hasta que la persona lo tocó o intentó enviar.
+  const [attempted, setAttempted] = useState(false);
+  const dirty = useRef<Set<string>>(new Set());
   const disabled = target.kind === 'preview' || !submit;
   const appNav = useAppNav();
   const operator = useViewTheme().layout === 'operator';
   const INPUT = operator ? INPUT_OPERATOR : INPUT_BASE;
   const online = useOnline();
+  const connection = useConnection();
   // Campos calculados: la MISMA fórmula que corre el servidor, al instante.
   const calc = applyComputed<string>(fields, values);
   const effective: Record<string, string> = Object.fromEntries(
@@ -176,13 +188,25 @@ export function FormBlock({
   // «viewer» lo llena el servidor con el nombre de quien envía (en un enlace
   // público queda vacío): aquí no puede contar como «falta». Una foto guardada
   // en el teléfono (`pending:`) cuenta como puesta.
-  const check = () =>
-    violationsByKey(
+  const check = () => {
+    const found = violationsByKey(
       validateRowValues(
         fields.map((f) => (f.default === 'viewer' ? { ...f, required: false } : f)),
         Object.fromEntries(Object.entries(effective).map(([k, v]) => [k, forValidation(v)])),
       ),
     );
+    // Las líneas (ítems con cantidad) no son un campo de la tabla: se juzgan aparte.
+    if (block.lines) {
+      const problem = checkLines(parseLinesValue(values[LINES_KEY]) ?? [], {
+        min: block.lines.min,
+        max: block.lines.max,
+        decimals: block.lines.decimals,
+        title: block.lines.title,
+      });
+      if (problem) found[LINES_KEY] = problem;
+    }
+    return found;
+  };
   // Uso (0225): la primera vez que alguien escribe se avisa «empezó», con la misma
   // referencia que luego lleva el envío. Sin contenido; si falla, no pasa nada.
   const usageRef = useRef<string | null>(null);
@@ -197,6 +221,7 @@ export function FormBlock({
         keepalive: true,
       }).catch(() => undefined);
     }
+    dirty.current.add(key);
     setValues((v) => ({ ...v, [key]: next }));
     autofill.markEdited(key);
     setErrors((e) => {
@@ -221,16 +246,46 @@ export function FormBlock({
     url: autofillUrl,
     enabled: !disabled && !correcting,
   });
+  // «Tomar foto del documento»: sólo el equipo con sesión (nunca el enlace público ni un usuario externo).
+  const scanUrl =
+    target.kind === 'app'
+      ? `/api/views/${target.viewId}/scan`
+      : target.kind === 'custom_app' && !target.external
+        ? `${appApiBase(target)}/screens/${target.screen}/scan`
+        : null;
+  const readableCount = scannableFields(fields).length;
+  const scan = useDocumentScan({
+    blockId: block.id,
+    fields,
+    values,
+    setValues: (patch) => {
+      patchValues(patch);
+      setErrors((e) => {
+        const keys = Object.keys(patch).filter((k) => k in e);
+        if (!keys.length) return e;
+        const rest = { ...e };
+        for (const k of keys) delete rest[k];
+        return rest;
+      });
+    },
+    url: scanUrl,
+    enabled: !disabled && !correcting && (block.documentScan ?? readableCount >= 3),
+    onApplied: autofill.adopt,
+    previous: autofill.previous,
+  });
   const blurField = (key: string) =>
     setErrors((e) => {
-      const msg = check()[key];
+      // Un campo que nadie tocó no se señala al salir de él: el rojo espera al envío.
+      const msg = dirty.current.has(key) || attempted ? check()[key] : undefined;
       if (msg) return { ...e, [key]: msg };
       if (!(key in e)) return e;
       const { [key]: _gone, ...rest } = e;
       return rest;
     });
+  const formRef = useRef<HTMLFormElement>(null);
+  // Por el final del id (`…-clave`): sigue sirviendo si el prefijo de useId cambió al hidratar.
   const focusField = (key: string | undefined) => {
-    if (key) document.getElementById(`${baseId}-${key}`)?.focus();
+    if (key) formRef.current?.querySelector<HTMLElement>(`[id$="-${key}"]`)?.focus();
   };
 
   // Encadenar pantallas: si llegamos con valores prellenados (?pre=…) desde otro
@@ -270,7 +325,10 @@ export function FormBlock({
     setStep(0);
     setReviewing(false);
     setError(null);
+    setAttempted(false);
+    dirty.current.clear();
     autofill.reset();
+    scan.dismiss();
   };
 
   /** Sólo lo que se muestra y tiene algo: lo oculto por `showIf` no viaja. Al corregir viajan también los vacíos (para poder borrar). */
@@ -281,13 +339,25 @@ export function FormBlock({
       if (all) payload[f.key] = visible.has(f.key) ? (v ?? '') : '';
       else if (visible.has(f.key) && v !== undefined && v !== '') payload[f.key] = v;
     }
+    // Las líneas viajan con el registro nuevo (al corregir no se tocan: ya son filas hijas).
+    if (!all && block.lines && values[LINES_KEY]) payload[LINES_KEY] = values[LINES_KEY];
     return payload;
   };
 
   const goToFirstError = (found: Record<string, string>) => {
     setErrors(found);
     const first = fields.find((f) => found[f.key]);
-    if (!first) return;
+    if (!first) {
+      // Sólo falla la lista de ítems: va en el último paso.
+      if (found[LINES_KEY]) {
+        if (steps) {
+          setStep(steps.length - 1);
+          setReviewing(false);
+        }
+        setTimeout(() => document.getElementById(`${baseId}-lines`)?.scrollIntoView({ block: 'center' }), 50);
+      }
+      return;
+    }
     if (steps) {
       const at = steps.findIndex((s) => s.fields.includes(first.key));
       if (at >= 0) {
@@ -307,6 +377,7 @@ export function FormBlock({
   const send = () => {
     if (disabled || !submit) return;
     setError(null);
+    setAttempted(true);
     const found = check();
     if (Object.keys(found).length) return goToFirstError(found);
 
@@ -352,7 +423,10 @@ export function FormBlock({
       return { ok: true, offline: true, message, duplicate: null };
     };
     const canQueue =
-      target.kind === 'app' || target.kind === 'public' || target.kind === 'custom_app';
+      target.kind === 'app' ||
+      target.kind === 'public' ||
+      target.kind === 'custom_app' ||
+      target.kind === 'demo';
     // Sin señal (o con fotos sin subir y sin señal): directo a la cola.
     if (canQueue && !navigator.onLine) return keepLocal();
     let outgoing = payload;
@@ -434,6 +508,7 @@ export function FormBlock({
         if (disabled || !submit)
           return { ok: false, error: 'Esta vista es sólo una vista previa.' };
         setError(null);
+        setAttempted(true);
         const found = check();
         const first = Object.values(found)[0];
         if (first) {
@@ -511,7 +586,7 @@ export function FormBlock({
               )}
               onClick={reset}
             >
-              Enviar otro
+              Registrar otro
             </button>
           </div>
         </output>
@@ -584,7 +659,7 @@ export function FormBlock({
       <div
         key={f.key}
         className={clsx(
-          'block',
+          'block min-w-0',
           (f.type === 'text' ||
             f.type === 'longtext' ||
             f.type === 'location' ||
@@ -686,32 +761,27 @@ export function FormBlock({
           <FileInput {...shared} />
         ) : f.type === 'text' && f.scan ? (
           <ScanInput {...shared} />
+        ) : f.type === 'number' || f.type === 'money' ? (
+          <NumberInput
+            id={id}
+            value={value}
+            onChange={(next) => setValue(f.key, next)}
+            onBlur={() => blurField(f.key)}
+            money={f.type === 'money'}
+            decimals={f.type === 'money' ? 0 : 6}
+            negative={typeof f.min !== 'number' || f.min < 0}
+            invalid={Boolean(msg)}
+            describedBy={describedBy}
+            className={inputClass}
+            placeholder={placeholder}
+          />
         ) : (
           <input
             {...common}
             type={
-              f.type === 'date'
-                ? 'date'
-                : f.type === 'time'
-                  ? 'time'
-                  : f.type === 'number' || f.type === 'money'
-                    ? 'number'
-                    : f.format === 'email'
-                      ? 'email'
-                      : 'text'
+              f.type === 'date' ? 'date' : f.type === 'time' ? 'time' : f.format === 'email' ? 'email' : 'text'
             }
-            inputMode={
-              f.type === 'number' || f.type === 'money'
-                ? 'decimal'
-                : f.format === 'phone'
-                  ? 'tel'
-                  : f.format === 'digits'
-                    ? 'numeric'
-                    : undefined
-            }
-            step="any"
-            min={typeof f.min === 'number' ? f.min : undefined}
-            max={typeof f.max === 'number' ? f.max : undefined}
+            inputMode={f.format === 'phone' ? 'tel' : f.format === 'digits' ? 'numeric' : undefined}
             maxLength={f.maxLength ?? 400}
             placeholder={placeholder}
             value={value}
@@ -738,7 +808,9 @@ export function FormBlock({
             )}
           >
             <Sparkles className="h-3 w-3 shrink-0" aria-hidden />
-            Sugerido por Cortex — corrígelo si hace falta
+            {sugg.source === 'documento'
+              ? 'Leído de la foto del documento — revísalo'
+              : 'Sugerido por Cortex — corrígelo si hace falta'}
             {sugg.source && /^https?:\/\//.test(sugg.source) && (
               <a
                 href={sugg.source}
@@ -784,9 +856,10 @@ export function FormBlock({
           <p
             id={`${id}-err`}
             role="alert"
-            className={clsx('mt-1 font-semibold text-rose', operator ? 'text-sm' : 'text-micro')}
+            className={clsx('mt-1.5 flex items-start gap-1.5 text-rose', operator ? 'text-sm' : 'text-xs')}
           >
-            {msg}
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>{msg}</span>
           </p>
         )}
       </div>
@@ -803,7 +876,9 @@ export function FormBlock({
 
   const next = () => {
     if (!current) return;
-    const found = stepErrors(current, visible, check());
+    const all = check();
+    const found = stepErrors(current, visible, all);
+    if (lastStep && all[LINES_KEY]) found[LINES_KEY] = all[LINES_KEY];
     if (Object.keys(found).length) {
       setErrors((e) => ({ ...e, ...found }));
       setTimeout(() => focusField(Object.keys(found)[0]), 50);
@@ -838,7 +913,19 @@ export function FormBlock({
           'max-sm:fixed max-sm:inset-0 max-sm:z-40 max-sm:overflow-y-auto max-sm:bg-surface max-sm:p-3',
       )}
     >
-      <Card title={block.title}>
+      <Card
+        title={block.title}
+        action={
+          !disabled ? (
+            <ConnectionPill
+              state={connection.state}
+              pending={queue.pending.length}
+              syncing={queue.syncing}
+              onRetry={() => void queue.drain(true)}
+            />
+          ) : undefined
+        }
+      >
         {steps && full && (
           <button
             type="button"
@@ -848,24 +935,6 @@ export function FormBlock({
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
-        )}
-        {queue.pending.length > 0 && (
-          <output className="mb-4 flex flex-wrap items-center gap-2 rounded-sm border border-amber/40 bg-amber-soft px-3 py-2 text-sm font-semibold text-amber">
-            <CloudOff className="h-4 w-4 shrink-0" aria-hidden />
-            <span>
-              {queue.pending.length} pendiente{queue.pending.length > 1 ? 's' : ''} de enviar
-            </span>
-            {online && (
-              <button
-                type="button"
-                onClick={() => void queue.drain(true)}
-                className="ml-auto inline-flex items-center gap-1 rounded-pill border border-amber/40 px-2.5 py-0.5 text-xs"
-              >
-                <RefreshCw className="h-3 w-3" aria-hidden />
-                Reintentar ahora
-              </button>
-            )}
-          </output>
         )}
         {queue.rejected.length > 0 && (
           <ul className="mb-4 space-y-1.5">
@@ -907,6 +976,15 @@ export function FormBlock({
               Cancelar
             </button>
           </p>
+        )}
+        {scan.available && !correcting && !reviewing && (!steps || stepIndex === 0) && (
+          <ScanDocument
+            scan={scan}
+            attached={attachedImages(fields, values)}
+            large={operator}
+            online={online}
+            className="mb-5"
+          />
         )}
         {!disabled && !correcting && online && voiceMode === 'conversation' && (
           <VoiceFormAssistant blockId={block.id} variant="button" className="mb-3" />
@@ -967,6 +1045,7 @@ export function FormBlock({
           </div>
         )}
         <form
+          ref={formRef}
           noValidate
           className={clsx('grid', operator ? 'gap-5' : 'gap-4 sm:grid-cols-2')}
           onSubmit={(e) => {
@@ -1021,9 +1100,70 @@ export function FormBlock({
                   </dd>
                 </div>
               ))}
+              {block.lines && (
+                <div className="rounded-sm border border-border p-3">
+                  <dt className="mb-2 text-xs font-bold uppercase tracking-field text-ink-faint">
+                    {block.lines.title}
+                  </dt>
+                  <dd className="space-y-1.5">
+                    {(parseLinesValue(values[LINES_KEY]) ?? []).map((l) => (
+                      <div
+                        key={l.item.id}
+                        className={clsx('flex justify-between gap-3', operator ? 'text-base' : 'text-sm')}
+                      >
+                        <span className="min-w-0 break-words text-ink-muted">{l.item.label}</span>
+                        <span className="shrink-0 font-semibold tabular text-ink">× {l.qty}</span>
+                      </div>
+                    ))}
+                    {!values[LINES_KEY] && <span className="text-ink-faint">—</span>}
+                  </dd>
+                </div>
+              )}
             </dl>
           ) : (
             shownFields.map(renderField)
+          )}
+          {block.lines && !correcting && !reviewing && (!steps || lastStep) && (
+            <div className="block min-w-0 sm:col-span-2">
+              <p
+                className={clsx(
+                  'flex items-baseline justify-between gap-2 font-semibold text-ink',
+                  operator ? 'mb-2 text-base' : 'mb-1.5 text-xs',
+                )}
+              >
+                <span id={`${baseId}-lines-label`}>
+                  {block.lines.title}
+                  {block.lines.min ? (
+                    <span className="text-rose" aria-hidden>
+                      {' '}
+                      *
+                    </span>
+                  ) : null}
+                </span>
+                {!block.lines.min && (
+                  <span className="text-micro font-normal text-ink-faint">Opcional</span>
+                )}
+              </p>
+              <LinesInput
+                id={`${baseId}-lines`}
+                config={block.lines}
+                value={values[LINES_KEY] ?? ''}
+                onChange={(next) => {
+                  dirty.current.add(LINES_KEY);
+                  setValues((v) => ({ ...v, [LINES_KEY]: next }));
+                  setErrors((e) => {
+                    if (!(LINES_KEY in e)) return e;
+                    const { [LINES_KEY]: _gone, ...rest } = e;
+                    return rest;
+                  });
+                }}
+                target={target}
+                blockId={block.id}
+                fieldKey={LINES_KEY}
+                error={errors[LINES_KEY]}
+                large={operator}
+              />
+            </div>
           )}
           {error && (
             <p
@@ -1039,7 +1179,8 @@ export function FormBlock({
           <div
             className={clsx(
               'flex gap-3 pt-1 sm:col-span-2',
-              steps ? 'max-sm:sticky max-sm:bottom-0 max-sm:bg-surface max-sm:pb-2' : '',
+              // En el teléfono el botón de enviar queda fijo abajo (sobre la barra de la app si la hay).
+              'max-sm:sticky max-sm:bottom-[var(--form-dock-bottom,0px)] max-sm:z-10 max-sm:-mx-4 max-sm:border-t max-sm:border-border max-sm:bg-surface/95 max-sm:px-4 max-sm:pb-[calc(0.75rem+var(--form-dock-safe,env(safe-area-inset-bottom)))] max-sm:pt-3 max-sm:backdrop-blur',
               operator || steps ? 'flex-col sm:flex-row' : 'flex-col sm:flex-row sm:items-center',
             )}
           >

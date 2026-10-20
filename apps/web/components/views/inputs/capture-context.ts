@@ -11,6 +11,12 @@ import { createContext, useContext } from 'react';
 export interface CaptureWho {
   userName: string | null;
   appName: string | null;
+  /**
+   * Para guardar copias sin señal (listas de opciones de los formularios) de
+   * ESTA persona en ESTA app; ausentes fuera de una app.
+   */
+  appKey?: string | null;
+  userKey?: string | null;
 }
 
 export const CaptureContext = createContext<CaptureWho>({ userName: null, appName: null });

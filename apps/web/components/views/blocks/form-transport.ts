@@ -5,6 +5,7 @@ import { isOfflineFailure } from '@/lib/views/offline-queue';
 import type { UploadedFile } from '@/lib/views/upload-rules';
 import type { SubmitTarget } from '../ViewCanvas';
 import { uploadFile } from '../inputs/FileInput';
+import { reportNetworkFailure } from './useConnection';
 
 /**
  * Cómo habla el formulario con el servidor: enviar, corregir y subir fotos
@@ -61,6 +62,7 @@ async function publicPost<T extends object>(
       offline: isOfflineFailure({ online: online(), status: res.status }),
     };
   } catch {
+    reportNetworkFailure();
     return { ok: false, error: 'Sin conexión. Inténtalo otra vez.', offline: true };
   }
 }
@@ -72,6 +74,7 @@ export function submitterFor(target: SubmitTarget): SubmitFn | undefined {
         return await submitViewFormAction(target.viewId, blockId, values, clientId);
       } catch {
         // La server action no llegó: sin red.
+        reportNetworkFailure();
         return { ok: false, error: 'Sin conexión. Inténtalo otra vez.', offline: true };
       }
     };
@@ -81,6 +84,7 @@ export function submitterFor(target: SubmitTarget): SubmitFn | undefined {
         return await submitAppFormAction(target.appId, target.screen, blockId, values, clientId);
       } catch {
         // La server action no llegó: sin red.
+        reportNetworkFailure();
         return { ok: false, error: 'Sin conexión. Inténtalo otra vez.', offline: true };
       }
     };
@@ -119,7 +123,14 @@ export function submitterFor(target: SubmitTarget): SubmitFn | undefined {
       };
     return async () => {
       await new Promise((r) => setTimeout(r, 500));
-      return { ok: true, message: 'Recibido. Gracias.', rowId: 'demo', editToken: null };
+      // Sin red el servidor de mentira tampoco contesta: así se prueba la cola sin señal.
+      if (!online()) return { ok: false, error: 'Sin conexión. Inténtalo otra vez.', offline: true };
+      return {
+        ok: true,
+        message: 'Recibido. Gracias.',
+        rowId: `demo-${Math.random().toString(36).slice(2, 8)}`,
+        editToken: null,
+      };
     };
   }
   return undefined;

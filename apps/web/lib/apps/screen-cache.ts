@@ -17,6 +17,19 @@ import { agoLabel } from '@/lib/apps/offline-cache';
 
 export const SCREEN_MAX_AGE_MS = 7 * 24 * 3_600_000;
 export const SCREENS_PER_APP = 12;
+/** Las listas de opciones de los formularios (relaciones) viajan en el mismo almacén, con su propio tope. */
+export const LISTS_PER_APP = 40;
+const LIST_PREFIX = 'list:';
+
+/** ¿Esta copia es una lista de opciones (y no una pantalla)? */
+export function isListEntry(screen: string): boolean {
+  return screen.startsWith(LIST_PREFIX);
+}
+
+/** El «nombre de pantalla» con el que se guarda una lista de opciones (una dirección sin la búsqueda). */
+export function listEntryName(url: string): string {
+  return `${LIST_PREFIX}${url}`;
+}
 
 export interface ScreenMeta {
   key: string;
@@ -51,11 +64,14 @@ export function screensToDrop(
 ): string[] {
   const drop = new Set<string>();
   const mine: ScreenMeta[] = [];
+  const lists: ScreenMeta[] = [];
   for (const s of all) {
     if (s.userKey !== who.userKey || !isUsable(s.savedAt, now)) drop.add(s.key);
-    else if (s.appKey === who.appKey) mine.push(s);
+    else if (s.appKey === who.appKey) (isListEntry(s.screen) ? lists : mine).push(s);
   }
   for (const s of mine.sort((a, b) => b.savedAt - a.savedAt).slice(SCREENS_PER_APP))
+    drop.add(s.key);
+  for (const s of lists.sort((a, b) => b.savedAt - a.savedAt).slice(LISTS_PER_APP))
     drop.add(s.key);
   return [...drop];
 }

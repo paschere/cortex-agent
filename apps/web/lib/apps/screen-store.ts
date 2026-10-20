@@ -1,6 +1,11 @@
 'use client';
 
-import { type ScreenMeta, pickScreen, screenCacheKey } from '@/lib/apps/screen-cache';
+import {
+  type ScreenMeta,
+  listEntryName,
+  pickScreen,
+  screenCacheKey,
+} from '@/lib/apps/screen-cache';
 import { type StoredScreen, loadScreens, putScreen } from '@/lib/views/offline-store';
 import type { ComputedView } from '@cortex/agent-tools';
 
@@ -58,6 +63,46 @@ export async function recallScreen(who: ScreenWho, screen: string): Promise<Save
           savedAt: hit.savedAt,
           computed: hit.computed as ComputedView,
         }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * La última lista de opciones de una relación (los clientes, los equipos) para
+ * poder elegir sin señal. Va en el mismo almacén que las pantallas (misma
+ * persona, misma app, mismas reglas de borrado y caducidad). Sólo la lista
+ * completa (sin búsqueda): con señal siempre manda el servidor.
+ */
+export async function rememberList(who: ScreenWho, url: string, options: unknown): Promise<void> {
+  const name = listEntryName(url);
+  const key = screenCacheKey(who.appKey, who.userKey, name);
+  const now = Date.now();
+  if (now - (lastWrite.get(key) ?? 0) < MIN_GAP_MS) return;
+  lastWrite.set(key, now);
+  try {
+    await putScreen({
+      key,
+      appKey: who.appKey,
+      userKey: who.userKey,
+      screen: name,
+      title: '',
+      savedAt: now,
+      computed: options,
+    });
+  } catch {}
+}
+
+export async function recallList<T>(
+  who: ScreenWho,
+  url: string,
+): Promise<{ options: T[]; savedAt: number } | null> {
+  try {
+    const all = await loadScreens();
+    const hit = pickScreen<ScreenMeta & StoredScreen>(all, who, listEntryName(url), Date.now());
+    return hit && Array.isArray(hit.computed)
+      ? { options: hit.computed as T[], savedAt: hit.savedAt }
       : null;
   } catch {
     return null;

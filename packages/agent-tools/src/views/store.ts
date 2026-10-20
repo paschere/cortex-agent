@@ -23,7 +23,7 @@ import {
   currentFlowActor,
   guardFlowWrite,
 } from '../trackers/flow-guard';
-import { rowLabel } from '../trackers/schema';
+import { displayTrackerValue, rowLabel } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, listTrackers, prepareValues } from '../trackers/store';
 import { type ViewRow, type ViewSource, blockWriteFields } from './compute';
 import {
@@ -39,6 +39,13 @@ import {
   isPendingReview,
   reviewPatch,
 } from './form-extras';
+import {
+  type FormLine,
+  LINES_KEY,
+  checkLines,
+  normalizeLines,
+  parseLinesValue,
+} from './form-lines';
 import { UNDO_ACTION_ID } from './row-history-shape';
 import {
   PLATFORM_SOURCES,
@@ -1303,6 +1310,21 @@ export async function submitViewForm(
       'Este formulario apunta a una fuente de sólo lectura; no recibe filas.',
     );
 
+  // Las líneas (ítems con cantidad) viajan aparte de los campos de la tabla.
+  let lines: FormLine[] = [];
+  if (block.lines) {
+    const parsed = parseLinesValue(input.values[LINES_KEY]);
+    if (!parsed) throw new ValidationError('La lista de ítems no se entiende. Vuelve a armarla.');
+    lines = normalizeLines(parsed);
+    const problem = checkLines(lines, {
+      min: block.lines.min,
+      max: block.lines.max,
+      decimals: block.lines.decimals,
+      title: block.lines.title,
+    });
+    if (problem) throw new ValidationError(problem);
+  }
+
   const clientId = input.clientId?.trim().slice(0, 64) || null;
   const replay = async (): Promise<SubmitOutcome | null> => {
     if (!clientId) return null;
@@ -1379,6 +1401,30 @@ export async function submitViewForm(
   if (error) throw error;
   const rowId = String((row as { id: string }).id);
 
+  // Las líneas: una fila hija por ítem, todas en UN insert. Si algo falla, la fila
+  // del formulario no se queda sola: se borra y el error le llega a la persona.
+  let childIds: string[] = [];
+  let childTrackerId: string | null = null;
+  if (block.lines && lines.length) {
+    try {
+      const made = await insertLineRows(db, {
+        view,
+        block,
+        parent: { id: rowId, label: rowLabel(tracker.fields, values), tracker },
+        lines,
+        submittedBy: input.submittedBy,
+        byApp,
+        viewer: input.viewer,
+        restrictRelations: !(input.submittedBy && input.submittedByKind !== 'app_user'),
+      });
+      childIds = made.ids;
+      childTrackerId = made.trackerId;
+    } catch (err) {
+      await db.from('tracker_rows').delete().eq('id', rowId).eq('tracker_id', tracker.id);
+      throw err;
+    }
+  }
+
   const editToken = editWindowOf(block) > 0 ? randomBytes(18).toString('base64url') : null;
   const { data: sub, error: subError } = await db
     .from('custom_view_submissions')
@@ -1396,6 +1442,8 @@ export async function submitViewForm(
     // Dos reintentos a la vez del mismo envío: gana el primero; esta fila sobra.
     if ((subError as { code?: string }).code === '23505' && clientId) {
       await db.from('tracker_rows').delete().eq('id', rowId).eq('tracker_id', tracker.id);
+      if (childTrackerId && childIds.length)
+        await db.from('tracker_rows').delete().in('id', childIds).eq('tracker_id', childTrackerId);
       const first = await replay();
       if (first) return first;
     }
@@ -1445,6 +1493,61 @@ export async function submitViewForm(
     editUntil: editToken
       ? editDeadline((sub as { created_at: string }).created_at, editWindowOf(block))
       : null,
+  };
+}
+
+/**
+ * Escribe las filas hijas de un formulario con líneas. Cada línea pasa por
+ * `prepareValues` (tipos, relaciones, lookups, fórmulas de la tabla hija) igual
+ * que cualquier fila; las relaciones apuntan a la fila recién creada y al ítem
+ * elegido. Desde un enlace público o un usuario externo, el ítem sólo puede ser
+ * de la tabla que el formulario declara.
+ */
+async function insertLineRows(
+  db: SupabaseClient,
+  input: {
+    view: CustomViewRow;
+    block: Extract<CustomViewRow['spec']['blocks'][number], { type: 'form' }>;
+    parent: { id: string; label: string; tracker: TrackerRow };
+    lines: FormLine[];
+    submittedBy: string | null;
+    byApp: boolean;
+    viewer?: string | null;
+    restrictRelations: boolean;
+  },
+): Promise<{ ids: string[]; trackerId: string }> {
+  const cfg = input.block.lines;
+  if (!cfg) return { ids: [], trackerId: '' };
+  const child = await trackerForBlock(db, cfg.tracker);
+  const itemField = child.fields.find((f) => f.key === cfg.item);
+  const allowed = input.restrictRelations
+    ? new Set([...trackersOf(input.view.spec), input.parent.tracker.slug, itemField?.tracker ?? ''])
+    : undefined;
+  const rows: Array<Record<string, unknown>> = [];
+  for (const line of input.lines) {
+    const values = await prepareValues(
+      db,
+      child,
+      {
+        [cfg.parent]: JSON.stringify({ id: input.parent.id, label: input.parent.label }),
+        [cfg.item]: JSON.stringify({ id: line.item.id, label: line.item.label }),
+        [cfg.qty]: line.qty,
+      },
+      { applyDefaults: true, viewer: input.viewer, allowedRelationTrackers: allowed },
+    );
+    rows.push({
+      tracker_id: child.id,
+      label: rowLabel(child.fields, values),
+      values,
+      created_by: input.byApp ? null : input.submittedBy,
+      ...(input.byApp && input.submittedBy ? { created_by_app_user: input.submittedBy } : {}),
+    });
+  }
+  const { data, error } = await db.from('tracker_rows').insert(rows).select('id');
+  if (error) throw error;
+  return {
+    ids: ((data ?? []) as Array<{ id: string }>).map((r) => String(r.id)),
+    trackerId: child.id,
   };
 }
 
@@ -1549,17 +1652,41 @@ export async function searchRelationOptions(
      */
     readable?: readonly string[];
   },
-): Promise<Array<{ id: string; label: string; pick?: Record<string, string | number> }>> {
+): Promise<
+  Array<{
+    id: string;
+    label: string;
+    /** Una línea para reconocer la fila («Medellín · 300 123 4567»): la tarjeta del elegido. */
+    detail?: string;
+    pick?: Record<string, string | number>;
+  }>
+> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
-  const source = await trackerForBlock(db, block.tracker);
-  const asked = new Set(block.fields.length ? block.fields : source.fields.map((f) => f.key));
-  const field = source.fields.find((f) => f.key === input.field);
+  // `__lines`: los ítems que se pueden elegir en las líneas del formulario (el
+  // campo `item` de la tabla hija). Se trata como una relación más.
+  const forLines = input.field === LINES_KEY;
+  if (forLines && !block.lines) throw new NotFoundError('Este formulario no tiene lista de ítems.');
+  const source = await trackerForBlock(
+    db,
+    forLines && block.lines ? block.lines.tracker : block.tracker,
+  );
+  const asked = new Set(
+    forLines && block.lines
+      ? [block.lines.item]
+      : block.fields.length
+        ? block.fields
+        : source.fields.map((f) => f.key),
+  );
+  const field = source.fields.find(
+    (f) => f.key === (forLines && block.lines ? block.lines.item : input.field),
+  );
   if (!field || field.type !== 'relation' || !field.tracker || !asked.has(field.key))
     throw new NotFoundError('Ese campo no es una relación de este formulario.');
   if (
     input.audience === 'public' &&
+    !forLines &&
     !trackersOf(view.spec).includes(field.tracker) &&
     !input.readable?.includes(field.tracker)
   )
@@ -1593,12 +1720,128 @@ export async function searchRelationOptions(
         const v = adaptLookupValue(l.field, r.values?.[l.target]);
         if (v !== undefined) pick[l.field.key] = v;
       }
+      const detail = detailOf(target.fields, r);
       return {
         id: String(r.id),
         label: String(r.label),
+        ...(detail ? { detail } : {}),
         ...(lookups.length ? { pick } : {}),
       };
     });
+}
+
+/** Dos datos cortos de una fila (texto, opciones, números, fechas) para reconocerla en una lista. */
+function detailOf(
+  fields: TrackerRow['fields'],
+  row: { label: string; values?: Record<string, unknown> },
+): string {
+  const parts: string[] = [];
+  for (const f of fields) {
+    if (parts.length >= 2) break;
+    if (
+      f.type === 'file' ||
+      f.type === 'relation' ||
+      f.type === 'longtext' ||
+      f.type === 'location'
+    )
+      continue;
+    const text = displayTrackerValue(f, row.values?.[f.key]).trim();
+    if (!text || text === row.label || text.length > 60) continue;
+    parts.push(text);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * «+ Agregar» en una relación de un formulario: crea la fila que falta en la
+ * tabla relacionada con SÓLO su nombre, sin salir del formulario («+ Agregar
+ * proveedor»). Sólo vale si esa tabla no pide nada más sin valor por defecto:
+ * si pide más, se dice y la persona la llena desde la tabla. Si ya hay una fila
+ * con ese nombre (sin tildes ni mayúsculas), se devuelve esa: no se duplica.
+ * Quien llama decide si la persona puede crear ahí (`mayCreate`).
+ */
+export async function createRelationRow(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: {
+    blockId: string;
+    field: string;
+    label: string;
+    createdBy: string | null;
+    createdByApp?: boolean;
+    mayCreate?: (slug: string) => boolean;
+  },
+): Promise<{ id: string; label: string; created: boolean }> {
+  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (!block || block.type !== 'form')
+    throw new NotFoundError('Ese formulario no está en esta vista.');
+  const forLines = input.field === LINES_KEY;
+  if (forLines && !block.lines) throw new NotFoundError('Este formulario no tiene lista de ítems.');
+  const source = await trackerForBlock(
+    db,
+    forLines && block.lines ? block.lines.tracker : block.tracker,
+  );
+  const key = forLines && block.lines ? block.lines.item : input.field;
+  const field = source.fields.find((f) => f.key === key);
+  if (!field || field.type !== 'relation' || !field.tracker)
+    throw new NotFoundError('Ese campo no es una relación de este formulario.');
+  if (!forLines && block.fields.length && !block.fields.includes(field.key))
+    throw new NotFoundError('Ese campo no está en el formulario.');
+  const target = await trackerForBlock(db, field.tracker);
+  if (input.mayCreate && !input.mayCreate(target.slug))
+    throw new ValidationError(`Tu rol no agrega filas en «${target.name}».`);
+  const label = input.label.replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (label.length < 2) throw new ValidationError('Escribe el nombre (al menos 2 letras).');
+  const main =
+    target.fields.find((f) => f.type === 'text' && f.required) ??
+    target.fields.find((f) => f.type === 'text');
+  if (!main)
+    throw new ValidationError(
+      `«${target.name}» no tiene un campo de nombre para agregar desde aquí.`,
+    );
+  const others = target.fields.filter(
+    (f) =>
+      f.key !== main.key &&
+      f.required &&
+      f.default === undefined &&
+      !f.formula &&
+      !(f.lookup && !f.lookup.editable),
+  );
+  if (others.length)
+    throw new ValidationError(
+      `«${target.name}» pide más datos (${others.map((f) => f.label).join(', ')}): agrégalo desde su tabla.`,
+    );
+  const fold = (t: string) =>
+    t
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase();
+  const { data: existing, error: existingError } = await db
+    .from('tracker_rows')
+    .select('id, label')
+    .eq('tracker_id', target.id)
+    .order('updated_at', { ascending: false })
+    .limit(400);
+  if (existingError) throw existingError;
+  const same = ((existing ?? []) as Array<{ id: string; label: string }>).find(
+    (r) => fold(String(r.label)) === fold(label),
+  );
+  if (same) return { id: String(same.id), label: String(same.label), created: false };
+  const values = await prepareValues(db, target, { [main.key]: label }, { applyDefaults: true });
+  const { data: row, error } = await db
+    .from('tracker_rows')
+    .insert({
+      tracker_id: target.id,
+      label: rowLabel(target.fields, values),
+      values,
+      created_by: input.createdByApp ? null : input.createdBy,
+      ...(input.createdByApp && input.createdBy ? { created_by_app_user: input.createdBy } : {}),
+    })
+    .select('id, label')
+    .single();
+  if (error) throw error;
+  const made = row as { id: string; label: string };
+  return { id: String(made.id), label: String(made.label), created: true };
 }
 
 // ---------------------------------------------------------------------------

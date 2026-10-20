@@ -1,15 +1,21 @@
 'use client';
 
-import { appApiBase } from '@/lib/apps/api-base';
 import type { ComputedFormField } from '@cortex/agent-tools';
 import { formatLocation, mapsUrl } from '@cortex/agent-tools/src/trackers/schema';
 import { clsx } from 'clsx';
 import { Loader2, LocateFixed, Search, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { SubmitTarget } from '../ViewCanvas';
 import { FileInput as RealFileInput } from '../inputs/FileInput';
 import { ScanInput as RealScanInput } from '../inputs/ScanInput';
 import { SignatureInput } from '../inputs/SignatureInput';
+import {
+  Initial,
+  RelationSheet,
+  chosenDetail,
+  parseRelation,
+  useRelationSource,
+} from './RelationPicker';
 
 /**
  * Los inputs de los campos «grandes» de un formulario: ubicación, relación,
@@ -142,32 +148,12 @@ export function LocationInput({
 // Relación: elegir una fila de otra tabla
 // ---------------------------------------------------------------------------
 
-function relationLabel(value: string): string {
-  try {
-    const v = JSON.parse(value) as { id?: string; label?: string };
-    return v.label || v.id?.slice(0, 8) || '';
-  } catch {
-    return '';
-  }
-}
-
-function relationUrl(
-  target: SubmitTarget,
-  blockId: string,
-  field: string,
-  q: string,
-): string | null {
-  const qs = new URLSearchParams({ block: blockId, field, q });
-  if (target.kind === 'app') return `/api/views/${target.viewId}/relation?${qs}`;
-  if (target.kind === 'custom_app')
-    return `${appApiBase(target)}/screens/${target.screen}/relation?${qs}`;
-  if (target.kind === 'public') {
-    qs.set('token', target.token);
-    return `/api/views/public/relation?${qs}`;
-  }
-  return null;
-}
-
+/**
+ * El campo de relación: un botón grande que abre la hoja de búsqueda
+ * (RelationPicker) y, ya elegido, la TARJETA de lo elegido (iniciales, nombre y
+ * un dato para reconocerlo) con «Cambiar» y «Quitar». El valor sigue siendo el
+ * JSON `{"id","label"}` de siempre.
+ */
 export function RelationInput({
   field,
   id,
@@ -182,130 +168,82 @@ export function RelationInput({
   onPick,
 }: FieldInputProps) {
   const [open, setOpen] = useState(false);
-  const [q, setQ] = useState('');
-  const [options, setOptions] = useState<
-    Array<{ id: string; label: string; pick?: Record<string, string | number> }>
-  >([]);
-  const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
-  const box = useRef<HTMLSpanElement>(null);
-  const selected = value ? relationLabel(value) : '';
-
-  // Busca al escribir (con una pausa corta) y sólo mientras la lista está abierta.
-  useEffect(() => {
-    if (!open) return;
-    const url = relationUrl(target, blockId, field.key, q);
-    if (!url) {
-      setState('idle');
-      return;
-    }
-    let cancelled = false;
-    setState('loading');
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(url);
-        const body = (await res.json().catch(() => null)) as {
-          options?: Array<{ id: string; label: string; pick?: Record<string, string | number> }>;
-        } | null;
-        if (cancelled) return;
-        if (!res.ok || !body?.options) throw new Error('bad');
-        setOptions(body.options);
-        setState('idle');
-      } catch {
-        if (!cancelled) setState('error');
-      }
-    }, 200);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [open, q, target, blockId, field.key]);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) {
-        setOpen(false);
-        onBlur?.();
-      }
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open, onBlur]);
+  // Elegir y cerrar no es «salir sin elegir»: el aviso de «falta» sólo si se cerró sin escoger nada.
+  const picked = useRef(false);
+  const source = useRelationSource(target, blockId, field.key);
+  const selected = parseRelation(value);
+  const detail = selected ? chosenDetail(selected.id)?.detail : undefined;
+  const noun = field.label.toLocaleLowerCase('es-CO');
 
   return (
-    <span ref={box} className="relative block">
-      <button
-        type="button"
-        id={id}
-        aria-expanded={open}
-        aria-invalid={invalid || undefined}
-        aria-describedby={describedBy}
-        onClick={() => setOpen((o) => !o)}
-        className={clsx(className, 'flex items-center justify-between gap-2 text-left')}
-      >
-        <span className={clsx('truncate', !selected && 'text-ink-faint')}>
-          {selected || field.placeholder || 'Elige…'}
-        </span>
-        {selected ? (
-          // biome-ignore lint/a11y/useSemanticElements: un botón dentro de un botón no es válido; esto es un acceso rápido con teclado en el propio botón.
-          <span
-            role="button"
-            tabIndex={-1}
-            aria-label="Quitar"
-            onClick={(e) => {
-              e.stopPropagation();
+    <span className="block">
+      {selected ? (
+        <span
+          className={clsx(
+            'flex items-center gap-3 rounded-sm border bg-surface px-3 py-2',
+            invalid ? 'border-rose' : 'border-border-strong',
+          )}
+        >
+          <Initial label={selected.label} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-base font-semibold text-ink">{selected.label}</span>
+            {detail && <span className="block truncate text-xs text-ink-muted">{detail}</span>}
+          </span>
+          <button
+            type="button"
+            id={id}
+            aria-describedby={describedBy}
+            onClick={() => setOpen(true)}
+            className="inline-flex h-10 shrink-0 items-center rounded-pill border border-border-strong px-3 text-xs font-semibold text-ink hover:bg-surface-2"
+          >
+            Cambiar
+          </button>
+          <button
+            type="button"
+            aria-label={`Quitar ${selected.label}`}
+            onClick={() => {
               onChange('');
               onPick?.(null);
+              onBlur?.();
             }}
-            onKeyDown={() => {}}
-            className="grid h-5 w-5 shrink-0 place-items-center rounded-pill text-ink-muted hover:bg-surface-2"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-pill text-ink-muted hover:bg-surface-2"
           >
-            <X className="h-3.5 w-3.5" aria-hidden />
-          </span>
-        ) : (
-          <Search className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
-        )}
-      </button>
-      {open && (
-        <span className="absolute left-0 right-0 z-20 mt-1 block rounded-sm border border-border bg-surface p-2 shadow-pop">
-          <input
-            // biome-ignore lint/a11y/noAutofocus: se abre para buscar; el foco va al buscador.
-            autoFocus
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar…"
-            className="mb-2 h-9 w-full rounded-sm border border-border bg-surface px-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-          />
-          <span className="block max-h-56 overflow-auto">
-            {options.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                aria-pressed={selected === o.label}
-                onClick={() => {
-                  onChange(JSON.stringify({ id: o.id, label: o.label }));
-                  onPick?.(o.pick ?? {});
-                  setOpen(false);
-                  setQ('');
-                }}
-                className="block w-full truncate rounded-sm px-2 py-1.5 text-left text-sm text-ink hover:bg-surface-2"
-              >
-                {o.label}
-              </button>
-            ))}
-            {state === 'loading' && (
-              <span className="block px-2 py-1.5 text-xs text-ink-muted">Buscando…</span>
-            )}
-            {state === 'error' && (
-              <span className="block px-2 py-1.5 text-xs text-rose">No se pudo buscar.</span>
-            )}
-            {state === 'idle' && options.length === 0 && (
-              <span className="block px-2 py-1.5 text-xs text-ink-muted">Sin resultados.</span>
-            )}
-          </span>
+            <X className="h-4 w-4" aria-hidden />
+          </button>
         </span>
+      ) : (
+        <button
+          type="button"
+          id={id}
+          aria-haspopup="dialog"
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
+          onClick={() => setOpen(true)}
+          className={clsx(className, 'flex items-center justify-between gap-2 text-left')}
+        >
+          <span className="truncate text-ink-faint">
+            {field.placeholder || `Elegir ${noun}…`}
+          </span>
+          <Search className="h-5 w-5 shrink-0 text-ink-faint" aria-hidden />
+        </button>
       )}
+      <RelationSheet
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (next) picked.current = false;
+          else if (!picked.current) onBlur?.();
+        }}
+        title={field.label}
+        addNoun={noun}
+        source={source}
+        selectedId={selected?.id}
+        onSelect={(o) => {
+          picked.current = true;
+          onChange(JSON.stringify({ id: o.id, label: o.label }));
+          onPick?.(o.pick ?? {});
+        }}
+      />
     </span>
   );
 }

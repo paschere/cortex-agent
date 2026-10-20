@@ -23,7 +23,11 @@ const input = z.object({
   blockId: z.string().min(1).max(40),
   /** Id del envío (cola sin internet): un reintento no escribe otra fila. */
   clientId: z.string().min(8).max(64).optional(),
-  values: z.record(z.string().max(4000)).refine((v) => Object.keys(v).length <= 30),
+  // Las líneas (`__lines`) pueden pesar más que un campo: hasta 50 ítems en JSON.
+  values: z
+    .record(z.string().max(20000))
+    .refine((v) => Object.keys(v).length <= 30)
+    .refine((v) => Object.entries(v).every(([k, x]) => k === '__lines' || x.length <= 4000)),
 });
 
 export async function POST(req: NextRequest) {
