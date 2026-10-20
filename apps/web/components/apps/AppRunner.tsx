@@ -31,6 +31,7 @@ import { LocationMenu, LocationProvider } from './LocationShare';
 import { PortalHome } from './PortalHome';
 import { PullToRefresh } from './PullToRefresh';
 import { TableroView } from './TableroView';
+import { ViewAsBanner, type ViewAsInfo } from './ViewAsBanner';
 import './app-runner.css';
 
 /**
@@ -118,6 +119,8 @@ export interface AppRunnerProps {
   } | null;
   /** «Ver como… cliente X»: el valor de los atributos con los que se mira (sólo lectura). */
   previewAttributes?: Record<string, string>;
+  /** «Ver como…»: los roles para cambiar de mirada y con qué datos se mira (prueba o reales). */
+  viewAs?: ViewAsInfo;
   /** Botones de acción manual de esta pantalla (automatizaciones, 0210). */
   buttons?: AppButton[];
   look?: AppLook;
@@ -221,6 +224,7 @@ export function AppRunner({
   embedBase,
   session = null,
   previewAttributes,
+  viewAs,
   buttons = [],
   look,
   emptyHints = [],
@@ -230,7 +234,7 @@ export function AppRunner({
   viewer = null,
 }: AppRunnerProps) {
   const router = useRouter();
-  const como = readOnly && !preview ? previewQuery(role.key, previewAttributes) : '';
+  const como = readOnly && !preview ? previewQuery(role.key, previewAttributes, viewAs?.mode) : '';
   const base = basePath ?? embedBase ?? `/apps/${app.slug}`;
   const hrefFor = (slug: string) => `${base}/${slug}${como}`;
   const editHref = `/apps/${app.slug}/edit`;
@@ -414,7 +418,18 @@ export function AppRunner({
                     homeSlug={session.homeSlug ?? null}
                   />
                 )}
-                {readOnly && !preview && (
+                {readOnly && !preview && viewAs && (
+                  <ViewAsBanner
+                    roleKey={role.key}
+                    roleName={role.name}
+                    view={viewAs}
+                    basePath={base}
+                    current={current}
+                    attributes={previewAttributes}
+                    editHref={editHref}
+                  />
+                )}
+                {readOnly && !preview && !viewAs && (
                   <output className="view-no-print mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-amber/40 bg-amber-soft px-4 py-3 text-sm font-semibold text-ink">
                     <span>Viendo como {role.name}. Nada se guarda.</span>
                     <Link
@@ -502,7 +517,7 @@ export function AppRunner({
                             heading={{ title }}
                             showBrand={false}
                             canExport={canExport}
-                            readOnly={readOnly}
+                            readOnly={readOnly && !viewAs?.sampled}
                             onView={
                               captureWho
                                 ? (view) =>

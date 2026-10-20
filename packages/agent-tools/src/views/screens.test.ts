@@ -742,3 +742,64 @@ describe('diseño por rol de una app', () => {
     expect(ok).toEqual([]);
   });
 });
+
+describe('historial de un registro: de dónde vino cada cambio y qué se puede deshacer', () => {
+  const history: RecordHistoryRaw = {
+    created: { at: '2026-10-01T10:00:00Z', by: 'Tú' },
+    events: [
+      {
+        id: 'ev-app',
+        at: '2026-10-02T10:00:00Z',
+        kind: 'edit',
+        actionId: null,
+        by: 'Marta',
+        source: 'app',
+        changes: { estado: { from: 'Programado', to: 'En camino' } },
+      },
+      {
+        id: 'audit:chat1',
+        at: '2026-10-03T10:00:00Z',
+        kind: 'edit',
+        actionId: null,
+        by: 'Tú',
+        source: 'chat',
+        changes: { llegada: { from: undefined, to: '2026-10-09' } },
+      },
+      {
+        id: 'ev-undo',
+        at: '2026-10-04T10:00:00Z',
+        kind: 'edit',
+        actionId: '__undo',
+        by: 'Tú',
+        source: 'undo',
+        changes: { estado: { from: 'En camino', to: 'Programado' } },
+      },
+    ],
+    runs: [],
+  };
+  const show = new Set(['created', 'changes', 'approvals', 'automations', 'files']);
+  const run = (canUndo: boolean) =>
+    buildTimeline(history, {
+      tracker: vuelos,
+      visible: new Set(['estado', 'llegada']),
+      show: show as never,
+      limit: 30,
+      canUndo,
+    });
+
+  it('cada cambio dice desde dónde se hizo', () => {
+    const t = run(false);
+    expect(t.find((e) => e.id === 'ev-app')?.origin).toBe('Desde la app');
+    expect(t.find((e) => e.id === 'audit:chat1')?.origin).toBe('Desde el chat');
+    expect(t.find((e) => e.id === 'ev-undo')?.origin).toBe('Al deshacer un cambio');
+    expect(t.some((e) => e.undoId)).toBe(false);
+  });
+
+  it('«Deshacer» sólo en lo que se puede devolver: con permiso, con valor de antes y no en un deshacer', () => {
+    const t = run(true);
+    expect(t.find((e) => e.id === 'ev-app')?.undoId).toBe('ev-app');
+    // El cambio del chat no trae el valor de antes: no se ofrece.
+    expect(t.find((e) => e.id === 'audit:chat1')?.undoId).toBeUndefined();
+    expect(t.find((e) => e.id === 'ev-undo')?.undoId).toBeUndefined();
+  });
+});

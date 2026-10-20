@@ -12,6 +12,7 @@ import {
   rowKit,
   viewShortDate,
 } from './compute';
+import { type ChangeOrigin, ORIGIN_LABEL, undoableKeys } from './row-history-shape';
 import {
   APPROVE_ACTION_ID,
   type CatalogTracker,
@@ -54,6 +55,8 @@ export interface RecordHistoryRaw {
     actionId: string | null;
     changes: Record<string, { from?: unknown; to?: unknown }>;
     by: string | null;
+    /** De dónde vino el cambio (app, chat, rutina, enlace, deshacer); ausente = no se sabe. */
+    source?: ChangeOrigin;
   }>;
   runs: Array<{ id: string; at: string; automation: string; ok: boolean }>;
 }
@@ -136,6 +139,8 @@ export function buildTimeline(
     show: ReadonlySet<TimelinePart>;
     limit: number;
     labels?: ReadonlyMap<string, string>;
+    /** Quien mira puede escribir: los cambios que se pueden devolver llevan `undoId`. */
+    canUndo?: boolean;
   },
 ): ComputedTimelineEntry[] {
   const { tracker, visible, show } = ctx;
@@ -175,9 +180,18 @@ export function buildTimeline(
 
     const changes = plain.map(([k, c]) => ({
       label: label(k),
-      from: showChange(tracker, k, c.from),
+      from: c.from === undefined ? '—' : showChange(tracker, k, c.from),
       to: showChange(tracker, k, c.to),
     }));
+    const origin = e.source ? { origin: ORIGIN_LABEL[e.source] } : {};
+    const undo =
+      ctx.canUndo &&
+      e.source !== 'undo' &&
+      !approval &&
+      e.kind !== 'action' &&
+      undoableKeys(e.changes ?? {}, tracker.fields, visible).length > 0
+        ? { undoId: e.id }
+        : {};
 
     if (approval) {
       if (!show.has('approvals')) continue;
@@ -187,6 +201,7 @@ export function buildTimeline(
         kind: 'approval',
         actor: e.by,
         title: approval === APPROVE_ACTION_ID ? 'Aprobado' : 'Rechazado',
+        ...origin,
         ...(show.has('changes') && changes.length ? { changes } : {}),
       });
       continue;
@@ -201,6 +216,7 @@ export function buildTimeline(
         kind: 'action',
         actor: e.by,
         title: name ? `Usó el botón «${name}»` : 'Usó un botón',
+        ...origin,
         ...(changes.length ? { changes } : {}),
       });
       continue;
@@ -218,6 +234,8 @@ export function buildTimeline(
             ? 'Lo movió'
             : `Cambió ${changes.length} campos`,
       changes,
+      ...origin,
+      ...undo,
     });
   }
 
@@ -404,6 +422,7 @@ export function buildDetail(
         show,
         limit: cfg.limit,
         labels: opts.actionLabels,
+        canUndo: opts.writable && !readOnly,
       },
     );
   }

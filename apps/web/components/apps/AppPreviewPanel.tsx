@@ -1,7 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
-import { Monitor, Moon, Smartphone, Sun } from 'lucide-react';
+import { FlaskConical, Monitor, Moon, Smartphone, Sun } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
@@ -160,6 +160,20 @@ export function AppPreviewPanel({
           </button>
         </div>
       </div>
+
+      <p
+        role="status"
+        className="flex items-start gap-2 rounded-card border border-sky/40 bg-sky-soft px-3 py-2 text-xs font-semibold text-ink"
+      >
+        <FlaskConical className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span>
+          Estás viendo la app como{' '}
+          {state?.roles.find((r) => r.key === role)?.name ?? 'Administrador'} — modo prueba.
+          <span className="block font-normal text-ink-muted">
+            Filas de ejemplo: los formularios no guardan nada.
+          </span>
+        </span>
+      </p>
 
       {state && state.screens.length > 0 && (
         <div

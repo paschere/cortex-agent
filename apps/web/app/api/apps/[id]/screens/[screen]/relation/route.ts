@@ -32,6 +32,9 @@ export async function GET(
       q: sp.get('q') ?? '',
       // Quien no administra sólo ve las tablas que la pantalla ya comparte.
       audience: access.role.admin ? 'team' : 'public',
+      readable: Object.entries(access.role.permissions.tables)
+        .filter(([, t]) => t.read === 'all')
+        .map(([slug]) => slug),
     });
     return NextResponse.json({ options }, { headers: { 'cache-control': 'no-store' } });
   } catch (err) {

@@ -409,6 +409,10 @@ export interface ComputedTimelineEntry {
   changes?: Array<{ label: string; from: string; to: string }>;
   files?: Array<{ label: string; names: string[] }>;
   ok?: boolean;
+  /** Desde dónde se hizo: «Desde la app», «Desde el chat», «Desde una rutina»… */
+  origin?: string;
+  /** Presente si quien mira puede «Deshacer este cambio»: el id que se manda al servidor. */
+  undoId?: string;
 }
 
 export interface ComputedDetailItem extends ComputedDetail {

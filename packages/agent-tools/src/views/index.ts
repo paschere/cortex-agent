@@ -55,6 +55,7 @@ export * from './spec';
 export * from './compute';
 export * from './record';
 export * from './record-history';
+export * from './row-history-shape';
 export * from './cards';
 export * from './cards-filter';
 export * from './agenda';

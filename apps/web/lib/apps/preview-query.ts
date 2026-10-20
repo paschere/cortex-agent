@@ -3,11 +3,25 @@
  * (uno por atributo). Es la dirección de «Ver como…»: la pantalla, sus datos y
  * el Excel la repiten para que la simulación no se pierda al navegar.
  */
-export function previewQuery(roleKey: string, attributes?: Record<string, string>): string {
+export function previewQuery(
+  roleKey: string,
+  attributes?: Record<string, string>,
+  /** `prueba`: «Ver como…» con filas de ejemplo; los envíos se validan y no se guardan. */
+  mode?: PreviewMode | null,
+): string {
   const attrs = Object.entries(attributes ?? {}).map(
     ([k, v]) => `&atr=${encodeURIComponent(`${k}:${v}`)}`,
   );
-  return `?como=${encodeURIComponent(roleKey)}${attrs.join('')}`;
+  return `?como=${encodeURIComponent(roleKey)}${attrs.join('')}${mode === 'prueba' ? '&modo=prueba' : ''}`;
+}
+
+/** Con qué datos se mira: los reales (sólo lectura) o los de prueba (nada se guarda). */
+export type PreviewMode = 'prueba';
+
+/** `?modo=prueba` de la dirección; cualquier otra cosa = datos reales. */
+export function previewModeOf(raw: string | string[] | null | undefined): PreviewMode | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return v === 'prueba' ? 'prueba' : null;
 }
 
 /**

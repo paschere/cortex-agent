@@ -39,6 +39,7 @@ import {
   isPendingReview,
   reviewPatch,
 } from './form-extras';
+import { UNDO_ACTION_ID } from './row-history-shape';
 import {
   PLATFORM_SOURCES,
   type SourceSensitivity,
@@ -48,6 +49,7 @@ import {
 import {
   APPROVE_ACTION_ID,
   type CatalogTracker,
+  type FormBlock,
   REJECT_ACTION_ID,
   type ViewSpec,
   approvalFor,
@@ -1158,6 +1160,102 @@ export class SubmissionLimitError extends Error {
 }
 
 /**
+ * Los valores que un formulario guardaría: qué campos entran (los del bloque,
+ * los forzados, los que se llenan solos), defaults, campos ocultos, reglas de
+ * cada campo y relaciones. No escribe nada: lo usan el envío de verdad y el
+ * «modo prueba» de «Ver como…», que muestra «se habría guardado esto».
+ */
+async function prepareFormValues(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  block: FormBlock,
+  tracker: TrackerRow,
+  input: {
+    values: Record<string, unknown>;
+    submittedBy: string | null;
+    submittedByKind?: ActorKind;
+    viewer?: string | null;
+    forced?: Record<string, string>;
+    fillDefaults?: boolean;
+  },
+): Promise<Record<string, string | number>> {
+  const allowed = new Set(block.fields.length ? block.fields : tracker.fields.map((f) => f.key));
+  // El campo de estado de la aprobación no se pide: lo pone el servidor.
+  if (block.approval) allowed.add(block.approval.field);
+  const forced = input.forced ?? {};
+  for (const key of Object.keys(forced)) allowed.add(key);
+  const defaultOnly = new Set<string>();
+  if (input.fillDefaults)
+    for (const f of tracker.fields)
+      if (!allowed.has(f.key) && f.default !== undefined && f.default !== '') {
+        allowed.add(f.key);
+        defaultOnly.add(f.key);
+      }
+  // Los campos que se llenan solos (fórmula, lookup) se calculan aunque el
+  // formulario no los muestre: la fila que se guarda es la de la tabla.
+  for (const f of tracker.fields)
+    if ((f.formula || (f.lookup && !f.lookup.editable)) && !allowed.has(f.key)) {
+      allowed.add(f.key);
+      defaultOnly.add(f.key);
+    }
+  const asked = tracker.fields.filter((f) => allowed.has(f.key));
+  const raw: Record<string, unknown> = {};
+  for (const f of asked)
+    raw[f.key] = defaultOnly.has(f.key) || f.formula ? undefined : input.values[f.key];
+  for (const [key, value] of Object.entries(forced)) raw[key] = value;
+  if (block.approval) raw[block.approval.field] = block.approval.pending;
+  // Defaults, campos ocultos (showIf), reglas de cada campo y relaciones. Una
+  // relación de un enlace público sólo puede apuntar a las tablas de ESTA vista:
+  // el resto del espacio no se asoma por un select de la página pública.
+  return prepareValues(db, { ...tracker, fields: asked }, raw, {
+    applyDefaults: true,
+    viewer: input.viewer,
+    allowedRelationTrackers:
+      input.submittedBy && input.submittedByKind !== 'app_user'
+        ? undefined
+        : new Set(trackersOf(view.spec)),
+  });
+}
+
+/**
+ * El «modo prueba» de un formulario: pasa por las mismas reglas que un envío
+ * de verdad (campos que pide, ocultos, validaciones, relaciones) y devuelve la
+ * fila tal como se guardaría, SIN escribir nada. Lanza `ValidationError` con el
+ * mismo texto que daría el envío real.
+ */
+export async function previewViewForm(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: {
+    blockId: string;
+    values: Record<string, unknown>;
+    submittedBy: string | null;
+    submittedByKind?: ActorKind;
+    viewer?: string | null;
+    forced?: Record<string, string>;
+    fillDefaults?: boolean;
+  },
+): Promise<{ values: Record<string, string | number>; tracker: TrackerRow }> {
+  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (!block || block.type !== 'form')
+    throw new NotFoundError('Ese formulario no está en esta vista.');
+  if (isReadOnlySource(block.tracker))
+    throw new ValidationError(
+      'Este formulario apunta a una fuente de sólo lectura; no recibe filas.',
+    );
+  const { data: t, error } = await db
+    .from('trackers')
+    .select(TRACKER_COLUMNS)
+    .eq('slug', block.tracker)
+    .maybeSingle();
+  if (error) throw error;
+  if (!t) throw new NotFoundError('La tabla de este formulario ya no existe.');
+  const tracker = t as unknown as TrackerRow;
+  const values = await prepareFormValues(db, view, block, tracker, input);
+  return { values, tracker };
+}
+
+/**
  * Escribe la fila que un bloque de formulario envió. Sólo acepta los campos
  * que el bloque pide — un formulario de «novedades» no puede escribir el
  * campo «valor» de la misma tabla aunque alguien lo mande a mano.
@@ -1254,42 +1352,7 @@ export async function submitViewForm(
   if (!t) throw new NotFoundError('La tabla de este formulario ya no existe.');
   const tracker = t as unknown as TrackerRow;
 
-  const allowed = new Set(block.fields.length ? block.fields : tracker.fields.map((f) => f.key));
-  // El campo de estado de la aprobación no se pide: lo pone el servidor.
-  if (block.approval) allowed.add(block.approval.field);
-  const forced = input.forced ?? {};
-  for (const key of Object.keys(forced)) allowed.add(key);
-  const defaultOnly = new Set<string>();
-  if (input.fillDefaults)
-    for (const f of tracker.fields)
-      if (!allowed.has(f.key) && f.default !== undefined && f.default !== '') {
-        allowed.add(f.key);
-        defaultOnly.add(f.key);
-      }
-  // Los campos que se llenan solos (fórmula, lookup) se calculan aunque el
-  // formulario no los muestre: la fila que se guarda es la de la tabla.
-  for (const f of tracker.fields)
-    if ((f.formula || (f.lookup && !f.lookup.editable)) && !allowed.has(f.key)) {
-      allowed.add(f.key);
-      defaultOnly.add(f.key);
-    }
-  const asked = tracker.fields.filter((f) => allowed.has(f.key));
-  const raw: Record<string, unknown> = {};
-  for (const f of asked)
-    raw[f.key] = defaultOnly.has(f.key) || f.formula ? undefined : input.values[f.key];
-  for (const [key, value] of Object.entries(forced)) raw[key] = value;
-  if (block.approval) raw[block.approval.field] = block.approval.pending;
-  // Defaults, campos ocultos (showIf), reglas de cada campo y relaciones. Una
-  // relación de un enlace público sólo puede apuntar a las tablas de ESTA vista:
-  // el resto del espacio no se asoma por un select de la página pública.
-  const values = await prepareValues(db, { ...tracker, fields: asked }, raw, {
-    applyDefaults: true,
-    viewer: input.viewer,
-    allowedRelationTrackers:
-      input.submittedBy && input.submittedByKind !== 'app_user'
-        ? undefined
-        : new Set(trackersOf(view.spec)),
-  });
+  const values = await prepareFormValues(db, view, block, tracker, input);
 
   // Flujo por estados: la fila nueva nace en el primer estado.
   Object.assign(
@@ -1473,7 +1536,19 @@ export async function editViewSubmission(
 export async function searchRelationOptions(
   db: SupabaseClient,
   view: CustomViewRow,
-  input: { blockId: string; field: string; q: string; audience: 'team' | 'public' },
+  input: {
+    blockId: string;
+    field: string;
+    q: string;
+    audience: 'team' | 'public';
+    /**
+     * Tablas que, además de las de la vista, quien mira puede leer enteras
+     * (en una app: las que su rol lee con `read: 'all'`). Sin esto, un
+     * desplegable a una tabla que la pantalla no muestra salía vacío para el
+     * operario aunque su rol sí pudiera leerla (2026-10-19, tarifario).
+     */
+    readable?: readonly string[];
+  },
 ): Promise<Array<{ id: string; label: string; pick?: Record<string, string | number> }>> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
@@ -1483,7 +1558,11 @@ export async function searchRelationOptions(
   const field = source.fields.find((f) => f.key === input.field);
   if (!field || field.type !== 'relation' || !field.tracker || !asked.has(field.key))
     throw new NotFoundError('Ese campo no es una relación de este formulario.');
-  if (input.audience === 'public' && !trackersOf(view.spec).includes(field.tracker))
+  if (
+    input.audience === 'public' &&
+    !trackersOf(view.spec).includes(field.tracker) &&
+    !input.readable?.includes(field.tracker)
+  )
     throw new ValidationError('Esta vista no comparte esa tabla.');
   const target = await trackerForBlock(db, field.tracker);
   const { data, error } = await db
@@ -1775,6 +1854,41 @@ export async function editViewRow(
           ? 'move'
           : 'edit'
         : 'edit',
+    actor: input.actor,
+    actorKind: input.actorKind,
+  });
+  return { label, duplicate };
+}
+
+/**
+ * Devuelve campos de una fila a su valor de antes («Deshacer este cambio» del
+ * historial). La lista blanca es la de los campos que se devuelven (el rol ya
+ * se comprobó en la capa de apps): lo demás —reglas del campo, flujo por
+ * estados, duplicados, automatizaciones— pasa igual que en cualquier edición, y
+ * queda registrado como un cambio hecho al deshacer (`__undo`).
+ */
+export async function undoViewRowChange(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: {
+    blockId: string;
+    rowId: string;
+    patch: Record<string, string | number>;
+    actor: string;
+    actorKind?: ActorKind;
+  },
+): Promise<{ label: string; duplicate: string | null }> {
+  const block = findWriteBlock(view.spec, input.blockId);
+  if (!block || !('tracker' in block)) throw new NotFoundError('Ese bloque no está en esta vista.');
+  const tracker = await trackerForBlock(db, block.tracker);
+  const { label, duplicate } = await patchRow(db, view, {
+    blockId: block.id,
+    tracker,
+    rowId: input.rowId,
+    patch: input.patch,
+    allowed: new Set(Object.keys(input.patch)),
+    kind: 'edit',
+    actionId: UNDO_ACTION_ID,
     actor: input.actor,
     actorKind: input.actorKind,
   });

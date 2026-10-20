@@ -103,8 +103,13 @@ export type SubmitTarget =
    */
   | { kind: 'custom_app'; appId: string; screen: string; external?: boolean }
   | { kind: 'preview' }
-  /** El escaparate de desarrollo (/v/views-showcase): escribe de mentira, sin red. */
-  | { kind: 'demo' };
+  /**
+   * El escaparate de desarrollo (/v/views-showcase): escribe de mentira, sin red.
+   * Con `dryRun` es el «modo prueba» de «Ver como…» en una app real: los envíos de
+   * formulario se validan en el servidor con el rol que se mira y se muestran como
+   * «se habría guardado esto», sin persistir nada.
+   */
+  | { kind: 'demo'; dryRun?: { appId: string; screen: string; roleKey: string } };
 
 export type { SubmitFn } from './blocks/form-transport';
 

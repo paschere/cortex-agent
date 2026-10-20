@@ -9,6 +9,7 @@ import './tools';
 import './design';
 import './brand-tool';
 import './draft';
+import './inspect';
 import './automations/tools';
 
 export {
@@ -21,6 +22,7 @@ export {
   appsList,
   appsPublish,
   appsUsage,
+  appsRestoreVersion,
   appsVersions,
   appsUpdate,
 } from './tools';
@@ -40,6 +42,12 @@ export * from './tablero';
 export * from './client-portal';
 export * from './versions-shape';
 export * from './versions';
+export * from './versions-compare';
+export { describeWouldSave, readScreenSample } from './sample-screen';
+export type { SampleScreen } from './sample-screen';
+export * from './inspect-shape';
+export { appsInspect, inspectAppRole, loadInspectInput } from './inspect';
+export type { InspectVersion, LoadedInspect } from './inspect';
 export * from './usage';
 export * from './app-extras';
 export * from './appearance';

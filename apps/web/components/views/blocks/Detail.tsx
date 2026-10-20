@@ -11,6 +11,7 @@ import {
   MousePointerClick,
   Pencil,
   Sparkles,
+  Undo2,
   UserPlus,
   XCircle,
   Zap,
@@ -18,7 +19,7 @@ import {
 import { useState } from 'react';
 import type { SubmitTarget } from '../ViewCanvas';
 import { FileValue } from '../inputs/FileValue';
-import { EditableValue, RowActions } from '../view-writes';
+import { EditableValue, RowActions, useViewWriter } from '../view-writes';
 import { FlowHistory, FlowPanel } from './FlowStepper';
 import { RichValue } from './RichValue';
 import { useIsVariant } from './design';
@@ -50,7 +51,50 @@ const KIND_ICON: Record<ComputedTimelineEntry['kind'], typeof Pencil> = {
   file: FilePlus2,
 };
 
-function TimelineItem({ entry, last }: { entry: ComputedTimelineEntry; last: boolean }) {
+/** «Deshacer este cambio»: el servidor decide si se puede; aquí sólo se pide y se cuenta qué pasó. */
+function UndoButton({ blockId, rowId, entryId }: { blockId: string; rowId: string; entryId: string }) {
+  const writer = useViewWriter();
+  const [state, setState] = useState<
+    { kind: 'idle' } | { kind: 'busy' } | { kind: 'done'; text: string } | { kind: 'error'; text: string }
+  >({ kind: 'idle' });
+  if (!writer?.undo) return null;
+  const undo = writer.undo;
+  if (state.kind === 'done')
+    return <p className="mt-1.5 text-micro font-semibold text-emerald">{state.text}</p>;
+  return (
+    <div className="view-no-print mt-1.5">
+      <button
+        type="button"
+        disabled={state.kind === 'busy'}
+        onClick={async () => {
+          if (!window.confirm('¿Deshacer este cambio? Los campos vuelven a su valor de antes.')) return;
+          setState({ kind: 'busy' });
+          const res = await undo(blockId, rowId, entryId);
+          setState(res.ok ? { kind: 'done', text: res.message } : { kind: 'error', text: res.error });
+        }}
+        className="inline-flex h-7 items-center gap-1 rounded-pill border border-border bg-surface px-2.5 text-micro font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-60"
+      >
+        <Undo2 className="h-3 w-3" aria-hidden />
+        {state.kind === 'busy' ? 'Deshaciendo…' : 'Deshacer este cambio'}
+      </button>
+      {state.kind === 'error' && (
+        <p role="alert" className="mt-1 text-micro text-rose">
+          {state.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TimelineItem({
+  entry,
+  last,
+  record,
+}: {
+  entry: ComputedTimelineEntry;
+  last: boolean;
+  record?: { blockId: string; rowId: string };
+}) {
   const rejected = entry.kind === 'approval' && entry.title === 'Rechazado';
   const failed = entry.kind === 'automation' && entry.ok === false;
   const Icon = rejected || failed ? XCircle : KIND_ICON[entry.kind];
@@ -77,6 +121,7 @@ function TimelineItem({ entry, last }: { entry: ComputedTimelineEntry; last: boo
           <time dateTime={entry.at} suppressHydrationWarning>
             {formatWhen(entry.at)}
           </time>
+          {entry.origin ? ` · ${entry.origin}` : ''}
         </p>
         {entry.changes && entry.changes.length > 0 && (
           <ul className="mt-1.5 space-y-1">
@@ -100,6 +145,9 @@ function TimelineItem({ entry, last }: { entry: ComputedTimelineEntry; last: boo
             {f.label}: <span className="font-semibold text-ink">{f.names.join(', ')}</span>
           </p>
         ))}
+        {entry.undoId && record && (
+          <UndoButton blockId={record.blockId} rowId={record.rowId} entryId={entry.undoId} />
+        )}
       </div>
     </li>
   );
@@ -201,6 +249,7 @@ export function DetailBlock({ block, target }: { block: Detail; target?: SubmitT
                     key={entry.id}
                     entry={entry}
                     last={i === (block.timeline?.length ?? 0) - 1}
+                    record={{ blockId: block.id, rowId }}
                   />
                 ))}
               </ol>

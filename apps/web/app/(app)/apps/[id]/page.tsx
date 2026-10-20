@@ -1,5 +1,5 @@
 import { previewAttributesOf, requireApp } from '@/lib/apps/access';
-import { previewQuery } from '@/lib/apps/preview-query';
+import { previewModeOf, previewQuery } from '@/lib/apps/preview-query';
 import {
   HOME_SLUG,
   PORTAL_SLUG,
@@ -24,7 +24,7 @@ export default async function AppIndexPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ como?: string; atr?: string | string[] }>;
+  searchParams: Promise<{ como?: string; atr?: string | string[]; modo?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { access } = await requireApp(id, {
@@ -32,7 +32,7 @@ export default async function AppIndexPage({
     attributes: previewAttributesOf(query.atr),
   });
   const screen = screenFor(access, null);
-  const como = query.como ? previewQuery(query.como, access.user.attributes) : '';
+  const como = query.como ? previewQuery(query.como, access.user.attributes, previewModeOf(query.modo)) : '';
   // Con «Inicio» encendido (0215), la app abre ahí.
   // Un cliente del portal y las apps de sólo tableros (0225) abren en su pantalla sintética.
   const first = portalActive(access)

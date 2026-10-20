@@ -12,8 +12,12 @@ import {
   appsGet,
   appsInviteUsers,
   appsPublish,
+  appsRestoreVersion,
   appsUpdate,
+  appsVersions,
 } from '../tools';
+import { appsInspect } from '../inspect';
+import { previewAppForm, resolveAppAccess, screenView, undoAppRowChange } from '../store';
 
 /**
  * LAS HERRAMIENTAS DE APLICACIONES DEL CHAT (0208 + 0209): permisos y validación.
@@ -476,5 +480,225 @@ describe('apps.invite_users', () => {
     expect(res.emailed).toBe(0);
     expect(res.notes.join(' ')).toMatch(/Usuarios/);
     expect(fake.tables.custom_app_users).toHaveLength(1);
+  });
+});
+
+describe('apps.inspect (Cortex se autoverifica)', () => {
+  it('es de sólo lectura, sólo de owner/admin, y revisa un rol o todos', async () => {
+    const { ctx, fake } = world();
+    expect(appsInspect.requiresConfirmation).toBeFalsy();
+    await expect(
+      appsInspect.handler({ app: 'planta', role: 'operario', version: 'draft' }, ctx(OPERARIO)),
+    ).rejects.toThrow();
+    const mine = () =>
+      JSON.stringify([
+        fake.tables.custom_apps,
+        fake.tables.custom_app_screens,
+        fake.tables.custom_views,
+        fake.tables.custom_app_roles,
+        fake.tables.tracker_rows,
+      ]);
+    const before = mine();
+    const one = await appsInspect.handler(
+      { app: 'planta', role: 'operario', version: 'draft', expect: ['campo_que_no_existe'] },
+      ctx(ADMIN),
+    );
+    expect(one.reports).toHaveLength(1);
+    expect(one.missing).toEqual(['campo_que_no_existe']);
+    expect(one.ok).toBe(false);
+    expect(one.markdown).toMatch(/NO está listo/);
+    expect(one.markdown).toMatch(/vista como \*\*Operario\*\*/);
+    const all = await appsInspect.handler({ app: 'planta', version: 'draft' }, ctx(ADMIN));
+    expect(all.reports.length).toBeGreaterThan(1);
+    const none = await appsInspect.handler(
+      { app: 'planta', role: 'no_existe', version: 'draft' },
+      ctx(ADMIN),
+    );
+    expect(none.ok).toBe(false);
+    expect(none.problems.join(' ')).toMatch(/no tiene un rol/);
+    expect(mine()).toBe(before);
+  });
+});
+
+describe('apps.versions y apps.restore_version', () => {
+  it('lista y compara sin pedir confirmación; volver atrás sí la pide y devuelve lo que cambió', async () => {
+    const { ctx } = world();
+    expect(appsVersions.requiresConfirmation).toBeFalsy();
+    expect(appsRestoreVersion.requiresConfirmation).toBe(true);
+    await appsPublish.handler({ app: 'planta', publish: true, note: 'primera' }, ctx(ADMIN));
+    await appsUpdate.handler({ app: 'planta', name: 'Planta Norte' }, ctx(ADMIN));
+    await appsPublish.handler({ app: 'planta', publish: true, note: 'segunda' }, ctx(ADMIN));
+    const list = await appsVersions.handler({ app: 'planta' }, ctx(ADMIN));
+    expect(list.markdown).toMatch(/v2 \(publicada\)/);
+    const cmp = await appsVersions.handler(
+      { app: 'planta', compare: { from: 1, to: 2 } },
+      ctx(ADMIN),
+    );
+    expect(cmp.changes?.join(' ')).toMatch(/Nombre: «Control en planta» → «Planta Norte»/);
+    await expect(
+      appsRestoreVersion.handler({ app: 'planta', version: 1, publish: false }, ctx(OPERARIO)),
+    ).rejects.toThrow();
+    const back = await appsRestoreVersion.handler(
+      { app: 'planta', version: 1, publish: false },
+      ctx(ADMIN),
+    );
+    expect(back.app.name).toBe('Control en planta');
+    expect(back.markdown).toMatch(/Devolví/);
+    await expect(
+      appsRestoreVersion.handler({ app: 'planta', version: 9, publish: false }, ctx(ADMIN)),
+    ).rejects.toThrow();
+  });
+});
+
+describe('«Deshacer este cambio» del historial de un registro', () => {
+  const ROW = '33333333-3333-4333-8333-333333333333';
+  const EVENT = '44444444-4444-4444-8444-444444444444';
+
+  function seeded() {
+    const w = world();
+    (w.fake.tables.tracker_rows as unknown[]).push({
+      id: ROW,
+      organization_id: ORG,
+      tracker_id: 'trk',
+      label: 'A-1',
+      values: { numero_guia: 'A-1', fecha: '2026-10-05', ubicacion: 'Muelle 3' },
+      created_by: ADMIN,
+      created_by_app_user: null,
+      created_at: '2026-10-05T10:00:00Z',
+      updated_at: '2026-10-05T10:00:00Z',
+    });
+    (w.fake.tables.custom_view_events ??= []).push({
+      id: EVENT,
+      organization_id: ORG,
+      view_id: 'view-registrar',
+      block_id: 'registrar',
+      kind: 'edit',
+      action_id: null,
+      tracker_row_id: ROW,
+      changes: { ubicacion: { from: 'Muelle 1', to: 'Muelle 3' } },
+      actor: ADMIN,
+      actor_kind: 'member',
+      created_at: '2026-10-06T10:00:00Z',
+    });
+    return w;
+  }
+
+  async function enterAs(w: ReturnType<typeof world>, role: string) {
+    const app = await resolveAppAccess(
+      w.ctx(ADMIN).db,
+      'planta',
+      { id: ADMIN, name: 'Admin', companyAdmin: true },
+      role === 'administrador' ? {} : { preview: { roleKey: role } },
+    );
+    if (!app) throw new Error('sin acceso');
+    const screen = app.screens.find((s) => s.slug === 'registrar');
+    if (!screen) throw new Error('sin pantalla');
+    return { access: app, view: await screenView(w.ctx(ADMIN).db, screen), db: w.ctx(ADMIN).db };
+  }
+
+  it('vuelve el campo a su valor de antes y deja el cambio de vuelta en la historia', async () => {
+    const w = seeded();
+    const { access, view, db } = await enterAs(w, 'administrador');
+    const res = await undoAppRowChange(db, access, view, {
+      blockId: 'registrar',
+      rowId: ROW,
+      entryId: EVENT,
+    });
+    expect(res.applied).toEqual(['ubicacion']);
+    const row = (w.fake.tables.tracker_rows as Array<{ id: string; values: Record<string, string> }>).find(
+      (r) => r.id === ROW,
+    );
+    expect(row?.values.ubicacion).toBe('Muelle 1');
+    const events = w.fake.tables.custom_view_events as Array<{ action_id: string | null }>;
+    expect(events.some((e) => e.action_id === '__undo')).toBe(true);
+    // Un segundo intento ya no encuentra el campo como el cambio lo dejó.
+    await expect(
+      undoAppRowChange(db, access, view, { blockId: 'registrar', rowId: ROW, entryId: EVENT }),
+    ).rejects.toThrow(/ya estaba deshecho/);
+  });
+
+  it('no pisa lo que alguien cambió después', async () => {
+    const w = seeded();
+    const rows = w.fake.tables.tracker_rows as Array<{ id: string; values: Record<string, string> }>;
+    const r = rows.find((x) => x.id === ROW);
+    if (r) r.values.ubicacion = 'Muelle 9';
+    const { access, view, db } = await enterAs(w, 'administrador');
+    await expect(
+      undoAppRowChange(db, access, view, { blockId: 'registrar', rowId: ROW, entryId: EVENT }),
+    ).rejects.toThrow(/cambió otra vez después/);
+    expect(r?.values.ubicacion).toBe('Muelle 9');
+  });
+
+  it('un rol que no edita la tabla no deshace nada', async () => {
+    const w = seeded();
+    const { access, view, db } = await enterAs(w, 'gerencia');
+    await expect(
+      undoAppRowChange(db, access, view, { blockId: 'registrar', rowId: ROW, entryId: EVENT }),
+    ).rejects.toThrow(/no edita esta tabla/);
+  });
+
+  it('lo hecho desde el chat sólo lo deshace quien administra', async () => {
+    const w = seeded();
+    const { access, view, db } = await enterAs(w, 'supervisor');
+    await expect(
+      undoAppRowChange(db, access, view, {
+        blockId: 'registrar',
+        rowId: ROW,
+        entryId: 'audit:55555555-5555-4555-8555-555555555555',
+      }),
+    ).rejects.toThrow(/quien administra/);
+  });
+});
+
+describe('«Ver como…» en modo prueba: el formulario se valida y no escribe', () => {
+  async function enter(role: string) {
+    const w = world();
+    const db = w.ctx(ADMIN).db;
+    const access = await resolveAppAccess(
+      db,
+      'planta',
+      { id: ADMIN, name: 'Admin', companyAdmin: true },
+      { preview: { roleKey: role } },
+    );
+    if (!access) throw new Error('sin acceso');
+    const screen = access.screens.find((s) => s.slug === 'registrar');
+    if (!screen) throw new Error('sin pantalla');
+    return { w, access, view: await screenView(db, screen), db };
+  }
+
+  it('devuelve la fila tal como se guardaría y no escribe nada', async () => {
+    const { w, access, view, db } = await enter('operario');
+    const out = await previewAppForm(db, access, view, {
+      blockId: 'registrar',
+      values: { numero_guia: 'Z-1', fecha: '2026-10-05', ubicacion: 'Muelle 3' },
+    });
+    expect(out.values).toMatchObject({ numero_guia: 'Z-1', ubicacion: 'Muelle 3' });
+    expect(out.values.estado).toBe('Pendiente');
+    expect(w.fake.tables.tracker_rows).toHaveLength(0);
+    expect(w.fake.tables.custom_view_submissions ?? []).toHaveLength(0);
+    expect(w.fake.tables.custom_view_events ?? []).toHaveLength(0);
+  });
+
+  it('rechaza con el mismo texto de verdad: campo obligatorio, campo fuera del rol, rol que no registra', async () => {
+    const op = await enter('operario');
+    await expect(
+      previewAppForm(op.db, op.access, op.view, {
+        blockId: 'registrar',
+        values: { fecha: '2026-10-05' },
+      }),
+    ).rejects.toThrow(/Falta/);
+    await expect(
+      previewAppForm(op.db, op.access, op.view, {
+        blockId: 'registrar',
+        values: { numero_guia: 'Z-2', fecha: '2026-10-05', motivo_rechazo: 'x' },
+      }),
+    ).rejects.toThrow(/no puede escribir/);
+    const ger = await enter('gerencia');
+    await expect(
+      previewAppForm(ger.db, ger.access, ger.view, {
+        blockId: 'registrar',
+        values: { numero_guia: 'Z-3', fecha: '2026-10-05' },
+      }),
+    ).rejects.toThrow(/no registra en esta tabla/);
   });
 });

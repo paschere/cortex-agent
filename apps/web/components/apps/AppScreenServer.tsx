@@ -3,7 +3,7 @@ import { ViewBrandProvider } from '@/components/views/blocks/brand';
 import { previewAttributesOf, requireApp } from '@/lib/apps/access';
 import { fontStack } from '@/lib/apps/app-brand';
 import { memberAppBrand } from '@/lib/apps/external-brand';
-import { previewQuery } from '@/lib/apps/preview-query';
+import { previewModeOf, previewQuery } from '@/lib/apps/preview-query';
 import {
   HOME_NAV,
   appCanExport,
@@ -12,11 +12,14 @@ import {
   emptyHintsFor,
   isHomeRoute,
   isPortalRoute,
+  listRoles,
   loadHome,
   locationStatus,
   navScreens,
   readScreen,
+  readScreenSample,
   recordAppEvent,
+  requiredAttributes,
   screenButtons,
   screenFor,
   tableroForRoute,
@@ -37,6 +40,8 @@ export interface AppScreenQuery {
   atr?: string | string[];
   fila?: string;
   d?: string;
+  /** `prueba`: «Ver como…» con filas de ejemplo (nada se guarda). */
+  modo?: string;
 }
 
 /**
@@ -75,15 +80,34 @@ export async function AppScreenServer({
     tableroDef ? computeTablero(db, access, tableroDef, { basePath }) : null,
     isPortal ? computePortal(db, access, { basePath }) : null,
   ]);
+  // «Ver como…» en modo prueba: las filas son de ejemplo y los formularios no guardan.
+  const mode = readOnly ? previewModeOf(query.modo) : null;
+  const sample =
+    mode && screen
+      ? await readScreenSample(db, access, screen, { fila: query.fila, detail: query.d })
+      : null;
+  const viewAs = readOnly
+    ? {
+        roles: (await listRoles(db, access.app.id)).map((r) => ({
+          key: r.key,
+          name: r.name,
+          needs: requiredAttributes(r.permissions),
+        })),
+        mode,
+        sampled: Boolean(sample),
+      }
+    : undefined;
   const [read, home, brand, buttons, location] = await Promise.all([
-    screen ? readScreen(db, access, screen, { readOnly, fila: query.fila, detail: query.d }) : null,
+    screen && !sample
+      ? readScreen(db, access, screen, { readOnly, fila: query.fila, detail: query.d })
+      : null,
     isHome ? loadHome(db, access) : null,
     memberAppBrand(db, actor.organizationName, access.app),
     screen ? screenButtons(db, access.app.id, screen.slug) : [],
     // Compartir ubicación (0216): sólo si la app lo tiene encendido y el rol puede.
     readOnly ? null : locationStatus(db, access),
   ]);
-  const emptyHints = screen && read ? await emptyHintsFor(db, access, screen, read) : [];
+  const emptyHints = screen && read && !sample ? await emptyHintsFor(db, access, screen, read) : [];
   const { app, role } = access;
   return (
     <ViewBrandProvider brand={brand}>
@@ -97,16 +121,26 @@ export async function AppScreenServer({
         readOnly={readOnly}
         {...(embedBase ? { embedBase: basePath } : {})}
         previewAttributes={readOnly ? access.user.attributes : undefined}
+        viewAs={viewAs}
         canExport={appCanExport(access)}
         canManage={viewer.companyAdmin}
-        computed={read?.computed}
+        computed={sample?.computed ?? read?.computed}
         home={home ?? undefined}
         tablero={tablero ?? undefined}
         portal={portal ?? undefined}
-        target={screen ? { kind: 'custom_app', appId: app.slug, screen: screen.slug } : undefined}
+        target={
+          screen && sample
+            ? {
+                kind: 'demo',
+                dryRun: { appId: app.slug, screen: screen.slug, roleKey: role.key },
+              }
+            : screen
+              ? { kind: 'custom_app', appId: app.slug, screen: screen.slug }
+              : undefined
+        }
         dataUrl={
           screen
-            ? `/api/apps/${app.slug}/screens/${screen.slug}/data${readOnly ? previewQuery(role.key, access.user.attributes) : ''}`
+            ? `/api/apps/${app.slug}/screens/${screen.slug}/data${readOnly ? previewQuery(role.key, access.user.attributes, mode) : ''}`
             : undefined
         }
         title={screen?.title ?? tableroDef?.title ?? (isPortal ? 'Mi portal' : HOME_NAV.title)}

@@ -18,6 +18,7 @@ import {
   updateApp,
   updateScreen,
 } from './store';
+import { type CompareLine, compareSnapshots } from './versions-compare';
 import {
   type Snapshot,
   type VersionChange,
@@ -134,6 +135,40 @@ export async function getVersion(
   const snapshot = parseSnapshot(row.spec);
   if (!snapshot) throw new ValidationError(`La versión ${number} no se puede leer.`);
   return { row, snapshot };
+}
+
+export type VersionRef = number | 'draft' | 'published';
+
+async function snapshotOf(
+  db: SupabaseClient,
+  app: CustomAppRow,
+  ref: VersionRef,
+): Promise<{ label: string; snapshot: Snapshot }> {
+  if (ref === 'draft') return { label: 'el borrador', snapshot: await draftSnapshot(db, app) };
+  if (ref === 'published') {
+    const p = await loadPublishedSnapshot(db, app.id);
+    if (!p) throw new ValidationError('Esta aplicación todavía no tiene una versión publicada.');
+    return { label: `la versión ${p.number} (publicada)`, snapshot: p.snapshot };
+  }
+  const v = await getVersion(db, app.id, ref);
+  return { label: `la versión ${ref}`, snapshot: v.snapshot };
+}
+
+/**
+ * Comparar dos versiones (o una con el borrador) en español: qué pantallas,
+ * bloques, campos de formulario, permisos y apariencia se agregaron, quitaron
+ * o cambiaron al pasar de `from` a `to`. Las automatizaciones y los datos no
+ * se versionan: la comparación lo dice.
+ */
+export async function compareVersions(
+  db: SupabaseClient,
+  appRef: string,
+  from: VersionRef,
+  to: VersionRef,
+): Promise<{ from: string; to: string; lines: CompareLine[] }> {
+  const app = await mustGetApp(db, appRef);
+  const [a, b] = await Promise.all([snapshotOf(db, app, from), snapshotOf(db, app, to)]);
+  return { from: a.label, to: b.label, lines: compareSnapshots(a.snapshot, b.snapshot) };
 }
 
 export interface AppDraftStatus {

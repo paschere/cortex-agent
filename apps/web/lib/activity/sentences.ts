@@ -167,6 +167,11 @@ const BUILDERS: Record<string, Builder> = {
   views_restore: ({ input }) => plain(`Restauré la vista ${quoted(input.view)}`.trim(), 'view'),
   views_share: ({ input }) => plain(`Compartí la vista ${quoted(input.view)}`.trim(), 'view'),
   views_delete: ({ input }) => plain(`Borré la vista ${quoted(input.view)}`.trim(), 'view'),
+  apps_restore_version: ({ input }) =>
+    plain(
+      `Devolví la aplicación ${quoted(input.app)} a la versión ${typeof input.version === 'number' ? input.version : ''}${input.publish ? ' y la publiqué' : ''}`.trim(),
+      'view',
+    ),
   payables_record: ({ input }) =>
     plain(
       `Anoté la factura${input.number ? ` ${str(input.number, 30)}` : ''} de ${str(input.supplierName, 50) ?? 'un proveedor'}`,
