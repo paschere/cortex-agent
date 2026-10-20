@@ -146,7 +146,7 @@ export function AppCaptureLayer({
   if (!outbox) return <>{content}</>;
 
   return (
-    <CaptureContext.Provider value={{ userName: who?.name ?? null, appName }}>
+    <CaptureContext.Provider value={{ userName: who?.name ?? null, appName, appKey, userKey }}>
       <OutboxBar
         snap={snap}
         note={offlineNote}

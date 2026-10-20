@@ -211,6 +211,17 @@ export type ComputedBlock =
       steps?: Array<{ title: string; fields: string[] }> | null;
       /** Cómo se llena hablando: `off` | `dictate` (por defecto) | `conversation`. */
       voice?: FormVoiceMode;
+      /** Lista de ítems con cantidad (se guarda como filas de una tabla hija); ver form-lines.ts. */
+      lines?: {
+        title: string;
+        itemLabel: string;
+        qtyLabel: string;
+        min?: number;
+        max?: number;
+        decimals?: boolean;
+      } | null;
+      /** true/false si el spec lo fija; ausente = automático (ver `documentScan` del spec). */
+      documentScan?: boolean;
       fields: ComputedFormField[];
     })
   | (BlockBase & {
@@ -1997,6 +2008,17 @@ function computeBlockBody(
         editWindowMinutes: editWindowOf(block),
         steps: block.steps?.length ? block.steps : null,
         voice: formVoiceOf(block),
+        ...(block.documentScan !== undefined ? { documentScan: block.documentScan } : {}),
+        lines: block.lines
+          ? {
+              title: block.lines.title,
+              itemLabel: block.lines.itemLabel,
+              qtyLabel: block.lines.qtyLabel,
+              ...(block.lines.min !== undefined ? { min: block.lines.min } : {}),
+              ...(block.lines.max !== undefined ? { max: block.lines.max } : {}),
+              ...(block.lines.decimals ? { decimals: true } : {}),
+            }
+          : null,
         // El campo de estado de la aprobación lo pone el servidor: no se pide.
         fields: keys
           .filter((key) => key !== block.approval?.field)

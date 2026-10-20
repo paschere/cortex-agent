@@ -414,6 +414,26 @@ export type FormStep = z.infer<typeof formStepSchema>;
 export const APPROVE_ACTION_ID = '__approve';
 export const REJECT_ACTION_ID = '__reject';
 
+/**
+ * Líneas del formulario (ver form-lines.ts): una lista de ítems con cantidad que
+ * se guarda como filas de una tabla hija. `tracker` es la tabla hija; `parent`
+ * su campo de relación hacia la tabla del formulario, `item` el de relación
+ * hacia la tabla de ítems y `qty` el campo numérico de la cantidad.
+ */
+export const formLinesSchema = z.object({
+  tracker: z.string().regex(TRACKER_SLUG_RE),
+  parent: fieldRef,
+  item: fieldRef,
+  qty: fieldRef,
+  title: z.string().trim().min(1).max(60).default('Ítems'),
+  itemLabel: z.string().trim().min(1).max(40).default('Ítem'),
+  qtyLabel: z.string().trim().min(1).max(40).default('Cantidad'),
+  min: z.number().int().min(0).max(50).optional(),
+  max: z.number().int().min(1).max(50).optional(),
+  decimals: z.boolean().optional(),
+});
+export type FormLines = z.infer<typeof formLinesSchema>;
+
 export const formBlockSchema = z.object({
   ...base,
   type: z.literal('form'),
@@ -449,6 +469,14 @@ export const formBlockSchema = z.object({
    * en voz alta, valida y lo envía al confirmar. Ver `VOICE_MODES`.
    */
   voice: z.enum(['off', 'dictate', 'conversation']).optional(),
+  /** Lista de ítems con cantidad que se guarda como filas de una tabla hija. */
+  lines: formLinesSchema.optional(),
+  /**
+   * «Tomar foto del documento»: Cortex lee una guía, manifiesto o factura y
+   * propone valores para los campos. Sin valor, se ofrece solo si el formulario
+   * tiene tres o más campos que se leen de un papel; `false` lo apaga.
+   */
+  documentScan: z.boolean().optional(),
 });
 
 /** Cómo se llena un formulario hablando (por defecto: dictar). */
@@ -1124,6 +1152,40 @@ export function approvalFor(
   return null;
 }
 
+/** Las líneas apuntan a una tabla hija con relación al padre, relación a ítems y cantidad numérica. */
+function checkFormLines(
+  block: FormBlock,
+  tracker: CatalogTracker,
+  bySlug: ReadonlyMap<string, CatalogTracker>,
+  problems: string[],
+  where: string,
+): void {
+  const l = block.lines;
+  if (!l) return;
+  const child = bySlug.get(l.tracker);
+  if (!child) {
+    problems.push(`${where}: la tabla de las líneas «${l.tracker}» no existe.`);
+    return;
+  }
+  if (child.opaque) return;
+  const parent = child.fields.find((f) => f.key === l.parent);
+  if (!parent || parent.type !== 'relation' || parent.tracker !== tracker.slug)
+    problems.push(
+      `${where}: «${l.parent}» de «${child.name}» tiene que ser una relación hacia «${tracker.name}» (la tabla del formulario).`,
+    );
+  const item = child.fields.find((f) => f.key === l.item);
+  if (!item || item.type !== 'relation' || !item.tracker)
+    problems.push(`${where}: «${l.item}» de «${child.name}» tiene que ser una relación a los ítems.`);
+  const qty = child.fields.find((f) => f.key === l.qty);
+  if (!qty || qty.type !== 'number')
+    problems.push(`${where}: «${l.qty}» de «${child.name}» tiene que ser un campo numérico.`);
+  for (const f of child.fields)
+    if (f.required && ![l.parent, l.item, l.qty].includes(f.key) && f.default === undefined && !f.formula && !(f.lookup && !f.lookup.editable))
+      problems.push(
+        `${where}: «${f.label}» de «${child.name}» es obligatorio y las líneas no lo piden; quítale lo obligatorio o dale un valor por defecto.`,
+      );
+}
+
 /**
  * Lo propio de un formulario con aprobación y/o pasos: el campo de estado es
  * un select de la tabla que ofrece los tres estados, las notas son texto, y
@@ -1134,8 +1196,10 @@ export function checkFormExtras(
   tracker: CatalogTracker,
   problems: string[],
   where: string,
+  bySlug?: ReadonlyMap<string, CatalogTracker>,
 ): void {
   if (tracker.opaque) return;
+  if (block.lines && bySlug) checkFormLines(block, tracker, bySlug, problems, where);
   const a = block.approval;
   if (a) {
     const f = tracker.fields.find((x) => x.key === a.field);
@@ -1512,7 +1576,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
             problems.push(`${where}: el formulario sólo pide campos de la tabla, no «${c}».`);
           else need(c, 'formulario');
         }
-        checkFormExtras(block, tracker, problems, where);
+        checkFormExtras(block, tracker, problems, where, bySlug);
         break;
     }
   }

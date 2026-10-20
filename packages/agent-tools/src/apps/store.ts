@@ -6,6 +6,7 @@ import type { FlowActor } from '../trackers/flow';
 import { withFlowActor } from '../trackers/flow-guard';
 import { TRACKER_COLUMNS, type TrackerRow } from '../trackers/store';
 import { type ComputedView, type ViewSource, computeView } from '../views/compute';
+import { LINES_KEY } from '../views/form-lines';
 import { loadRecordContext } from '../views/record-history';
 import { internalShareRefusal, internalSourcesOf } from '../views/sources';
 import {
@@ -1199,8 +1200,14 @@ export async function submitAppForm(
   assertFields(
     access,
     slug,
-    Object.keys(values).filter((k) => values[k] !== undefined && values[k] !== ''),
+    Object.keys(values).filter((k) => k !== LINES_KEY && values[k] !== undefined && values[k] !== ''),
   );
+  // Las líneas del formulario se guardan en otra tabla: el rol tiene que poder crear ahí también.
+  const linesBlock = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (linesBlock?.type === 'form' && linesBlock.lines && values[LINES_KEY]) {
+    if (!canCreateIn(access.role, linesBlock.lines.tracker))
+      throw new ValidationError('Tu rol en esta aplicación no registra los ítems de esta lista.');
+  } else delete values[LINES_KEY];
   // Quien ve «las filas donde Cliente = su cliente» sólo crea filas de SU
   // cliente: el campo del scope lo pone el servidor, no el formulario.
   const scope = rowAccessFor(access.role, access.user, slug);

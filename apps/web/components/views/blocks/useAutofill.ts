@@ -183,6 +183,22 @@ export function useAutofill(opts: {
     delete applied.current[key];
   }, []);
 
+  /**
+   * Otro origen de sugerencias (la lectura de un documento) puso estos valores:
+   * quedan marcados como sugeridos —y reemplazables— igual que los del autofill.
+   * `appliedNow` ya pasó por el merge, que no pisa lo que la persona escribió.
+   */
+  const adopt = useCallback((appliedNow: Record<string, string>, source?: string) => {
+    Object.assign(applied.current, appliedNow);
+    setSuggested((s) => ({
+      ...s,
+      ...Object.fromEntries(Object.keys(appliedNow).map((k) => [k, { source }])),
+    }));
+  }, []);
+
+  /** Lo que se puso por sugerencia y la persona no tocó (para que el merge lo pueda actualizar). */
+  const previous = useCallback(() => ({ ...applied.current }), []);
+
   const reset = useCallback(() => {
     setStatus({});
     setSuggested({});
@@ -190,5 +206,14 @@ export function useAutofill(opts: {
     lastSig.current = {};
   }, []);
 
-  return { status, suggested, run, markEdited, reset, available: Boolean(url) && enabled };
+  return {
+    status,
+    suggested,
+    run,
+    markEdited,
+    reset,
+    adopt,
+    previous,
+    available: Boolean(url) && enabled,
+  };
 }

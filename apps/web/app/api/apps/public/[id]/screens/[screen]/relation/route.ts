@@ -7,7 +7,7 @@
  * entrega el rol GUARDADO— y no se debilita por llegar por otro camino.
  */
 
-export { GET } from '@/app/api/apps/[id]/screens/[screen]/relation/route';
+export { GET, POST } from '@/app/api/apps/[id]/screens/[screen]/relation/route';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

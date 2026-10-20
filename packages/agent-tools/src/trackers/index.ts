@@ -61,6 +61,7 @@ export {
   triggerSignature,
 } from './autofill-shape';
 export type { AutofillConfig, MergeResult as SuggestionMerge, Suggestion } from './autofill-shape';
+export { mergeScan, scanMessage, scannableFields, shapeScan } from './scan-shape';
 
 export {
   FLOW_REQUIREMENT_KINDS,

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LISTS_PER_APP,
   SCREENS_PER_APP,
   SCREEN_MAX_AGE_MS,
+  isListEntry,
   isUsable,
+  listEntryName,
   pickScreen,
   savedLabel,
   screenCacheKey,
@@ -73,5 +76,27 @@ describe('copias de pantallas sin señal', () => {
     // Las que sobran son las más viejas.
     expect(dropped).toContain(screenCacheKey('planta', 'ana', `p${SCREENS_PER_APP + 2}`));
     expect(dropped).not.toContain(screenCacheKey('planta', 'ana', 'p0'));
+  });
+
+  it('las listas de opciones no le quitan sitio a las pantallas y tienen su propio tope', () => {
+    const screens = Array.from({ length: SCREENS_PER_APP }, (_, i) =>
+      meta('planta', 'ana', `p${i}`, NOW - i * 1000),
+    );
+    const lists = Array.from({ length: LISTS_PER_APP + 2 }, (_, i) =>
+      meta('planta', 'ana', listEntryName(`/api/x/relation?field=${i}`), NOW - i * 1000),
+    );
+    const dropped = screensToDrop([...screens, ...lists], { appKey: 'planta', userKey: 'ana' }, NOW);
+    expect(dropped).toHaveLength(2);
+    expect(dropped.every((k) => k.includes('list:'))).toBe(true);
+    expect(isListEntry(listEntryName('/a'))).toBe(true);
+    expect(isListEntry('envios')).toBe(false);
+  });
+
+  it('las listas de otra persona también se borran', () => {
+    const mine = meta('planta', 'ana', listEntryName('/a'));
+    const theirs = meta('planta', 'luis', listEntryName('/a'));
+    expect(screensToDrop([mine, theirs], { appKey: 'planta', userKey: 'ana' }, NOW)).toEqual([
+      theirs.key,
+    ]);
   });
 });
