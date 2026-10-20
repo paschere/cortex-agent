@@ -142,7 +142,7 @@ export function FormulariosShowcase({
   const target = useMemo(() => ({ kind: 'demo' as const }), []);
   const submit = useMemo(() => submitterFor(target), [target]);
   return (
-    <div className="min-h-screen bg-canvas px-4 py-6 sm:px-6 sm:py-10">
+    <div className="cortex-workspace min-h-screen bg-canvas px-4 py-6 sm:px-6 sm:py-10">
       <div className="mx-auto w-full max-w-2xl">
         <ViewThemeProvider theme={{ ...DEFAULT_THEME, layout: operator ? 'operator' : 'dashboard' }}>
           <FormDataSourceProvider value={data}>
