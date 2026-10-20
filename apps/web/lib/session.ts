@@ -112,10 +112,30 @@ export async function requireSession(): Promise<SessionUser> {
   };
 }
 
-export async function getOptionalSession(): Promise<SessionUser | null> {
+/**
+ * `canonicalRedirect`: las pantallas de una app (/a/<app>/…) las abre tanto un
+ * miembro como alguien de afuera. Si un miembro llega SIN `?workspace=` (el
+ * enlace instalado, la pantalla que se abre después de enviar un formulario),
+ * `requireSession` lo manda a la URL canónica con su empresa; tragarse esa
+ * redirección lo dejaba como «sin sesión» y lo echaba a la entrada de usuarios
+ * externos. Con esta opción esa redirección sí se sigue; la de «entrar»
+ * (/login) y las demás siguen siendo «no hay sesión».
+ */
+export async function getOptionalSession(
+  options: { canonicalRedirect?: boolean } = {},
+): Promise<SessionUser | null> {
   try {
     return await requireSession();
-  } catch {
+  } catch (error) {
+    const digest = (error as { digest?: unknown } | null)?.digest;
+    if (
+      options.canonicalRedirect &&
+      typeof digest === 'string' &&
+      digest.startsWith('NEXT_REDIRECT') &&
+      digest.includes('workspace=') &&
+      !digest.includes(';/login')
+    )
+      throw error;
     return null;
   }
 }

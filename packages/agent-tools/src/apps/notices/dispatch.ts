@@ -66,9 +66,15 @@ export interface NoticeDelivery {
   baseUrl(): string;
 }
 
-let delivery: NoticeDelivery | null = null;
+// En `globalThis` por la misma razón que los enganches de emit.ts: la entrega
+// se registra en `instrumentation` y la usan las rutas, que pueden tener otra
+// copia de este módulo.
+const DELIVERY_KEY = Symbol.for('cortex.notices.delivery');
+function currentDelivery(): NoticeDelivery | null {
+  return (globalThis as unknown as Record<symbol, NoticeDelivery | null | undefined>)[DELIVERY_KEY] ?? null;
+}
 export function setNoticeDelivery(d: NoticeDelivery | null): void {
-  delivery = d;
+  (globalThis as unknown as Record<symbol, NoticeDelivery | null>)[DELIVERY_KEY] = d;
 }
 
 /** Cómo llegó un aviso a una persona (para el resultado de la entrega y las pruebas). */
@@ -89,7 +95,7 @@ export async function deliverStored(
   db: SupabaseClient,
   app: DeliveryApp,
   stored: readonly StoredNotice[],
-  d: NoticeDelivery | null = delivery,
+  d: NoticeDelivery | null = currentDelivery(),
 ): Promise<Map<string, NoticeChannel>> {
   const result = new Map<string, NoticeChannel>();
   if (!d) return result;
@@ -243,7 +249,7 @@ export async function dispatchRowNotices(
       if (!planned.length) continue;
       const stored = await storeNotices(db, app.id, planned, prefs, now);
       total += stored.length;
-      await deliverStored(db, app, stored, deps.delivery === undefined ? delivery : deps.delivery);
+      await deliverStored(db, app, stored, deps.delivery === undefined ? currentDelivery() : deps.delivery);
     }
     return total;
   } catch {

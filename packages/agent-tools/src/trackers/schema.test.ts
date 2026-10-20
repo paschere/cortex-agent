@@ -45,6 +45,18 @@ describe('el esquema de una tabla inventada', () => {
     expect(rowLabel([plate], { placa: 'ABC123' }, 'La de Ana')).toBe('La de Ana');
   });
 
+  it('sin texto propio, nombra la fila con la relación y no con «Sin nombre» ni con el responsable automático', () => {
+    const fields = [
+      { key: 'vuelo', label: 'Vuelo', type: 'relation' as const, tracker: 'vuelos', required: true },
+      { key: 'tipo', label: 'Tipo', type: 'select' as const, options: ['Rampa'], required: false },
+      { key: 'responsable', label: 'Responsable', type: 'text' as const, default: 'viewer', required: false },
+    ];
+    const values = { vuelo: '{"id":"x","label":"AV-2041"}', tipo: 'Rampa', responsable: 'Ana' };
+    expect(rowLabel(fields, values)).toBe('AV-2041 · Rampa');
+    expect(rowLabel([fields[2] as (typeof fields)[number]], { responsable: 'Ana' })).toBe('Ana');
+    expect(rowLabel([fields[1] as (typeof fields)[number]], {})).toBe('Sin nombre');
+  });
+
   describe('los tipos longtext, checkbox y time', () => {
     const base = { key: 'campo', label: 'Campo', required: false };
 

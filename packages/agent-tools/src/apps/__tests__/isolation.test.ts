@@ -52,6 +52,13 @@ const SOFIA = 'u-sofia'; // supervisora de Postal
 const GERENTE = 'u-gerente'; // gerencia de Postal
 const CARLA = 'u-carla'; // operaria de Aduanas
 
+/**
+ * Las pantallas filtran por fechas RELATIVAS («hoy y ayer», «esta semana»), así
+ * que las filas de prueba tienen que ser de hoy: con una fecha fija el test se
+ * pudre solo el día que la fecha sale de la ventana (el supervisor veía 0).
+ */
+const HOY = new Date().toISOString().slice(0, 10);
+
 const guiaFields = CONTROL_EN_PLANTA.trackers[0]?.fields ?? [];
 
 function seed() {
@@ -79,7 +86,7 @@ function seed() {
     organization_id: org,
     tracker_id: trackerId,
     label: numero,
-    values: { numero_guia: numero, fecha: '2026-10-05', estado },
+    values: { numero_guia: numero, fecha: HOY, estado },
     created_by: by,
     created_at: '2026-10-05T10:00:00Z',
     updated_at: '2026-10-05T10:00:00Z',
@@ -437,7 +444,7 @@ function externalWorld() {
     organization_id: org,
     tracker_id: trk,
     label: numero,
-    values: { numero_guia: numero, fecha: '2026-10-05', estado: 'Por aprobar', ubicacion: zona },
+    values: { numero_guia: numero, fecha: HOY, estado: 'Por aprobar', ubicacion: zona },
     created_by: by.created_by ?? null,
     created_by_app_user: by.created_by_app_user ?? null,
     created_at: '2026-10-05T10:00:00Z',

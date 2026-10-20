@@ -1405,6 +1405,7 @@ export async function submitViewForm(
   // del formulario no se queda sola: se borra y el error le llega a la persona.
   let childIds: string[] = [];
   let childTrackerId: string | null = null;
+  let childRows: Array<{ id: string; label: string; values: Record<string, unknown> }> = [];
   if (block.lines && lines.length) {
     try {
       const made = await insertLineRows(db, {
@@ -1419,6 +1420,7 @@ export async function submitViewForm(
       });
       childIds = made.ids;
       childTrackerId = made.trackerId;
+      childRows = made.rows;
     } catch (err) {
       await db.from('tracker_rows').delete().eq('id', rowId).eq('tracker_id', tracker.id);
       throw err;
@@ -1485,6 +1487,34 @@ export async function submitViewForm(
     await emitAutomationEvent(db, { ...common, kind: 'form_submitted' });
   }
 
+  // Las filas hijas de las líneas también son filas nuevas: una regla que mire
+  // esa tabla («al crear un equipo usado, suma el costo en la atención») tiene
+  // que enterarse, igual que si se hubieran escrito una por una.
+  if (
+    block.lines &&
+    childTrackerId &&
+    childRows.length &&
+    (await watchesTracker(db, childTrackerId))
+  ) {
+    const actor = {
+      kind: byApp ? ('app_user' as const) : ('member' as const),
+      id: input.submittedBy,
+    };
+    for (const child of childRows)
+      await emitAutomationEvent(db, {
+        kind: 'row_created',
+        trackerId: childTrackerId,
+        trackerSlug: block.lines.tracker,
+        rowId: child.id,
+        after: child.values as Record<string, string | number>,
+        label: child.label,
+        version: new Date().toISOString(),
+        actor,
+        viewId: view.id,
+        blockId: block.id,
+      });
+  }
+
   return {
     rowId,
     message: block.successMessage,
@@ -1515,9 +1545,13 @@ async function insertLineRows(
     viewer?: string | null;
     restrictRelations: boolean;
   },
-): Promise<{ ids: string[]; trackerId: string }> {
+): Promise<{
+  ids: string[];
+  trackerId: string;
+  rows: Array<{ id: string; label: string; values: Record<string, unknown> }>;
+}> {
   const cfg = input.block.lines;
-  if (!cfg) return { ids: [], trackerId: '' };
+  if (!cfg) return { ids: [], trackerId: '', rows: [] };
   const child = await trackerForBlock(db, cfg.tracker);
   const itemField = child.fields.find((f) => f.key === cfg.item);
   const allowed = input.restrictRelations
@@ -1545,9 +1579,15 @@ async function insertLineRows(
   }
   const { data, error } = await db.from('tracker_rows').insert(rows).select('id');
   if (error) throw error;
+  const ids = ((data ?? []) as Array<{ id: string }>).map((r) => String(r.id));
   return {
-    ids: ((data ?? []) as Array<{ id: string }>).map((r) => String(r.id)),
+    ids,
     trackerId: child.id,
+    rows: ids.map((id, i) => ({
+      id,
+      label: String(rows[i]?.label ?? ''),
+      values: (rows[i]?.values ?? {}) as Record<string, unknown>,
+    })),
   };
 }
 

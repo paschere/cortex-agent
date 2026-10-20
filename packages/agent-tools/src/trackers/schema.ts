@@ -677,11 +677,37 @@ export function rowLabel(
 ): string {
   const named = explicit?.trim();
   if (named) return named.slice(0, 200);
+  // Un texto que se llena solo con quien escribe («Responsable») no distingue
+  // una fila de otra: se prefiere uno que la persona escriba; si no hay, el
+  // nombre de la fila relacionada (el vuelo de la atención) y su primer dato de
+  // opciones; y sólo al final ese texto automático.
+  const textual = (f: TrackerField) => f.type === 'text' && !f.formula;
+  const writtenByHand = (f: TrackerField) => textual(f) && f.default !== 'viewer';
   const preferred =
-    fields.find((f) => f.type === 'text' && f.required) ?? fields.find((f) => f.type === 'text');
-  if (preferred) {
-    const value = values[preferred.key];
-    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 200);
+    fields.find((f) => writtenByHand(f) && f.required) ?? fields.find(writtenByHand);
+  const textOf = (f: TrackerField | undefined) => {
+    const value = f ? values[f.key] : undefined;
+    return typeof value === 'string' && value.trim() ? value.trim().slice(0, 200) : null;
+  };
+  const byHand = textOf(preferred);
+  if (byHand) return byHand;
+  const parts: string[] = [];
+  for (const f of fields) {
+    if (f.type !== 'relation') continue;
+    const raw = values[f.key];
+    if (typeof raw !== 'string' || !raw.trim().startsWith('{')) continue;
+    try {
+      const label = (JSON.parse(raw) as { label?: unknown }).label;
+      if (typeof label === 'string' && label.trim()) parts.push(label.trim());
+    } catch {
+      /* una relación mal guardada no tumba el nombre de la fila */
+    }
+    if (parts.length >= 1) break;
   }
+  const choice = fields.find((f) => f.type === 'select' && !f.flow && textOf(f));
+  if (parts.length && choice) parts.push(textOf(choice) as string);
+  if (parts.length) return parts.join(' · ').slice(0, 200);
+  const auto = textOf(fields.find((f) => textual(f)));
+  if (auto) return auto;
   return 'Sin nombre';
 }

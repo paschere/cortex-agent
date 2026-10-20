@@ -67,9 +67,30 @@ export function currentAutomationOrigin(): AutomationOrigin | null {
  * Sin despertador, el barrido de cada minuto hace el trabajo.
  */
 type Waker = (runs: Array<{ id: string; organizationId: string }>) => Promise<void> | void;
-let waker: Waker | null = null;
+
+/**
+ * Los enganches viven en `globalThis` y no en una variable del módulo: Next
+ * compila `instrumentation.ts` aparte de las rutas, y cada una puede cargar SU
+ * copia de este módulo. Con una variable de módulo, el avisador que se
+ * registraba al arrancar nunca era el que veían las rutas (las filas nuevas
+ * no generaban avisos ni despertaban a las reglas). Visto en local, 2026-10-20.
+ */
+interface Hooks {
+  waker: Waker | null;
+  rowListener: RowChangeListener | null;
+}
+const HOOKS_KEY = Symbol.for('cortex.automation.hooks');
+function hooks(): Hooks {
+  const g = globalThis as unknown as Record<symbol, Hooks | undefined>;
+  let h = g[HOOKS_KEY];
+  if (!h) {
+    h = { waker: null, rowListener: null };
+    g[HOOKS_KEY] = h;
+  }
+  return h;
+}
 export function setAutomationWaker(fn: Waker | null): void {
-  waker = fn;
+  hooks().waker = fn;
 }
 
 /**
@@ -81,9 +102,8 @@ export interface RowChangeListener {
   watches(db: SupabaseClient, trackerId: string): Promise<boolean>;
   onEvent(db: SupabaseClient, event: AutomationEvent): Promise<void>;
 }
-let rowListener: RowChangeListener | null = null;
 export function setRowChangeListener(l: RowChangeListener | null): void {
-  rowListener = l;
+  hooks().rowListener = l;
 }
 
 const WATCH_TTL_MS = 10_000;
@@ -111,6 +131,7 @@ export async function watchesTracker(
       .limit(1);
     if (error) return false;
     let value = (data ?? []).length > 0;
+    const rowListener = hooks().rowListener;
     if (!value && rowListener) value = await rowListener.watches(db, trackerId).catch(() => false);
     watchCache.set(trackerId, { at: now, value });
     return value;
@@ -170,6 +191,7 @@ export async function emitAutomationEvent(db: SupabaseClient, input: EmitInput):
       depth: o?.depth ?? 0,
     };
     // Avisos automáticos de las apps (0230): no son reglas, miran toda fila creada o cambiada.
+    const rowListener = hooks().rowListener;
     if (rowListener && (event.kind === 'row_created' || event.kind === 'row_updated'))
       await rowListener.onEvent(db, event).catch(() => undefined);
 
@@ -247,6 +269,7 @@ export async function queueRuns(
     .select('id, organization_id');
   if (error) return 0;
   const created = (inserted ?? []) as Array<{ id: string; organization_id: string }>;
+  const waker = hooks().waker;
   if (created.length && waker) {
     try {
       await waker(created.map((r) => ({ id: r.id, organizationId: r.organization_id })));

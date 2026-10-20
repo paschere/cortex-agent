@@ -72,7 +72,7 @@ export async function openApp(
   ref: string,
   options: { as?: string | null; attributes?: Record<string, string> } = {},
 ): Promise<OpenedApp | null> {
-  const user = await getOptionalSession();
+  const user = await getOptionalSession({ canonicalRedirect: true });
   if (user) {
     const member = await openMemberApp(user, ref, options);
     if (member) return member;
