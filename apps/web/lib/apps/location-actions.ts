@@ -1,7 +1,6 @@
 'use server';
 
 import { openApp } from '@/lib/apps/access';
-import { notifyAssigned } from '@/lib/apps/assign-notify';
 import { buildAutomationDeps } from '@/lib/apps/automation-deps';
 import { createLimiter } from '@/lib/apps/rate-limit';
 import {
@@ -16,7 +15,6 @@ import {
   locationStatus,
   parsePersonRef,
   recordPosition,
-  resolveAssignee,
   revokeLocation,
   runAppAction,
   screenFor,
@@ -257,19 +255,9 @@ export async function assignTaskAction(
       priority: input.priority,
       location: input.location,
     });
-    const channel = await notifyAssigned(db, {
-      app: access.app,
-      person: done.person,
-      task: { rowId: done.rowId, label: done.label, due: input.due },
-      screen: done.screen,
-      by: access.user.name,
-    });
-    return {
-      ok: true,
-      message: `Tarea asignada a ${done.person.name}.${
-        channel === 'none' ? ' No tiene cómo recibir avisos: se la verá al abrir la app.' : ''
-      }`,
-    };
+    // El aviso («Se te asignó…») sale solo: al crearse la fila, los avisos automáticos de la
+    // app (apps/notices) ven el campo de la persona y le avisan por su canal.
+    return { ok: true, message: `Tarea asignada a ${done.person.name}.` };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo asignar la tarea.') };
   }
@@ -293,18 +281,8 @@ export async function assignRowAction(
     const view = await screenView(db, screen);
     const res = await runAppAction(db, access, view, { blockId, actionId, rowId, person });
     if (res.kind !== 'assign') throw new ValidationError('Ese botón no asigna.');
-    const who = await resolveAssignee(db, access, person);
-    const channel = await notifyAssigned(db, {
-      app: access.app,
-      person: who,
-      task: { rowId: res.rowId, label: res.label },
-      screen: res.screen,
-      by: access.user.name,
-    });
-    return {
-      ok: true,
-      message: `${res.message}${channel === 'none' ? ' No tiene cómo recibir avisos.' : ''}`,
-    };
+    // Igual que al crear: el cambio del campo de la persona dispara el aviso automático.
+    return { ok: true, message: res.message };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo asignar.') };
   }

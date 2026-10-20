@@ -92,6 +92,42 @@ interface Act {
   waitUnit: 'm' | 'h' | 'd';
   stillMode: 'rule' | 'always' | 'custom';
   stillConds: Cond[];
+  // --- Reporte por correo (a.title = título, a.subject, a.body = frase de contexto, a.emails, a.roles) ---
+  rSource: 'query' | 'screen';
+  rGroupBy: string;
+  rMetrics: Array<{ op: string; field: string; label: string }>;
+  rRangeOn: boolean;
+  rRangeField: string;
+  rRangePreset: string;
+  rSort: 'desc' | 'asc' | 'label';
+  rLimit: string;
+  rDetail: boolean;
+  rXlsx: boolean;
+  rPdf: boolean;
+  rMaxPerDay: string;
+  rSkipEmpty: boolean;
+  // --- Prefactura (a.body = observaciones, a.roles + a.admins = a quién se avisa) ---
+  iTaxId: string;
+  iName: string;
+  iVia: string;
+  iItems: Array<{
+    description: string;
+    productCode: string;
+    quantity: string;
+    unitPrice: string;
+    taxRate: string;
+  }>;
+  iCurrency: string;
+  iTrm: string;
+  iPayForm: 'contado' | 'credito';
+  iPayDays: string;
+  iDocType: string;
+  iSeller: string;
+  iPayType: string;
+  iWbNumber: string;
+  iWbField: string;
+  iWbPending: string;
+  iWbCreated: string;
 }
 
 interface Draft {
@@ -151,10 +187,41 @@ const ACTIONS: Array<{ type: string; label: string }> = [
   { type: 'update_related', label: 'Cambiar filas relacionadas (subir o bajar por una relación)' },
   { type: 'update_rows', label: 'Cambiar filas de otra tabla que cumplan un filtro' },
   { type: 'rollup', label: 'Acumular en la fila padre (suma, conteo, promedio…)' },
+  { type: 'report', label: 'Mandar un reporte por correo (tabla + Excel / PDF)' },
+  { type: 'accounting_draft_invoice', label: 'Preparar una prefactura para Siigo (por revisar)' },
   { type: 'wait', label: 'Esperar y volver a revisar la fila' },
 ];
 /** Acciones que necesitan una fila de partida. */
-const NEEDS_ROW = new Set(['set_field', 'update_related', 'rollup']);
+const NEEDS_ROW = new Set(['set_field', 'update_related', 'rollup', 'accounting_draft_invoice']);
+const REPORT_PRESETS: Array<{ id: string; label: string }> = [
+  { id: 'last_week', label: 'La semana pasada' },
+  { id: 'this_week', label: 'Esta semana' },
+  { id: 'last_month', label: 'El mes pasado' },
+  { id: 'this_month', label: 'El mes en curso' },
+  { id: 'yesterday', label: 'Ayer' },
+  { id: 'today', label: 'Hoy' },
+  { id: 'last_7_days', label: 'Los últimos 7 días' },
+  { id: 'last_30_days', label: 'Los últimos 30 días' },
+  { id: 'this_year', label: 'El año en curso' },
+];
+const TAX_RATE_OPTIONS = [
+  { id: 'iva_19', label: 'IVA 19 %' },
+  { id: 'iva_5', label: 'IVA 5 %' },
+  { id: 'iva_0', label: 'IVA 0 % (exento)' },
+  { id: 'excluido', label: 'Excluido' },
+];
+const emptyInvoiceItem = () => ({
+  description: '',
+  productCode: '',
+  quantity: '',
+  unitPrice: '',
+  taxRate: 'iva_19',
+});
+/** Un número, `{{campo}}` o fórmula: lo que sea número queda número. */
+const amountInput = (raw: string): string | number => {
+  const t = raw.trim();
+  return t !== '' && /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : t;
+};
 const ROLLUP_OPS = [
   { op: 'sum', label: 'La suma de…' },
   { op: 'count', label: 'El conteo de filas' },
@@ -198,7 +265,7 @@ const emptyAct = (type: string): Act => ({
   pairs: [{ key: '', value: '' }],
   members: [],
   roles: [],
-  admins: false,
+  admins: type === 'accounting_draft_invoice',
   title: '',
   body: '',
   toKind: 'role',
@@ -225,6 +292,34 @@ const emptyAct = (type: string): Act => ({
   waitUnit: 'm',
   stillMode: 'rule',
   stillConds: [],
+  rSource: 'query',
+  rGroupBy: '',
+  rMetrics: [{ op: 'sum', field: '', label: '' }],
+  rRangeOn: true,
+  rRangeField: 'created_at',
+  rRangePreset: 'last_week',
+  rSort: 'desc',
+  rLimit: '',
+  rDetail: false,
+  rXlsx: true,
+  rPdf: false,
+  rMaxPerDay: '',
+  rSkipEmpty: false,
+  iTaxId: '',
+  iName: '',
+  iVia: '',
+  iItems: [emptyInvoiceItem()],
+  iCurrency: 'COP',
+  iTrm: '',
+  iPayForm: 'contado',
+  iPayDays: '0',
+  iDocType: '',
+  iSeller: '',
+  iPayType: '',
+  iWbNumber: '',
+  iWbField: '',
+  iWbPending: '',
+  iWbCreated: '',
 });
 
 const emptyCond = (): Cond => ({
@@ -466,6 +561,82 @@ function toInput(d: Draft): unknown {
           ...(a.op !== 'count' && a.rollField ? { field: a.rollField } : {}),
           ...(a.where.length ? { where: a.where.map(condInput) } : {}),
         };
+      case 'report':
+        return {
+          type: a.type,
+          title: a.title,
+          source:
+            a.rSource === 'screen'
+              ? { kind: 'screen', screen: a.screen }
+              : {
+                  kind: 'query',
+                  tracker: a.tracker,
+                  ...(a.rGroupBy ? { groupBy: a.rGroupBy } : {}),
+                  metrics: a.rMetrics.map((m) => ({
+                    op: m.op,
+                    ...(m.op !== 'count' && m.field ? { field: m.field } : {}),
+                    ...(m.label.trim() ? { label: m.label.trim() } : {}),
+                  })),
+                  where: a.where.map(condInput),
+                  ...(a.rRangeOn && a.rRangeField
+                    ? { range: { field: a.rRangeField, preset: a.rRangePreset } }
+                    : {}),
+                  sort: a.rSort,
+                  ...(Number(a.rLimit) > 0 ? { limit: Number(a.rLimit) } : {}),
+                  detail: a.rDetail,
+                },
+          to: a.emails.split(/[\s,;]+/).filter(Boolean),
+          roles: a.roles,
+          formats: [...(a.rXlsx ? ['xlsx'] : []), ...(a.rPdf ? ['pdf'] : [])],
+          ...(a.subject.trim() ? { subject: a.subject.trim() } : {}),
+          ...(a.body.trim() ? { intro: a.body.trim() } : {}),
+          ...(Number(a.rMaxPerDay) > 0 ? { maxPerDay: Number(a.rMaxPerDay) } : {}),
+          ...(a.rSkipEmpty ? { skipIfEmpty: true } : {}),
+        };
+      case 'accounting_draft_invoice': {
+        const wbStatus =
+          a.iWbField && (a.iWbPending.trim() || a.iWbCreated.trim())
+            ? {
+                status: {
+                  field: a.iWbField,
+                  ...(a.iWbPending.trim() ? { pending: a.iWbPending.trim() } : {}),
+                  ...(a.iWbCreated.trim() ? { created: a.iWbCreated.trim() } : {}),
+                },
+              }
+            : {};
+        const writeBack = {
+          ...(a.iWbNumber ? { invoiceNumber: a.iWbNumber } : {}),
+          ...wbStatus,
+        };
+        return {
+          type: a.type,
+          customer: {
+            taxId: a.iTaxId,
+            ...(a.iName.trim() ? { name: a.iName.trim() } : {}),
+            ...(a.iVia ? { via: a.iVia } : {}),
+          },
+          items: a.iItems.map((it) => ({
+            description: it.description,
+            ...(it.productCode.trim() ? { productCode: it.productCode.trim() } : {}),
+            quantity: amountInput(it.quantity),
+            unitPrice: amountInput(it.unitPrice),
+            taxRate: it.taxRate,
+          })),
+          currency: (a.iCurrency || 'COP').toUpperCase(),
+          ...(a.iCurrency.toUpperCase() !== 'COP' && a.iTrm.trim()
+            ? { trm: amountInput(a.iTrm) }
+            : {}),
+          ...(a.body.trim() ? { observations: a.body.trim() } : {}),
+          paymentForm: a.iPayForm,
+          paymentDays: a.iPayForm === 'credito' ? Math.max(0, Math.round(Number(a.iPayDays) || 0)) : 0,
+          ...(a.iDocType.trim() ? { documentTypeId: a.iDocType.trim() } : {}),
+          ...(a.iSeller.trim() ? { sellerId: a.iSeller.trim() } : {}),
+          ...(a.iPayType.trim() ? { paymentTypeId: a.iPayType.trim() } : {}),
+          ...(Object.keys(writeBack).length ? { writeBack } : {}),
+          notifyAdmins: a.admins,
+          notifyRoles: a.roles,
+        };
+      }
       case 'wait':
         return {
           type: a.type,
@@ -582,6 +753,69 @@ function toDraft(v: AutomationView): Draft {
       x.target = String(a.target ?? '');
       x.op = String(a.op ?? 'sum');
       x.rollField = String(a.field ?? '');
+    }
+    if (a.type === 'report') {
+      const src = (a.source ?? {}) as Record<string, unknown>;
+      x.rSource = src.kind === 'screen' ? 'screen' : 'query';
+      x.screen = String(src.screen ?? '');
+      x.tracker = String(src.tracker ?? '');
+      x.rGroupBy = String(src.groupBy ?? '');
+      const metrics = Array.isArray(src.metrics) ? (src.metrics as Array<Record<string, unknown>>) : [];
+      if (metrics.length)
+        x.rMetrics = metrics.map((m) => ({
+          op: String(m.op ?? 'sum'),
+          field: String(m.field ?? ''),
+          label: String(m.label ?? ''),
+        }));
+      x.where = (Array.isArray(src.where) ? (src.where as Array<Record<string, unknown>>) : []).map(condDraft);
+      const range = src.range as { field?: string; preset?: string } | undefined;
+      x.rRangeOn = Boolean(range);
+      x.rRangeField = String(range?.field ?? 'created_at');
+      x.rRangePreset = String(range?.preset ?? 'last_week');
+      x.rSort = (src.sort as 'desc' | 'asc' | 'label' | undefined) ?? 'desc';
+      x.rLimit = src.limit === undefined ? '' : String(src.limit);
+      x.rDetail = src.detail === true;
+      x.emails = ((a.to as string[] | undefined) ?? []).join(', ');
+      const formats = (a.formats as string[] | undefined) ?? [];
+      x.rXlsx = formats.includes('xlsx');
+      x.rPdf = formats.includes('pdf');
+      x.body = String(a.intro ?? '');
+      x.rMaxPerDay = a.maxPerDay === undefined ? '' : String(a.maxPerDay);
+      x.rSkipEmpty = a.skipIfEmpty === true;
+    }
+    if (a.type === 'accounting_draft_invoice') {
+      const c = (a.customer ?? {}) as { taxId?: string; name?: string; via?: string };
+      x.iTaxId = String(c.taxId ?? '');
+      x.iName = String(c.name ?? '');
+      x.iVia = String(c.via ?? '');
+      const items = Array.isArray(a.items) ? (a.items as Array<Record<string, unknown>>) : [];
+      x.iItems = items.length
+        ? items.map((it) => ({
+            description: String(it.description ?? ''),
+            productCode: String(it.productCode ?? ''),
+            quantity: String(it.quantity ?? ''),
+            unitPrice: String(it.unitPrice ?? ''),
+            taxRate: String(it.taxRate ?? 'iva_19'),
+          }))
+        : [emptyInvoiceItem()];
+      x.iCurrency = String(a.currency ?? 'COP');
+      x.iTrm = a.trm === undefined ? '' : String(a.trm);
+      x.body = String(a.observations ?? '');
+      x.iPayForm = a.paymentForm === 'credito' ? 'credito' : 'contado';
+      x.iPayDays = String(a.paymentDays ?? 0);
+      x.iDocType = String(a.documentTypeId ?? '');
+      x.iSeller = String(a.sellerId ?? '');
+      x.iPayType = String(a.paymentTypeId ?? '');
+      const wb = (a.writeBack ?? {}) as {
+        invoiceNumber?: string;
+        status?: { field?: string; pending?: string; created?: string };
+      };
+      x.iWbNumber = String(wb.invoiceNumber ?? '');
+      x.iWbField = String(wb.status?.field ?? '');
+      x.iWbPending = String(wb.status?.pending ?? '');
+      x.iWbCreated = String(wb.status?.created ?? '');
+      x.roles = (a.notifyRoles as string[] | undefined) ?? [];
+      x.admins = a.notifyAdmins !== false;
     }
     if (a.type === 'wait') {
       const m = Number(a.minutes ?? 30);
@@ -2183,6 +2417,433 @@ function ActionFields({
             Se recalcula siempre desde todas las hijas, así que correrla dos veces da lo mismo. Para
             que el total siga todos los cambios, crea la misma regla para «Se crea», «Cambia» y «Se
             borra» una fila.
+          </p>
+        </div>
+      );
+    }
+    case 'report': {
+      const tFields = a.tracker ? fieldsOf(a.tracker) : [];
+      const dateFields = tFields.filter((f) => f.type === 'date');
+      const metricFields = numericOf(tFields);
+      const setMetric = (i: number, p: Partial<Act['rMetrics'][number]>) =>
+        set({ rMetrics: a.rMetrics.map((m, j) => (j === i ? { ...m, ...p } : m)) });
+      return (
+        <div className="space-y-3">
+          {text(a.title, (v) => set({ title: v }), 'Título del reporte (p. ej. Costo de equipos por proveedor)')}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+            El reporte sale de
+            <select
+              value={a.rSource}
+              onChange={(e) => set({ rSource: e.target.value as 'query' | 'screen' })}
+              className={INPUT}
+            >
+              <option value="query">una consulta sobre una tabla (suma, conteo…)</option>
+              <option value="screen">una pantalla de la app, tal cual</option>
+            </select>
+          </div>
+          {a.rSource === 'screen' ? (
+            <select
+              value={a.screen}
+              onChange={(e) => set({ screen: e.target.value })}
+              className={clsx(INPUT, 'w-full')}
+            >
+              <option value="">Elige la pantalla…</option>
+              {data.screens.map((sc) => (
+                <option key={sc.slug} value={sc.slug}>
+                  {sc.title}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="space-y-2">
+              <select
+                value={a.tracker}
+                onChange={(e) =>
+                  set({ tracker: e.target.value, rGroupBy: '', where: [], rMetrics: [{ op: 'sum', field: '', label: '' }] })
+                }
+                className={clsx(INPUT, 'w-full')}
+              >
+                <option value="">¿De qué tabla?</option>
+                {everyTracker.map((x) => (
+                  <option key={x.slug} value={x.slug}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+              {a.tracker && (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+                    Agrupar por
+                    <select
+                      value={a.rGroupBy}
+                      onChange={(e) => set({ rGroupBy: e.target.value })}
+                      className={INPUT}
+                    >
+                      <option value="">(sin agrupar: un solo total)</option>
+                      {tFields.map((f) => (
+                        <option key={f.key} value={f.key}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                    ordenado por
+                    <select
+                      value={a.rSort}
+                      onChange={(e) => set({ rSort: e.target.value as 'desc' | 'asc' | 'label' })}
+                      className={INPUT}
+                    >
+                      <option value="desc">la primera cifra, de mayor a menor</option>
+                      <option value="asc">la primera cifra, de menor a mayor</option>
+                      <option value="label">orden alfabético</option>
+                    </select>
+                  </div>
+                  <p className="text-micro text-ink-muted">Cifras (hasta 4):</p>
+                  {a.rMetrics.map((m, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: filas de formulario sin id propio
+                    <div key={i} className="flex flex-wrap items-center gap-2">
+                      <select value={m.op} onChange={(e) => setMetric(i, { op: e.target.value })} className={INPUT}>
+                        {ROLLUP_OPS.map((o) => (
+                          <option key={o.op} value={o.op}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      {m.op !== 'count' && (
+                        <select value={m.field} onChange={(e) => setMetric(i, { field: e.target.value })} className={INPUT}>
+                          <option value="">Campo de número o dinero…</option>
+                          {metricFields.map((f) => (
+                            <option key={f.key} value={f.key}>
+                              {f.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <input
+                        value={m.label}
+                        onChange={(e) => setMetric(i, { label: e.target.value })}
+                        placeholder="Título de la columna (opcional)"
+                        className={clsx(INPUT, 'w-56')}
+                      />
+                      <button
+                        type="button"
+                        className={BTN_DANGER}
+                        aria-label="Quitar cifra"
+                        disabled={a.rMetrics.length === 1}
+                        onClick={() => set({ rMetrics: a.rMetrics.filter((_, j) => j !== i) })}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                    </div>
+                  ))}
+                  {a.rMetrics.length < 4 && (
+                    <button
+                      type="button"
+                      className={BTN_SECONDARY}
+                      onClick={() => set({ rMetrics: [...a.rMetrics, { op: 'count', field: '', label: '' }] })}
+                    >
+                      + Otra cifra
+                    </button>
+                  )}
+                  <label className="flex flex-wrap items-center gap-2 text-xs text-ink">
+                    <input
+                      type="checkbox"
+                      checked={a.rRangeOn}
+                      onChange={(e) => set({ rRangeOn: e.target.checked })}
+                    />
+                    Sólo filas cuya fecha cae en
+                    <select
+                      value={a.rRangePreset}
+                      onChange={(e) => set({ rRangePreset: e.target.value })}
+                      className={INPUT}
+                      disabled={!a.rRangeOn}
+                    >
+                      {REPORT_PRESETS.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                    según
+                    <select
+                      value={a.rRangeField}
+                      onChange={(e) => set({ rRangeField: e.target.value })}
+                      className={INPUT}
+                      disabled={!a.rRangeOn}
+                    >
+                      <option value="created_at">la fecha en que se creó la fila</option>
+                      <option value="updated_at">la fecha en que se cambió por última vez</option>
+                      {dateFields.map((f) => (
+                        <option key={f.key} value={f.key}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="text-micro text-ink-muted">Sólo filas que cumplan (opcional):</p>
+                  <CondEditor conds={a.where} onChange={(next) => set({ where: next })} fields={tFields} />
+                  <label className="flex items-center gap-2 text-xs text-ink">
+                    <input type="checkbox" checked={a.rDetail} onChange={(e) => set({ rDetail: e.target.checked })} />
+                    Agregar una hoja de detalle con las filas que lo componen (en los adjuntos)
+                  </label>
+                </>
+              )}
+            </div>
+          )}
+          <div className="space-y-2 border-t border-border/60 pt-2">
+            <p className="text-micro font-semibold text-ink">¿A quién se le manda?</p>
+            {text(a.emails, (v) => set({ emails: v }), 'Correos, separados por coma (opcional)')}
+            <div className="flex flex-wrap gap-3">
+              {data.roles.map((r) => (
+                <label key={r.key} className="flex items-center gap-1.5 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    checked={a.roles.includes(r.key)}
+                    onChange={() => set({ roles: toggle(a.roles, r.key) })}
+                  />
+                  Rol {r.name}
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-xs text-ink">
+              <span>Adjuntar:</span>
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={a.rXlsx} onChange={(e) => set({ rXlsx: e.target.checked })} />
+                Excel
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={a.rPdf} onChange={(e) => set({ rPdf: e.target.checked })} />
+                PDF
+              </label>
+              <span className="text-ink-muted">(la tabla siempre va en el cuerpo del correo)</span>
+            </div>
+            {text(a.subject, (v) => set({ subject: v }), 'Asunto (opcional; por defecto el título y el período)')}
+            {text(a.body, (v) => set({ body: v }), 'Una frase de contexto sobre la tabla (opcional)', 2)}
+            <div className="flex flex-wrap items-center gap-3 text-xs text-ink">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={a.rSkipEmpty} onChange={(e) => set({ rSkipEmpty: e.target.checked })} />
+                No mandar si no hubo movimiento
+              </label>
+              <label className="flex items-center gap-2">
+                Tope por día si no es un horario
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={a.rMaxPerDay}
+                  placeholder="3"
+                  onChange={(e) => set({ rMaxPerDay: e.target.value })}
+                  className={clsx(INPUT, 'w-16')}
+                />
+              </label>
+            </div>
+            <p className="text-micro text-ink-muted">
+              Ej.: «cada lunes a las 7, a Gerencia, el costo de equipos por proveedor de la semana
+              pasada» = disparador «A una hora» semanal + esta acción con la tabla de equipos,
+              agrupada por proveedor, suma del costo, rango «La semana pasada». Cada envío queda en
+              el historial de la regla con su rango, sus filas y sus destinatarios.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    case 'accounting_draft_invoice': {
+      const setItem = (i: number, p: Partial<Act['iItems'][number]>) =>
+        set({ iItems: a.iItems.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+      const rel = relationFields.find((f) => f.key === a.iVia);
+      const customerFields = rel?.tracker ? fieldsOf(rel.tracker) : fields;
+      return (
+        <div className="space-y-3">
+          <div className="rounded-card bg-amber-soft px-3 py-2 text-micro text-amber">
+            Esto NO emite nada: arma la prefactura y la deja en «Prefacturas por revisar». Sólo
+            cuando una persona la aprueba se crea en Siigo.
+          </div>
+          <p className="text-micro font-semibold text-ink">Cliente</p>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+            El cliente está en
+            <select value={a.iVia} onChange={(e) => set({ iVia: e.target.value })} className={INPUT}>
+              <option value="">esta misma fila</option>
+              {relationFields.map((f) => (
+                <option key={f.key} value={f.key}>
+                  la fila a la que apunta «{f.label}»
+                </option>
+              ))}
+            </select>
+          </div>
+          {text(a.iTaxId, (v) => set({ iTaxId: v }), 'NIT del cliente: {{nit}} (un campo) o un valor fijo')}
+          {text(a.iName, (v) => set({ iName: v }), 'Nombre del cliente (opcional): {{cliente}}')}
+          <p className="text-micro text-ink-muted">
+            Campos disponibles:{' '}
+            {customerFields
+              .slice(0, 12)
+              .map((f) => `{{${f.key}}}`)
+              .join(' ')}
+          </p>
+          <p className="text-micro font-semibold text-ink">Ítems (hasta 10)</p>
+          {a.iItems.map((it, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: filas de formulario sin id propio
+            <div key={i} className="space-y-2 rounded-card border border-border/70 p-2">
+              <div className="flex items-center gap-2">
+                <input
+                  value={it.description}
+                  onChange={(e) => setItem(i, { description: e.target.value })}
+                  placeholder="Descripción: Atención a {{aerolinea}} · {{vuelo}}"
+                  className={clsx(INPUT, 'flex-1')}
+                />
+                <button
+                  type="button"
+                  className={BTN_DANGER}
+                  aria-label="Quitar ítem"
+                  disabled={a.iItems.length === 1}
+                  onClick={() => set({ iItems: a.iItems.filter((_, j) => j !== i) })}
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  value={it.productCode}
+                  onChange={(e) => setItem(i, { productCode: e.target.value })}
+                  placeholder="Código en Siigo (p. ej. SERV-001)"
+                  className={clsx(INPUT, 'w-48')}
+                />
+                <input
+                  value={it.quantity}
+                  onChange={(e) => setItem(i, { quantity: e.target.value })}
+                  placeholder="Cantidad: {{kilos}} o =..."
+                  className={clsx(INPUT, 'w-44')}
+                />
+                <input
+                  value={it.unitPrice}
+                  onChange={(e) => setItem(i, { unitPrice: e.target.value })}
+                  placeholder="Precio unitario: 0,80"
+                  className={clsx(INPUT, 'w-44')}
+                />
+                <select value={it.taxRate} onChange={(e) => setItem(i, { taxRate: e.target.value })} className={INPUT}>
+                  {TAX_RATE_OPTIONS.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
+          {a.iItems.length < 10 && (
+            <button
+              type="button"
+              className={BTN_SECONDARY}
+              onClick={() => set({ iItems: [...a.iItems, emptyInvoiceItem()] })}
+            >
+              + Otro ítem
+            </button>
+          )}
+          <p className="text-micro text-ink-muted">
+            Cantidad y precio aceptan un número, un campo ({'{{kilos}}'}) o una fórmula que empieza
+            por = (por ejemplo {'={{kilos}} * 0,80'}; sólo + − × ÷ y paréntesis). Un ítem con
+            cantidad cero se deja fuera.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+            Los precios están en
+            <input
+              value={a.iCurrency}
+              onChange={(e) => set({ iCurrency: e.target.value.toUpperCase().slice(0, 3) })}
+              className={clsx(INPUT, 'w-20')}
+              placeholder="COP"
+            />
+            {a.iCurrency.toUpperCase() !== 'COP' && (
+              <>
+                con TRM
+                <input
+                  value={a.iTrm}
+                  onChange={(e) => set({ iTrm: e.target.value })}
+                  placeholder="4100 o {{trm}}"
+                  className={clsx(INPUT, 'w-36')}
+                />
+                (pesos por cada {a.iCurrency || 'unidad'}; la prefactura queda en pesos)
+              </>
+            )}
+          </div>
+          {text(a.body, (v) => set({ body: v }), 'Observaciones de la factura (opcional): Vuelo {{vuelo}} del {{fecha}}', 2)}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+            Pago
+            <select
+              value={a.iPayForm}
+              onChange={(e) => set({ iPayForm: e.target.value as 'contado' | 'credito' })}
+              className={INPUT}
+            >
+              <option value="contado">de contado</option>
+              <option value="credito">a crédito</option>
+            </select>
+            {a.iPayForm === 'credito' && (
+              <>
+                a
+                <input
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={a.iPayDays}
+                  onChange={(e) => set({ iPayDays: e.target.value })}
+                  className={clsx(INPUT, 'w-20')}
+                />
+                días
+              </>
+            )}
+          </div>
+          <details className="text-xs text-ink">
+            <summary className="cursor-pointer text-ink-muted">Opciones de Siigo y de la fila (opcional)</summary>
+            <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <input value={a.iDocType} onChange={(e) => set({ iDocType: e.target.value })} placeholder="Id del tipo de documento (FV)" className={clsx(INPUT, 'w-56')} />
+                <input value={a.iSeller} onChange={(e) => set({ iSeller: e.target.value })} placeholder="Id del vendedor" className={clsx(INPUT, 'w-40')} />
+                <input value={a.iPayType} onChange={(e) => set({ iPayType: e.target.value })} placeholder="Id de la forma de pago" className={clsx(INPUT, 'w-48')} />
+              </div>
+              <p className="text-micro text-ink-muted">
+                Vacíos = se usan los que Siigo tenga activos. Al aprobar, la persona elige si la
+                factura además se envía a la DIAN o queda creada en Siigo sin enviar.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                Al crearla en Siigo, escribir el número de factura en
+                <select value={a.iWbNumber} onChange={(e) => set({ iWbNumber: e.target.value })} className={INPUT}>
+                  <option value="">(no escribirlo)</option>
+                  {fields
+                    .filter((f) => f.type === 'text' || f.type === 'long_text')
+                    .map((f) => (
+                      <option key={f.key} value={f.key}>
+                        {f.label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                Y marcar el estado en
+                <select value={a.iWbField} onChange={(e) => set({ iWbField: e.target.value })} className={INPUT}>
+                  <option value="">(no marcarlo)</option>
+                  {fields.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+                <input value={a.iWbPending} onChange={(e) => set({ iWbPending: e.target.value })} placeholder="al armar: Por facturar" className={clsx(INPUT, 'w-48')} />
+                <input value={a.iWbCreated} onChange={(e) => set({ iWbCreated: e.target.value })} placeholder="al crear: Facturada" className={clsx(INPUT, 'w-44')} />
+              </div>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={a.admins} onChange={(e) => set({ admins: e.target.checked })} />
+                Avisar a los administradores de la empresa
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {data.roles.map((r) => (
+                  <label key={r.key} className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={a.roles.includes(r.key)} onChange={() => set({ roles: toggle(a.roles, r.key) })} />
+                    Avisar al rol {r.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </details>
+          <p className="text-micro text-ink-muted">
+            Una fila genera UNA sola prefactura por esta regla, aunque la regla corra de nuevo.
+            Se revisan en «Prefacturas por revisar» (menú Comercial).
           </p>
         </div>
       );

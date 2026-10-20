@@ -592,9 +592,15 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // de otra empresa nunca puede dispararse ni recibir un aviso aquí.
   custom_app_automations: tenant(),
   custom_app_automation_runs: tenant(),
+  // 0230: prefacturas por revisar que arma una automatización (sólo al aprobarlas se crean en Siigo).
+  app_invoice_drafts: tenant(),
   // 0214: automatizaciones que esperan a una persona (código, captcha, sesión vencida).
   custom_app_automation_waits: tenant(),
   push_subscriptions: tenant(),
+  // 0231: avisos automáticos de las apps (bandeja por persona, preferencias y qué recibe cada rol).
+  custom_app_notices: tenant(),
+  custom_app_notice_prefs: tenant(),
+  custom_app_notice_config: tenant(),
   // 0211: dispositivos compartidos de planta (modo kiosco). Tenant: un dispositivo
   // ajeno dejaría entrar con un PIN a una app que no es de esta empresa.
   custom_app_devices: tenant(),

@@ -45,6 +45,8 @@ export {
   forgetAutomationWatch,
   queueRuns,
   setAutomationWaker,
+  setRowChangeListener,
+  type RowChangeListener,
   watchesTracker,
   withAutomationOrigin,
 } from './emit';
@@ -69,3 +71,57 @@ export {
   appsAutomationsUpdate,
   describeAutomation,
 } from './tools';
+export {
+  type ReportColumn as AutomationReportColumn,
+  type ReportResult as AutomationReportResult,
+  type ReportTable as AutomationReportTable,
+  describeReportSource,
+  formatCell as formatReportCell,
+  reportQueryProblems,
+  runReportQuery,
+} from './report';
+export {
+  RANGE_PRESETS,
+  RANGE_PRESET_LABEL,
+  type DayRange,
+  type RangePreset,
+  resolveRange,
+} from './report-range';
+export {
+  REPORT_FORMATS,
+  REPORT_MAX_RECIPIENTS,
+  reportSourceSchema,
+} from './report-spec';
+export { renderReportEmail } from './report-email';
+export { buildReportXlsx, renderReportPdf, reportFilename } from './report-files';
+export { buildReport as buildAutomationReport, runReportAction } from './report-run';
+export {
+  type DraftBuild,
+  type DraftLine as InvoiceDraftLine,
+  type InvoiceDraftData,
+  buildInvoiceDraft,
+  evalAmount,
+  evalArithmetic,
+  invoiceDraftKey,
+  parseLooseNumber,
+} from './invoice-draft';
+export {
+  INVOICE_DRAFT_STATUS_LABEL,
+  type InvoiceDraftEdit,
+  type InvoiceDraftRow,
+  type InvoiceDraftStatus,
+  approveInvoiceDraft,
+  discardInvoiceDraft,
+  draftProblems,
+  draftsForRow,
+  getInvoiceDraft,
+  invoiceDraftEditSchema,
+  listInvoiceDrafts,
+  updateInvoiceDraft,
+} from './invoice-drafts';
+export {
+  accountingInvoiceDraftApprove,
+  accountingInvoiceDraftDiscard,
+  accountingInvoiceDraftsList,
+} from './invoice-draft-tools';
+export { appsReportPreview } from './report-tools';

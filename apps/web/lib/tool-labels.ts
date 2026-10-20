@@ -501,6 +501,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   apps_get: { label: 'Abrir una aplicación', icon: 'LayoutGrid' },
   apps_update: { label: 'Cambiar una aplicación', icon: 'LayoutGrid' },
   apps_publish: { label: 'Publicar una aplicación', icon: 'LayoutGrid' },
+  apps_notices: { label: 'Ajustar los avisos automáticos de la aplicación', icon: 'Bell' },
   apps_geofences: { label: 'Definir lugares con radio y avisos', icon: 'MapPin' },
   apps_usage: { label: 'Ver el uso de la aplicación', icon: 'BarChart3' },
   apps_versions: { label: 'Ver y comparar versiones de la aplicación', icon: 'History' },
@@ -514,6 +515,10 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   apps_automations_update: { label: 'Cambiar una automatización', icon: 'Zap' },
   apps_automations_pause: { label: 'Pausar o reanudar una automatización', icon: 'Zap' },
   apps_automations_test: { label: 'Probar una automatización con una fila real', icon: 'Zap' },
+  apps_report_preview: { label: 'Ver cómo saldría un reporte por correo', icon: 'FileSpreadsheet' },
+  accounting_invoice_drafts_list: { label: 'Ver las prefacturas por revisar', icon: 'Receipt' },
+  accounting_invoice_draft_approve: { label: 'Aprobar una prefactura y crearla en Siigo', icon: 'Receipt' },
+  accounting_invoice_draft_discard: { label: 'Descartar una prefactura', icon: 'Trash2' },
   views_list: { label: 'Ver las vistas', icon: 'LayoutPanelTop' },
   views_get: { label: 'Abrir una vista', icon: 'LayoutPanelTop' },
   views_create: { label: 'Crear una vista', icon: 'LayoutPanelTop' },
@@ -715,6 +720,10 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       return `Crear una cotización para «${input.client}» con ${Array.isArray(input.lines) ? input.lines.length : 0} línea(s)`;
     case 'sales_quote_send':
       return `Mandar la cotización ${input.quote} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'al correo del cliente'}`;
+    case 'accounting_invoice_draft_approve':
+      return `Aprobar la prefactura y crear la factura en Siigo${input.sendToDian === true ? ' — se envía a la DIAN' : ' — queda en Siigo sin enviar a la DIAN'}`;
+    case 'accounting_invoice_draft_discard':
+      return 'Descartar la prefactura: no se crea nada en Siigo';
     case 'sales_invoice_emit':
       return `Emitir la factura electrónica de ${input.document} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : 'el programa contable'} — sale con su CUFE a la DIAN`;
     case 'crm_create_opportunity':

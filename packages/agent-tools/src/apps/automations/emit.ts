@@ -72,6 +72,20 @@ export function setAutomationWaker(fn: Waker | null): void {
   waker = fn;
 }
 
+/**
+ * Quien quiere ver CADA fila creada o cambiada aunque ninguna regla la mire:
+ * los avisos automáticos de las apps (apps/notices, 0230). Lo registra la app
+ * web; sin él, todo funciona como antes.
+ */
+export interface RowChangeListener {
+  watches(db: SupabaseClient, trackerId: string): Promise<boolean>;
+  onEvent(db: SupabaseClient, event: AutomationEvent): Promise<void>;
+}
+let rowListener: RowChangeListener | null = null;
+export function setRowChangeListener(l: RowChangeListener | null): void {
+  rowListener = l;
+}
+
 const WATCH_TTL_MS = 10_000;
 const watchCache = new Map<string, { at: number; value: boolean }>();
 
@@ -96,7 +110,8 @@ export async function watchesTracker(
       .eq('tracker_id', trackerId)
       .limit(1);
     if (error) return false;
-    const value = (data ?? []).length > 0;
+    let value = (data ?? []).length > 0;
+    if (!value && rowListener) value = await rowListener.watches(db, trackerId).catch(() => false);
     watchCache.set(trackerId, { at: now, value });
     return value;
   } catch {
@@ -151,6 +166,10 @@ export async function emitAutomationEvent(db: SupabaseClient, input: EmitInput):
       chain: o?.chain ?? [],
       depth: o?.depth ?? 0,
     };
+    // Avisos automáticos de las apps (0230): no son reglas, miran toda fila creada o cambiada.
+    if (rowListener && (event.kind === 'row_created' || event.kind === 'row_updated'))
+      await rowListener.onEvent(db, event).catch(() => undefined);
+
     // Más profundo que el tope: ni se consulta.
     if (event.depth >= AUTOMATION_MAX_DEPTH) return 0;
 

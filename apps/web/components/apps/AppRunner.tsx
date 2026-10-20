@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { type AppButton, AppButtons, PushToggle } from './AppAutomationBar';
 import { AppCaptureLayer } from './AppCaptureLayer';
+import { AppNoticesProvider, NoticeBadge, NoticesBell } from './AppNotices';
 import { Glyph } from './AppGlyph';
 import { AppHome } from './AppHome';
 import { AppNavProvider } from './AppNav';
@@ -247,6 +248,8 @@ export function AppRunner({
     portal?.computedAt ??
     new Date().toISOString();
   const [sheet, setSheet] = useState(false);
+  // Avisos automáticos (0231): sólo con quien usa la app de verdad, no en vista previa ni «Ver como…».
+  const noticesOn = !readOnly && !preview && !embedBase;
   // Captura sin señal (cola, copia de pantallas, marca de agua): sólo con quien escribe de verdad.
   const captureWho =
     readOnly || preview
@@ -286,6 +289,7 @@ export function AppRunner({
 
   const accountActions = (
     <div className="flex flex-col items-start gap-3">
+      {noticesOn && <NoticesBell variant="row" />}
       {!readOnly && !preview && <LocationMenu />}
       {session && <InstallButton />}
       {session?.external && (
@@ -303,389 +307,408 @@ export function AppRunner({
   return (
     <LocationProvider appId={app.id} initial={readOnly ? null : location}>
       <AppToastProvider>
-        <AppNavProvider base={base} suffix={como}>
-          {!embedBase && <AppThemeScope />}
-          <div
-            className="app-frame"
-            style={look ? { fontFamily: look.font } : undefined}
-            onClickCapture={
-              preview
-                ? (e) => {
-                    const a = (e.target as HTMLElement).closest('a[href]');
-                    const href = a?.getAttribute('href') ?? '';
-                    if (!a || !href.startsWith(`${base}/`)) return;
-                    e.preventDefault();
-                    preview.onSelect(href.slice(base.length + 1).split(/[?#]/)[0] ?? '');
-                  }
-                : undefined
-            }
-          >
-            <BrandScope className="md:flex md:gap-6">
-              <aside className="view-no-print hidden w-60 shrink-0 md:block">
-                <div className="sticky top-4 flex flex-col gap-4">
-                  <div className="app-hero flex items-center gap-3 rounded-card border border-border p-4 shadow-card">
-                    <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-11 w-11" />
-                    <div className="min-w-0 leading-tight">
-                      <p className="truncate text-base font-extrabold tracking-tight text-ink">
-                        {app.name}
-                      </p>
-                      <p className="mt-0.5 truncate text-micro font-semibold text-ink-muted">
-                        {role.name}
-                        {session?.external ? ` · ${session.name}` : ''}
-                      </p>
+        <AppNoticesProvider
+          appId={app.id}
+          base={base}
+          suffix={como}
+          current={current}
+          enabled={noticesOn}
+        >
+          <AppNavProvider base={base} suffix={como}>
+            {!embedBase && <AppThemeScope />}
+            <div
+              className="app-frame"
+              style={look ? { fontFamily: look.font } : undefined}
+              onClickCapture={
+                preview
+                  ? (e) => {
+                      const a = (e.target as HTMLElement).closest('a[href]');
+                      const href = a?.getAttribute('href') ?? '';
+                      if (!a || !href.startsWith(`${base}/`)) return;
+                      e.preventDefault();
+                      preview.onSelect(href.slice(base.length + 1).split(/[?#]/)[0] ?? '');
+                    }
+                  : undefined
+              }
+            >
+              <BrandScope className="md:flex md:gap-6">
+                <aside className="view-no-print hidden w-60 shrink-0 md:block">
+                  <div className="sticky top-4 flex flex-col gap-4">
+                    <div className="app-hero flex items-center gap-3 rounded-card border border-border p-4 shadow-card">
+                      <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-11 w-11" />
+                      <div className="min-w-0 leading-tight">
+                        <p className="truncate text-base font-extrabold tracking-tight text-ink">
+                          {app.name}
+                        </p>
+                        <p className="mt-0.5 truncate text-micro font-semibold text-ink-muted">
+                          {role.name}
+                          {session?.external ? ` · ${session.name}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <nav
+                      aria-label={`Pantallas de ${app.name}`}
+                      className="flex flex-col gap-1 rounded-card border border-border bg-surface p-1.5 shadow-card"
+                    >
+                      {screens.map((s) => {
+                        const active = s.slug === current;
+                        return (
+                          <Link
+                            key={s.slug}
+                            href={hrefFor(s.slug)}
+                            aria-current={active ? 'page' : undefined}
+                            className={clsx(
+                              'app-press relative flex min-h-11 items-center gap-3 rounded-sm px-3 text-sm font-semibold',
+                              active
+                                ? 'bg-primary-soft text-primary-ink'
+                                : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                            )}
+                          >
+                            {active && (
+                              <span
+                                aria-hidden
+                                className="absolute inset-y-2.5 left-0 w-1 rounded-r-pill bg-primary"
+                              />
+                            )}
+                            <Glyph name={s.icon} className="h-5 w-5 shrink-0" />
+                            <span className="min-w-0 flex-1 truncate">{s.title}</span>
+                            <NoticeBadge slugs={[s.slug]} />
+                          </Link>
+                        );
+                      })}
+                    </nav>
+                    <div className="flex flex-col items-start gap-3 px-1">
+                      {accountActions}
+                      {standalone && <AppThemeToggle className="w-full" />}
+                      {canManage && (
+                        <Link
+                          href={editHref}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar la app
+                        </Link>
+                      )}
                     </div>
                   </div>
+                </aside>
+
+                <main className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+                  {standalone && (
+                    <header
+                      className="app-header-bar view-no-print sticky top-0 z-30 -mx-4 mb-4 bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl sm:-mx-6"
+                      style={{ transform: hidden ? 'translateY(-100%)' : 'translateY(0)' }}
+                    >
+                      <span aria-hidden className="view-brand-stripe block h-[3px]" />
+                      <div className="flex min-h-14 items-center gap-3 border-b border-border px-4 sm:px-6">
+                        <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-9 w-9" />
+                        <div className="min-w-0 flex-1 leading-tight">
+                          <p className="truncate text-micro font-semibold text-ink-muted">
+                            {app.name}
+                          </p>
+                          <p className="truncate text-base font-extrabold tracking-tight text-ink">
+                            {title}
+                          </p>
+                        </div>
+                        {noticesOn && <NoticesBell variant="icon" />}
+                        <button
+                          type="button"
+                          onClick={() => setSheet(true)}
+                          aria-label="Abrir el menú de la app"
+                          className="app-press -mr-1.5 grid h-11 w-11 place-items-center rounded-pill"
+                        >
+                          <Avatar name={session?.name || role.name} className="h-9 w-9 text-xs" />
+                        </button>
+                      </div>
+                    </header>
+                  )}
+                  {session?.kiosk && (
+                    <KioskIdleGuard appId={session.appId} idleMinutes={session.kiosk.idleMinutes} />
+                  )}
+                  {session && (
+                    <AppWorker
+                      appId={session.appId}
+                      userKey={session.userKey}
+                      homeSlug={session.homeSlug ?? null}
+                    />
+                  )}
+                  {readOnly && !preview && viewAs && (
+                    <ViewAsBanner
+                      roleKey={role.key}
+                      roleName={role.name}
+                      view={viewAs}
+                      basePath={base}
+                      current={current}
+                      attributes={previewAttributes}
+                      editHref={editHref}
+                    />
+                  )}
+                  {readOnly && !preview && !viewAs && (
+                    <output className="view-no-print mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-amber/40 bg-amber-soft px-4 py-3 text-sm font-semibold text-ink">
+                      <span>Viendo como {role.name}. Nada se guarda.</span>
+                      <Link
+                        href={editHref}
+                        className="text-xs font-semibold text-primary hover:underline"
+                      >
+                        Volver al editor
+                      </Link>
+                    </output>
+                  )}
+                  {/* Una pantalla distinta es otro lienzo: sin estado de la anterior, y entra suave. */}
+                  <AppCaptureLayer
+                    appKey={appKey}
+                    appName={app.name}
+                    external={Boolean(session?.external)}
+                    who={captureWho}
+                    base={base}
+                    current={current}
+                    computedAt={computedAt}
+                    canExport={canExport}
+                  >
+                    <div key={`${app.slug}:${current}:${role.key}`} className="app-screen">
+                      {!readOnly && !preview && buttons.length > 0 && (
+                        <div className="view-no-print mb-3 flex flex-col items-start gap-2">
+                          <AppButtons appId={app.id} screen={current} buttons={buttons} />
+                        </div>
+                      )}
+                      {!readOnly && !preview && !home && !tablero && !portal && (
+                        <PushToggle appId={app.id} />
+                      )}
+                      {preview && screenContent ? (
+                        screenContent
+                      ) : home ? (
+                        <AppHome
+                          home={home}
+                          base={base}
+                          como={como}
+                          appName={app.name}
+                          roleName={role.name}
+                        />
+                      ) : tablero ? (
+                        <TableroView tablero={tablero} />
+                      ) : portal ? (
+                        <PortalHome portal={portal} />
+                      ) : (
+                        computed &&
+                        target && (
+                          <>
+                            {emptyHints.length > 0 && (
+                              <ul className="view-no-print mb-3 space-y-2">
+                                {emptyHints.map((h) => (
+                                  <li
+                                    key={h.blockId}
+                                    className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-border-strong bg-surface px-4 py-3"
+                                  >
+                                    <span className="flex min-w-0 items-center gap-2 text-sm text-ink-muted">
+                                      <Info
+                                        className="h-4 w-4 shrink-0 text-ink-faint"
+                                        aria-hidden
+                                      />
+                                      <span>
+                                        Aún no hay registros en{' '}
+                                        <span className="font-semibold text-ink">{h.title}</span>.
+                                        {!h.screen &&
+                                          !readOnly &&
+                                          ' Registra el primero con el formulario.'}
+                                      </span>
+                                    </span>
+                                    {h.screen && !readOnly && (
+                                      <Link
+                                        href={hrefFor(h.screen)}
+                                        className="app-press inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-primary-soft px-4 text-xs font-semibold text-primary-ink hover:bg-primary-soft/70"
+                                      >
+                                        <Plus className="h-3.5 w-3.5" aria-hidden />
+                                        {h.screenTitle
+                                          ? `Registrar en ${h.screenTitle}`
+                                          : 'Registrar'}
+                                      </Link>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            <LiveViewCanvas
+                              initial={computed}
+                              target={target}
+                              dataUrl={dataUrl ?? null}
+                              heading={{ title }}
+                              showBrand={false}
+                              canExport={canExport}
+                              readOnly={readOnly && !viewAs?.sampled}
+                              onView={
+                                captureWho
+                                  ? (view) =>
+                                      void rememberScreen(
+                                        { appKey, userKey: captureWho.key, screen: current, title },
+                                        view,
+                                      )
+                                  : undefined
+                              }
+                            />
+                          </>
+                        )
+                      )}
+                    </div>
+                  </AppCaptureLayer>
+                </main>
+
+                {standalone && <PullToRefresh onRefresh={refresh} />}
+
+                {screens.length > 1 && (
                   <nav
                     aria-label={`Pantallas de ${app.name}`}
-                    className="flex flex-col gap-1 rounded-card border border-border bg-surface p-1.5 shadow-card"
+                    className="app-tabbar view-no-print fixed inset-x-0 bottom-0 z-40 flex rounded-t-[1.25rem] bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-1 backdrop-blur-xl md:hidden"
                   >
-                    {screens.map((s) => {
+                    {tabs.map((s) => {
                       const active = s.slug === current;
                       return (
                         <Link
                           key={s.slug}
                           href={hrefFor(s.slug)}
                           aria-current={active ? 'page' : undefined}
-                          className={clsx(
-                            'app-press relative flex min-h-11 items-center gap-3 rounded-sm px-3 text-sm font-semibold',
-                            active
-                              ? 'bg-primary-soft text-primary-ink'
-                              : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-                          )}
+                          className="app-press flex min-h-[3.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-micro font-semibold"
                         >
-                          {active && (
-                            <span
-                              aria-hidden
-                              className="absolute inset-y-2.5 left-0 w-1 rounded-r-pill bg-primary"
-                            />
-                          )}
-                          <Glyph name={s.icon} className="h-5 w-5 shrink-0" />
-                          <span className="truncate">{s.title}</span>
+                          <span
+                            className={clsx(
+                              'relative grid h-8 w-14 place-items-center rounded-pill transition-colors duration-200 motion-reduce:transition-none',
+                              active
+                                ? 'app-pill-in bg-primary-soft text-primary-ink'
+                                : 'text-ink-faint',
+                            )}
+                          >
+                            <Glyph name={s.icon} className="h-[1.375rem] w-[1.375rem] text-xl" />
+                            <NoticeBadge slugs={[s.slug]} className="absolute -right-0.5 -top-1" />
+                          </span>
+                          <span
+                            className={clsx(
+                              'max-w-full truncate',
+                              active ? 'font-bold text-ink' : 'text-ink-faint',
+                            )}
+                          >
+                            {s.title}
+                          </span>
                         </Link>
                       );
                     })}
-                  </nav>
-                  <div className="flex flex-col items-start gap-3 px-1">
-                    {accountActions}
-                    {standalone && <AppThemeToggle className="w-full" />}
-                    {canManage && (
-                      <Link
-                        href={editHref}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
-                      >
-                        <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar la app
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </aside>
-
-              <main className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
-                {standalone && (
-                  <header
-                    className="app-header-bar view-no-print sticky top-0 z-30 -mx-4 mb-4 bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl sm:-mx-6"
-                    style={{ transform: hidden ? 'translateY(-100%)' : 'translateY(0)' }}
-                  >
-                    <span aria-hidden className="view-brand-stripe block h-[3px]" />
-                    <div className="flex min-h-14 items-center gap-3 border-b border-border px-4 sm:px-6">
-                      <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-9 w-9" />
-                      <div className="min-w-0 flex-1 leading-tight">
-                        <p className="truncate text-micro font-semibold text-ink-muted">
-                          {app.name}
-                        </p>
-                        <p className="truncate text-base font-extrabold tracking-tight text-ink">
-                          {title}
-                        </p>
-                      </div>
+                    {more.length > 0 && (
                       <button
                         type="button"
                         onClick={() => setSheet(true)}
-                        aria-label="Abrir el menú de la app"
-                        className="app-press -mr-1.5 grid h-11 w-11 place-items-center rounded-pill"
-                      >
-                        <Avatar name={session?.name || role.name} className="h-9 w-9 text-xs" />
-                      </button>
-                    </div>
-                  </header>
-                )}
-                {session?.kiosk && (
-                  <KioskIdleGuard appId={session.appId} idleMinutes={session.kiosk.idleMinutes} />
-                )}
-                {session && (
-                  <AppWorker
-                    appId={session.appId}
-                    userKey={session.userKey}
-                    homeSlug={session.homeSlug ?? null}
-                  />
-                )}
-                {readOnly && !preview && viewAs && (
-                  <ViewAsBanner
-                    roleKey={role.key}
-                    roleName={role.name}
-                    view={viewAs}
-                    basePath={base}
-                    current={current}
-                    attributes={previewAttributes}
-                    editHref={editHref}
-                  />
-                )}
-                {readOnly && !preview && !viewAs && (
-                  <output className="view-no-print mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-amber/40 bg-amber-soft px-4 py-3 text-sm font-semibold text-ink">
-                    <span>Viendo como {role.name}. Nada se guarda.</span>
-                    <Link
-                      href={editHref}
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      Volver al editor
-                    </Link>
-                  </output>
-                )}
-                {/* Una pantalla distinta es otro lienzo: sin estado de la anterior, y entra suave. */}
-                <AppCaptureLayer
-                  appKey={appKey}
-                  appName={app.name}
-                  external={Boolean(session?.external)}
-                  who={captureWho}
-                  base={base}
-                  current={current}
-                  computedAt={computedAt}
-                  canExport={canExport}
-                >
-                  <div key={`${app.slug}:${current}:${role.key}`} className="app-screen">
-                    {!readOnly && !preview && buttons.length > 0 && (
-                      <div className="view-no-print mb-3 flex flex-col items-start gap-2">
-                        <AppButtons appId={app.id} screen={current} buttons={buttons} />
-                      </div>
-                    )}
-                    {!readOnly && !preview && !home && !tablero && !portal && (
-                      <PushToggle appId={app.id} />
-                    )}
-                    {preview && screenContent ? (
-                      screenContent
-                    ) : home ? (
-                      <AppHome
-                        home={home}
-                        base={base}
-                        como={como}
-                        appName={app.name}
-                        roleName={role.name}
-                      />
-                    ) : tablero ? (
-                      <TableroView tablero={tablero} />
-                    ) : portal ? (
-                      <PortalHome portal={portal} />
-                    ) : (
-                      computed &&
-                      target && (
-                        <>
-                          {emptyHints.length > 0 && (
-                            <ul className="view-no-print mb-3 space-y-2">
-                              {emptyHints.map((h) => (
-                                <li
-                                  key={h.blockId}
-                                  className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-border-strong bg-surface px-4 py-3"
-                                >
-                                  <span className="flex min-w-0 items-center gap-2 text-sm text-ink-muted">
-                                    <Info className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
-                                    <span>
-                                      Aún no hay registros en{' '}
-                                      <span className="font-semibold text-ink">{h.title}</span>.
-                                      {!h.screen &&
-                                        !readOnly &&
-                                        ' Registra el primero con el formulario.'}
-                                    </span>
-                                  </span>
-                                  {h.screen && !readOnly && (
-                                    <Link
-                                      href={hrefFor(h.screen)}
-                                      className="app-press inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-primary-soft px-4 text-xs font-semibold text-primary-ink hover:bg-primary-soft/70"
-                                    >
-                                      <Plus className="h-3.5 w-3.5" aria-hidden />
-                                      {h.screenTitle
-                                        ? `Registrar en ${h.screenTitle}`
-                                        : 'Registrar'}
-                                    </Link>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <LiveViewCanvas
-                            initial={computed}
-                            target={target}
-                            dataUrl={dataUrl ?? null}
-                            heading={{ title }}
-                            showBrand={false}
-                            canExport={canExport}
-                            readOnly={readOnly && !viewAs?.sampled}
-                            onView={
-                              captureWho
-                                ? (view) =>
-                                    void rememberScreen(
-                                      { appKey, userKey: captureWho.key, screen: current, title },
-                                      view,
-                                    )
-                                : undefined
-                            }
-                          />
-                        </>
-                      )
-                    )}
-                  </div>
-                </AppCaptureLayer>
-              </main>
-
-              {standalone && <PullToRefresh onRefresh={refresh} />}
-
-              {screens.length > 1 && (
-                <nav
-                  aria-label={`Pantallas de ${app.name}`}
-                  className="app-tabbar view-no-print fixed inset-x-0 bottom-0 z-40 flex rounded-t-[1.25rem] bg-surface/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-1 backdrop-blur-xl md:hidden"
-                >
-                  {tabs.map((s) => {
-                    const active = s.slug === current;
-                    return (
-                      <Link
-                        key={s.slug}
-                        href={hrefFor(s.slug)}
-                        aria-current={active ? 'page' : undefined}
+                        aria-label="Más pantallas y cuenta"
                         className="app-press flex min-h-[3.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-micro font-semibold"
                       >
                         <span
                           className={clsx(
-                            'grid h-8 w-14 place-items-center rounded-pill transition-colors duration-200 motion-reduce:transition-none',
-                            active
+                            'relative grid h-8 w-14 place-items-center rounded-pill transition-colors duration-200 motion-reduce:transition-none',
+                            moreActive
                               ? 'app-pill-in bg-primary-soft text-primary-ink'
                               : 'text-ink-faint',
                           )}
                         >
-                          <Glyph name={s.icon} className="h-[1.375rem] w-[1.375rem] text-xl" />
+                          <Ellipsis className="h-[1.375rem] w-[1.375rem]" aria-hidden />
+                          <NoticeBadge
+                            slugs={more.map((m) => m.slug)}
+                            className="absolute -right-0.5 -top-1"
+                          />
                         </span>
-                        <span
-                          className={clsx(
-                            'max-w-full truncate',
-                            active ? 'font-bold text-ink' : 'text-ink-faint',
-                          )}
-                        >
-                          {s.title}
+                        <span className={moreActive ? 'font-bold text-ink' : 'text-ink-faint'}>
+                          Más
                         </span>
-                      </Link>
-                    );
-                  })}
-                  {more.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setSheet(true)}
-                      aria-label="Más pantallas y cuenta"
-                      className="app-press flex min-h-[3.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-micro font-semibold"
-                    >
-                      <span
-                        className={clsx(
-                          'grid h-8 w-14 place-items-center rounded-pill transition-colors duration-200 motion-reduce:transition-none',
-                          moreActive
-                            ? 'app-pill-in bg-primary-soft text-primary-ink'
-                            : 'text-ink-faint',
-                        )}
-                      >
-                        <Ellipsis className="h-[1.375rem] w-[1.375rem]" aria-hidden />
-                      </span>
-                      <span className={moreActive ? 'font-bold text-ink' : 'text-ink-faint'}>
-                        Más
-                      </span>
-                    </button>
-                  )}
-                </nav>
-              )}
+                      </button>
+                    )}
+                  </nav>
+                )}
 
-              <Dialog.Root open={sheet} onOpenChange={setSheet}>
-                <Dialog.Portal>
-                  <BrandScope>
-                    <Dialog.Overlay className="app-overlay fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] md:hidden" />
-                    <Dialog.Content
-                      aria-describedby={undefined}
-                      className="app-sheet fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] overflow-y-auto rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-2 shadow-pop md:hidden"
-                    >
-                      <div
-                        aria-hidden
-                        className="mx-auto mb-3 h-1.5 w-10 rounded-pill bg-border-strong"
-                      />
-                      <div className="mb-4 flex items-center gap-3">
-                        <Avatar name={session?.name || role.name} className="h-11 w-11 text-sm" />
-                        <div className="min-w-0 flex-1 leading-tight">
-                          <Dialog.Title className="truncate text-base font-extrabold tracking-tight text-ink">
-                            {session?.external ? session.name : app.name}
-                          </Dialog.Title>
-                          <p className="mt-0.5 truncate text-xs text-ink-muted">
-                            {role.name}
-                            {session?.external ? ` · ${app.name}` : ''}
-                          </p>
+                <Dialog.Root open={sheet} onOpenChange={setSheet}>
+                  <Dialog.Portal>
+                    <BrandScope>
+                      <Dialog.Overlay className="app-overlay fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] md:hidden" />
+                      <Dialog.Content
+                        aria-describedby={undefined}
+                        className="app-sheet fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] overflow-y-auto rounded-t-[1.75rem] bg-surface px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-2 shadow-pop md:hidden"
+                      >
+                        <div
+                          aria-hidden
+                          className="mx-auto mb-3 h-1.5 w-10 rounded-pill bg-border-strong"
+                        />
+                        <div className="mb-4 flex items-center gap-3">
+                          <Avatar name={session?.name || role.name} className="h-11 w-11 text-sm" />
+                          <div className="min-w-0 flex-1 leading-tight">
+                            <Dialog.Title className="truncate text-base font-extrabold tracking-tight text-ink">
+                              {session?.external ? session.name : app.name}
+                            </Dialog.Title>
+                            <p className="mt-0.5 truncate text-xs text-ink-muted">
+                              {role.name}
+                              {session?.external ? ` · ${app.name}` : ''}
+                            </p>
+                          </div>
+                          <Dialog.Close
+                            aria-label="Cerrar"
+                            className="app-press -mr-1.5 grid h-11 w-11 place-items-center rounded-pill bg-surface-2 text-ink-muted"
+                          >
+                            <X className="h-5 w-5" aria-hidden />
+                          </Dialog.Close>
                         </div>
-                        <Dialog.Close
-                          aria-label="Cerrar"
-                          className="app-press -mr-1.5 grid h-11 w-11 place-items-center rounded-pill bg-surface-2 text-ink-muted"
-                        >
-                          <X className="h-5 w-5" aria-hidden />
-                        </Dialog.Close>
-                      </div>
-                      {more.length > 0 && (
-                        <nav aria-label="Más pantallas" className="mb-4 grid grid-cols-2 gap-2">
-                          {more.map((s) => {
-                            const active = s.slug === current;
-                            return (
-                              <Link
-                                key={s.slug}
-                                href={hrefFor(s.slug)}
-                                onClick={() => setSheet(false)}
-                                aria-current={active ? 'page' : undefined}
-                                className={clsx(
-                                  'app-press flex min-h-14 items-center gap-3 rounded-card border px-3 text-sm font-semibold',
-                                  active
-                                    ? 'border-primary/40 bg-primary-soft text-primary-ink'
-                                    : 'border-border bg-surface text-ink',
-                                )}
-                              >
-                                <span
+                        {more.length > 0 && (
+                          <nav aria-label="Más pantallas" className="mb-4 grid grid-cols-2 gap-2">
+                            {more.map((s) => {
+                              const active = s.slug === current;
+                              return (
+                                <Link
+                                  key={s.slug}
+                                  href={hrefFor(s.slug)}
+                                  onClick={() => setSheet(false)}
+                                  aria-current={active ? 'page' : undefined}
                                   className={clsx(
-                                    'grid h-9 w-9 shrink-0 place-items-center rounded-sm',
+                                    'app-press flex min-h-14 items-center gap-3 rounded-card border px-3 text-sm font-semibold',
                                     active
-                                      ? 'bg-surface text-primary'
-                                      : 'bg-surface-2 text-ink-muted',
+                                      ? 'border-primary/40 bg-primary-soft text-primary-ink'
+                                      : 'border-border bg-surface text-ink',
                                   )}
                                 >
-                                  <Glyph name={s.icon} className="h-5 w-5 text-lg" />
-                                </span>
-                                <span className="min-w-0 truncate">{s.title}</span>
-                              </Link>
-                            );
-                          })}
-                        </nav>
-                      )}
-                      <div className="space-y-4 rounded-card bg-surface-2/70 p-4">
-                        {accountActions}
-                        <AppThemeToggle />
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-3 px-1">
-                        {canManage ? (
-                          <Link
-                            href={editHref}
-                            className="app-press inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink"
-                          >
-                            <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar la app
-                          </Link>
-                        ) : (
-                          <span />
+                                  <span
+                                    className={clsx(
+                                      'grid h-9 w-9 shrink-0 place-items-center rounded-sm',
+                                      active
+                                        ? 'bg-surface text-primary'
+                                        : 'bg-surface-2 text-ink-muted',
+                                    )}
+                                  >
+                                    <Glyph name={s.icon} className="h-5 w-5 text-lg" />
+                                  </span>
+                                  <span className="min-w-0 flex-1 truncate">{s.title}</span>
+                                  <NoticeBadge slugs={[s.slug]} />
+                                </Link>
+                              );
+                            })}
+                          </nav>
                         )}
-                        {standalone && (
-                          <p className="text-micro text-ink-faint">Hecho con Cortex</p>
-                        )}
-                      </div>
-                    </Dialog.Content>
-                  </BrandScope>
-                </Dialog.Portal>
-              </Dialog.Root>
-            </BrandScope>
-          </div>
-        </AppNavProvider>
+                        <div className="space-y-4 rounded-card bg-surface-2/70 p-4">
+                          {accountActions}
+                          <AppThemeToggle />
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-3 px-1">
+                          {canManage ? (
+                            <Link
+                              href={editHref}
+                              className="app-press inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink"
+                            >
+                              <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar la app
+                            </Link>
+                          ) : (
+                            <span />
+                          )}
+                          {standalone && (
+                            <p className="text-micro text-ink-faint">Hecho con Cortex</p>
+                          )}
+                        </div>
+                      </Dialog.Content>
+                    </BrandScope>
+                  </Dialog.Portal>
+                </Dialog.Root>
+              </BrandScope>
+            </div>
+          </AppNavProvider>
+        </AppNoticesProvider>
       </AppToastProvider>
     </LocationProvider>
   );

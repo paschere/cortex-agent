@@ -178,6 +178,36 @@ export interface AppEditorData {
   draft?: EditorDraft;
   /** Uso de los últimos 30 días (0225); null si no se pudo leer. */
   usage?: UsageStats | null;
+  /** Avisos automáticos por rol (0231). */
+  notices?: EditorNotices;
+}
+
+export interface EditorNoticeRole {
+  roleKey: string;
+  roleName: string;
+  new: boolean;
+  assigned: boolean;
+  approval: boolean;
+  changed: boolean;
+  /** «Nuevos» limitados a estas tablas (slug); null = todas las que usa. */
+  only: string[] | null;
+  /** Lo guardado se aparta del valor por defecto. */
+  custom: boolean;
+  /** De qué tablas depende este rol (por qué recibiría avisos). */
+  depends: Array<{
+    tracker: string;
+    screens: string[];
+    approves: boolean;
+    sees: 'all' | 'attr' | 'self' | 'own';
+  }>;
+}
+
+export interface EditorNotices {
+  roles: EditorNoticeRole[];
+  /** Lo guardado tal cual ({ roles: { supervisor: { new: true } } }). */
+  config: { roles: Record<string, Record<string, unknown>> };
+  /** El servidor tiene llaves VAPID: el push del teléfono puede estar encendido. */
+  pushOn: boolean;
 }
 
 export interface EditorDraft {

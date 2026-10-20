@@ -21,6 +21,8 @@ export async function sendEmail(opts: {
    * alternative alongside `text`; every client picks exactly one.
    */
   html?: string;
+  /** Adjuntos en base64 (Resend: `content`). Un reporte lleva su Excel y su PDF. */
+  attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>;
 }): Promise<{ sent: boolean; reason?: string }> {
   const to = (Array.isArray(opts.to) ? opts.to : [opts.to])
     .map((addr) => addr.trim())
@@ -46,6 +48,15 @@ export async function sendEmail(opts: {
       subject: opts.subject,
       text: opts.text,
       ...(opts.html ? { html: opts.html } : {}),
+      ...(opts.attachments?.length
+        ? {
+            attachments: opts.attachments.map((x) => ({
+              filename: x.filename,
+              content: x.contentBase64,
+              ...(x.contentType ? { content_type: x.contentType } : {}),
+            })),
+          }
+        : {}),
     }),
   });
   if (!res.ok) {

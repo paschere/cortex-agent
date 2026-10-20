@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { filterSchema, thenSchema } from '../../views/spec';
 import { roleKeySchema } from '../permissions';
+import { invoiceBodySchema } from './invoice-draft-spec';
+import { REPORT_MAX_RECIPIENTS, reportBodySchema } from './report-spec';
 
 /**
  * LA FORMA DE UNA AUTOMATIZACIÓN (migración 0210): Cuando / Si / Entonces.
@@ -307,6 +309,26 @@ export const automationActionSchema = z.discriminatedUnion('type', [
     /** Sólo cuentan las hijas que cumplan estos filtros. */
     where: z.array(filterSchema).max(4).optional(),
   }),
+  /**
+   * REPORTE QUE SALE SOLO: arma una tabla (consulta agregada sobre una tabla de
+   * la app o una pantalla) y la manda por correo a direcciones y/o roles, con la
+   * tabla en el cuerpo y Excel y/o PDF adjuntos. Ver report-spec.ts.
+   */
+  z.object({
+    type: z.literal('report'),
+    ...branch,
+    ...reportBodySchema,
+  }),
+  /**
+   * PREFACTURA A SIIGO: arma la prefactura de la fila (cliente por NIT, ítems,
+   * observaciones) y la deja POR REVISAR en Cortex; sólo al aprobarla una persona
+   * se crea en Siigo. Ver invoice-draft-spec.ts.
+   */
+  z.object({
+    type: z.literal('accounting_draft_invoice'),
+    ...branch,
+    ...invoiceBodySchema,
+  }),
   z.object({
     type: z.literal('wait'),
     ...branch,
@@ -334,6 +356,8 @@ export const ACTION_LABEL: Record<ActionType, string> = {
   update_related: 'Cambiar filas relacionadas (subir o bajar por una relación)',
   update_rows: 'Cambiar filas de otra tabla por filtro',
   rollup: 'Acumular en la fila padre (suma, conteo, promedio…)',
+  report: 'Mandar un reporte por correo (tabla + Excel / PDF)',
+  accounting_draft_invoice: 'Preparar una prefactura para Siigo (por revisar)',
   wait: 'Esperar y volver a revisar',
 };
 
@@ -416,6 +440,16 @@ export function structuralProblems(input: AutomationInput): string[] {
       out.push('«Escribir en la fila» necesita una fila; con un horario o un botón no hay fila.');
     if (a.type === 'webhook' && !a.url.toLowerCase().startsWith('https://'))
       out.push('El webhook sólo acepta direcciones https.');
+    if (a.type === 'report' && !a.to.length && !a.roles.length)
+      out.push('El reporte necesita al menos una dirección o un rol.');
+    if (a.type === 'report' && a.to.length + a.roles.length > REPORT_MAX_RECIPIENTS)
+      out.push(`Un reporte admite hasta ${REPORT_MAX_RECIPIENTS} destinatarios entre direcciones y roles.`);
+    if (a.type === 'accounting_draft_invoice' && rowless)
+      out.push('«Preparar una prefactura» parte de una fila (un cierre, una atención…); con un horario o un botón no hay fila.');
+    if (a.type === 'accounting_draft_invoice' && a.currency !== 'COP' && a.trm === undefined)
+      out.push(`Los precios están en ${a.currency}: falta la TRM (\`trm\`) para pasarlos a pesos.`);
+    if (a.type === 'accounting_draft_invoice' && a.customer.via && rowless)
+      out.push('«Cliente de la fila relacionada» necesita una fila de partida.');
   }
   if (input.trigger.type === 'row_deleted') {
     if (input.actions.some((a) => a.type === 'set_field'))

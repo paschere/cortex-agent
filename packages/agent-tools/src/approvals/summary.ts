@@ -362,6 +362,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   apps_get: 'Abrir una aplicación',
   apps_update: 'Cambiar una aplicación',
   apps_publish: 'Publicar una aplicación',
+  apps_notices: 'Ajustar los avisos automáticos de la aplicación',
   apps_geofences: 'Definir lugares con radio y avisos',
   apps_usage: 'Ver el uso de la aplicación',
   apps_versions: 'Ver y comparar versiones de la aplicación',
@@ -375,6 +376,10 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   apps_automations_update: 'Cambiar una automatización',
   apps_automations_pause: 'Pausar o reanudar una automatización',
   apps_automations_test: 'Probar una automatización con una fila real',
+  apps_report_preview: 'Ver cómo saldría un reporte por correo',
+  accounting_invoice_drafts_list: 'Ver las prefacturas por revisar',
+  accounting_invoice_draft_approve: 'Aprobar una prefactura y crearla en Siigo',
+  accounting_invoice_draft_discard: 'Descartar una prefactura',
   views_list: 'Ver las vistas',
   views_get: 'Abrir una vista',
   views_create: 'Crear una vista',
@@ -527,6 +532,10 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       return `Crear una cotización para «${input.client}» con ${Array.isArray(input.lines) ? input.lines.length : 0} línea(s)`;
     case 'sales_quote_send':
       return `Mandar la cotización ${input.quote} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'al correo del cliente'}`;
+    case 'accounting_invoice_draft_approve':
+      return `Aprobar la prefactura y crear la factura en Siigo${input.sendToDian === true ? ' — se envía a la DIAN' : ' — queda en Siigo sin enviar a la DIAN'}`;
+    case 'accounting_invoice_draft_discard':
+      return 'Descartar la prefactura: no se crea nada en Siigo';
     case 'sales_invoice_emit':
       return `Emitir la factura electrónica de ${input.document} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : 'el programa contable'} — sale con su CUFE a la DIAN`;
     case 'crm_create_opportunity':

@@ -1,7 +1,15 @@
 import { wakeAutomationRuns } from '@/lib/apps/automation-wake';
+import { buildNoticeDelivery } from '@/lib/apps/notice-delivery';
 import { browserDocumentSink } from '@/lib/browser-download';
 import { readWaitingIndex } from '@/lib/waiting';
-import { setAutomationWaker, setDocumentSink, setWaitingReader } from '@cortex/agent-tools';
+import {
+  rowNoticeListener,
+  setAutomationWaker,
+  setDocumentSink,
+  setNoticeDelivery,
+  setRowChangeListener,
+  setWaitingReader,
+} from '@cortex/agent-tools';
 import * as Sentry from '@sentry/nextjs';
 
 /**
@@ -35,6 +43,15 @@ setWaitingReader(readWaitingIndex);
  * barrido de cada minuto hace el mismo trabajo.
  */
 setAutomationWaker(wakeAutomationRuns);
+
+/**
+ * Avisos automáticos de las apps (0231): cada fila creada o cambiada llega a
+ * `emit.ts`, y de ahí aquí; el paquete calcula quién depende de esa tabla y la
+ * app web presta el push, el correo y la campana. Sin esto la bandeja sigue
+ * funcionando pero nada suena.
+ */
+setRowChangeListener(rowNoticeListener);
+setNoticeDelivery(buildNoticeDelivery());
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({

@@ -167,6 +167,8 @@ const BUILDERS: Record<string, Builder> = {
   views_restore: ({ input }) => plain(`Restauré la vista ${quoted(input.view)}`.trim(), 'view'),
   views_share: ({ input }) => plain(`Compartí la vista ${quoted(input.view)}`.trim(), 'view'),
   views_delete: ({ input }) => plain(`Borré la vista ${quoted(input.view)}`.trim(), 'view'),
+  apps_notices: ({ input }) =>
+    plain(`Ajusté los avisos automáticos de la aplicación ${quoted(input.app)}`.trim(), 'view'),
   apps_restore_version: ({ input }) =>
     plain(
       `Devolví la aplicación ${quoted(input.app)} a la versión ${typeof input.version === 'number' ? input.version : ''}${input.publish ? ' y la publiqué' : ''}`.trim(),
@@ -191,6 +193,9 @@ const BUILDERS: Record<string, Builder> = {
       'money',
     );
   },
+  accounting_invoice_draft_approve: () =>
+    plain('Aprobé una prefactura y la creé en Siigo', 'money'),
+  accounting_invoice_draft_discard: () => plain('Descarté una prefactura', 'money'),
   sales_invoice_emit: ({ input }) =>
     plain(`Emití la factura electrónica de ${str(input.document, 40) ?? 'un documento'}`, 'money'),
   sales_quote_create: ({ input }) =>

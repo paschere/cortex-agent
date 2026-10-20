@@ -11,6 +11,9 @@ import './brand-tool';
 import './draft';
 import './inspect';
 import './automations/tools';
+import './automations/report-tools';
+import './automations/invoice-draft-tools';
+import './notices/tools';
 
 export {
   appsAssignMembers,
@@ -36,6 +39,7 @@ export * from './templates';
 export * from './install';
 export * from './external';
 export * from './automations';
+export * from './notices';
 export * from './kiosk';
 export * from './portal';
 export * from './tablero';

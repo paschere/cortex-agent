@@ -4,6 +4,7 @@ import { type TrackerRow, getTrackerBySlug } from '../../trackers/store';
 import { isReadOnlySource } from '../../views/spec';
 import { listRoles, listScreens } from '../store';
 import { forgetAutomationWatch } from './emit';
+import { reportQueryProblems } from './report';
 import { isChanged } from './engine';
 import {
   type AutomationAction,
@@ -285,9 +286,32 @@ export async function validateAutomation(
       problems.push(`El rol «${a.to.role}» no existe en esta app.`);
     if (a.type === 'notify_app_user' && a.screen && !screenSlugs.has(a.screen))
       problems.push(`La pantalla «${a.screen}» del aviso no es de esta app.`);
-    if ((a.type === 'email' || a.type === 'notify_member') && 'roles' in a)
+    if ((a.type === 'email' || a.type === 'notify_member' || a.type === 'report') && 'roles' in a)
       for (const r of a.roles)
         if (!roleKeys.has(r)) problems.push(`El rol «${r}» no existe en esta app.`);
+    if (a.type === 'report') {
+      if (a.source.kind === 'screen') {
+        if (!screenSlugs.has(a.source.screen))
+          problems.push(`La pantalla «${a.source.screen}» del reporte no es de esta app.`);
+      } else if (isReadOnlySource(a.source.tracker))
+        problems.push('El reporte agrega filas de una tabla propia; para una fuente de la plataforma usa «una pantalla».');
+      else {
+        const source = await getTrackerBySlug(db, a.source.tracker);
+        if (!source) problems.push(`La tabla «${a.source.tracker}» del reporte no existe.`);
+        else problems.push(...reportQueryProblems(a.source, source));
+      }
+    }
+    if (a.type === 'accounting_draft_invoice') {
+      for (const r of a.notifyRoles)
+        if (!roleKeys.has(r)) problems.push(`El rol «${r}» no existe en esta app.`);
+      if (triggerTracker_) {
+        const byKey = new Map(triggerTracker_.fields.map((f) => [f.key, f]));
+        if (a.customer.via && byKey.get(a.customer.via)?.type !== 'relation')
+          problems.push(`«${a.customer.via}» no es un campo de relación de «${slug}»: de ahí se saca el cliente.`);
+        for (const k of [a.writeBack?.invoiceNumber, a.writeBack?.status?.field])
+          if (k && !byKey.has(k)) problems.push(`«${k}» no es un campo de «${slug}» (donde se escribe el número o el estado).`);
+      }
+    }
   }
 
   if (triggerTracker_)

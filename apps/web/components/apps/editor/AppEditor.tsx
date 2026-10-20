@@ -16,6 +16,7 @@ import { HistoryTab } from './HistoryTab';
 import { HomeTab } from './HomeTab';
 import { IconPicker } from './IconPicker';
 import { MembersTab } from './MembersTab';
+import { NoticesTab } from './NoticesTab';
 import { PortalTab } from './PortalTab';
 import { PreviewTab } from './PreviewTab';
 import { PublishBar } from './PublishBar';
@@ -55,6 +56,7 @@ type Tab =
   | 'look'
   | 'home'
   | 'roles'
+  | 'notices'
   | 'flows'
   | 'members'
   | 'users'
@@ -69,6 +71,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'home', label: 'Inicio' },
   { id: 'look', label: 'Apariencia' },
   { id: 'roles', label: 'Roles y permisos' },
+  { id: 'notices', label: 'Avisos' },
   { id: 'flows', label: 'Flujos' },
   { id: 'members', label: 'Miembros' },
   { id: 'users', label: 'Usuarios' },
@@ -373,6 +376,7 @@ export function AppEditor({
       {tab === 'home' && <HomeTab data={data} />}
       {tab === 'look' && <AppearanceTab data={data} />}
       {tab === 'roles' && <RolesTab data={data} />}
+      {tab === 'notices' && <NoticesTab data={data} />}
       {tab === 'flows' && <FlowsTab data={data} />}
       {tab === 'members' && <MembersTab data={data} />}
       {tab === 'users' && <UsersTab data={data} />}

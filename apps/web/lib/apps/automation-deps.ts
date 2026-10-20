@@ -27,7 +27,8 @@ export function buildAutomationDeps(): AutomationDeps {
   return {
     baseUrl: appBaseUrl(),
     signingSecret: signingSecret(),
-    sendEmail: ({ to, subject, text }) => sendEmail({ to, subject, text }),
+    sendEmail: ({ to, subject, text, html, attachments }) =>
+      sendEmail({ to, subject, text, html, attachments }),
     notifyMembers: async (db, userIds, note) => {
       let n = 0;
       for (const userId of userIds) {

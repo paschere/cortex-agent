@@ -1,11 +1,13 @@
 import 'server-only';
 import type { AppEditorData } from '@/components/apps/editor/shared';
 import type { OpenedMemberApp } from '@/lib/apps/access';
+import { pushEnabled } from '@/lib/apps/push';
 import { loadSessionBrand } from '@/lib/branding/store';
 import {
   type CustomViewRow,
   attributeValueSuggestions,
   draftStatus,
+  getNoticeConfig,
   getKioskSettings,
   listAppUsers,
   listDevices,
@@ -17,6 +19,7 @@ import {
   listTrackers,
   listVersions,
   loadUsage,
+  summarizeRoleNotices,
   personLabel,
   trackersOf,
 } from '@cortex/agent-tools';
@@ -50,6 +53,20 @@ export async function loadAppEditorData(
     draftStatus(db, app).catch(() => null),
     loadUsage(db, app).catch(() => null),
   ]);
+  // Avisos automáticos (0231): lo que recibe cada rol, con lo por defecto ya resuelto.
+  const noticeConfig = await getNoticeConfig(db, app.id).catch(() => ({ roles: {} }));
+  const noticeRoles = summarizeRoleNotices({
+    id: app.id,
+    slug: app.slug,
+    name: app.name,
+    screens: screens.flatMap((s) => {
+      const view = views.get(s.view_id);
+      return view ? [{ slug: s.slug, title: s.title, roles: s.roles, spec: view.spec }] : [];
+    }),
+    roles: roles.map((r) => ({ key: r.key, name: r.name, permissions: r.permissions })),
+    config: noticeConfig,
+  });
+  const trackerName = new Map(trackers.map((t) => [t.slug, t.name]));
   const attributeValues = await attributeValueSuggestions(db, roles);
   const companyBrand = await loadSessionBrand(db, user.organization.name);
   const pinOf = new Map(pins.map((p) => [p.userId, p]));
@@ -181,6 +198,15 @@ export async function loadAppEditorData(
         }
       : undefined,
     usage,
+    notices: {
+      roles: noticeRoles.map((r) => ({
+        ...r,
+        only: r.only,
+        depends: r.depends.map((d) => ({ ...d, tracker: trackerName.get(d.tracker) ?? d.tracker })),
+      })),
+      config: noticeConfig,
+      pushOn: pushEnabled(),
+    },
     screenFilters: Object.fromEntries(
       screens.flatMap((s) => {
         const bar = views.get(s.view_id)?.spec.filtersBar ?? [];

@@ -2,6 +2,8 @@ import { relationParts } from '../../trackers/computed';
 import { type ViewRow, matches } from '../../views/compute';
 import type { CatalogTracker } from '../../views/spec';
 import { type AutomationEvent, type Values, fieldChanged, rowValue } from './match';
+import { describeReportSource } from './report';
+import { REPORT_FORMAT_LABEL } from './report-spec';
 import {
   type AutomationAction,
   type AutomationCondition,
@@ -135,7 +137,7 @@ export interface TemplateContext {
 
 const VAR_RE = /\{\{\s*([^{}]{1,48}?)\s*\}\}/g;
 
-function lookupRaw(name: string, ctx: TemplateContext): unknown {
+export function lookupRaw(name: string, ctx: TemplateContext): unknown {
   const n = name.trim();
   const lower = n.toLowerCase();
   if (lower === 'nombre') return ctx.label ?? '';
@@ -428,6 +430,16 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
       return {
         type: a.type,
         summary: `Dejaría en «${a.target}» de la fila padre (por «${a.up}») ${ROLLUP_OP_LABEL[a.op]}${a.field ? ` de «${a.field}»` : ''} de todas sus filas hijas.`,
+      };
+    case 'report':
+      return {
+        type: a.type,
+        summary: `Armaría el reporte «${renderTemplate(a.title, ctx)}» (${describeReportSource(a.source)}) y lo mandaría por correo a ${[...a.to, ...a.roles.map((r) => `rol ${r}`)].join(', ')}${a.formats.length ? ` con ${a.formats.map((f) => REPORT_FORMAT_LABEL[f]).join(' y ')} adjunto` : ' (sólo la tabla en el cuerpo)'}.`,
+      };
+    case 'accounting_draft_invoice':
+      return {
+        type: a.type,
+        summary: `Armaría una prefactura para el NIT ${renderTemplate(a.customer.taxId, ctx) || '(vacío)'} con ${a.items.length} ítem${a.items.length === 1 ? '' : 's'}${a.currency !== 'COP' ? ` en ${a.currency} (a pesos con la TRM)` : ''} y la dejaría POR REVISAR; sólo al aprobarla una persona se crea en Siigo.`,
       };
     case 'wait':
       return {

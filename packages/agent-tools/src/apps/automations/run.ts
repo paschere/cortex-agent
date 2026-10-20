@@ -42,6 +42,8 @@ import {
   adaptAutomationRun,
   runsToday,
 } from './store';
+import { runDraftInvoiceAction } from './invoice-draft-run';
+import { runReportAction } from './report-run';
 import { WaitingForPersonError, notifyWaitOpened, openWait } from './waits';
 
 /**
@@ -95,7 +97,14 @@ export interface AutomationDeps {
   baseUrl: string;
   /** Llave maestra para las firmas HMAC de los webhooks. */
   signingSecret: string;
-  sendEmail(input: { to: string; subject: string; text: string }): Promise<{
+  sendEmail(input: {
+    to: string;
+    subject: string;
+    text: string;
+    /** Cuerpo en HTML (los reportes) y adjuntos en base64 (Excel, PDF). */
+    html?: string;
+    attachments?: Array<{ filename: string; contentBase64: string; contentType: string }>;
+  }): Promise<{
     sent: boolean;
     reason?: string;
   }>;
@@ -843,6 +852,39 @@ async function runAction(a: ActionRun): Promise<string> {
       if (out.failures.length) throw new Error(out.failures.slice(0, 2).join(' · '));
       return describeRollupPlan(action, plan, true);
     }
+    case 'report':
+      return runReportAction({
+        db,
+        deps,
+        app,
+        automation,
+        runId: a.run.id,
+        action,
+        ctx,
+        now: a.now,
+        roleEmails: async (role) => (await appUsers(db, app.id, { role })).map((u) => u.email),
+      });
+    case 'accounting_draft_invoice':
+      return runDraftInvoiceAction({
+        db,
+        organizationId: a.organizationId,
+        app,
+        automation,
+        runId: a.run.id,
+        runKey: a.runKey,
+        action,
+        ctx,
+        trackerRow: a.trackerRow
+          ? { id: a.trackerRow.id, slug: a.trackerRow.slug, name: a.trackerRow.name }
+          : null,
+        rowId: event.rowId ?? null,
+        baseUrl: deps.baseUrl,
+        notifyMembers: deps.notifyMembers,
+        currentRowValues: async () =>
+          a.trackerRow && event.rowId
+            ? ((await currentRow(db, a.trackerRow.id, event.rowId))?.values ?? null)
+            : null,
+      });
     case 'wait':
       // Se maneja en el ciclo de executeRun (la espera duerme la corrida).
       return 'Espera.';

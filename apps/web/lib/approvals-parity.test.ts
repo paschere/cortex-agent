@@ -242,6 +242,9 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
   { toolId: 'sales.quote_send', input: { quote: 'COT-12' } },
   { toolId: 'sales.invoice_emit', input: { document: 'PED-3', provider: 'siigo' } },
   { toolId: 'sales.invoice_emit', input: { document: 'COT-12' } },
+  { toolId: 'accounting.invoice_draft_approve', input: { id: 'x', sendToDian: true } },
+  { toolId: 'accounting.invoice_draft_approve', input: { id: 'x' } },
+  { toolId: 'accounting.invoice_draft_discard', input: { id: 'x' } },
   // Embudo comercial (0193).
   {
     toolId: 'crm.create_opportunity',

@@ -81,6 +81,12 @@ export default async function SalesPage({
         subtitle="Cotiza con tu marca, que el cliente acepte desde un enlace, conviértelo en pedido y emite la factura electrónica por Siigo o Alegra con tu aprobación."
         icon={<Receipt className="h-5 w-5" aria-hidden />}
       />
+      <p className="mb-3 text-xs text-ink-muted">
+        ¿Una automatización dejó prefacturas armadas?{' '}
+        <a href="/prefacturas" className="font-semibold text-primary underline">
+          Prefacturas por revisar
+        </a>
+      </p>
       {all === null && (
         <p role="alert" className="mb-4 rounded-sm bg-rose-soft px-3 py-2 text-sm text-rose">
           No se pudieron leer las ventas. Si es la primera vez, falta aplicar la migración 0182.

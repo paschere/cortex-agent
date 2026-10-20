@@ -39,6 +39,12 @@ export interface EinvoiceChoices {
   paymentTypeId?: string;
   /** Siigo: que el programa le mande la factura al correo del cliente. Por defecto sí. */
   sendEmail?: boolean;
+  /**
+   * Siigo `stamp.send` / Alegra `generateStamp`: false deja la factura creada en
+   * el programa SIN enviarla a la DIAN (la persona la envía allá). Por defecto
+   * sí se envía (lo que hace `sales.invoice_emit`).
+   */
+  stamp?: boolean;
 }
 
 export interface EinvoiceLineSummary {
@@ -257,10 +263,12 @@ export function buildSiigoInvoice(input: {
         ...(payment?.credit ? { due_date: base.dueDate } : {}),
       },
     ],
-    stamp: { send: true },
-    mail: { send: choices.sendEmail !== false },
+    stamp: { send: choices.stamp !== false },
+    mail: { send: choices.sendEmail !== false && choices.stamp !== false },
   };
-  if (choices.sendEmail !== false)
+  if (choices.stamp === false)
+    notes.push('Queda creada en Siigo SIN enviarla a la DIAN: se envía desde Siigo.');
+  else if (choices.sendEmail !== false)
     notes.push('Siigo le manda la factura al correo del cliente registrado en Siigo.');
 
   return {
@@ -352,7 +360,7 @@ export function buildAlegraInvoice(input: {
     ...(seller ? { seller: Number(seller.id) || seller.id } : {}),
     observations: base.observations,
     ...(doc.notes ? { anotation: doc.notes.slice(0, 500) } : {}),
-    stamp: { generateStamp: true },
+    stamp: { generateStamp: choices.stamp !== false },
     status: 'open',
   };
   if (!credit) notes.push('De contado: Alegra pide el medio de pago; se marca «transferencia».');
