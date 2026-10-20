@@ -128,6 +128,21 @@ interface Act {
   iWbField: string;
   iWbPending: string;
   iWbCreated: string;
+  // --- Cliente, recibo de caja y nota crédito para Siigo (0232) ---
+  oName: string;
+  oEmail: string;
+  oPhone: string;
+  oAddress: string;
+  oCity: string;
+  oRegime: string;
+  oAmount: string;
+  oDate: string;
+  oInvoices: string;
+  oReference: string;
+  oBank: string;
+  oReason: string;
+  /** Lo que el formulario no edita (ítems de la nota, tipo de documento…): se conserva tal cual. */
+  oExtra: Record<string, unknown>;
 }
 
 interface Draft {
@@ -155,6 +170,9 @@ interface Draft {
     /** Botón: pantalla que se abre después y valores fijos que lleva. */
     thenScreen: string;
     thenPairs: Array<{ key: string; value: string }>;
+    /** Suceso contable (event) y programa (provider) cuando type = accounting_event. */
+    acEvent: string;
+    acProvider: string;
   };
   conditions: Cond[];
   actions: Act[];
@@ -170,7 +188,26 @@ const TRIGGERS: Array<{ type: string; label: string }> = [
   { type: 'schedule', label: 'A una hora (diaria o semanal)' },
   { type: 'button', label: 'Alguien toca un botón en una pantalla' },
   { type: 'rows_poll', label: 'Cada cierto tiempo, para cada fila que cumpla' },
+  { type: 'accounting_event', label: 'Pasa algo en el programa contable (Siigo): factura pagada, recibo, nota crédito…' },
 ];
+
+/** Sucesos contables y la tabla sincronizada de la que salen (mismo nombre que accounting/tables.ts). */
+const ACCOUNTING_EVENTS: Array<{ id: string; label: string; table: string }> = [
+  { id: 'invoice_created', label: 'Se crea una factura', table: 'facturas' },
+  { id: 'invoice_paid', label: 'Una factura queda pagada', table: 'facturas' },
+  { id: 'invoice_overdue', label: 'Una factura se vence', table: 'facturas' },
+  { id: 'invoice_annulled', label: 'Se anula una factura', table: 'facturas' },
+  { id: 'receipt_created', label: 'Entra un recibo de caja (pago de un cliente)', table: 'pagos' },
+  { id: 'credit_note_created', label: 'Se crea una nota crédito', table: 'notas_credito' },
+  { id: 'customer_created', label: 'Hay un cliente nuevo', table: 'clientes' },
+];
+const ACCOUNTING_PROVIDERS = [
+  { id: 'siigo', name: 'Siigo' },
+  { id: 'alegra', name: 'Alegra' },
+  { id: 'quickbooks', name: 'QuickBooks' },
+];
+const accountingSlug = (provider: string, event: string): string =>
+  `${provider}_${ACCOUNTING_EVENTS.find((e) => e.id === event)?.table ?? 'facturas'}`;
 const HOURS = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
 ];
@@ -189,10 +226,21 @@ const ACTIONS: Array<{ type: string; label: string }> = [
   { type: 'rollup', label: 'Acumular en la fila padre (suma, conteo, promedio…)' },
   { type: 'report', label: 'Mandar un reporte por correo (tabla + Excel / PDF)' },
   { type: 'accounting_draft_invoice', label: 'Preparar una prefactura para Siigo (por revisar)' },
+  { type: 'accounting_upsert_customer', label: 'Crear el cliente en Siigo si no existe (por revisar)' },
+  { type: 'accounting_draft_receipt', label: 'Preparar un recibo de caja en Siigo (por revisar)' },
+  { type: 'accounting_draft_credit_note', label: 'Preparar una nota crédito en Siigo (por revisar)' },
   { type: 'wait', label: 'Esperar y volver a revisar la fila' },
 ];
 /** Acciones que necesitan una fila de partida. */
-const NEEDS_ROW = new Set(['set_field', 'update_related', 'rollup', 'accounting_draft_invoice']);
+const NEEDS_ROW = new Set([
+  'set_field',
+  'update_related',
+  'rollup',
+  'accounting_draft_invoice',
+  'accounting_upsert_customer',
+  'accounting_draft_receipt',
+  'accounting_draft_credit_note',
+]);
 const REPORT_PRESETS: Array<{ id: string; label: string }> = [
   { id: 'last_week', label: 'La semana pasada' },
   { id: 'this_week', label: 'Esta semana' },
@@ -265,7 +313,7 @@ const emptyAct = (type: string): Act => ({
   pairs: [{ key: '', value: '' }],
   members: [],
   roles: [],
-  admins: type === 'accounting_draft_invoice',
+  admins: type.startsWith('accounting_'),
   title: '',
   body: '',
   toKind: 'role',
@@ -320,6 +368,19 @@ const emptyAct = (type: string): Act => ({
   iWbField: '',
   iWbPending: '',
   iWbCreated: '',
+  oName: '',
+  oEmail: '',
+  oPhone: '',
+  oAddress: '',
+  oCity: '',
+  oRegime: 'no_responsable',
+  oAmount: '',
+  oDate: '',
+  oInvoices: '',
+  oReference: '',
+  oBank: '',
+  oReason: '2',
+  oExtra: {},
 });
 
 const emptyCond = (): Cond => ({
@@ -413,6 +474,8 @@ const emptyDraft = (): Draft => ({
     winAfter: 24,
     thenScreen: '',
     thenPairs: [{ key: '', value: '' }],
+    acEvent: 'invoice_paid',
+    acProvider: 'siigo',
   },
   conditions: [],
   actions: [emptyAct('notify_app_user')],
@@ -473,7 +536,9 @@ function toInput(d: Draft): unknown {
                       }
                     : {}),
                 }
-              : t.type === 'rows_poll'
+              : t.type === 'accounting_event'
+                ? { type: t.type, event: t.acEvent, provider: t.acProvider }
+                : t.type === 'rows_poll'
                 ? {
                     type: t.type,
                     tracker: t.tracker,
@@ -637,6 +702,65 @@ function toInput(d: Draft): unknown {
           notifyRoles: a.roles,
         };
       }
+      case 'accounting_upsert_customer':
+      case 'accounting_draft_receipt':
+      case 'accounting_draft_credit_note': {
+        const wbStatus =
+          a.iWbField && (a.iWbPending.trim() || a.iWbCreated.trim())
+            ? {
+                status: {
+                  field: a.iWbField,
+                  ...(a.iWbPending.trim() ? { pending: a.iWbPending.trim() } : {}),
+                  ...(a.iWbCreated.trim() ? { created: a.iWbCreated.trim() } : {}),
+                },
+              }
+            : {};
+        const writeBack = { ...(a.iWbNumber ? { invoiceNumber: a.iWbNumber } : {}), ...wbStatus };
+        const common = {
+          ...a.oExtra,
+          ...(Object.keys(writeBack).length ? { writeBack } : {}),
+          notifyAdmins: a.admins,
+          notifyRoles: a.roles,
+        };
+        const opt = (k: string, v: string) => (v.trim() ? { [k]: v.trim() } : {});
+        if (a.type === 'accounting_upsert_customer')
+          return {
+            type: a.type,
+            taxId: a.iTaxId,
+            name: a.oName,
+            ...opt('email', a.oEmail),
+            ...opt('phone', a.oPhone),
+            ...opt('address', a.oAddress),
+            ...opt('city', a.oCity),
+            regime: a.oRegime,
+            ...(a.iVia ? { via: a.iVia } : {}),
+            ...common,
+          };
+        if (a.type === 'accounting_draft_receipt')
+          return {
+            type: a.type,
+            customer: {
+              taxId: a.iTaxId,
+              ...(a.iName.trim() ? { name: a.iName.trim() } : {}),
+              ...(a.iVia ? { via: a.iVia } : {}),
+            },
+            amount: amountInput(a.oAmount),
+            ...opt('date', a.oDate),
+            ...opt('invoices', a.oInvoices),
+            ...opt('reference', a.oReference),
+            ...opt('bankAccount', a.oBank),
+            ...(a.iPayType.trim() ? { paymentTypeId: a.iPayType.trim() } : {}),
+            ...common,
+          };
+        return {
+          type: a.type,
+          invoice: a.oInvoices,
+          reason: Number(a.oReason) || 2,
+          ...opt('date', a.oDate),
+          ...opt('observations', a.oReference),
+          ...common,
+        };
+      }
       case 'wait':
         return {
           type: a.type,
@@ -679,7 +803,10 @@ function toDraft(v: AutomationView): Draft {
   d.trigger = {
     ...d.trigger,
     type: String(t.type),
-    tracker: String(t.tracker ?? ''),
+    tracker:
+      t.type === 'accounting_event'
+        ? accountingSlug(String(t.provider ?? 'siigo'), String(t.event ?? 'invoice_paid'))
+        : String(t.tracker ?? ''),
     field: String(t.field ?? ''),
     to: t.to === undefined ? '' : String(t.to),
     screen: String(t.screen ?? ''),
@@ -697,6 +824,8 @@ function toDraft(v: AutomationView): Draft {
     winTimeField: String((t.window as { timeField?: string } | undefined)?.timeField ?? ''),
     winBefore: Number((t.window as { beforeHours?: number } | undefined)?.beforeHours ?? 6),
     winAfter: Number((t.window as { afterHours?: number } | undefined)?.afterHours ?? 24),
+    acEvent: String(t.event ?? 'invoice_paid'),
+    acProvider: String(t.provider ?? 'siigo'),
     thenScreen: String((t.next as { screen?: string } | undefined)?.screen ?? ''),
     thenPairs: pairsDraft((t.next as { prefill?: unknown } | undefined)?.prefill),
   };
@@ -816,6 +945,54 @@ function toDraft(v: AutomationView): Draft {
       x.iWbCreated = String(wb.status?.created ?? '');
       x.roles = (a.notifyRoles as string[] | undefined) ?? [];
       x.admins = a.notifyAdmins !== false;
+    }
+    if (
+      a.type === 'accounting_upsert_customer' ||
+      a.type === 'accounting_draft_receipt' ||
+      a.type === 'accounting_draft_credit_note'
+    ) {
+      const wb = (a.writeBack ?? {}) as {
+        invoiceNumber?: string;
+        status?: { field?: string; pending?: string; created?: string };
+      };
+      x.iWbNumber = String(wb.invoiceNumber ?? '');
+      x.iWbField = String(wb.status?.field ?? '');
+      x.iWbPending = String(wb.status?.pending ?? '');
+      x.iWbCreated = String(wb.status?.created ?? '');
+      x.roles = (a.notifyRoles as string[] | undefined) ?? [];
+      x.admins = a.notifyAdmins !== false;
+      x.oDate = String(a.date ?? '');
+      if (a.type === 'accounting_upsert_customer') {
+        x.iTaxId = String(a.taxId ?? '');
+        x.iVia = String(a.via ?? '');
+        x.oName = String(a.name ?? '');
+        x.oEmail = String(a.email ?? '');
+        x.oPhone = String(a.phone ?? '');
+        x.oAddress = String(a.address ?? '');
+        x.oCity = String(a.city ?? '');
+        x.oRegime = String(a.regime ?? 'no_responsable');
+        x.oExtra = a.personType ? { personType: a.personType } : {};
+      } else if (a.type === 'accounting_draft_receipt') {
+        const c = (a.customer ?? {}) as { taxId?: string; name?: string; via?: string };
+        x.iTaxId = String(c.taxId ?? '');
+        x.iName = String(c.name ?? '');
+        x.iVia = String(c.via ?? '');
+        x.oAmount = String(a.amount ?? '');
+        x.oInvoices = String(a.invoices ?? '');
+        x.oReference = String(a.reference ?? '');
+        x.oBank = String(a.bankAccount ?? '');
+        x.iPayType = String(a.paymentTypeId ?? '');
+      } else {
+        x.oInvoices = String(a.invoice ?? '');
+        x.oReason = String(a.reason ?? 2);
+        x.oReference = String(a.observations ?? '');
+        x.oExtra = {
+          ...(a.mode ? { mode: a.mode } : {}),
+          ...(a.items ? { items: a.items } : {}),
+          ...(a.documentTypeId ? { documentTypeId: a.documentTypeId } : {}),
+          ...(a.paymentTypeId ? { paymentTypeId: a.paymentTypeId } : {}),
+        };
+      }
     }
     if (a.type === 'wait') {
       const m = Number(a.minutes ?? 30);
@@ -1478,7 +1655,13 @@ function RuleEditor({
           onChange={(e) =>
             setD({
               ...d,
-              trigger: { ...t, type: e.target.value },
+              trigger: {
+                ...t,
+                type: e.target.value,
+                ...(e.target.value === 'accounting_event'
+                  ? { tracker: accountingSlug(t.acProvider, t.acEvent) }
+                  : {}),
+              },
               conditions: ROWLESS.has(e.target.value) ? [] : d.conditions,
             })
           }
@@ -1490,7 +1673,7 @@ function RuleEditor({
             </option>
           ))}
         </select>
-        {!rowless && (
+        {!rowless && t.type !== 'accounting_event' && (
           <select
             value={t.tracker}
             onChange={(e) => {
@@ -1507,6 +1690,47 @@ function RuleEditor({
               </option>
             ))}
           </select>
+        )}
+        {t.type === 'accounting_event' && (
+          <div className="space-y-2 text-xs text-ink">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={t.acEvent}
+                onChange={(e) =>
+                  setT({ acEvent: e.target.value, tracker: accountingSlug(t.acProvider, e.target.value) })
+                }
+                className={INPUT}
+              >
+                {ACCOUNTING_EVENTS.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+              en
+              <select
+                value={t.acProvider}
+                onChange={(e) =>
+                  setT({ acProvider: e.target.value, tracker: accountingSlug(e.target.value, t.acEvent) })
+                }
+                className={INPUT}
+              >
+                {ACCOUNTING_PROVIDERS.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-micro text-ink-muted">
+              Cortex se entera cuando sincroniza con el programa (cada 15 minutos), así que sale a los
+              pocos minutos. «Se vence» y los pagos que Siigo no registra como recibo salen en el repaso
+              diario. La primera carga no dispara nada. La fila de partida es la factura (o el recibo,
+              la nota o el cliente): usa {'{{numero}}'}, {'{{cliente}}'}, {'{{saldo}}'}, {'{{total}}'},{' '}
+              {'{{estado}}'} y {'{{hoy}}'}.
+              {!tracker && ' Todavía no existe esa tabla: conecta el programa en Integraciones.'}
+            </p>
+          </div>
         )}
         {t.type === 'row_updated' && (
           <div className="flex flex-wrap gap-2">
@@ -2654,7 +2878,7 @@ function ActionFields({
       return (
         <div className="space-y-3">
           <div className="rounded-card bg-amber-soft px-3 py-2 text-micro text-amber">
-            Esto NO emite nada: arma la prefactura y la deja en «Prefacturas por revisar». Sólo
+            Esto NO emite nada: arma la prefactura y la deja en «Por enviar a Siigo». Sólo
             cuando una persona la aprueba se crea en Siigo.
           </div>
           <p className="text-micro font-semibold text-ink">Cliente</p>
@@ -2843,7 +3067,149 @@ function ActionFields({
           </details>
           <p className="text-micro text-ink-muted">
             Una fila genera UNA sola prefactura por esta regla, aunque la regla corra de nuevo.
-            Se revisan en «Prefacturas por revisar» (menú Comercial).
+            Se revisan en «Por enviar a Siigo» (menú Comercial).
+          </p>
+        </div>
+      );
+    }
+    case 'accounting_upsert_customer':
+    case 'accounting_draft_receipt':
+    case 'accounting_draft_credit_note': {
+      const rel = relationFields.find((f) => f.key === a.iVia);
+      const customerFields = rel?.tracker ? fieldsOf(rel.tracker) : fields;
+      const kindText =
+        a.type === 'accounting_upsert_customer'
+          ? 'un cliente (tercero)'
+          : a.type === 'accounting_draft_receipt'
+            ? 'un recibo de caja'
+            : 'una nota crédito';
+      const viaPick = (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+          Los datos del cliente están en
+          <select value={a.iVia} onChange={(e) => set({ iVia: e.target.value })} className={INPUT}>
+            <option value="">esta misma fila</option>
+            {relationFields.map((f) => (
+              <option key={f.key} value={f.key}>
+                la fila a la que apunta «{f.label}»
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+      return (
+        <div className="space-y-3">
+          <div className="rounded-card bg-amber-soft px-3 py-2 text-micro text-amber">
+            Esto NO envía nada a Siigo: arma {kindText} y lo deja en «Por enviar a Siigo». Sólo cuando
+            una persona lo aprueba llega a Siigo.
+          </div>
+          <p className="text-micro text-ink-muted">
+            Campos disponibles:{' '}
+            {(a.type === 'accounting_draft_credit_note' ? fields : customerFields)
+              .slice(0, 12)
+              .map((f) => `{{${f.key}}}`)
+              .join(' ')}
+          </p>
+          {a.type === 'accounting_upsert_customer' && (
+            <>
+              {viaPick}
+              {text(a.iTaxId, (v) => set({ iTaxId: v }), 'NIT o cédula: {{nit}} (el dígito de verificación se calcula solo)')}
+              {text(a.oName, (v) => set({ oName: v }), 'Nombre o razón social: {{cliente}}')}
+              {text(a.oEmail, (v) => set({ oEmail: v }), 'Correo (Siigo lo exige): {{correo}}')}
+              {text(a.oPhone, (v) => set({ oPhone: v }), 'Teléfono (Siigo lo exige): {{telefono}}')}
+              {text(a.oAddress, (v) => set({ oAddress: v }), 'Dirección (Siigo la exige): {{direccion}}')}
+              {text(a.oCity, (v) => set({ oCity: v }), 'Ciudad: Bogotá, Medellín… o código DANE de 5 dígitos')}
+              <select value={a.oRegime} onChange={(e) => set({ oRegime: e.target.value })} className={INPUT}>
+                <option value="no_responsable">No responsable de IVA</option>
+                <option value="responsable_iva">Responsable de IVA</option>
+              </select>
+              <p className="text-micro text-ink-muted">
+                Si el NIT ya está en Siigo no se crea nada ni se pisa nada. Lo que falte (ciudad,
+                teléfono…) lo completa quien revisa en la bandeja.
+              </p>
+            </>
+          )}
+          {a.type === 'accounting_draft_receipt' && (
+            <>
+              {viaPick}
+              {text(a.iTaxId, (v) => set({ iTaxId: v }), 'NIT del cliente que pagó: {{nit}}')}
+              {text(a.oAmount, (v) => set({ oAmount: v }), 'Valor del pago: {{valor}} (un campo) o una fórmula =…')}
+              {text(a.oDate, (v) => set({ oDate: v }), 'Fecha del pago: {{fecha}} (vacío = hoy)')}
+              {text(a.oInvoices, (v) => set({ oInvoices: v }), 'Facturas a cruzar: FV-1-68, FV-1-70 (vacío = todas las facturas con saldo del cliente, la que vence primero)')}
+              {text(a.oReference, (v) => set({ oReference: v }), 'Referencia (opcional): {{referencia}}')}
+              {text(a.oBank, (v) => set({ oBank: v }), 'Cuenta o banco (opcional, para elegir la forma de pago en Siigo)')}
+              <p className="text-micro text-ink-muted">
+                El pago se aplica a las facturas con saldo sin pasarse de lo que cada una debe; si
+                sobra, queda marcado para que quien revisa decida (anticipo).
+              </p>
+            </>
+          )}
+          {a.type === 'accounting_draft_credit_note' && (
+            <>
+              {text(a.oInvoices, (v) => set({ oInvoices: v }), 'Factura que se afecta: {{factura}} (por ejemplo FV-1-68)')}
+              <select value={a.oReason} onChange={(e) => set({ oReason: e.target.value })} className={INPUT}>
+                <option value="2">Anulación de la factura electrónica</option>
+                <option value="1">Devolución parcial de bienes o servicio</option>
+                <option value="3">Rebaja o descuento</option>
+                <option value="4">Ajuste de precio</option>
+                <option value="6">Descuento por pronto pago</option>
+                <option value="7">Descuento por volumen</option>
+              </select>
+              {text(a.oDate, (v) => set({ oDate: v }), 'Fecha de la nota (vacío = hoy)')}
+              {text(a.oReference, (v) => set({ oReference: v }), 'Observaciones: Anulada por {{motivo}}')}
+              <p className="text-micro text-ink-muted">
+                Copia todas las líneas de la factura (anular o devolver todo). Al aprobar, la persona
+                elige si la nota además se envía a la DIAN.
+              </p>
+            </>
+          )}
+          <details className="rounded-card border border-border px-3 py-2">
+            <summary className="cursor-pointer text-xs font-semibold text-ink">
+              Al aprobarse en Siigo, avisar y marcar la fila
+            </summary>
+            <div className="mt-2 space-y-2 text-xs text-ink">
+              <div className="flex flex-wrap items-center gap-2">
+                Escribir el número del documento de Siigo en
+                <select value={a.iWbNumber} onChange={(e) => set({ iWbNumber: e.target.value })} className={INPUT}>
+                  <option value="">(no escribirlo)</option>
+                  {fields
+                    .filter((f) => f.type === 'text' || f.type === 'long_text')
+                    .map((f) => (
+                      <option key={f.key} value={f.key}>
+                        {f.label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                Y marcar el estado en
+                <select value={a.iWbField} onChange={(e) => set({ iWbField: e.target.value })} className={INPUT}>
+                  <option value="">(no marcarlo)</option>
+                  {fields.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+                <input value={a.iWbPending} onChange={(e) => set({ iWbPending: e.target.value })} placeholder="al armar: Recibo por registrar" className={clsx(INPUT, 'w-52')} />
+                <input value={a.iWbCreated} onChange={(e) => set({ iWbCreated: e.target.value })} placeholder="al aprobar: Registrado" className={clsx(INPUT, 'w-44')} />
+              </div>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={a.admins} onChange={(e) => set({ admins: e.target.checked })} />
+                Avisar a los administradores de la empresa que hay algo por revisar
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {data.roles.map((r) => (
+                  <label key={r.key} className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={a.roles.includes(r.key)} onChange={() => set({ roles: toggle(a.roles, r.key) })} />
+                    Avisar al rol {r.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </details>
+          <p className="text-micro text-ink-muted">
+            Una fila genera UN solo borrador de este tipo por esta regla. Se revisan en «Por enviar a
+            Siigo» (menú Comercial).
           </p>
         </div>
       );

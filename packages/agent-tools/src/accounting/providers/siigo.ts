@@ -4,6 +4,7 @@ import { siigoPayrollPage } from '../payroll-provider';
 import type {
   AccountingEntity,
   AccountingProvider,
+  NormalizedCreditNote,
   NormalizedCustomer,
   NormalizedInvoice,
   NormalizedPayment,
@@ -16,6 +17,7 @@ import type {
 } from '../types';
 import { siigoLive } from '../live/siigo-live';
 import { siigoInvoicing } from './invoicing';
+import { siigoOutbound } from './outbound';
 import { siigoPurchasePage } from './purchases';
 import { siigoReports } from './reports-siigo';
 import { SiigoClient, SiigoError, hasMorePages } from './siigo-client';
@@ -50,6 +52,7 @@ const PATHS: Record<AccountingEntity, string> = {
   products: '/v1/products',
   invoices: '/v1/invoices',
   payments: '/v1/vouchers',
+  credit_notes: '/v1/credit-notes',
 };
 
 // ---------------------------------------------------------------------------
@@ -347,6 +350,38 @@ export function normalizeSiigoVoucher(v: SiigoVoucher): NormalizedPayment | null
   };
 }
 
+export interface SiigoCreditNote {
+  id: string;
+  name?: string;
+  number?: number;
+  date?: string;
+  invoice?: { id?: string; name?: string } | null;
+  customer?: { id?: string; identification?: string };
+  currency?: { code?: string } | null;
+  total?: number;
+  observations?: string;
+  metadata?: Metadata;
+}
+
+/** Una nota crédito de Siigo (0232). `null` si le falta id, número, fecha o total. */
+export function normalizeSiigoCreditNote(n: SiigoCreditNote): NormalizedCreditNote | null {
+  const number = clip(n.name ?? n.number, 120);
+  const date = day(n.date);
+  const total = amount(n.total);
+  if (!n.id || !number || !date || total === undefined || total < 0) return null;
+  return {
+    externalId: String(n.id),
+    number,
+    date,
+    customerExternalId: n.customer?.id ?? undefined,
+    customerTaxId: normalizeNit(n.customer?.identification) || undefined,
+    invoiceNumber: clip(n.invoice?.name, 120),
+    total,
+    currency: currencyOf(n),
+    notes: clip(n.observations, 400),
+  };
+}
+
 function normalize(entity: AccountingEntity, record: unknown): NormalizedRecord | null {
   switch (entity) {
     case 'customers':
@@ -357,6 +392,8 @@ function normalize(entity: AccountingEntity, record: unknown): NormalizedRecord 
       return normalizeSiigoInvoice(record as SiigoInvoice);
     case 'payments':
       return normalizeSiigoVoucher(record as SiigoVoucher);
+    case 'credit_notes':
+      return normalizeSiigoCreditNote(record as SiigoCreditNote);
   }
 }
 
@@ -406,6 +443,8 @@ export function siigoQueries(entity: AccountingEntity, input: QueryPlanInput): P
   }
   // The first load has no date cutoff. The sync engine paginates and resumes
   // across runs, so an old unpaid invoice or its receipt cannot be omitted.
+  if (entity === 'credit_notes' && input.mode === 'sweep')
+    return [{ created_start: monthsAgo(input.now, SWEEP_MONTHS) }];
   if ((entity === 'invoices' || entity === 'payments') && input.mode === 'sweep')
     return [{ date_start: monthsAgo(input.now, entity === 'payments' ? 12 : SWEEP_MONTHS) }];
   return [{}];
@@ -451,7 +490,7 @@ export const siigoProvider: AccountingProvider = {
     { key: 'access_key', label: 'Access key', secret: true, placeholder: 'Pega la access key' },
   ],
   accountLabelField: 'username',
-  entities: ['customers', 'products', 'invoices', 'payments'],
+  entities: ['customers', 'products', 'invoices', 'payments', 'credit_notes'],
   options: ['payroll'],
   paymentsLabel: 'Recibos de caja',
   queries: siigoQueries,
@@ -471,11 +510,23 @@ export const siigoProvider: AccountingProvider = {
       },
       verify: () => client.verify(),
       invoicing: siigoInvoicing(client),
+      outbound: siigoOutbound(client),
       listPurchases: (since, page) => siigoPurchasePage(client, since, page),
       listPayroll: (since, page) => siigoPayrollPage(client, since, page),
       reports: siigoReports(client, { fetch: runtime.fetch }),
       live: (req) => siigoLive(client, req),
       writer: siigoWriter(client),
+      async refreshInvoices(numbers) {
+        const out: NormalizedInvoice[] = [];
+        for (const name of [...new Set(numbers)].slice(0, 25)) {
+          const result = await client.page<unknown>(PATHS.invoices, { name }, 1, 5);
+          for (const r of result.results) {
+            const inv = normalizeSiigoInvoice(r as SiigoInvoice);
+            if (inv) out.push(inv);
+          }
+        }
+        return out;
+      },
       async remoteTotal(entity) {
         // Sólo las que se piden sin filtros: clientes y productos se piden por
         // alcance (tipo, activo), así que su total no es una sola cifra.

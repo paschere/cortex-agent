@@ -133,7 +133,7 @@ export function cleanEntities(
 }
 
 export function cleanInterval(raw: number | undefined): number {
-  const n = Math.round(Number(raw ?? 60));
+  const n = Math.round(Number(raw ?? 15));
   if (!Number.isFinite(n) || n < 15 || n > 1440)
     throw new ValidationError('La frecuencia tiene que estar entre 15 minutos y un día.');
   return n;

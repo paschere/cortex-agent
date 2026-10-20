@@ -41,7 +41,7 @@ export interface InvoiceDraftRunInput {
   currentRowValues: () => Promise<Values | null>;
 }
 
-async function relatedContext(
+export async function relatedContext(
   db: SupabaseClient,
   via: string,
   ctx: TemplateContext,

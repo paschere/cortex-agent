@@ -194,8 +194,9 @@ const BUILDERS: Record<string, Builder> = {
     );
   },
   accounting_invoice_draft_approve: () =>
-    plain('Aprobé una prefactura y la creé en Siigo', 'money'),
-  accounting_invoice_draft_discard: () => plain('Descarté una prefactura', 'money'),
+    plain('Aprobé algo de la bandeja y lo envié a Siigo', 'money'),
+  accounting_invoice_draft_discard: () => plain('Descarté algo de la bandeja de Siigo', 'money'),
+  accounting_outbox_prepare: () => plain('Preparé un borrador para Siigo (por revisar)', 'money'),
   sales_invoice_emit: ({ input }) =>
     plain(`Emití la factura electrónica de ${str(input.document, 40) ?? 'un documento'}`, 'money'),
   sales_quote_create: ({ input }) =>

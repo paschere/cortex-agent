@@ -84,7 +84,7 @@ export default async function SalesPage({
       <p className="mb-3 text-xs text-ink-muted">
         ¿Una automatización dejó prefacturas armadas?{' '}
         <a href="/prefacturas" className="font-semibold text-primary underline">
-          Prefacturas por revisar
+          Por enviar a Siigo
         </a>
       </p>
       {all === null && (

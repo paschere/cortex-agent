@@ -8,6 +8,7 @@ import {
 import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { OtherDraftCard } from './OtherDraftCard';
 
 /**
  * LA BANDEJA: una tarjeta por prefactura con sus líneas editables. Los dos
@@ -28,6 +29,12 @@ interface Line {
 
 export interface DraftView {
   id: string;
+  /** Qué se enviará a Siigo: `invoice` = prefactura (0232). */
+  kind: 'invoice' | 'receipt' | 'credit_note' | 'customer';
+  payload: Record<string, unknown>;
+  choices: { paymentTypeId?: string; documentTypeId?: string; sellerId?: string };
+  /** Lo que falta antes de aprobar (calculado en el servidor). */
+  problems: string[];
   row_label: string;
   status: 'pending' | 'creating' | 'created' | 'discarded' | 'error';
   customer_tax_id: string | null;
@@ -259,10 +266,14 @@ export function DraftInbox({
     <div className="space-y-4">
       {open.length === 0 ? (
         <p className="rounded-card border border-dashed border-border px-4 py-8 text-center text-sm text-ink-muted">
-          No hay prefacturas por revisar. Cuando una regla de una app cierre una atención y arme una, aparece aquí.
+          No hay nada por enviar a Siigo. Cuando una regla de una app arme una prefactura, un recibo de caja, una nota crédito o un cliente nuevo, aparece aquí para que lo revises.
         </p>
       ) : (
-        open.map((d) => <Card key={`${d.id}:${d.created_at}:${d.total}`} d={d} focus={d.id === focusId} />)
+        open.map((d) => (d.kind === 'invoice' ? (
+            <Card key={`${d.id}:${d.created_at}:${d.total}`} d={d} focus={d.id === focusId} />
+          ) : (
+            <OtherDraftCard key={`${d.id}:${d.created_at}:${d.total}`} d={d} focus={d.id === focusId} />
+          )))
       )}
       {done.length > 0 && (
         <details className="space-y-3">
@@ -270,9 +281,9 @@ export function DraftInbox({
             Ya resueltas ({done.length})
           </summary>
           <div className="mt-3 space-y-3">
-            {done.map((d) => (
-              <Card key={d.id} d={d} focus={false} />
-            ))}
+            {done.map((d) =>
+              d.kind === 'invoice' ? <Card key={d.id} d={d} focus={false} /> : <OtherDraftCard key={d.id} d={d} focus={false} />,
+            )}
           </div>
         </details>
       )}

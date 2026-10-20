@@ -32,6 +32,7 @@ const ENTITY_LABEL: Record<AccountingEntity, string> = {
   products: 'productos',
   invoices: 'facturas',
   payments: 'pagos',
+  credit_notes: 'notas crédito',
 };
 
 function when(iso: string | null): string {

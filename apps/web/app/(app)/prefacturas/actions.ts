@@ -10,6 +10,7 @@ import {
   runTool,
   toolErrorMessage,
   updateInvoiceDraft,
+  updateOutboxPayload,
 } from '@cortex/agent-tools';
 import type { UUID } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
@@ -47,6 +48,17 @@ export async function saveDraftAction(id: string, edit: unknown): Promise<DraftA
   try {
     const { db } = await manager();
     await updateInvoiceDraft(db, id, edit);
+    revalidatePath(PATH);
+    return { ok: true, note: 'Cambios guardados.' };
+  } catch (err) {
+    return { ok: false, error: toolErrorMessage(err) };
+  }
+}
+
+export async function saveOutboxDraftAction(id: string, edit: unknown): Promise<DraftActionResult> {
+  try {
+    const { db } = await manager();
+    await updateOutboxPayload(db, id, edit);
     revalidatePath(PATH);
     return { ok: true, note: 'Cambios guardados.' };
   } catch (err) {

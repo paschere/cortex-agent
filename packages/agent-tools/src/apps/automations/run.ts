@@ -32,7 +32,7 @@ import {
   planUpdateRelated,
   planUpdateRows,
 } from './related';
-import type { AutomationAction } from './spec';
+import { type AutomationAction, triggerTracker } from './spec';
 import {
   AUTOMATION_COLUMNS,
   AUTOMATION_RUN_COLUMNS,
@@ -43,6 +43,7 @@ import {
   runsToday,
 } from './store';
 import { runDraftInvoiceAction } from './invoice-draft-run';
+import { runOutboxAction } from './outbox-run';
 import { runReportAction } from './report-run';
 import { WaitingForPersonError, notifyWaitOpened, openWait } from './waits';
 
@@ -272,7 +273,7 @@ export async function executeRun(
   }
 
   // 4. La tabla, la fila y las condiciones.
-  const trackerSlug = 'tracker' in automation.trigger ? automation.trigger.tracker : null;
+  const trackerSlug = triggerTracker(automation.trigger);
   const trackerRow = trackerSlug ? await getTrackerBySlug(db, trackerSlug) : null;
   const tracker: CatalogTracker | null = trackerRow
     ? { slug: trackerRow.slug, name: trackerRow.name, fields: trackerRow.fields }
@@ -879,6 +880,29 @@ async function runAction(a: ActionRun): Promise<string> {
           : null,
         rowId: event.rowId ?? null,
         baseUrl: deps.baseUrl,
+        notifyMembers: deps.notifyMembers,
+        currentRowValues: async () =>
+          a.trackerRow && event.rowId
+            ? ((await currentRow(db, a.trackerRow.id, event.rowId))?.values ?? null)
+            : null,
+      });
+    case 'accounting_upsert_customer':
+    case 'accounting_draft_receipt':
+    case 'accounting_draft_credit_note':
+      return runOutboxAction({
+        db,
+        organizationId: a.organizationId,
+        app,
+        automation,
+        runId: a.run.id,
+        action,
+        ctx,
+        trackerRow: a.trackerRow
+          ? { id: a.trackerRow.id, slug: a.trackerRow.slug, name: a.trackerRow.name }
+          : null,
+        rowId: event.rowId ?? null,
+        baseUrl: deps.baseUrl,
+        now: a.now,
         notifyMembers: deps.notifyMembers,
         currentRowValues: async () =>
           a.trackerRow && event.rowId

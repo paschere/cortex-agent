@@ -2,7 +2,7 @@ import { DraftInbox, type DraftView } from '@/components/prefacturas/DraftInbox'
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { type InvoiceDraftStatus, isCompanyManager, listInvoiceDrafts } from '@cortex/agent-tools';
+import { type InvoiceDraftStatus, isCompanyManager, listInvoiceDrafts, outboxDraftProblems } from '@cortex/agent-tools';
 import { Receipt } from 'lucide-react';
 
 /**
@@ -12,7 +12,7 @@ import { Receipt } from 'lucide-react';
  */
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Prefacturas por revisar · Cortex' };
+export const metadata = { title: 'Por enviar a Siigo · Cortex' };
 
 const OPEN: InvoiceDraftStatus[] = ['pending', 'error', 'creating'];
 
@@ -31,21 +31,21 @@ export default async function PrefacturasPage({
         listInvoiceDrafts(db, { statuses: ['created', 'discarded'], limit: 30 }).catch(() => []),
       ])
     : [[], []];
-  const view = (d: NonNullable<typeof open>[number]): DraftView => ({ ...d });
+  const view = (d: NonNullable<typeof open>[number]): DraftView => ({ ...d, problems: outboxDraftProblems(d) });
   return (
     <div className="mx-auto max-w-[1100px] px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
-        title="Prefacturas por revisar"
-        subtitle="Las armó una automatización cuando se cerró una atención. Revísalas, corrige lo que haga falta y apruébalas: sólo entonces se crean en Siigo."
+        title="Por enviar a Siigo"
+        subtitle="Prefacturas, recibos de caja, notas crédito y clientes nuevos que armó una automatización (o Cortex a pedido tuyo). Revísalos, corrige lo que haga falta y apruébalos: sólo entonces llegan a Siigo."
         icon={<Receipt className="h-5 w-5" aria-hidden />}
       />
       {!canReview ? (
         <p className="rounded-sm bg-surface-2 px-3 py-2 text-sm text-ink-muted">
-          Sólo quien administra la empresa revisa las prefacturas.
+          Sólo quien administra la empresa revisa lo que se envía a Siigo.
         </p>
       ) : open === null ? (
         <p role="alert" className="rounded-sm bg-rose-soft px-3 py-2 text-sm text-rose">
-          No se pudieron leer las prefacturas. Si es la primera vez, falta aplicar la migración 0230.
+          No se pudieron leer las prefacturas. Si es la primera vez, falta aplicar las migraciones 0230 y 0232.
         </p>
       ) : (
         <DraftInbox

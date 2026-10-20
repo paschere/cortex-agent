@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
+import { forgetAutomationWatch } from '../apps/automations/emit';
 import type { ImportSystemPaymentsInput, ImportSystemPaymentsResult } from '../payments/import';
 import { createFakeSupabase } from '../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../tenancy/scoped-client';
@@ -658,5 +659,127 @@ describe('Siigo: los recibos de caja se piden también por fecha del documento',
     );
     expect(plan.mode).toBe('sweep');
     expect(plan.queries[0]).toEqual({ date_start: '2025-10-19' });
+  });
+});
+
+describe('Siigo → app: sucesos contables que salen de la sincronización (0232)', () => {
+  const rule = (trackerId: string) => ({
+    id: 'r-paid',
+    organization_id: ORG,
+    app_id: 'app-1',
+    name: 'Factura pagada',
+    enabled: true,
+    trigger: { type: 'accounting_event', event: 'invoice_paid', provider: 'siigo' },
+    conditions: [],
+    actions: [{ type: 'notify_member', admins: true, title: 'Pagada' }],
+    tracker_id: trackerId,
+    trigger_kind: 'accounting_event',
+  });
+  const created = rule('x');
+
+  it('la carga inicial no dispara nada; después, una factura que pasa a Pagada dispara UNA vez', async () => {
+    const w = world({ custom_app_automations: [], custom_app_automation_runs: [] });
+    const conn = connection({ entities: ['customers', 'invoices'] });
+    // Primera corrida: ya existe una regla mirando la tabla de facturas (aún sin id): se crea tras la carga.
+    const first = await runAccountingSync(w.db, conn, {
+      session: fakeSession({ customers: [customers], invoices: [invoices] }).session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    if (first.result.status === 'error') throw new Error(first.result.error);
+    const trackerId = first.result.trackers?.invoices as string;
+    (w.tables.custom_app_automations as Row[]).push({ ...created, tracker_id: trackerId });
+    forgetAutomationWatch();
+    expect(w.tables.custom_app_automation_runs ?? []).toHaveLength(0);
+
+    // Siigo registra el pago completo de FV-2-22.
+    const paid = invoices.map((i) =>
+      (i as { externalId: string }).externalId === 'i-1' ? { ...i, balance: 0, status: 'paid' } : i,
+    ) as NormalizedRecord[];
+    const next = { ...conn, cursors: first.result.cursors, trackers: first.result.trackers };
+    const second = await runAccountingSync(w.db, next, {
+      session: fakeSession({ customers: [customers], invoices: [paid] }).session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    if (second.result.status === 'error') throw new Error(second.result.error);
+    const runs = (w.tables.custom_app_automation_runs ?? []) as Row[];
+    expect(runs).toHaveLength(1);
+    const event = runs[0]?.event as { before: { estado: string }; after: { estado: string; numero: string }; kind: string; backfill?: boolean };
+    expect(event).toMatchObject({ kind: 'row_updated', before: { estado: 'Vencida' }, after: { estado: 'Pagada', numero: 'FV-2-22' } });
+    expect(event.backfill).toBeFalsy();
+
+    // Corre otra vez lo mismo: no cambió nada, no sale nada nuevo.
+    await runAccountingSync(
+      w.db,
+      { ...next, cursors: second.result.cursors, trackers: second.result.trackers },
+      { session: fakeSession({ customers: [customers], invoices: [paid] }).session, now: NOW, importPayments: recorder().importPayments },
+    );
+    expect(w.tables.custom_app_automation_runs ?? []).toHaveLength(1);
+  });
+
+  it('una regla que mira la carga inicial no recibe sucesos contables (backfill)', async () => {
+    const w = world({ custom_app_automations: [], custom_app_automation_runs: [] });
+    // La regla debe existir ANTES de la carga: se pre-crea la tabla corriendo una vez sin facturas.
+    const conn = connection({ entities: ['invoices'] });
+    const warm = await runAccountingSync(w.db, conn, {
+      session: fakeSession({ invoices: [[]] }).session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    if (warm.result.status === 'error') throw new Error(warm.result.error);
+    (w.tables.custom_app_automations as Row[]).push({ ...created, trigger: { ...created.trigger, event: 'invoice_created' }, tracker_id: warm.result.trackers?.invoices });
+    forgetAutomationWatch();
+    // Carga inicial (sin cursor): llegan facturas.
+    const initial = await runAccountingSync(
+      w.db,
+      { ...conn, trackers: warm.result.trackers, cursors: {} },
+      { session: fakeSession({ invoices: [invoices] }).session, now: NOW, importPayments: recorder().importPayments },
+    );
+    if (initial.result.status === 'error') throw new Error(initial.result.error);
+    expect((w.tables.tracker_rows ?? []).length).toBe(2);
+    expect(w.tables.custom_app_automation_runs ?? []).toHaveLength(0);
+  });
+
+  it('al llegar un recibo se vuelven a leer las facturas que abona (sin esperar al repaso diario)', async () => {
+    const w = world();
+    const conn = connection({ entities: ['invoices', 'payments'] });
+    const first = await runAccountingSync(w.db, conn, {
+      session: fakeSession({ invoices: [invoices] }).session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    if (first.result.status === 'error') throw new Error(first.result.error);
+    const asked: string[][] = [];
+    const base = fakeSession({ payments: [payments] });
+    const session: ProviderSession = {
+      ...base.session,
+      refreshInvoices: async (numbers) => {
+        asked.push(numbers);
+        return [{ ...(invoices[0] as object), balance: 0, status: 'paid' }] as never;
+      },
+    };
+    const second = await runAccountingSync(
+      w.db,
+      { ...conn, cursors: first.result.cursors, trackers: first.result.trackers },
+      { session, now: NOW, importPayments: recorder().importPayments },
+    );
+    if (second.result.status === 'error') throw new Error(second.result.error);
+    expect(asked).toEqual([['FV-2-22']]);
+    const row = ((w.tables.tracker_rows ?? []) as Row[]).find((r) => r.external_key === 'i-1');
+    expect(row?.values).toMatchObject({ saldo: 0, estado: 'Pagada' });
+    expect(((w.tables.accounting_invoices ?? []) as Row[]).find((r) => r.source_ref === 'i-1')?.balance).toBe(0);
+  });
+
+  it('la carga inicial de recibos no dispara relecturas', async () => {
+    const w = world();
+    const asked: string[][] = [];
+    const base = fakeSession({ payments: [payments] });
+    const session: ProviderSession = { ...base.session, refreshInvoices: async (n) => { asked.push(n); return []; } };
+    const out = await runAccountingSync(w.db, connection({ entities: ['invoices', 'payments'] }), {
+      session, now: NOW, importPayments: recorder().importPayments,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    expect(asked).toEqual([]);
   });
 });

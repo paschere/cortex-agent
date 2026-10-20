@@ -144,6 +144,8 @@ export function lookupRaw(name: string, ctx: TemplateContext): unknown {
   if (lower === 'app') return ctx.appName ?? '';
   if (lower === 'enlace') return ctx.link ?? '';
   if (lower === 'motivo') return ctx.reason ?? '';
+  // La fecha de hoy en Bogotá (AAAA-MM-DD): «fecha de pago = {{hoy}}» (0232).
+  if (lower === 'hoy') return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
   const prior = lower.startsWith('antes.');
   const key = prior ? n.slice(6).trim() : n;
   const source = prior ? (ctx.before ?? {}) : ctx.after;
@@ -440,6 +442,21 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
       return {
         type: a.type,
         summary: `Armaría una prefactura para el NIT ${renderTemplate(a.customer.taxId, ctx) || '(vacío)'} con ${a.items.length} ítem${a.items.length === 1 ? '' : 's'}${a.currency !== 'COP' ? ` en ${a.currency} (a pesos con la TRM)` : ''} y la dejaría POR REVISAR; sólo al aprobarla una persona se crea en Siigo.`,
+      };
+    case 'accounting_upsert_customer':
+      return {
+        type: a.type,
+        summary: `Armaría el cliente «${renderTemplate(a.name, ctx) || '(sin nombre)'}» (NIT ${renderTemplate(a.taxId, ctx) || '(vacío)'}, con su dígito de verificación calculado) para crearlo en Siigo si no existe, y lo dejaría POR REVISAR; nada llega a Siigo sin la aprobación de una persona.`,
+      };
+    case 'accounting_draft_receipt':
+      return {
+        type: a.type,
+        summary: `Armaría un recibo de caja de ${typeof a.amount === 'number' ? `$${a.amount.toLocaleString('es-CO')}` : `«${renderTemplate(a.amount, ctx)}»`} del NIT ${renderTemplate(a.customer.taxId, ctx) || '(vacío)'} contra ${a.invoices ? `las facturas ${renderTemplate(a.invoices, ctx) || '(vacío)'}` : 'sus facturas con saldo (la que vence primero primero)'} y lo dejaría POR REVISAR; el recibo sólo se registra en Siigo cuando una persona lo aprueba.`,
+      };
+    case 'accounting_draft_credit_note':
+      return {
+        type: a.type,
+        summary: `Armaría una nota crédito (motivo DIAN ${a.reason}) a la factura ${renderTemplate(a.invoice, ctx) || '(vacío)'}, ${a.mode === 'total' ? 'por toda la factura' : `con ${(a.items ?? []).length} línea(s)`}, y la dejaría POR REVISAR; sólo se crea en Siigo cuando una persona la aprueba.`,
       };
     case 'wait':
       return {

@@ -2,6 +2,7 @@ import type { SystemPaymentRow } from '../payments/import';
 import type { TrackerField } from '../trackers/schema';
 import type {
   AccountingEntity,
+  NormalizedCreditNote,
   NormalizedCustomer,
   NormalizedInvoice,
   NormalizedPayment,
@@ -127,6 +128,22 @@ const BASE: Record<
       text('enlace', 'Ver en el programa'),
     ],
   },
+  credit_notes: {
+    slug: 'notas_credito',
+    name: 'Notas crédito',
+    noun: 'notas crédito',
+    what: 'las notas crédito de venta (anulan o rebajan una factura)',
+    fields: [
+      text('numero', 'Número'),
+      text('cliente', 'Cliente'),
+      text('nit', 'NIT cliente'),
+      date('fecha', 'Fecha'),
+      text('factura', 'Factura que afecta'),
+      money('valor', 'Valor'),
+      text('moneda', 'Moneda'),
+      text('observaciones', 'Observaciones'),
+    ],
+  },
   payments: {
     slug: 'pagos',
     name: 'Pagos recibidos',
@@ -160,7 +177,7 @@ export function accountingTableSpec(
     entity === 'payments' && provider.paymentsLabel ? provider.paymentsLabel : base.name;
   return {
     entity,
-    slug: `${provider.id}_${base.slug}`.slice(0, 48),
+    slug: accountingTableSlug(provider.id, entity),
     name: `${label} (${provider.name})`.slice(0, 80),
     description: `Se llena sola desde ${provider.name}: ${base.what}.`.slice(0, 500),
     noun: base.noun,
@@ -273,6 +290,24 @@ export function paymentValues(p: NormalizedPayment, ctx: RowContext): Values {
   });
 }
 
+export function creditNoteValues(n: NormalizedCreditNote, ctx: RowContext): Values {
+  return compact({
+    numero: n.number,
+    cliente: nameFor(n, ctx),
+    nit: n.customerTaxId,
+    fecha: n.date,
+    factura: n.invoiceNumber,
+    valor: n.total,
+    moneda: n.currency,
+    observaciones: n.notes,
+  });
+}
+
+/** El slug de la tabla de una cosa de un programa («siigo_facturas»). */
+export function accountingTableSlug(providerId: string, entity: AccountingEntity): string {
+  return `${providerId}_${BASE[entity].slug}`.slice(0, 48);
+}
+
 export function valuesFor(
   entity: AccountingEntity,
   record: NormalizedRecord,
@@ -287,6 +322,8 @@ export function valuesFor(
       return invoiceValues(record as NormalizedInvoice, ctx);
     case 'payments':
       return paymentValues(record as NormalizedPayment, ctx);
+    case 'credit_notes':
+      return creditNoteValues(record as NormalizedCreditNote, ctx);
   }
 }
 

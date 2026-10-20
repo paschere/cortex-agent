@@ -16,6 +16,7 @@ import type {
 import { AlegraClient, alegraHasMore } from './alegra-client';
 import { amount, bogotaDay, clip, currencyCode, day, daysBefore, monthsAgo } from './common';
 import { alegraInvoicing } from './invoicing';
+import { alegraOutbound } from './outbound';
 import { alegraBillPage } from './purchases';
 import { alegraReports } from './reports-alegra';
 
@@ -64,6 +65,7 @@ const PATHS: Record<AccountingEntity, string> = {
   products: '/items',
   invoices: '/invoices',
   payments: '/payments',
+  credit_notes: '/credit-notes',
 };
 
 // ---------------------------------------------------------------------------
@@ -430,6 +432,7 @@ export const alegraProvider: AccountingProvider = {
         return { token: null };
       },
       invoicing: alegraInvoicing(client),
+      outbound: alegraOutbound(client),
       writer: alegraWriter(client),
       reports: alegraReports({
         email: credentials.email ?? '',
@@ -467,6 +470,8 @@ export const alegraProvider: AccountingProvider = {
                 return normalizeAlegraInvoice(r as AlegraInvoice, currency);
               case 'payments':
                 return normalizeAlegraPayment(r as AlegraPayment, currency);
+              case 'credit_notes':
+                return null;
             }
           })
           .filter((r): r is NormalizedRecord => r !== null);

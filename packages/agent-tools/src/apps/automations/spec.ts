@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { filterSchema, thenSchema } from '../../views/spec';
 import { roleKeySchema } from '../permissions';
+import { ACCOUNTING_EVENTS, ACCOUNTING_EVENT_LABEL, accountingEventTableSlug } from '../../accounting/events';
+import { ACCOUNTING_PROVIDER_IDS } from '../../accounting/types';
 import { invoiceBodySchema } from './invoice-draft-spec';
+import { creditNoteBodySchema, customerBodySchema, receiptBodySchema } from './outbox-spec';
 import { REPORT_MAX_RECIPIENTS, reportBodySchema } from './report-spec';
 
 /**
@@ -30,6 +33,7 @@ export const TRIGGER_KINDS = [
   'button',
   'rows_poll',
   'row_deleted',
+  'accounting_event',
 ] as const;
 export type TriggerKind = (typeof TRIGGER_KINDS)[number];
 
@@ -42,6 +46,7 @@ export const ROW_TRIGGER_KINDS: ReadonlySet<TriggerKind> = new Set([
   'approval_decided',
   'rows_poll',
   'row_deleted',
+  'accounting_event',
 ]);
 
 const slug = z
@@ -119,6 +124,17 @@ export const automationTriggerSchema = z.discriminatedUnion('type', [
     /** Tope de filas por vuelta (las que más tiempo llevan sin atenderse van primero). */
     maxRows: z.number().int().min(1).max(POLL_MAX_ROWS).default(POLL_DEFAULT_ROWS),
     window: pollWindowSchema.optional(),
+  }),
+  /**
+   * UN SUCESO CONTABLE («una factura queda pagada en Siigo»). Sale de comparar
+   * antes y después las filas que la sincronización escribe en las tablas del
+   * programa; la fila de partida es la factura, el recibo, la nota o el cliente
+   * (sus campos sirven en `{{numero}}`, `{{saldo}}`, `{{cliente}}`…).
+   */
+  z.object({
+    type: z.literal('accounting_event'),
+    event: z.enum(ACCOUNTING_EVENTS),
+    provider: z.enum(ACCOUNTING_PROVIDER_IDS as unknown as [string, ...string[]]).default('siigo'),
   }),
   z.object({
     type: z.literal('button'),
@@ -329,6 +345,12 @@ export const automationActionSchema = z.discriminatedUnion('type', [
     ...branch,
     ...invoiceBodySchema,
   }),
+  /** CLIENTE A SIIGO: crea el tercero si no existe (por NIT); queda POR REVISAR. */
+  z.object({ type: z.literal('accounting_upsert_customer'), ...branch, ...customerBodySchema }),
+  /** RECIBO DE CAJA: un pago que entró; se cruza contra las facturas del cliente. POR REVISAR. */
+  z.object({ type: z.literal('accounting_draft_receipt'), ...branch, ...receiptBodySchema }),
+  /** NOTA CRÉDITO: anula o rebaja una factura. POR REVISAR. */
+  z.object({ type: z.literal('accounting_draft_credit_note'), ...branch, ...creditNoteBodySchema }),
   z.object({
     type: z.literal('wait'),
     ...branch,
@@ -358,6 +380,9 @@ export const ACTION_LABEL: Record<ActionType, string> = {
   rollup: 'Acumular en la fila padre (suma, conteo, promedio…)',
   report: 'Mandar un reporte por correo (tabla + Excel / PDF)',
   accounting_draft_invoice: 'Preparar una prefactura para Siigo (por revisar)',
+  accounting_upsert_customer: 'Crear el cliente en Siigo si no existe (por revisar)',
+  accounting_draft_receipt: 'Preparar un recibo de caja en Siigo (por revisar)',
+  accounting_draft_credit_note: 'Preparar una nota crédito en Siigo (por revisar)',
   wait: 'Esperar y volver a revisar',
 };
 
@@ -371,6 +396,7 @@ export const TRIGGER_LABEL: Record<TriggerKind, string> = {
   button: 'Alguien toca un botón',
   rows_poll: 'Cada cierto tiempo, para cada fila que cumpla',
   row_deleted: 'Se borra una fila',
+  accounting_event: 'Pasa algo en el programa contable',
 };
 
 export const automationInputSchema = z.object({
@@ -383,8 +409,12 @@ export const automationInputSchema = z.object({
 export type AutomationInput = z.infer<typeof automationInputSchema>;
 
 export function triggerTracker(t: AutomationTrigger): string | null {
+  if (t.type === 'accounting_event')
+    return accountingEventTableSlug(t.provider as (typeof ACCOUNTING_PROVIDER_IDS)[number], t.event);
   return 'tracker' in t ? t.tracker : null;
 }
+
+export { ACCOUNTING_EVENT_LABEL };
 
 /** Los problemas que no dependen de la base: una acción que necesita fila en un disparador sin fila. */
 export function structuralProblems(input: AutomationInput): string[] {
@@ -448,6 +478,17 @@ export function structuralProblems(input: AutomationInput): string[] {
       out.push('«Preparar una prefactura» parte de una fila (un cierre, una atención…); con un horario o un botón no hay fila.');
     if (a.type === 'accounting_draft_invoice' && a.currency !== 'COP' && a.trm === undefined)
       out.push(`Los precios están en ${a.currency}: falta la TRM (\`trm\`) para pasarlos a pesos.`);
+    if (
+      (a.type === 'accounting_upsert_customer' ||
+        a.type === 'accounting_draft_receipt' ||
+        a.type === 'accounting_draft_credit_note') &&
+      rowless
+    )
+      out.push(`«${ACTION_LABEL[a.type]}» parte de una fila (un pago, una anulación…); con un horario o un botón no hay fila.`);
+    if (a.type === 'accounting_draft_credit_note' && a.mode === 'items' && !a.items?.length)
+      out.push('Una nota crédito «por ítems» necesita sus líneas (`items`); para anular toda la factura usa mode «total».');
+    if (a.type === 'accounting_draft_credit_note' && a.mode === 'total' && a.items?.length)
+      out.push('Con mode «total» se copian las líneas de la factura: quita `items` o usa mode «items».');
     if (a.type === 'accounting_draft_invoice' && a.customer.via && rowless)
       out.push('«Cliente de la fila relacionada» necesita una fila de partida.');
   }

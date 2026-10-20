@@ -1,3 +1,4 @@
+import { accountingSlugParts, detectAccountingEvents } from '../../accounting/events';
 import type { AutomationTrigger, TriggerKind } from './spec';
 
 /**
@@ -35,6 +36,8 @@ export interface AutomationEvent {
   decision?: 'approved' | 'rejected';
   reason?: string;
   buttonId?: string;
+  /** Viene de la carga inicial de un programa contable (no cuenta como un suceso de hoy). */
+  backfill?: boolean;
   /** Reglas que llevaron hasta aquí (anti-bucles) y a cuántos saltos. */
   chain: string[];
   depth: number;
@@ -71,6 +74,15 @@ export function matchesTrigger(
   event: AutomationEvent,
   trackerSlug: string | null,
 ): boolean {
+  if (trigger.type === 'accounting_event') {
+    if (event.kind !== 'row_created' && event.kind !== 'row_updated') return false;
+    if (event.backfill) return false;
+    const parts = accountingSlugParts(trackerSlug ?? event.trackerSlug);
+    if (!parts || parts.provider !== trigger.provider) return false;
+    return detectAccountingEvents(parts.entity, event.kind, event.before, event.after).includes(
+      trigger.event,
+    );
+  }
   if (trigger.type !== event.kind) return false;
   if ('tracker' in trigger && trackerSlug && trigger.tracker !== trackerSlug) return false;
   switch (trigger.type) {

@@ -377,9 +377,10 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   apps_automations_pause: 'Pausar o reanudar una automatización',
   apps_automations_test: 'Probar una automatización con una fila real',
   apps_report_preview: 'Ver cómo saldría un reporte por correo',
-  accounting_invoice_drafts_list: 'Ver las prefacturas por revisar',
-  accounting_invoice_draft_approve: 'Aprobar una prefactura y crearla en Siigo',
-  accounting_invoice_draft_discard: 'Descartar una prefactura',
+  accounting_invoice_drafts_list: 'Ver lo que está por enviar a Siigo',
+  accounting_invoice_draft_approve: 'Aprobar y enviar a Siigo (factura, recibo, nota crédito o cliente)',
+  accounting_invoice_draft_discard: 'Descartar algo por enviar a Siigo',
+  accounting_outbox_prepare: 'Preparar un cliente, recibo de caja o nota crédito para Siigo',
   views_list: 'Ver las vistas',
   views_get: 'Abrir una vista',
   views_create: 'Crear una vista',
@@ -533,9 +534,9 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
     case 'sales_quote_send':
       return `Mandar la cotización ${input.quote} por correo ${Array.isArray(input.to) && input.to.length ? `a ${input.to.join(', ')}` : 'al correo del cliente'}`;
     case 'accounting_invoice_draft_approve':
-      return `Aprobar la prefactura y crear la factura en Siigo${input.sendToDian === true ? ' — se envía a la DIAN' : ' — queda en Siigo sin enviar a la DIAN'}`;
+      return `Aprobar y enviar a Siigo lo que está en la bandeja (factura, recibo de caja, nota crédito o cliente)${input.sendToDian === true ? ' — lo electrónico se envía a la DIAN' : ' — sin enviar a la DIAN'}`;
     case 'accounting_invoice_draft_discard':
-      return 'Descartar la prefactura: no se crea nada en Siigo';
+      return 'Descartar el borrador: no se crea nada en Siigo';
     case 'sales_invoice_emit':
       return `Emitir la factura electrónica de ${input.document} en ${input.provider === 'siigo' ? 'Siigo' : input.provider === 'alegra' ? 'Alegra' : 'el programa contable'} — sale con su CUFE a la DIAN`;
     case 'crm_create_opportunity':

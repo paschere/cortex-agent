@@ -30,6 +30,7 @@ import {
 import type {
   AccountingEntity,
   AccountingProvider,
+  NormalizedCreditNote,
   NormalizedCustomer,
   NormalizedInvoice,
   NormalizedPayment,
@@ -80,6 +81,7 @@ const ENTITY_LABEL: Record<AccountingEntity, string> = {
   products: 'productos',
   invoices: 'facturas',
   payments: 'recibos de caja',
+  credit_notes: 'notas crédito',
 };
 
 export const ENTITY_ORDER: readonly AccountingEntity[] = ACCOUNTING_ENTITIES;
@@ -268,7 +270,9 @@ export async function upsertAccountingRows(
   createdBy: string,
   counts: EntityCounts,
   newLabels: string[],
+  opts: { backfill?: boolean } = {},
 ): Promise<void> {
+  const befores = new Map<string, Record<string, unknown>>();
   const wroteSince = new Date(Date.now() - 2000).toISOString();
   const known = new Set(table.fields.map((f) => f.key));
   const byKey = new Map<string, Record<string, string | number>>();
@@ -313,6 +317,8 @@ export async function upsertAccountingRows(
         });
         continue;
       }
+      // Una copia de lo de antes, por si la lectura comparte objeto con lo que se escribe.
+      const beforeValues = { ...(found.values ?? {}) };
       if (sameOn(Object.keys(ours), found.values ?? {}, values)) {
         counts.unchanged += 1;
         continue;
@@ -324,6 +330,8 @@ export async function upsertAccountingRows(
         .eq('tracker_id', table.id);
       if (updateError) throw updateError;
       counts.updated += 1;
+      // Lo que tenía antes: «una factura queda pagada» se detecta comparando (0232).
+      befores.set(key, beforeValues);
     }
     if (!inserts.length) continue;
     const { error: insertError } = await db.from('tracker_rows').insert(inserts);
@@ -345,7 +353,11 @@ export async function upsertAccountingRows(
     }
   }
   // Avisa a las automatizaciones de la app que miran esta tabla (0210).
-  if (counts.inserted || counts.updated) await emitSyncEvents(db, table, wroteSince);
+  if (counts.inserted || counts.updated)
+    await emitSyncEvents(db, table, wroteSince, {
+      befores: befores as Map<string, Record<string, string | number>>,
+      backfill: opts.backfill,
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -467,6 +479,7 @@ export async function runAccountingSync(
   let clientIds: Map<string, string> | null = null;
   let partial = false;
   let ranInitial = false;
+  const refreshNumbers = new Set<string>();
   const warnings: string[] = [];
   const entities = ENTITY_ORDER.filter(
     (e) => conn.entities.includes(e) && provider.entities.includes(e),
@@ -489,11 +502,11 @@ export async function runAccountingSync(
         if (kind === 'customers')
           for (const c of records as NormalizedCustomer[])
             if (c.name) names.set(c.externalId, c.name);
-        if (kind === 'invoices' || kind === 'payments')
+        if (kind === 'invoices' || kind === 'payments' || kind === 'credit_notes')
           await loadCustomerNames(
             db,
             trackers.customers,
-            (records as Array<NormalizedInvoice | NormalizedPayment>)
+            (records as Array<NormalizedInvoice | NormalizedPayment | NormalizedCreditNote>)
               .filter((r) => !r.customerName && r.customerExternalId)
               .map((r) => r.customerExternalId as string),
             names,
@@ -506,6 +519,7 @@ export async function runAccountingSync(
           conn.created_by,
           entityCounts,
           labels,
+          { backfill: plan.mode === 'initial' },
         );
         if (kind === 'invoices') {
           clientIds ??= await clientsByNit(db);
@@ -551,6 +565,12 @@ export async function runAccountingSync(
             });
             counts.payments_created = (counts.payments_created ?? 0) + imported.created;
           }
+          // Un recibo baja el saldo de la factura sin marcarla «modificada» (0232):
+          // se vuelve a leer ya, en vez de esperar al repaso diario, para que
+          // «la factura queda pagada» salga a los minutos.
+          if (plan.mode !== 'initial')
+            for (const p of records as NormalizedPayment[])
+              for (const a of p.applications) if (a.invoiceNumber) refreshNumbers.add(a.invoiceNumber);
         }
       };
 
@@ -609,6 +629,54 @@ export async function runAccountingSync(
         break;
       }
     }
+    if (
+      refreshNumbers.size &&
+      deps.session.refreshInvoices &&
+      trackers.invoices &&
+      entities.includes('invoices')
+    ) {
+      try {
+        const fresh = await deps.session.refreshInvoices([...refreshNumbers]);
+        if (fresh.length) {
+          const table = await ensureAccountingTable(
+            db,
+            accountingTableSpec(provider, 'invoices'),
+            trackers.invoices,
+            conn.created_by,
+          );
+          await loadCustomerNames(
+            db,
+            trackers.customers,
+            fresh.filter((r) => !r.customerName && r.customerExternalId).map((r) => r.customerExternalId as string),
+            names,
+          );
+          const ctx = { today, customerNames: names };
+          const c = counts.invoices ?? emptyCounts();
+          counts.invoices = c;
+          await upsertAccountingRows(
+            db,
+            table,
+            fresh.map((r) => ({ key: r.externalId, values: valuesFor('invoices', r, ctx) })),
+            conn.created_by,
+            c,
+            [],
+            { backfill: false },
+          );
+          clientIds ??= await clientsByNit(db);
+          const map = clientIds;
+          counts.receivables =
+            (counts.receivables ?? 0) +
+            (await writeReceivables(
+              db,
+              fresh.map((inv) =>
+                receivableFor(provider.id, inv, { ...ctx, clientIdByNit: map, now: now.toISOString() }),
+              ),
+            ));
+        }
+      } catch {
+        // El repaso diario las alcanza: no tumba la sincronización.
+      }
+    }
   } catch (err) {
     counts.requests = deps.session.requests;
     return {
@@ -644,6 +712,7 @@ const NOUN: Record<AccountingEntity, [string, string]> = {
   products: ['producto nuevo', 'productos nuevos'],
   invoices: ['factura nueva', 'facturas nuevas'],
   payments: ['pago nuevo', 'pagos nuevos'],
+  credit_notes: ['nota crédito nueva', 'notas crédito nuevas'],
 };
 
 /**

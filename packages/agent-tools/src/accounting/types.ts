@@ -21,12 +21,18 @@ export const ACCOUNTING_PROVIDER_IDS: readonly AccountingProviderId[] = [
   'quickbooks',
 ] as const;
 
-export type AccountingEntity = 'customers' | 'products' | 'invoices' | 'payments';
+export type AccountingEntity =
+  | 'customers'
+  | 'products'
+  | 'invoices'
+  | 'payments'
+  | 'credit_notes';
 export const ACCOUNTING_ENTITIES: readonly AccountingEntity[] = [
   'customers',
   'products',
   'invoices',
   'payments',
+  'credit_notes',
 ] as const;
 
 /**
@@ -120,11 +126,28 @@ export interface NormalizedPayment {
   applications: Array<{ ref: string; invoiceNumber: string | null; amount: number }>;
 }
 
+/** Nota crédito de venta (0232): anula o rebaja una factura. */
+export interface NormalizedCreditNote {
+  externalId: string;
+  number: string;
+  date: string;
+  customerExternalId?: string;
+  customerName?: string;
+  customerTaxId?: string;
+  /** Número de la factura que afecta («FV-1-68»), si el programa lo dice. */
+  invoiceNumber?: string;
+  total: number;
+  currency: string;
+  reason?: string;
+  notes?: string;
+}
+
 export type NormalizedRecord =
   | NormalizedCustomer
   | NormalizedProduct
   | NormalizedInvoice
-  | NormalizedPayment;
+  | NormalizedPayment
+  | NormalizedCreditNote;
 
 /** Un filtro de un listado del programa, opaco para el motor (se guarda para reanudar). */
 export type ProviderQuery = Record<string, string>;
@@ -171,6 +194,13 @@ export interface ProviderSession {
   verify(): Promise<{ token: ProviderToken | null }>;
   listPage(entity: AccountingEntity, query: ProviderQuery, page: number): Promise<ProviderPage>;
   /**
+   * Vuelve a leer estas facturas por su número («FV-1-68»), sin filtros de
+   * fecha (0232). Un recibo de caja baja el saldo de una factura SIN marcarla
+   * como modificada, así que al llegar un pago se refrescan las facturas que
+   * abona en vez de esperar al repaso diario. Máximo unas decenas por vez.
+   */
+  refreshInvoices?(numbers: string[]): Promise<NormalizedInvoice[]>;
+  /**
    * Cuántos registros dice tener el programa de una cosa, sin filtros (una sola
    * petición de una fila). Sirve para comprobar que la tabla sincronizada no
    * se quedó corta. `null` si el programa no lo puede decir.
@@ -215,6 +245,40 @@ export interface ProviderSession {
    * vista previa y la aprobación de una persona (close/writeback/store.ts).
    */
   writer?: ProviderWriter;
+  /**
+   * Escrituras hacia el programa desde las apps (0232): cliente (tercero),
+   * recibo de caja contra varias facturas y nota crédito. Igual que `invoicing`,
+   * sólo después de la revisión y aprobación de una persona (bandeja
+   * «Por enviar a Siigo»); nunca desatendido.
+   */
+  outbound?: ProviderOutbound;
+}
+
+/** Un documento creado en el programa. */
+export interface CreatedProviderDocument {
+  id: string;
+  number: string | null;
+  total: number | null;
+  /** Estado de la DIAN en español, si aplica (nota crédito electrónica). */
+  einvoiceStatus?: string | null;
+}
+
+export interface ProviderOutbound {
+  /** Crea el tercero si no existe (por NIT); si ya existe devuelve el que hay. Nunca pisa datos. */
+  upsertCustomer(
+    payload: import('./outbound/shape').CustomerPayload,
+    opts: { idempotencyKey: string },
+  ): Promise<{ id: string; name: string | null; created: boolean }>;
+  /** Un recibo de caja que cruza una o varias facturas del mismo cliente. */
+  createReceipt?(
+    payload: import('./outbound/shape').ReceiptPayload,
+    opts: { idempotencyKey: string; paymentTypeId?: string },
+  ): Promise<CreatedProviderDocument>;
+  /** Una nota crédito contra una factura. */
+  createCreditNote?(
+    payload: import('./outbound/shape').CreditNotePayload,
+    opts: { idempotencyKey: string; paymentTypeId?: string; documentTypeId?: string; stamp?: boolean },
+  ): Promise<CreatedProviderDocument>;
 }
 
 /** Lo que el programa necesita que se elija antes de facturar, ya traducido. */

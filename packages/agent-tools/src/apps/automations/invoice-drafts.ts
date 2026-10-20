@@ -5,6 +5,8 @@ import { type EmissionDeps, emitInvoice } from '../../sales/emit';
 import { createSalesDocument } from '../../sales/store';
 import { documentTotals, formatMoney } from '../../sales/totals';
 import { getTrackerById, upsertRow } from '../../trackers/store';
+import { OUTBOX_KIND_LABEL, type OutboxKind } from '../../accounting/outbound/shape';
+import { outboxPayloadProblems } from './outbox-build';
 import { type DraftLine, type InvoiceDraftData, writeBackValues } from './invoice-draft';
 import { INVOICE_TAX_RATES, type InvoiceWriteBack } from './invoice-draft-spec';
 
@@ -31,7 +33,7 @@ import { INVOICE_TAX_RATES, type InvoiceWriteBack } from './invoice-draft-spec';
  */
 
 export const INVOICE_DRAFT_COLUMNS =
-  'id, organization_id, app_id, automation_id, run_id, tracker_id, row_id, row_label, idempotency_key, status, customer_tax_id, customer_name, currency, trm, lines, observations, payment_form, payment_days, choices, write_back, total, sales_document_id, provider, provider_invoice_id, provider_number, sent_to_dian, error, decided_by, decided_at, created_at, updated_at';
+  'id, organization_id, app_id, automation_id, run_id, tracker_id, row_id, row_label, idempotency_key, status, customer_tax_id, customer_name, currency, trm, lines, observations, payment_form, payment_days, choices, write_back, total, sales_document_id, provider, provider_invoice_id, provider_number, sent_to_dian, error, decided_by, decided_at, created_at, updated_at, kind, payload';
 
 export type InvoiceDraftStatus = 'pending' | 'creating' | 'created' | 'discarded' | 'error';
 
@@ -51,7 +53,11 @@ export interface InvoiceDraftChoices {
 
 export interface InvoiceDraftRow {
   id: string;
-  app_id: string;
+  /** Qué se enviará a Siigo al aprobar (0232). `invoice` = prefactura. */
+  kind: OutboxKind;
+  /** Lo que se manda cuando no es factura (recibo, nota, cliente). */
+  payload: Record<string, unknown>;
+  app_id: string | null;
   automation_id: string | null;
   run_id: string | null;
   tracker_id: string | null;
@@ -94,7 +100,24 @@ function adapt(r: Record<string, unknown>): InvoiceDraftRow {
     })),
     choices: (r.choices as InvoiceDraftChoices) ?? {},
     write_back: (r.write_back as InvoiceWriteBack) ?? {},
+    kind: ((r.kind as OutboxKind | undefined) ?? 'invoice'),
+    payload: (r.payload as Record<string, unknown> | undefined) ?? {},
   };
+}
+
+/** `adapt` para los otros módulos de la bandeja (outbox-run, outbox-approve). */
+export const adaptDraftRow = adapt;
+
+/** Los problemas de CUALQUIER borrador antes de aprobar, según lo que sea. Puro. */
+export function outboxDraftProblems(
+  d: Pick<InvoiceDraftRow, 'kind' | 'payload' | 'customer_tax_id' | 'lines' | 'currency'>,
+): string[] {
+  return d.kind === 'invoice' ? draftProblems(d) : outboxPayloadProblems(d.kind, d.payload);
+}
+
+/** «Recibo de caja», «Nota crédito»… para títulos y avisos. */
+export function draftKindLabel(kind: OutboxKind): string {
+  return OUTBOX_KIND_LABEL[kind];
 }
 
 /** Problemas que se ven ANTES de aprobar (el resto lo dice Siigo al crear). Puro. */
@@ -190,7 +213,7 @@ export async function getInvoiceDraft(db: SupabaseClient, id: string): Promise<I
 
 export async function listInvoiceDrafts(
   db: SupabaseClient,
-  opts: { statuses?: InvoiceDraftStatus[]; limit?: number } = {},
+  opts: { statuses?: InvoiceDraftStatus[]; kinds?: OutboxKind[]; limit?: number } = {},
 ): Promise<InvoiceDraftRow[]> {
   let q = db
     .from('app_invoice_drafts')
@@ -198,6 +221,7 @@ export async function listInvoiceDrafts(
     .order('created_at', { ascending: false })
     .limit(opts.limit ?? 100);
   if (opts.statuses?.length) q = q.in('status', opts.statuses);
+  if (opts.kinds?.length) q = q.in('kind', opts.kinds);
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map((r) => adapt(r as Record<string, unknown>));
@@ -448,7 +472,7 @@ export async function approveInvoiceDraft(
 }
 
 /** Escribe el número de factura (y el estado) en la fila de origen. Nunca tumba la aprobación. */
-async function writeBackToRow(db: SupabaseClient, d: InvoiceDraftRow, userId: string): Promise<string[]> {
+export async function writeBackToRow(db: SupabaseClient, d: InvoiceDraftRow, userId: string): Promise<string[]> {
   const values = writeBackValues(d.write_back, 'created', d.provider_number ?? d.provider_invoice_id);
   if (!Object.keys(values).length) return [];
   if (!d.tracker_id || !d.row_id) return ['La prefactura no viene de una fila: no hay dónde escribir el número.'];

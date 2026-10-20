@@ -68,6 +68,7 @@ const TABLES: Record<AccountingEntity, string> = {
   products: 'Item',
   invoices: 'Invoice',
   payments: 'Payment',
+  credit_notes: 'CreditMemo',
 };
 
 // ---------------------------------------------------------------------------
@@ -439,6 +440,8 @@ export const quickbooksProvider: AccountingProvider = {
                 return normalizeQuickbooksInvoice(r as QuickBooksInvoice, currency);
               case 'payments':
                 return normalizeQuickbooksPayment(r as QuickBooksPayment, invoiceNumbers, currency);
+              case 'credit_notes':
+                return null;
             }
           })
           .filter((r): r is NormalizedRecord => r !== null);

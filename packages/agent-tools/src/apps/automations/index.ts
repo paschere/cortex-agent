@@ -123,5 +123,8 @@ export {
   accountingInvoiceDraftApprove,
   accountingInvoiceDraftDiscard,
   accountingInvoiceDraftsList,
+  accountingOutboxPrepare,
 } from './invoice-draft-tools';
+export { approveOutboxItem, updateOutboxPayload, outboxPayloadEditSchema } from './outbox-approve';
+export { outboxDraftProblems, draftKindLabel } from './invoice-drafts';
 export { appsReportPreview } from './report-tools';

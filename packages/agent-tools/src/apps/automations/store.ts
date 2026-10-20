@@ -228,7 +228,11 @@ export async function validateAutomation(
       );
     const tracker = isReadOnlySource(slug) ? null : await getTrackerBySlug(db, slug);
     if (!tracker && !isReadOnlySource(slug))
-      problems.push(`La tabla «${slug}» no existe (mira trackers.list).`);
+      problems.push(
+        input.trigger.type === 'accounting_event'
+          ? `Todavía no existe la tabla «${slug}»: conecta ${input.trigger.provider === 'siigo' ? 'Siigo' : input.trigger.provider} en Integraciones → Programas contables y espera a que termine su primera carga (para notas crédito, activa «notas crédito» en la conexión).`
+          : `La tabla «${slug}» no existe (mira trackers.list).`,
+      );
     if (tracker) {
       triggerTracker_ = tracker;
       trackerId = tracker.id;
@@ -299,6 +303,22 @@ export async function validateAutomation(
         const source = await getTrackerBySlug(db, a.source.tracker);
         if (!source) problems.push(`La tabla «${a.source.tracker}» del reporte no existe.`);
         else problems.push(...reportQueryProblems(a.source, source));
+      }
+    }
+    if (
+      a.type === 'accounting_upsert_customer' ||
+      a.type === 'accounting_draft_receipt' ||
+      a.type === 'accounting_draft_credit_note'
+    ) {
+      for (const r of a.notifyRoles)
+        if (!roleKeys.has(r)) problems.push(`El rol «${r}» no existe en esta app.`);
+      if (triggerTracker_) {
+        const byKey = new Map(triggerTracker_.fields.map((f) => [f.key, f]));
+        const via = a.type === 'accounting_draft_receipt' ? a.customer.via : a.type === 'accounting_upsert_customer' ? a.via : undefined;
+        if (via && byKey.get(via)?.type !== 'relation')
+          problems.push(`«${via}» no es un campo de relación de «${slug}»: de ahí se sacan los datos del cliente.`);
+        for (const k of [a.writeBack?.invoiceNumber, a.writeBack?.status?.field])
+          if (k && !byKey.has(k)) problems.push(`«${k}» no es un campo de «${slug}» (donde se escribe el número o el estado).`);
       }
     }
     if (a.type === 'accounting_draft_invoice') {

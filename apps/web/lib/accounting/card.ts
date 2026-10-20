@@ -19,6 +19,8 @@ export const ENTITY_LABELS: Record<AccountingSelection, string> = {
   products: 'Productos',
   invoices: 'Facturas de venta',
   payments: 'Pagos recibidos',
+  // 0232: para el disparador «se crea una nota crédito».
+  credit_notes: 'Notas crédito',
   // 0217: Siigo no tiene API de nómina; se leen los comprobantes contables.
   payroll: 'Nómina (desde los comprobantes contables)',
 };

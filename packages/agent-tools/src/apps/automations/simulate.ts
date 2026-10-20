@@ -14,7 +14,7 @@ import {
   planUpdateRows,
   summarizeChanges,
 } from './related';
-import type { AutomationInput } from './spec';
+import { type AutomationInput, triggerTracker } from './spec';
 
 /**
  * «PROBAR CON UNA FILA DE EJEMPLO»: la regla corre contra una fila real (la que
@@ -31,7 +31,7 @@ export async function simulateAutomation(
 ): Promise<Simulation & { sample: { label: string; id: string } | null }> {
   const now = options.now ?? new Date();
   const trigger = input.trigger;
-  const slug = 'tracker' in trigger ? trigger.tracker : null;
+  const slug = triggerTracker(trigger);
   const tracker = slug ? await getTrackerBySlug(db, slug) : null;
   if (slug && !tracker) throw new NotFoundError(`La tabla «${slug}» no existe.`);
 
@@ -66,8 +66,31 @@ export async function simulateAutomation(
   else if (trigger.type === 'approval_decided' || trigger.type === 'row_updated')
     before = { ...after };
 
+  // Un suceso contable simulado: la fila de ejemplo se lleva al estado al que
+  // llegaría («una factura queda pagada» → Pagada, saldo 0), con su «antes».
+  let kind: AutomationEvent['kind'] = trigger.type;
+  if (trigger.type === 'accounting_event') {
+    const created = ['invoice_created', 'receipt_created', 'credit_note_created', 'customer_created'];
+    const target =
+      trigger.event === 'invoice_paid'
+        ? 'Pagada'
+        : trigger.event === 'invoice_overdue'
+          ? 'Vencida'
+          : trigger.event === 'invoice_annulled'
+            ? 'Anulada'
+            : null;
+    if (created.includes(trigger.event)) {
+      kind = 'row_created';
+      before = null;
+    } else {
+      kind = 'row_updated';
+      before = { ...after, estado: 'Por cobrar' };
+      after = { ...after, ...(target ? { estado: target } : {}), ...(target === 'Pagada' ? { saldo: 0 } : {}) };
+    }
+  }
+
   const event: AutomationEvent = {
-    kind: trigger.type,
+    kind,
     trackerId: tracker?.id,
     trackerSlug: tracker?.slug,
     rowId: id,

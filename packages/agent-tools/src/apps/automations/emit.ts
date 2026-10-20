@@ -135,6 +135,8 @@ export interface EmitInput {
   screen?: string;
   decision?: 'approved' | 'rejected';
   reason?: string;
+  /** Viene de una carga inicial de un programa contable (no dispara sucesos contables). */
+  backfill?: boolean;
 }
 
 interface Candidate {
@@ -163,6 +165,7 @@ export async function emitAutomationEvent(db: SupabaseClient, input: EmitInput):
       screen: input.screen,
       decision: input.decision,
       reason: input.reason,
+      backfill: input.backfill,
       chain: o?.chain ?? [],
       depth: o?.depth ?? 0,
     };
@@ -178,7 +181,14 @@ export async function emitAutomationEvent(db: SupabaseClient, input: EmitInput):
       .select('id, app_id, trigger')
       .eq('enabled', true)
       .eq('tracker_id', input.trackerId)
-      .eq('trigger_kind', input.kind)
+      .in(
+        'trigger_kind',
+        // Los sucesos contables («una factura queda pagada») salen de las mismas
+        // filas sincronizadas: el mismo punto, sin un segundo camino (0232).
+        input.kind === 'row_created' || input.kind === 'row_updated'
+          ? [input.kind, 'accounting_event']
+          : [input.kind],
+      )
       .limit(50);
     if (error || !data?.length) return 0;
 
@@ -266,13 +276,19 @@ export async function emitSyncEvents(
   db: SupabaseClient,
   tracker: { id: string; slug: string },
   sinceIso: string,
-  options: { limit?: number } = {},
+  options: {
+    limit?: number;
+    /** Valores de antes por clave externa, para que «cambió de X a Y» y los sucesos contables funcionen. */
+    befores?: Map<string, Values>;
+    /** Carga inicial: no es «lo que pasó hoy»; los sucesos contables no se disparan. */
+    backfill?: boolean;
+  } = {},
 ): Promise<number> {
   try {
     if (!(await watchesTracker(db, tracker.id))) return 0;
     const { data, error } = await db
       .from('tracker_rows')
-      .select('id, label, values, created_at, updated_at')
+      .select('id, label, values, created_at, updated_at, external_key')
       .eq('tracker_id', tracker.id)
       .gte('updated_at', sinceIso)
       .order('updated_at', { ascending: true })
@@ -285,6 +301,7 @@ export async function emitSyncEvents(
       values: Values;
       created_at: string;
       updated_at: string;
+      external_key?: string | null;
     }>) {
       const created = new Date(r.created_at).getTime() >= new Date(sinceIso).getTime();
       n += await emitAutomationEvent(db, {
@@ -292,10 +309,12 @@ export async function emitSyncEvents(
         trackerId: tracker.id,
         trackerSlug: tracker.slug,
         rowId: r.id,
+        before: created ? null : ((r.external_key && options.befores?.get(r.external_key)) || null),
         after: r.values ?? {},
         label: r.label,
         version: r.updated_at,
         actor: { kind: 'system' },
+        backfill: options.backfill,
       });
     }
     return n;
