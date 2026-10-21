@@ -10,3 +10,4 @@ Solo local. La base `cortex_qa` vive dentro del contenedor `supabase_db_cortex-a
 3. `next dev -p 3100` con `SUPABASE_DB_URL=…/cortex_qa`, `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54391`, `APP_BASE_URL`/`BETTER_AUTH_URL=http://localhost:3100`.
 4. Crear cuentas (`/api/auth/sign-up/email`), una empresa (`/api/auth/organization/create`), añadir miembros a `ba_member`, entrar una vez con cada uno.
 5. `QA_ORG=<id empresa> tsx scripts/qa/seed-vuelos.ts` monta la app; `tsx scripts/qa/run-automations.ts` ejecuta la cola de reglas (Inngest no corre en local).
+Contraseña local de las cuentas @qa.test (solo base cortex_qa): QaLocal-2026-vuelos

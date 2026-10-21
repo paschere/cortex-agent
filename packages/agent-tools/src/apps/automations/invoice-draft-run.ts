@@ -1,3 +1,4 @@
+import { formatMoney } from '../../format/display';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { orgAdmins } from '../../directory/store';
 import { getTrackerBySlug, upsertRow } from '../../trackers/store';
@@ -177,6 +178,6 @@ export async function runDraftInvoiceAction(a: InvoiceDraftRunInput): Promise<st
   } catch {
     // El aviso es un extra: la prefactura ya está en la bandeja.
   }
-  const total = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(built.draft.total);
+  const total = formatMoney(built.draft.total);
   return `Prefactura por revisar para ${built.draft.customerName || `NIT ${built.draft.customerTaxId}`}: ${built.draft.lines.length} línea${built.draft.lines.length === 1 ? '' : 's'}, ${total} con IVA (estimado)${built.draft.skipped.length ? `; sin ${built.draft.skipped.join(' ')}` : ''}. Nada se envió a Siigo; falta la aprobación de una persona${belled ? ` (aviso a ${belled})` : ''}.${warning}`;
 }

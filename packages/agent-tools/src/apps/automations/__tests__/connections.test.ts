@@ -843,6 +843,64 @@ describe('planUpdateRelated / planUpdateRows / planRollup contra la base', () =>
     expect((await applyRelatedPlan(db, again, 'u1')).changed).toBe(0);
   });
 
+  it('cada escritura de una regla deja un evento «Regla: nombre» en el historial de la fila que cambió', async () => {
+    const { db, tables } = world();
+    tables.custom_view_events = [];
+    const vuelos = await getTrackerBySlug(db, 'vuelos');
+    const equipos = await getTrackerBySlug(db, 'equipos');
+    if (!vuelos || !equipos) throw new Error('sin tabla');
+    const plan = await planUpdateRelated(db, {
+      tracker: vuelos,
+      rowId: V1,
+      action: {
+        type: 'update_related',
+        down: { tracker: 'equipos', via: 'vuelo' },
+        set: { estado: 'Devuelto' },
+      } as never,
+      ctx: ctxFor({}),
+      now: NOW,
+    });
+    const rule = { name: 'Devolver equipos', reason: 'Porque cambió la fila «AV204».' };
+    await applyRelatedPlan(db, plan, 'u1', rule);
+    const events = tables.custom_view_events as Array<Record<string, unknown>>;
+    expect(events).toHaveLength(2);
+    expect(events.map((e) => e.tracker_row_id).sort()).toEqual(['e1', 'e2']);
+    expect(events[0]).toMatchObject({
+      kind: 'rule',
+      rule_name: 'Devolver equipos',
+      reason: 'Porque cambió la fila «AV204».',
+      view_id: null,
+      changes: { estado: { from: 'En uso', to: 'Devuelto' } },
+    });
+    // Repetirla no escribe nada, así que tampoco deja más eventos.
+    const again = await planUpdateRelated(db, {
+      tracker: vuelos,
+      rowId: V1,
+      action: {
+        type: 'update_related',
+        down: { tracker: 'equipos', via: 'vuelo' },
+        set: { estado: 'Devuelto' },
+      } as never,
+      ctx: ctxFor({}),
+      now: NOW,
+    });
+    await applyRelatedPlan(db, again, 'u1', rule);
+    expect(events).toHaveLength(2);
+    // El acumulado del padre también queda en su historia.
+    const rollup = await planRollup(db, {
+      tracker: equipos,
+      action: { type: 'rollup', up: 'vuelo', target: 'costo_total', op: 'sum', field: 'costo_total' } as never,
+      ctx: ctxFor({ vuelo: rel(V1, 'AV204') }),
+      now: NOW,
+    });
+    await applyRollupPlan(db, rollup, 'u1', { name: 'Total del vuelo' });
+    const parent = events.find((e) => e.tracker_row_id === V1);
+    expect(parent).toMatchObject({
+      rule_name: 'Total del vuelo',
+      changes: { costo_total: { from: 0, to: 350 } },
+    });
+  });
+
   it('update_rows: filtra por plantilla de la fila que disparó, con tope y aviso', async () => {
     const { db } = world();
     const plan = await planUpdateRows(db, {

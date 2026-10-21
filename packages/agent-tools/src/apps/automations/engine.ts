@@ -1,3 +1,4 @@
+import { formatClock, formatLoose, formatMoney, formatNumber } from '../../format/display';
 import { relationParts } from '../../trackers/computed';
 import { type ViewRow, matches } from '../../views/compute';
 import type { CatalogTracker } from '../../views/spec';
@@ -133,6 +134,8 @@ export interface TemplateContext {
   reason?: string;
   /** Etiquetas de los campos (para que `{{Guía}}` también funcione, no sólo la llave). */
   labels?: Record<string, string>;
+  /** Tipo de cada campo (llave → tipo): `renderText` lo usa para leer dinero, números y fechas como se ven. */
+  types?: Record<string, string>;
 }
 
 const VAR_RE = /\{\{\s*([^{}]{1,48}?)\s*\}\}/g;
@@ -192,6 +195,42 @@ export function renderRaw(template: string, ctx: TemplateContext): string {
 /** Pinta `{{campo}}`. Un nombre desconocido queda vacío; nunca lanza. */
 export function renderTemplate(template: string, ctx: TemplateContext): string {
   return template.replace(VAR_RE, (_m, name: string) => lookup(name, ctx));
+}
+
+/** El valor de una variable tal como lo lee una persona: «$ 240.000», «2 oct 2026», nunca «240000». */
+function lookupText(name: string, ctx: TemplateContext): string {
+  const n = name.trim();
+  const prior = n.toLowerCase().startsWith('antes.');
+  const key = prior ? n.slice(6).trim() : n;
+  const raw = lookupRaw(name, ctx);
+  if (raw === undefined || raw === null || raw === '') return '';
+  let type = ctx.types?.[key];
+  if (!type && ctx.labels && ctx.types) {
+    const byLabel = Object.entries(ctx.labels).find(
+      ([, label]) => label.trim().toLowerCase() === key.toLowerCase(),
+    );
+    if (byLabel) type = ctx.types[byLabel[0]];
+  }
+  if (type === 'money' || type === 'number') {
+    const num = Number(raw);
+    if (Number.isFinite(num) && String(raw).trim() !== '')
+      return type === 'money' ? formatMoney(num) : formatNumber(num, 6);
+  }
+  if (type === 'date' || type === 'time' || typeof raw === 'string') {
+    const text = String(raw);
+    if (type === 'time') return formatClock(text);
+    if (type === 'date' || /^\d{4}-\d{2}-\d{2}(T|$)/.test(text)) return formatLoose(text);
+  }
+  return readable(raw);
+}
+
+/**
+ * Pinta `{{campo}}` para que lo LEA una persona (avisos, correos, asuntos): el
+ * dinero con puntos y signo de pesos, las fechas en palabras. Para datos que
+ * se copian a otro campo se usa `renderTemplate` / `renderRaw`, que dejan el valor crudo.
+ */
+export function renderText(template: string, ctx: TemplateContext): string {
+  return template.replace(VAR_RE, (_m, name: string) => lookupText(name, ctx));
 }
 
 /** Las variables que una plantilla nombra (para el editor y la validación). */
@@ -451,7 +490,7 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
     case 'accounting_draft_receipt':
       return {
         type: a.type,
-        summary: `Armaría un recibo de caja de ${typeof a.amount === 'number' ? `$${a.amount.toLocaleString('es-CO')}` : `«${renderTemplate(a.amount, ctx)}»`} del NIT ${renderTemplate(a.customer.taxId, ctx) || '(vacío)'} contra ${a.invoices ? `las facturas ${renderTemplate(a.invoices, ctx) || '(vacío)'}` : 'sus facturas con saldo (la que vence primero primero)'} y lo dejaría POR REVISAR; el recibo sólo se registra en Siigo cuando una persona lo aprueba.`,
+        summary: `Armaría un recibo de caja de ${typeof a.amount === 'number' ? formatMoney(a.amount) : `«${renderTemplate(a.amount, ctx)}»`} del NIT ${renderTemplate(a.customer.taxId, ctx) || '(vacío)'} contra ${a.invoices ? `las facturas ${renderTemplate(a.invoices, ctx) || '(vacío)'}` : 'sus facturas con saldo (la que vence primero primero)'} y lo dejaría POR REVISAR; el recibo sólo se registra en Siigo cuando una persona lo aprueba.`,
       };
     case 'accounting_draft_credit_note':
       return {

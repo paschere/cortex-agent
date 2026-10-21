@@ -1,9 +1,15 @@
 'use client';
+import { DialogHost } from '@/components/ui/DialogHost';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(() => new QueryClient());
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      {children}
+      <DialogHost />
+    </QueryClientProvider>
+  );
 }

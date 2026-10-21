@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import { removeMemberAction, setMemberAction } from '@/lib/apps/actions';
 import { clsx } from 'clsx';
 import { Plus, Trash2, X } from 'lucide-react';
@@ -81,8 +82,8 @@ function MemberRow({
         <button
           type="button"
           disabled={busy}
-          onClick={() => {
-            if (window.confirm(`¿Quitar a ${member.name} de la aplicación?`))
+          onClick={async () => {
+            if (await confirmDialog(`¿Quitar a ${member.name} de la aplicación?`))
               run(() => removeMemberAction(appId, member.userId));
           }}
           className={BTN_DANGER}

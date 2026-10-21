@@ -464,6 +464,7 @@ export async function applyRelatedPlan(
   db: SupabaseClient,
   plan: RelatedPlan,
   userId: string | null,
+  rule?: RuleAttribution,
 ): Promise<{ changed: number; failures: string[] }> {
   if (!plan.tracker) return { changed: 0, failures: [] };
   const target = await getTrackerById(db, plan.tracker.id);
@@ -482,11 +483,49 @@ export async function applyRelatedPlan(
         only: new Set(Object.keys(set)),
       });
       changed += 1;
+      if (rule) await recordRuleChange(db, { rowId: row.id, changes: row.changes, rule });
     } catch (err) {
       failures.push(`«${row.label}»: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return { changed, failures };
+}
+
+
+/** Quién escribió: la regla (nombre) y por qué (la fila que la despertó). */
+export interface RuleAttribution {
+  name: string;
+  reason?: string;
+}
+
+/**
+ * Deja constancia en el Historial de la fila de lo que una regla le cambió:
+ * un evento por escritura (`kind = 'rule'`), con el antes → después por campo.
+ * Nunca rompe la regla: si no se puede anotar, el cambio ya está hecho.
+ */
+export async function recordRuleChange(
+  db: SupabaseClient,
+  input: { rowId: string; changes: Change[]; rule: RuleAttribution },
+): Promise<void> {
+  if (!input.changes.length) return;
+  try {
+    const changes: Record<string, { from?: unknown; to?: unknown }> = {};
+    for (const c of input.changes) changes[c.field] = { from: c.from, to: c.to };
+    await db.from('custom_view_events').insert({
+      view_id: null,
+      block_id: null,
+      kind: 'rule',
+      action_id: null,
+      tracker_row_id: input.rowId,
+      changes,
+      actor: null,
+      actor_kind: 'member',
+      rule_name: input.rule.name.slice(0, 120) || 'Regla',
+      reason: input.rule.reason ? input.rule.reason.slice(0, 300) : null,
+    });
+  } catch {
+    // La historia es un rastro, no una condición del cambio.
+  }
 }
 
 /** Los padres que hay que recalcular: el de ahora y, si la fila cambió de padre, el de antes. */
@@ -565,6 +604,7 @@ export async function applyRollupPlan(
   db: SupabaseClient,
   plan: RollupPlan,
   userId: string | null,
+  rule?: RuleAttribution,
 ): Promise<{ changed: number; failures: string[] }> {
   if (!plan.parentTracker) return { changed: 0, failures: [] };
   const target = await getTrackerById(db, plan.parentTracker.id);
@@ -587,6 +627,18 @@ export async function applyRollupPlan(
         only: new Set([plan.target]),
       });
       changed += 1;
+      if (rule)
+        await recordRuleChange(db, {
+          rowId: p.id,
+          changes: [
+            {
+              field: plan.target,
+              from: isBlank(current) ? undefined : (current as string | number),
+              to: p.to === null ? '' : p.to,
+            },
+          ],
+          rule,
+        });
     } catch (err) {
       failures.push(`«${p.label}»: ${err instanceof Error ? err.message : String(err)}`);
     }

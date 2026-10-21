@@ -19,7 +19,7 @@ import type { TrackerField } from '../trackers/schema';
  * aparecen aquí.
  */
 
-export type ChangeOrigin = 'app' | 'chat' | 'automation' | 'link' | 'undo';
+export type ChangeOrigin = 'app' | 'chat' | 'automation' | 'link' | 'undo' | 'rule';
 
 export const ORIGIN_LABEL: Record<ChangeOrigin, string> = {
   app: 'Desde la app',
@@ -27,7 +27,13 @@ export const ORIGIN_LABEL: Record<ChangeOrigin, string> = {
   automation: 'Desde una rutina',
   link: 'Desde el enlace público',
   undo: 'Al deshacer un cambio',
+  rule: 'Regla automática',
 };
+
+/** «Regla: Total del vuelo»; sin nombre (quien mira no es del equipo) queda genérico. */
+export function ruleOriginLabel(name?: string | null): string {
+  return name?.trim() ? `Regla: ${name.trim()}` : ORIGIN_LABEL.rule;
+}
 
 /** El `action_id` con que se registra un cambio hecho al deshacer otro. */
 export const UNDO_ACTION_ID = '__undo';

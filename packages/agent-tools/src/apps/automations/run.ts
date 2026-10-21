@@ -18,6 +18,7 @@ import {
   newBranchState,
   renderRaw,
   renderTemplate,
+  renderText,
   renderValues,
   waitText,
 } from './engine';
@@ -26,6 +27,8 @@ import type { AutomationEvent, Values } from './match';
 import {
   applyRelatedPlan,
   applyRollupPlan,
+  type RuleAttribution,
+  recordRuleChange,
   describeRelatedPlan,
   describeRollupPlan,
   planRollup,
@@ -302,6 +305,7 @@ export async function executeRun(
     link,
     reason: event.reason,
     labels: trackerRow ? Object.fromEntries(trackerRow.fields.map((f) => [f.key, f.label])) : {},
+    types: trackerRow ? Object.fromEntries(trackerRow.fields.map((f) => [f.key, f.type])) : {},
   };
 
   // 5. Las acciones, una a una, con su resultado guardado.
@@ -621,6 +625,15 @@ async function currentRow(
   return data as never;
 }
 
+/** El nombre de la regla y la fila que la despertó, para el Historial de lo que escribe. */
+function ruleOf(a: ActionRun): RuleAttribution {
+  const label = a.event.label ? ` «${a.event.label}»` : '';
+  return {
+    name: a.automation.name,
+    reason: a.event.rowId ? `Porque cambió la fila${label || ' que la despertó'}.` : undefined,
+  };
+}
+
 async function runAction(a: ActionRun): Promise<string> {
   const { db, deps, app, automation, ctx, action, event } = a;
   // La campana de los miembros abre la misma pantalla y fila que el aviso de
@@ -649,6 +662,17 @@ async function runAction(a: ActionRun): Promise<string> {
         values: { ...row.values, [action.field]: value },
         userId: automation.created_by,
         only: new Set([action.field]),
+      });
+      await recordRuleChange(db, {
+        rowId: row.id,
+        changes: [
+          {
+            field: action.field,
+            from: row.values[action.field] === undefined ? undefined : (row.values[action.field] as string | number),
+            to: value,
+          },
+        ],
+        rule: ruleOf(a),
       });
       return `«${action.field}» quedó en «${value}».`;
     }
@@ -685,8 +709,8 @@ async function runAction(a: ActionRun): Promise<string> {
       const valid = ((people ?? []) as Array<{ id: string }>).map((p) => p.id);
       const n = await deps.notifyMembers(db, valid, {
         appId: app.id,
-        title: renderTemplate(action.title, ctx),
-        body: action.body ? renderTemplate(action.body, ctx) : undefined,
+        title: renderText(action.title, ctx),
+        body: action.body ? renderText(action.body, ctx) : undefined,
         href: base,
         dedupeKey: `appauto:${a.runKey}:${a.index}`.slice(0, 190),
       });
@@ -704,8 +728,8 @@ async function runAction(a: ActionRun): Promise<string> {
       } else {
         recipients = await appUsers(db, app.id, { role: action.to.role });
       }
-      const title = renderTemplate(action.title, ctx);
-      const body = action.body ? renderTemplate(action.body, ctx) : undefined;
+      const title = renderText(action.title, ctx);
+      const body = action.body ? renderText(action.body, ctx) : undefined;
       const url = `/a/${app.id}${action.screen ? `/${action.screen}` : ''}`;
       const pushed = recipients.length
         ? await deps.pushAppUsers(
@@ -755,8 +779,8 @@ async function runAction(a: ActionRun): Promise<string> {
           for (const u of await appUsers(db, app.id, { role })) targets.add(u.email.toLowerCase());
       const list = [...targets].slice(0, 50);
       if (!list.length) return 'No había a quién escribirle.';
-      const subject = renderTemplate(action.subject, ctx);
-      const text = `${renderTemplate(action.body, ctx)}\n\n—\nAviso automático de «${app.name}».`;
+      const subject = renderText(action.subject, ctx);
+      const text = `${renderText(action.body, ctx)}\n\n—\nAviso automático de «${app.name}».`;
       let sent = 0;
       let lastReason = '';
       for (const to of list) {
@@ -824,7 +848,7 @@ async function runAction(a: ActionRun): Promise<string> {
         ctx,
         now: a.now,
       });
-      const out = await applyRelatedPlan(db, plan, automation.created_by);
+      const out = await applyRelatedPlan(db, plan, automation.created_by, ruleOf(a));
       if (out.failures.length)
         throw new Error(
           `No se pudo cambiar ${out.failures.length} fila${out.failures.length === 1 ? '' : 's'}: ${out.failures.slice(0, 2).join(' · ')}`,
@@ -833,7 +857,7 @@ async function runAction(a: ActionRun): Promise<string> {
     }
     case 'update_rows': {
       const plan = await planUpdateRows(db, { action, ctx, now: a.now });
-      const out = await applyRelatedPlan(db, plan, automation.created_by);
+      const out = await applyRelatedPlan(db, plan, automation.created_by, ruleOf(a));
       if (out.failures.length)
         throw new Error(
           `No se pudo cambiar ${out.failures.length} fila${out.failures.length === 1 ? '' : 's'}: ${out.failures.slice(0, 2).join(' · ')}`,
@@ -849,7 +873,7 @@ async function runAction(a: ActionRun): Promise<string> {
         before: event.before,
         now: a.now,
       });
-      const out = await applyRollupPlan(db, plan, automation.created_by);
+      const out = await applyRollupPlan(db, plan, automation.created_by, ruleOf(a));
       if (out.failures.length) throw new Error(out.failures.slice(0, 2).join(' · '));
       return describeRollupPlan(action, plan, true);
     }

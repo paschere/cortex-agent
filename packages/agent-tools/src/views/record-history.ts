@@ -45,8 +45,10 @@ const CHAT_LIMIT = 60;
 
 interface EventRow {
   id: string;
-  kind: 'edit' | 'move' | 'action';
+  kind: 'edit' | 'move' | 'action' | 'rule';
   action_id: string | null;
+  rule_name?: string | null;
+  reason?: string | null;
   changes: Record<string, { from?: unknown; to?: unknown }> | null;
   actor: string | null;
   actor_kind: 'member' | 'app_user' | null;
@@ -113,7 +115,7 @@ export async function loadRecordHistory(
   const [{ data: eventData }, runData] = await Promise.all([
     db
       .from('custom_view_events')
-      .select('id, kind, action_id, changes, actor, actor_kind, created_at')
+      .select('id, kind, action_id, changes, actor, actor_kind, created_at, rule_name, reason')
       .eq('tracker_row_id', rowId)
       .order('created_at', { ascending: false })
       .limit(EVENT_LIMIT),
@@ -212,19 +214,28 @@ export async function loadRecordHistory(
       ...events.map((e) => ({
         id: e.id,
         at: e.created_at,
-        kind: e.kind,
+        kind: e.kind === 'rule' ? ('edit' as const) : e.kind,
         actionId: e.action_id,
         changes: e.changes ?? {},
-        by: actorLabel(
+        ...(e.kind === 'rule'
+          ? {
+              // El nombre de la regla es del equipo: afuera sólo «Regla automática».
+              ruleName: viewer.kind === 'member' ? (e.rule_name ?? '') : '',
+              reason: viewer.kind === 'member' ? (e.reason ?? undefined) : undefined,
+            }
+          : {}),
+        by: e.kind === 'rule' ? 'Automático' : actorLabel(
           { id: e.actor, kind: e.actor_kind === 'app_user' ? 'app_user' : 'member' },
           viewer,
           names,
         ),
-        source: (e.action_id === UNDO_ACTION_ID
-          ? 'undo'
-          : e.actor
-            ? 'app'
-            : 'link') as ChangeOrigin,
+        source: (e.kind === 'rule'
+          ? 'rule'
+          : e.action_id === UNDO_ACTION_ID
+            ? 'undo'
+            : e.actor
+              ? 'app'
+              : 'link') as ChangeOrigin,
       })),
       ...chatEvents.map((c) => ({
         id: c.id,

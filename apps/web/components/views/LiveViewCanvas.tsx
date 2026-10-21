@@ -241,9 +241,20 @@ export function LiveViewCanvas({
           recordRef.current,
           window.location.origin,
         );
-        const res = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) throw new Error(String(res.status));
-        const body = (await res.json()) as { view: ComputedView };
+        // Una lectura que se cuelga no deja la pantalla esperando: 20 s y se avisa.
+        // Si la persona la pidió (filtro, registro), un segundo intento corto antes de rendirse.
+        let body: { view: ComputedView } | null = null;
+        for (let attempt = 0; attempt < (force ? 2 : 1) && !body; attempt++) {
+          if (attempt) await new Promise((r) => setTimeout(r, 1200));
+          try {
+            const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(20_000) });
+            if (res.ok) body = (await res.json()) as { view: ComputedView };
+            else if (res.status < 500) break;
+          } catch {
+            /* sin señal o demasiado lento: se reintenta una vez */
+          }
+        }
+        if (!body) throw new Error('no-data');
         if (mine !== seq.current) return;
         setView(body.view);
         setUpdatedAt(Date.now());

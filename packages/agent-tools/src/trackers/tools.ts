@@ -2,7 +2,8 @@ import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { notFoundWithHints } from '../not-found-hints';
-import { duplicateRuleSchema, getDuplicateRule } from './duplicates';
+import { duplicateKeyFor, duplicateSentence, findLikelyDuplicates } from './duplicate-check';
+import { duplicateRuleSchema, getDuplicateRule, normalizeDuplicateKey } from './duplicates';
 import {
   displayTrackerValue,
   trackerFieldSchema,
@@ -259,11 +260,18 @@ export const trackersUpsert = registerTool({
       .max(200)
       .optional()
       .describe('How to name the row out loud. Defaults to the first required text field.'),
+    allowDuplicate: z
+      .boolean()
+      .optional()
+      .describe(
+        'Creating a row that looks like one that already exists (same key, or same name) is NOT done: the existing row comes back instead and you tell the person. Pass true ONLY after the person confirms they really want a second one.',
+      ),
   }),
   outputSchema: z.object({
     row: entrySchema,
     tracker: z.object({ slug: z.string(), name: z.string() }),
     created: z.boolean(),
+    duplicateOf: z.string().uuid().optional(),
     markdown: z.string(),
   }),
   rateLimit: { perMinute: 30 },
@@ -303,6 +311,19 @@ export const trackersUpsert = registerTool({
           'tabla',
         ),
       );
+    }
+    // Crear lo que ya existe es el duplicado de siempre: se avisa y no se crea.
+    if (!input.rowId && !input.allowDuplicate) {
+      const found = await findLikelyDuplicates(ctx.db, tracker, input.values, { limit: 3 });
+      const first = found.matches[0];
+      if (first)
+        return {
+          row: { id: first.id, label: first.label, values: first.values as Record<string, string | number>, updatedAt: first.updatedAt },
+          tracker: { slug: tracker.slug, name: tracker.name },
+          created: false,
+          duplicateOf: first.id,
+          markdown: `${duplicateSentence(found.matches)} en **${tracker.name}**: no la creé de nuevo. Si quieres cambiarla, edítala con rowId \`${first.id}\`; si de verdad quieres una segunda, confírmalo con la persona y repite con allowDuplicate=true.`,
+        };
     }
     const row = await upsertRow(ctx.db, {
       tracker,
@@ -351,11 +372,20 @@ export const trackersUpsertMany = registerTool({
       )
       .min(1)
       .max(MAX_UPSERT_MANY_ROWS),
+    allowDuplicates: z
+      .boolean()
+      .optional()
+      .describe(
+        'New rows that look like ones already in the table (same key or name), or repeat each other inside this call, are SKIPPED and reported instead of duplicated. Pass true ONLY after the person confirms they want them anyway.',
+      ),
   }),
   outputSchema: z.object({
     tracker: z.object({ slug: z.string(), name: z.string() }),
     created: z.number().int(),
     updated: z.number().int(),
+    skippedDuplicates: z
+      .array(z.object({ index: z.number().int(), label: z.string(), existing: z.string() }))
+      .optional(),
     failed: z.array(z.object({ index: z.number().int(), label: z.string(), error: z.string() })),
     remaining: z.number().int(),
     markdown: z.string(),
@@ -381,10 +411,32 @@ export const trackersUpsertMany = registerTool({
     let updated = 0;
     let processed = 0;
     const failed: Array<{ index: number; label: string; error: string }> = [];
+    const skipped: Array<{ index: number; label: string; existing: string }> = [];
+    const ruleKey = (await getDuplicateRule(ctx.db, tracker.id))?.rule.key ?? null;
+    const keyOfRow = duplicateKeyFor(tracker.fields, ruleKey);
+    const seenInCall = new Set<string>();
     for (const [index, item] of input.rows.entries()) {
       if (Date.now() > deadline || ctx.signal?.aborted) break;
       processed = index + 1;
       try {
+        if (!item.rowId && !input.allowDuplicates && keyOfRow) {
+          const mine = item.values[keyOfRow.field.key];
+          const norm =
+            keyOfRow.mode === 'key'
+              ? normalizeDuplicateKey(mine)
+              : String(mine ?? '').trim().toLowerCase();
+          const label0 = item.label ?? String(mine ?? `fila ${index + 1}`);
+          if (norm && seenInCall.has(norm)) {
+            skipped.push({ index, label: label0, existing: 'otra fila de esta misma llamada' });
+            continue;
+          }
+          const found = await findLikelyDuplicates(ctx.db, tracker, item.values, { ruleKey, limit: 1 });
+          if (found.matches[0]) {
+            skipped.push({ index, label: label0, existing: found.matches[0].label });
+            continue;
+          }
+          if (norm) seenInCall.add(norm);
+        }
         await upsertRow(ctx.db, {
           tracker,
           rowId: item.rowId,
@@ -406,8 +458,15 @@ export const trackersUpsertMany = registerTool({
     const parts = [
       `En **${tracker.name}**: ${created} fila${created === 1 ? '' : 's'} nueva${created === 1 ? '' : 's'}`,
       updated ? `${updated} actualizada${updated === 1 ? '' : 's'}` : null,
+      skipped.length
+        ? `${skipped.length} ya existía${skipped.length === 1 ? '' : 'n'} (no se duplicaron)`
+        : null,
       failed.length ? `${failed.length} con error` : null,
     ].filter(Boolean);
+    const skippedLines = skipped
+      .slice(0, 15)
+      .map((f) => `- fila ${f.index + 1} (${f.label}): ya existe «${f.existing}»`)
+      .join('\n');
     const lines = failed
       .slice(0, 15)
       .map((f) => `- fila ${f.index + 1} (${f.label}): ${f.error}`)
@@ -417,8 +476,9 @@ export const trackersUpsertMany = registerTool({
       created,
       updated,
       failed: failed.slice(0, 50),
+      ...(skipped.length ? { skippedDuplicates: skipped.slice(0, 50) } : {}),
       remaining,
-      markdown: `${parts.join(', ')}.${lines ? `\n\nNo se guardaron:\n${lines}` : ''}${
+      markdown: `${parts.join(', ')}.${skippedLines ? `\n\nNo se crearon por parecerse a algo que ya está (confirma con la persona y repite con allowDuplicates=true si las quiere igual):\n${skippedLines}` : ''}${lines ? `\n\nNo se guardaron:\n${lines}` : ''}${
         remaining > 0
           ? `\n\nQuedaron ${remaining} sin procesar por tiempo: envía las filas desde la ${processed + 1} en otra llamada.`
           : ''

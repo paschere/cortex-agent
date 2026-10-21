@@ -193,6 +193,8 @@ export function RelationInput({
             type="button"
             id={id}
             aria-describedby={describedBy}
+            aria-haspopup="dialog"
+            aria-label={`Cambiar ${field.label}: ${selected.label}`}
             onClick={() => setOpen(true)}
             className="inline-flex h-10 shrink-0 items-center rounded-pill border border-border-strong px-3 text-xs font-semibold text-ink hover:bg-surface-2"
           >
@@ -200,7 +202,7 @@ export function RelationInput({
           </button>
           <button
             type="button"
-            aria-label={`Quitar ${selected.label}`}
+            aria-label={`Quitar ${field.label}: ${selected.label}`}
             onClick={() => {
               onChange('');
               onPick?.(null);
@@ -216,6 +218,7 @@ export function RelationInput({
           type="button"
           id={id}
           aria-haspopup="dialog"
+          aria-label={`${field.label}: elegir ${noun}`}
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           onClick={() => setOpen(true)}

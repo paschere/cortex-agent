@@ -200,7 +200,7 @@ describe('runReportQuery: costo de equipos por proveedor de la semana pasada', (
     const q = reportQuerySourceSchema.parse({ kind: 'query', tracker: 'equipos_usados', groupBy: 'vuelo', metrics: [{ op: 'sum', field: 'costo' }] });
     expect((runReportQuery(q, src, MONDAY_7AM).tables[0] as ReportTable).rows).toEqual([['AV204', 15]]);
     const byDay = reportQuerySourceSchema.parse({ kind: 'query', tracker: 'equipos_usados', groupBy: 'created_at', metrics: [{ op: 'count' }] });
-    expect((runReportQuery(byDay, src, MONDAY_7AM).tables[0] as ReportTable).rows).toEqual([['2026-10-14', 2]]);
+    expect((runReportQuery(byDay, src, MONDAY_7AM).tables[0] as ReportTable).rows).toEqual([['14 oct 2026', 2]]);
   });
   it('rango por la fecha de creación en hora de Bogotá (11 p. m. del domingo cuenta en la semana)', () => {
     const late = row('z', { nombre: 'Tarde', proveedor: 'Z', costo: 50 }, '2026-10-19T04:30:00.000Z'); // domingo 23:30 Bogotá

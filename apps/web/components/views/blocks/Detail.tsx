@@ -25,6 +25,7 @@ import { RichValue } from './RichValue';
 import { useIsVariant } from './design';
 import { useRecordNav } from './record-nav';
 import { Card, EmptyState, StatusChip, formatWhen, useViewTheme } from './theme';
+import { confirmDialog, promptDialog } from '@/lib/ui/dialog-queue';
 
 /**
  * EL DETALLE DE UN REGISTRO: UNA PANTALLA PARA UNA FILA.
@@ -67,7 +68,14 @@ function UndoButton({ blockId, rowId, entryId }: { blockId: string; rowId: strin
         type="button"
         disabled={state.kind === 'busy'}
         onClick={async () => {
-          if (!window.confirm('¿Deshacer este cambio? Los campos vuelven a su valor de antes.')) return;
+          if (
+            !(await confirmDialog({
+              title: '¿Deshacer este cambio?',
+              message: 'Los campos vuelven a su valor de antes.',
+              confirmLabel: 'Deshacer',
+            }))
+          )
+            return;
           setState({ kind: 'busy' });
           const res = await undo(blockId, rowId, entryId);
           setState(res.ok ? { kind: 'done', text: res.message } : { kind: 'error', text: res.error });
@@ -123,6 +131,7 @@ function TimelineItem({
           </time>
           {entry.origin ? ` · ${entry.origin}` : ''}
         </p>
+        {entry.reason && <p className="text-micro text-ink-muted">{entry.reason}</p>}
         {entry.changes && entry.changes.length > 0 && (
           <ul className="mt-1.5 space-y-1">
             {entry.changes.map((c) => (

@@ -55,6 +55,9 @@ import { type RecordNav, RecordNavProvider } from './blocks/record-nav';
 import {
   Card,
   EmptyState,
+  RegisterFirst,
+  RegisterProvider,
+  noneYet,
   STATUS_COLUMN_RE,
   StatusChip,
   TONE_BAR,
@@ -70,6 +73,7 @@ import {
   ViewWriterProvider,
   useViewWriter,
 } from './view-writes';
+import { BlockBoundary } from './BlockBoundary';
 import './views.css';
 
 /**
@@ -184,7 +188,29 @@ export function ViewCanvas({
     ? recordBlockOf(view.blocks.find((b) => b.id === opened.blockId))
     : null;
 
+  // Un bloque vacío puede ofrecer «Registrar el primero» si la pantalla tiene UN formulario.
+  const forms = view.blocks.filter((b) => b.type === 'form');
+  const formId = view.writable && forms.length === 1 ? (forms[0]?.id ?? null) : null;
+  const register = useMemo(
+    () =>
+      formId
+        ? {
+            scrollToForm: () => {
+              const el = document.getElementById(`block-${formId}`);
+              if (!el) return;
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              window.setTimeout(
+                () => el.querySelector<HTMLElement>('input:not([type=hidden]),select,textarea')?.focus({ preventScroll: true }),
+                350,
+              );
+            },
+          }
+        : null,
+    [formId],
+  );
+
   return (
+    <RegisterProvider value={register}>
     <ViewThemeProvider theme={theme}>
       <FormVoiceProvider>
         <ViewWriterProvider
@@ -300,6 +326,7 @@ export function ViewCanvas({
         </ViewWriterProvider>
       </FormVoiceProvider>
     </ViewThemeProvider>
+    </RegisterProvider>
   );
 }
 
@@ -319,7 +346,15 @@ export function ViewBlockPreview({ block }: { block: ComputedBlock }) {
   );
 }
 
-function Block({
+function Block(props: { block: ComputedBlock; target: SubmitTarget; submit?: SubmitFn }) {
+  return (
+    <BlockBoundary resetKey={props.block} name={'title' in props.block && typeof props.block.title === 'string' ? props.block.title : undefined}>
+      <BlockBody {...props} />
+    </BlockBoundary>
+  );
+}
+
+function BlockBody({
   block,
   target,
   submit,
@@ -722,9 +757,11 @@ function Table({ block }: { block: TableBlock }) {
         <EmptyState
           className="mt-2"
           icon={<Search className="h-5 w-5" aria-hidden />}
-          title={query ? 'Nada coincide con esa búsqueda' : 'Todavía no hay filas'}
+          title={query ? 'Nada coincide con esa búsqueda' : noneYet(block.source)}
           hint={query ? 'Prueba con otra palabra.' : 'Las filas nuevas aparecen aquí solas.'}
-        />
+        >
+          {!query && <RegisterFirst source={block.source} />}
+        </EmptyState>
       )}
       {block.total > block.rows.length && (
         <p className="mt-3 text-micro text-ink-faint">

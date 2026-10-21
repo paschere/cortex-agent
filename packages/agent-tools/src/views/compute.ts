@@ -1,4 +1,13 @@
 import type { ComputedFlow, FlowActor, FlowHistoryEntry } from '../trackers/flow';
+import {
+  MONTHS_SHORT as MONTHS,
+  cleanText,
+  formatClock,
+  formatDay,
+  formatLoose,
+  formatMoney,
+  formatNumber,
+} from '../format/display';
 import { type TrackerField, displayTrackerValue, parseLocation } from '../trackers/schema';
 import { computeCards } from './cards';
 import { type BlockDesign, hasDesign } from './design-shape';
@@ -422,6 +431,8 @@ export interface ComputedTimelineEntry {
   ok?: boolean;
   /** Desde dónde se hizo: «Desde la app», «Desde el chat», «Desde una rutina»… */
   origin?: string;
+  /** Por qué (en un cambio de regla: la fila que la despertó). */
+  reason?: string;
   /** Presente si quien mira puede «Deshacer este cambio»: el id que se manda al servidor. */
   undoId?: string;
 }
@@ -723,31 +734,21 @@ function dayOf(value: string): string | null {
   return Number.isNaN(t) ? null : todayIn(new Date(t));
 }
 
-const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-
 export function viewShortDate(isoDay: string): string {
-  const [y, m, d] = isoDay.split('-');
-  return `${Number(d)} ${MONTHS[Number(m) - 1] ?? m} ${y}`;
+  return formatDay(isoDay);
 }
 
 // ---------------------------------------------------------------------------
 // Formato
 // ---------------------------------------------------------------------------
 
-const NUMBER = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 });
-const MONEY = new Intl.NumberFormat('es-CO', {
-  style: 'currency',
-  currency: 'COP',
-  maximumFractionDigits: 0,
-});
-
 export function formatValue(value: number | null, format: ValueFormat | 'ratio'): string {
   if (value === null || !Number.isFinite(value)) return '—';
-  if (format === 'money') return MONEY.format(value);
+  if (format === 'money') return formatMoney(value);
   // Un campo número «como porcentaje» guarda la razón: 0,153 se ve «15,3 %».
-  if (format === 'ratio') return `${NUMBER.format(Math.round(value * 1e8) / 1e6)} %`;
-  if (format === 'percent') return `${NUMBER.format(value)} %`;
-  return NUMBER.format(value);
+  if (format === 'ratio') return `${formatNumber(Math.round(value * 1e8) / 1e6)} %`;
+  if (format === 'percent') return `${formatNumber(value)} %`;
+  return formatNumber(value);
 }
 
 function rawValue(row: ViewRow, key: string): string | number | undefined {
@@ -776,7 +777,8 @@ function displayValue(tracker: CatalogTracker, row: ViewRow, key: string): strin
     /^\d{4}-\d{2}-\d{2}$/.test(v)
   )
     return viewShortDate(v);
-  return String(v);
+  if (type === 'time' && typeof v === 'string') return formatClock(v);
+  return typeof v === 'string' ? formatLoose(v) : cleanText(v) || '—';
 }
 
 /** ¿Esta fila lleva la marca de la regla de duplicados de su tabla? */

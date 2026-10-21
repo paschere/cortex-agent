@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { notFoundWithHints } from '../not-found-hints';
 import type { FlowActor } from '../trackers/flow';
+import { findLikelyDuplicates } from '../trackers/duplicate-check';
 import { withFlowActor } from '../trackers/flow-guard';
 import { TRACKER_COLUMNS, type TrackerRow } from '../trackers/store';
 import { type ComputedView, type ViewSource, computeView } from '../views/compute';
@@ -1261,6 +1262,45 @@ export async function submitAppForm(
     ref: input.clientId ?? null,
   });
   return sent;
+}
+
+/**
+ * «Parece que ya existe»: antes de guardar, ¿hay una fila igual en esta tabla?
+ * Sólo mira lo que el rol puede VER (una fila fuera de su alcance es como si no
+ * existiera: no se confirma que esté) y sólo si puede crear ahí. Solo avisa:
+ * guardar igual sigue siendo posible. `openIn` es el bloque «detalle» de esta
+ * misma pantalla que abre la fila, si lo hay.
+ */
+export async function checkAppDuplicates(
+  db: SupabaseClient,
+  access: AppAccess,
+  view: CustomViewRow,
+  input: { blockId: string; values: Record<string, unknown> },
+): Promise<{
+  keys: string[];
+  matches: Array<{ id: string; label: string; why: string }>;
+  openIn: string | null;
+}> {
+  const slug = trackerOfBlock(view, input.blockId);
+  if (!canCreateIn(access.role, slug)) return { keys: [], matches: [], openIn: null };
+  const tracker = await trackerRow(db, slug);
+  const found = await findLikelyDuplicates(db, tracker, input.values, { limit: 6 });
+  const scope = rowAccessFor(access.role, access.user, slug);
+  const visible = found.matches
+    .filter((m) =>
+      rowVisible(scope, {
+        values: m.values,
+        created_by: m.createdBy ?? null,
+        created_by_app_user: m.createdByApp ?? null,
+      } as never),
+    )
+    .slice(0, 3);
+  const detail = view.spec.blocks.find((b) => b.type === 'detail' && b.tracker === slug);
+  return {
+    keys: found.keys,
+    matches: visible.map((m) => ({ id: m.id, label: m.label, why: m.why })),
+    openIn: detail?.id ?? null,
+  };
 }
 
 /**

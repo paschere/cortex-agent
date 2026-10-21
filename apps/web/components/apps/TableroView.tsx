@@ -1,5 +1,7 @@
 'use client';
 
+import { formatMoney, formatNumber } from '@cortex/agent-tools/src/format/display';
+
 import type { ComputedTablero, ComputedWidget } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { AlertTriangle, ArrowUpRight, CheckCircle2 } from 'lucide-react';
@@ -78,11 +80,7 @@ function Kpi({ w }: { w: Extract<ComputedWidget, { kind: 'kpi' }> }) {
             color={color}
             height={40}
             name={w.title}
-            format={(n) =>
-              w.format === 'money'
-                ? `$ ${Math.round(n).toLocaleString('es-CO')}`
-                : n.toLocaleString('es-CO')
-            }
+            format={(n) => (w.format === 'money' ? formatMoney(n) : formatNumber(n))}
             className="h-10 w-24 shrink-0"
           />
         )}
@@ -150,8 +148,8 @@ function Widget({ w, today }: { w: ComputedWidget; today: string }) {
                   {info.summary.current === null
                     ? '—'
                     : w.metric.fmt === 'money'
-                      ? `$ ${Math.round(info.summary.current).toLocaleString('es-CO')}`
-                      : Math.round(info.summary.current).toLocaleString('es-CO')}
+                      ? formatMoney(info.summary.current)
+                      : formatNumber(info.summary.current, 0)}
                 </span>
                 <DeltaPill
                   ratio={info.summary.ratio}
@@ -179,7 +177,7 @@ function Widget({ w, today }: { w: ComputedWidget; today: string }) {
               key: s.key,
               label: s.label,
               value: s.value,
-              display: s.value.toLocaleString('es-CO'),
+              display: formatNumber(s.value, 0),
               color: CHART_COLOR[s.tone as ChartTone],
             }))}
           />

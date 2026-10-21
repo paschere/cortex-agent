@@ -1,5 +1,7 @@
 'use client';
 
+import { formatDateTime } from '@cortex/agent-tools/src/format/display';
+
 import { geofenceEventsAction, saveLocationSettingsAction } from '@/lib/apps/actions';
 import { clsx } from 'clsx';
 import { Crosshair, LocateFixed, MapPin, Plus, Trash2 } from 'lucide-react';
@@ -353,12 +355,7 @@ export function GeofencesPanel({
               <li key={e.id}>
                 <span className="font-semibold text-ink">{e.person}</span>{' '}
                 {e.kind === 'enter' ? 'llegó a' : 'salió de'} {e.name} ·{' '}
-                {new Date(e.at).toLocaleString('es-CO', {
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+                {formatDateTime(e.at)}
               </li>
             ))}
           </ul>

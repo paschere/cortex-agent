@@ -143,8 +143,13 @@ export function useVoiceForm(controller: FormController | undefined) {
     });
   }, []);
 
-  const supported =
-    typeof window !== 'undefined' && (recognitionCtor() !== null || canRecord()) && canSpeak();
+  // Lo que el navegador sabe hacer sólo se mira DESPUÉS de montar: el servidor no puede
+  // saberlo, y pintarlo distinto en el primer render rompe la hidratación.
+  const [probe, setProbe] = useState<boolean | null>(null);
+  useEffect(() => {
+    setProbe((recognitionCtor() !== null || canRecord()) && canSpeak());
+  }, []);
+  const supported = probe === true;
 
   const cutAll = useCallback(() => {
     run.current += 1;
@@ -537,6 +542,7 @@ export function useVoiceForm(controller: FormController | undefined) {
 
   return {
     supported,
+    probed: probe !== null,
     phase,
     said,
     heard,

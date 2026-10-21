@@ -3,7 +3,7 @@
 import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import type { SubmitTarget } from '@/components/views/ViewCanvas';
 import { BrandScope } from '@/components/views/blocks/brand';
-import { headerHidden, splitTabs } from '@/lib/apps/app-nav';
+import { headerHidden, shortTabLabels, splitTabs } from '@/lib/apps/app-nav';
 import { previewQuery } from '@/lib/apps/preview-query';
 import { rememberScreen } from '@/lib/apps/screen-store';
 import type {
@@ -240,6 +240,7 @@ export function AppRunner({
   const hrefFor = (slug: string) => `${base}/${slug}${como}`;
   const editHref = `/apps/${app.slug}/edit`;
   const { tabs, more, moreActive } = splitTabs(screens, current);
+  const tabLabels = shortTabLabels(tabs);
   const standalone = Boolean(basePath);
   const computedAt =
     computed?.computedAt ??
@@ -248,6 +249,26 @@ export function AppRunner({
     portal?.computedAt ??
     new Date().toISOString();
   const [sheet, setSheet] = useState(false);
+  // Pantallas hermanas precargadas en un rato libre: tocar una pestaña se siente inmediato.
+  // Sólo con buena conexión y sin «ahorro de datos»; son las primeras de la barra, no todas.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: depende del conjunto de pantallas y de la actual.
+  useEffect(() => {
+    if (preview || readOnly) return;
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } })
+      .connection;
+    if (conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType ?? '')) return;
+    const run = () => {
+      for (const sc of screens.filter((x) => x.slug !== current).slice(0, 4))
+        router.prefetch(hrefFor(sc.slug));
+    };
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number; cancelIdleCallback?: (id: number) => void };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(run);
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = window.setTimeout(run, 1500);
+    return () => window.clearTimeout(t);
+  }, [current, screens.length, base, como]);
   // Avisos automáticos (0231): sólo con quien usa la app de verdad, no en vista previa ni «Ver como…».
   const noticesOn = !readOnly && !preview && !embedBase;
   // Captura sin señal (cola, copia de pantallas, marca de agua): sólo con quien escribe de verdad.
@@ -564,6 +585,8 @@ export function AppRunner({
                         <Link
                           key={s.slug}
                           href={hrefFor(s.slug)}
+                          title={s.title}
+                          aria-label={s.title}
                           aria-current={active ? 'page' : undefined}
                           className="app-press flex min-h-[3.75rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-micro font-semibold"
                         >
@@ -584,7 +607,7 @@ export function AppRunner({
                               active ? 'font-bold text-ink' : 'text-ink-faint',
                             )}
                           >
-                            {s.title}
+                            {tabLabels.get(s.slug) ?? s.title}
                           </span>
                         </Link>
                       );

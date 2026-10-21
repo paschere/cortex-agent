@@ -170,12 +170,15 @@ export function ScanDocument({
   large,
   online,
   className,
+  compact,
 }: {
   scan: ReturnType<typeof useDocumentScan>;
   attached: ReturnType<typeof attachedImages>;
   large?: boolean;
   online: boolean;
   className?: string;
+  /** Formulario corto: una sola fila (ícono, título y botones) en vez de una tarjeta con explicación. */
+  compact?: boolean;
 }) {
   const camera = useRef<HTMLInputElement>(null);
   const gallery = useRef<HTMLInputElement>(null);
@@ -190,6 +193,120 @@ export function ScanDocument({
     e.target.value = '';
     if (file) void scan.scan(file);
   };
+
+  if (compact)
+    return (
+      <section
+        aria-labelledby={`${id}-t`}
+        className={clsx(
+          'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-sm border border-primary/25 bg-primary-soft/50 px-3 py-2',
+          className,
+        )}
+      >
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-primary-soft text-primary ring-1 ring-primary/20">
+          <FileScan className="h-4 w-4" aria-hidden />
+        </span>
+        <h3
+          id={`${id}-t`}
+          title="Guía aérea, manifiesto o factura: Cortex lo lee y llena lo que pueda. Tú revisas."
+          className="min-w-0 grow basis-[55%] text-sm font-semibold leading-tight text-ink"
+        >
+          Tomar foto del documento
+        </h3>
+        {scan.thumb && (
+          <img
+            src={scan.thumb}
+            alt="Foto del documento que se leyó"
+            className="h-9 w-9 shrink-0 rounded-sm border border-border object-cover"
+            onError={(e) => {
+              e.currentTarget.hidden = true;
+            }}
+          />
+        )}
+        <input
+          ref={camera}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="sr-only"
+          tabIndex={-1}
+          aria-label="Tomar foto del documento con la cámara"
+          onChange={pick}
+        />
+        <input
+          ref={gallery}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          tabIndex={-1}
+          aria-label="Elegir la foto del documento de la galería"
+          onChange={pick}
+        />
+        <button
+          type="button"
+          disabled={reading || !online}
+          onClick={() => camera.current?.click()}
+          className={clsx(
+            'inline-flex min-h-11 items-center justify-center gap-2 rounded-pill border border-primary bg-primary px-4 text-xs font-semibold text-white transition-colors hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50',
+            large && 'min-h-12 text-sm',
+          )}
+        >
+          {reading ? (
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+          ) : (
+            <Camera className="h-4 w-4" aria-hidden />
+          )}
+          {reading ? 'Leyendo…' : 'Tomar foto'}
+        </button>
+        <button
+          type="button"
+          disabled={reading || !online}
+          onClick={() => gallery.current?.click()}
+          aria-label="Elegir de la galería"
+          title="Elegir de la galería"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-pill border border-border-strong bg-surface text-ink transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <ImageIcon className="h-4 w-4" aria-hidden />
+        </button>
+        {attached.length > 0 && (
+          <ul className="flex basis-full flex-wrap gap-2">
+            {attached.slice(0, 4).map((a) => (
+              <li key={`${a.field}:${a.src}`}>
+                <button
+                  type="button"
+                  disabled={reading || !online}
+                  onClick={() => void scan.scanUrl(a.src)}
+                  className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-pill border border-border-strong bg-surface px-3 text-xs font-semibold text-ink hover:bg-surface-2 disabled:opacity-50"
+                >
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                  <span className="truncate">Leer «{a.name}» ({a.label})</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div aria-live="polite" className="basis-full empty:hidden">
+          {!online && (
+            <p className="flex items-center gap-2 text-xs font-semibold text-amber">
+              <WifiOff className="h-4 w-4 shrink-0" aria-hidden />
+              Sin conexión: llena a mano.
+            </p>
+          )}
+          {reading && <p className="text-xs font-semibold text-primary-ink">Leyendo el documento…</p>}
+          {scan.message && scan.phase !== 'reading' && (
+            <p
+              role={scan.phase === 'error' ? 'alert' : 'status'}
+              className={clsx(
+                'rounded-sm px-3 py-2 text-xs leading-relaxed',
+                scan.phase === 'error' ? 'bg-amber-soft font-semibold text-amber' : 'bg-surface text-ink-muted',
+              )}
+            >
+              {scan.message}
+            </p>
+          )}
+        </div>
+      </section>
+    );
 
   return (
     <section

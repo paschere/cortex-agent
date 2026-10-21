@@ -1,5 +1,8 @@
 'use client';
 
+import { formatDateTime } from '@cortex/agent-tools/src/format/display';
+
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import {
   importAppUsersAction,
   inviteAppUserAction,
@@ -40,11 +43,7 @@ const STATUS: Record<EditorAppUser['status'], { label: string; cls: string }> = 
 
 function seen(iso: string | null): string {
   if (!iso) return 'Nunca ha entrado';
-  return `Último acceso: ${new Intl.DateTimeFormat('es-CO', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'America/Bogota',
-  }).format(new Date(iso))}`;
+  return `Último acceso: ${formatDateTime(iso)}`;
 }
 
 type Run = (task: () => Promise<{ ok: boolean; error?: string }>) => void;
@@ -112,10 +111,10 @@ function UserRow({
       <button
         type="button"
         disabled={busy}
-        onClick={() => {
+        onClick={async () => {
           if (
             user.status === 'disabled' ||
-            window.confirm(`¿Desactivar a ${user.name}? Se cierran todas sus sesiones.`)
+            await confirmDialog(`¿Desactivar a ${user.name}? Se cierran todas sus sesiones.`)
           )
             run(() =>
               setAppUserStatusAction(
@@ -133,8 +132,8 @@ function UserRow({
         type="button"
         disabled={busy}
         aria-label={`Quitar a ${user.name}`}
-        onClick={() => {
-          if (window.confirm(`¿Quitar a ${user.name} de la aplicación?`))
+        onClick={async () => {
+          if (await confirmDialog(`¿Quitar a ${user.name} de la aplicación?`))
             run(() => removeAppUserAction(appId, user.id));
         }}
         className={BTN_DANGER}

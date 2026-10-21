@@ -14,6 +14,8 @@ import type {
   TrackerField,
 } from '@cortex/agent-tools';
 import { validateRowValues } from '@cortex/agent-tools/src/trackers/validation';
+import { confirmDialog, promptDialog } from '@/lib/ui/dialog-queue';
+import { formatDay, formatMoney, formatNumber } from '@cortex/agent-tools/src/format/display';
 import { clsx } from 'clsx';
 import { Check, Clock, Loader2, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -70,10 +72,33 @@ export interface ViewWriter {
 }
 
 /** Rechazar pide un motivo opcional; `null` = la persona canceló. */
-function askReason(action: ComputedAction, rowLabel: string): string | null {
+async function askReason(action: ComputedAction, rowLabel: string): Promise<string | null> {
   if (!action.askReason) return '';
-  const answer = window.prompt(`Motivo del rechazo de «${rowLabel}» (opcional)`, '');
-  return answer === null ? null : answer.trim().slice(0, 300);
+  return promptDialog({
+    title: `Motivo del rechazo de «${rowLabel}»`,
+    label: 'Motivo (opcional)',
+    confirmLabel: 'Rechazar',
+    maxLength: 300,
+  });
+}
+
+/** «¿Aprobar en «Fila»?»: un diálogo propio, no el del navegador. */
+function askConfirm(action: ComputedAction, rowLabel: string): Promise<boolean> {
+  return confirmDialog({
+    title: `¿${action.label} en «${rowLabel}»?`,
+    confirmLabel: action.label,
+  });
+}
+
+/** Lo que escribió la persona, como se verá en la celda (dinero y fechas con su formato). */
+function shownText(type: string, value: string): string {
+  const v = value.trim();
+  if (!v) return '—';
+  if (type === 'money' && Number.isFinite(Number(v))) return formatMoney(Number(v));
+  if (type === 'number' && Number.isFinite(Number(v))) return formatNumber(Number(v), 6);
+  if (type === 'date') return formatDay(v);
+  if (type === 'checkbox') return v === '1' ? 'Sí' : 'No';
+  return v;
 }
 
 const WriterContext = createContext<ViewWriter | null>(null);
@@ -119,9 +144,9 @@ export function ViewWriterProvider({
         return res;
       },
       async act(blockId, action, rowId, rowLabel) {
-        if (action.confirm && !window.confirm(`¿${action.label} en «${rowLabel}»?`))
+        if (action.confirm && !(await askConfirm(action, rowLabel)))
           return { ok: false, error: 'Cancelado.' };
-        const reason = askReason(action, rowLabel);
+        const reason = await askReason(action, rowLabel);
         if (reason === null) return { ok: false, error: 'Cancelado.' };
         const res = await runViewActionAction(target.viewId, blockId, action.id, rowId, reason);
         if (res.ok) onChanged?.();
@@ -191,9 +216,9 @@ export function ViewWriterProvider({
         }
       },
       async act(blockId, action, rowId, rowLabel) {
-        if (action.confirm && !window.confirm(`¿${action.label} en «${rowLabel}»?`))
+        if (action.confirm && !(await askConfirm(action, rowLabel)))
           return { ok: false, error: 'Cancelado.' };
-        const reason = askReason(action, rowLabel);
+        const reason = await askReason(action, rowLabel);
         if (reason === null) return { ok: false, error: 'Cancelado.' };
         const outbox = activeOutbox(target.appId);
         const keep = async (): Promise<Result> => {
@@ -233,9 +258,9 @@ export function ViewWriterProvider({
         return res;
       },
       async act(blockId, action, rowId, rowLabel) {
-        if (action.confirm && !window.confirm(`¿${action.label} en «${rowLabel}»?`))
+        if (action.confirm && !(await askConfirm(action, rowLabel)))
           return { ok: false, error: 'Cancelado.' };
-        const reason = askReason(action, rowLabel);
+        const reason = await askReason(action, rowLabel);
         if (reason === null) return { ok: false, error: 'Cancelado.' };
         const res = await publicWrite({
           op: 'action',
@@ -322,6 +347,8 @@ export function EditableValue({
   const [error, setError] = useState<string | null>(null);
   // Lo que se escribió sin señal: se muestra con un reloj hasta que el servidor lo confirme.
   const [queuedValue, setQueuedValue] = useState<string | null>(null);
+  // Lo que acaba de escribir, ya en pantalla mientras el servidor contesta; si falla, se devuelve.
+  const [optimistic, setOptimistic] = useState<string | null>(null);
   const input = useRef<HTMLInputElement & HTMLSelectElement & HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -331,6 +358,7 @@ export function EditableValue({
   // biome-ignore lint/correctness/useExhaustiveDependencies: sólo cuando cambia lo que dice el servidor
   useEffect(() => {
     setQueuedValue(null);
+    setOptimistic(null);
     setState((s) => (s === 'queued' ? 'idle' : s));
   }, [raw]);
   useEffect(() => {
@@ -353,6 +381,7 @@ export function EditableValue({
     }
     setEditing(false);
     setState('saving');
+    setOptimistic(shownText(edit.type, next));
     const res = await writer?.edit(
       blockId,
       rowId,
@@ -368,6 +397,7 @@ export function EditableValue({
       setError(null);
       setTimeout(() => setState('idle'), 1500);
     } else {
+      setOptimistic(null);
       setState('error');
       setError(res?.error ?? 'No se pudo guardar.');
     }
@@ -450,9 +480,14 @@ export function EditableValue({
           className="-mx-1 w-[calc(100%+0.5rem)] rounded-sm px-1 underline decoration-border-strong decoration-dotted underline-offset-4 transition-colors hover:bg-primary-soft/40"
         >
           {state === 'saving' ? (
-            <Loader2 className="inline h-3.5 w-3.5 animate-spin" />
+            <>
+              {optimistic ?? display}
+              <Loader2 className="ml-1 inline h-3 w-3 animate-spin motion-reduce:animate-none" />
+            </>
           ) : state === 'queued' && queuedValue !== null ? (
-            queuedValue || '—'
+            shownText(edit.type, queuedValue) || '—'
+          ) : optimistic !== null ? (
+            optimistic
           ) : (
             display
           )}
@@ -503,6 +538,8 @@ export function RowActions({
   const writer = useViewWriter();
   const appNav = useAppNav();
   const [busy, setBusy] = useState<string | null>(null);
+  // Un botón a la vez, también entre dos toques del mismo instante (antes de que `busy` pinte).
+  const busyRef = useRef(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [picking, setPicking] = useState<ComputedAction | null>(null);
   // Aprobar / Rechazar sólo salen en las filas que esperan revisión (`rowIds`);
@@ -547,9 +584,16 @@ export function RowActions({
               setPicking(a);
               return;
             }
+            if (busyRef.current) return;
+            busyRef.current = true;
             setBusy(a.id);
-            const res = await writer.act(blockId, a, rowId, rowLabel);
-            setBusy(null);
+            let res: Result;
+            try {
+              res = await writer.act(blockId, a, rowId, rowLabel);
+            } finally {
+              busyRef.current = false;
+              setBusy(null);
+            }
             if (res.ok || res.error !== 'Cancelado.')
               setNote(res.ok ? { ok: true, text: res.message } : { ok: false, text: res.error });
             setTimeout(() => setNote(null), 3000);

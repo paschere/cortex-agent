@@ -1,5 +1,7 @@
 'use client';
 
+import { formatDateTime } from '@cortex/agent-tools/src/format/display';
+
 import { DeleteDialog } from '@/components/ui/DeleteDialog';
 import {
   archiveViewAction,
@@ -31,6 +33,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { confirmDialog, promptDialog } from '@/lib/ui/dialog-queue';
 
 /**
  * Las acciones de una vista: fijar en Inicio, compartir, historial y archivar.
@@ -145,11 +148,13 @@ export function ViewToolbar({
           className={clsx(PILL, 'text-ink-muted')}
           title="Archivar"
           disabled={pending}
-          onClick={() => {
+          onClick={async () => {
             if (
-              !window.confirm(
-                `¿Archivar «${view.name}»? Desaparece de la lista y su enlace deja de abrir. Los datos no se tocan.`,
-              )
+              !(await confirmDialog({
+                title: `¿Archivar «${view.name}»?`,
+                message: 'Desaparece de la lista y su enlace deja de abrir. Los datos no se tocan.',
+                confirmLabel: 'Archivar',
+              }))
             )
               return;
             start(async () => {
@@ -426,7 +431,7 @@ export function ShareDialog({
                 <p className="mt-2 text-micro text-ink-faint">
                   Abierto {view.opens} {view.opens === 1 ? 'vez' : 'veces'}
                   {view.expiresAt
-                    ? ` · vence el ${new Date(view.expiresAt).toLocaleDateString('es-CO', { dateStyle: 'long' })}`
+                    ? ` · vence el ${formatDateTime(view.expiresAt)}`
                     : ' · no vence'}
                   .
                 </p>

@@ -83,6 +83,7 @@ import { InspectorPanel } from './InspectorPanel';
 import { ViewSettings } from './ViewSettings';
 import { blockIcon, blockLabel } from './block-meta';
 import { useEditorServices } from './services';
+import { confirmDialog, promptDialog } from '@/lib/ui/dialog-queue';
 
 /**
  * EL ESTUDIO: EDITAR UNA VISTA EN PANTALLA COMPLETA.
@@ -557,12 +558,16 @@ export function ViewEditor({
     setSavedAt(Date.now());
   }
 
-  function exit() {
+  async function exit() {
     if (
       dirty &&
-      !window.confirm(
-        '¿Salir sin guardar? Tus cambios quedan en este navegador y te ofrecemos recuperarlos cuando vuelvas.',
-      )
+      !(await confirmDialog({
+        title: '¿Salir sin guardar?',
+        message:
+          'Tus cambios quedan en este navegador y te ofrecemos recuperarlos cuando vuelvas.',
+        confirmLabel: 'Salir',
+        cancelLabel: 'Seguir editando',
+      }))
     )
       return;
     onCancel();

@@ -8,6 +8,7 @@ import {
   pullDistance,
   pullProgress,
   pullTriggers,
+  shortTabLabels,
   splitTabs,
 } from './app-nav';
 
@@ -77,5 +78,22 @@ describe('enlace de una tarjeta', () => {
     expect(
       cardHref('/apps/p', '?como=cliente', { screen: 'guias', filter: 'estado=Duplicado' }),
     ).toBe('/apps/p/guias?como=cliente&f=estado%3DDuplicado');
+  });
+});
+
+
+describe('shortTabLabels', () => {
+  const labels = (titles: string[]) =>
+    [...shortTabLabels(titles.map((t, i) => ({ slug: `s${i}`, title: t }))).values()];
+  it('resume a una palabra con sentido y sin cortar a la mitad', () => {
+    expect(labels(['Control de vuelos', 'Inicio', 'Atenciones'])).toEqual(['Vuelos', 'Inicio', 'Atenciones']);
+  });
+  it('no repite nombres entre pestañas', () => {
+    const out = labels(['Control de vuelos', 'Control de equipos', 'Control de tripulación']);
+    expect(new Set(out).size).toBe(3);
+    for (const l of out) expect(l.length).toBeLessThanOrEqual(11);
+  });
+  it('un título largo de una sola palabra se corta con punto', () => {
+    expect(labels(['Programaciones'])).toEqual(['Programaci.']);
   });
 });

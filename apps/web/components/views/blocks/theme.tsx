@@ -1,5 +1,7 @@
 'use client';
 
+import { formatDateTime } from '@cortex/agent-tools/src/format/display';
+
 import { hueDistance, hueOf } from '@/lib/branding/colors';
 import type { ViewBrand } from '@/lib/branding/shape';
 import type { ComputedTheme, Tone } from '@cortex/agent-tools';
@@ -246,16 +248,54 @@ export function Card({
 }
 
 /** Un bloque sin nada que mostrar: qué va ahí, sin dramatismo. */
+/**
+ * «Registrar el primero»: si la pantalla tiene un formulario, un bloque vacío
+ * ofrece llevar hasta él en vez de dejar un callejón sin salida. Lo provee el
+ * lienzo (ViewCanvas) cuando hay UN formulario; sin proveedor no hay botón.
+ */
+const RegisterCtx = createContext<{ scrollToForm: () => void } | null>(null);
+export const RegisterProvider = RegisterCtx.Provider;
+
+/** «el primero» / «la primera», por cómo termina el nombre de lo que se registra. */
+export function firstOf(noun: string): string {
+  const last = noun.trim().toLocaleLowerCase('es-CO').split(/\s+/).pop() ?? '';
+  return /(as|ones|ades|ciones|umbres|es)$/.test(last) && !/(os|ores|eres)$/.test(last)
+    ? 'la primera'
+    : 'el primero';
+}
+
+/** El título de un bloque sin filas: «Aún no hay atenciones». */
+export function noneYet(source: string): string {
+  const name = source.replace(/^.*·\s*/, '').trim().toLocaleLowerCase('es-CO');
+  return name ? `Aún no hay ${name}` : 'Todavía no hay nada';
+}
+
+export function RegisterFirst({ source }: { source: string }) {
+  const reg = useContext(RegisterCtx);
+  if (!reg) return null;
+  return (
+    <button
+      type="button"
+      onClick={reg.scrollToForm}
+      className="view-press mt-1 inline-flex min-h-11 items-center rounded-pill bg-primary px-5 text-xs font-semibold text-white shadow-card hover:bg-primary-strong"
+    >
+      Registrar {firstOf(source.replace(/^.*·\s*/, ''))}
+    </button>
+  );
+}
+
 export function EmptyState({
   icon,
   title,
   hint,
   className,
+  children,
 }: {
   icon?: React.ReactNode;
   title: string;
   hint?: string;
   className?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <div
@@ -271,20 +311,15 @@ export function EmptyState({
       )}
       <p className="text-sm font-semibold text-ink-muted">{title}</p>
       {hint && <p className="max-w-xs text-xs leading-relaxed text-ink-faint">{hint}</p>}
+      {children}
     </div>
   );
 }
 
-const VIEW_WHEN = new Intl.DateTimeFormat('es-CO', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'America/Bogota',
-});
-
 /** Fecha y hora de Bogotá, corta: «28 sep 2026, 12:00 p. m.». Una fecha rota es «—», no un error. */
 export function formatWhen(iso: string): string {
   const t = Date.parse(iso);
-  return Number.isNaN(t) ? '—' : VIEW_WHEN.format(new Date(t));
+  return Number.isNaN(t) ? '—' : formatDateTime(new Date(t).toISOString());
 }
 
 /** «octubre de 2026» → «Octubre de 2026»: sólo la primera letra (`capitalize` de CSS haría «De»). */

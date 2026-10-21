@@ -1,5 +1,7 @@
 'use client';
 
+import { formatDateTime } from '@cortex/agent-tools/src/format/display';
+
 import { restoreVersionAction } from '@/lib/apps/phase6-actions';
 import { compareVersionsAction } from '@/lib/apps/review-actions';
 import type { CompareLine } from '@cortex/agent-tools';
@@ -17,13 +19,7 @@ import { type AppEditorData, BTN_PRIMARY, BTN_SECONDARY, CARD, ErrorLine } from 
  * tablas no se versionan: no se pierde ni se pisa ningún registro.
  */
 
-const DATE = new Intl.DateTimeFormat('es-CO', {
-  day: 'numeric',
-  month: 'short',
-  hour: 'numeric',
-  minute: '2-digit',
-  timeZone: 'America/Bogota',
-});
+const DATE = { format: (d: Date) => formatDateTime(d.toISOString()) };
 
 const KIND: Record<string, string> = {
   added: 'bg-emerald-soft text-emerald',

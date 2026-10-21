@@ -50,6 +50,8 @@ import { type VoiceSendOutcome, useFormVoiceStore } from './form-voice-bridge';
 import { Card, useViewTheme } from './theme';
 import { useAutofill } from './useAutofill';
 import { useConnection } from './useConnection';
+import { useDuplicateHint } from './useDuplicateHint';
+import { useRecordNav } from './record-nav';
 import { queueKeyFor, useFormQueue, useOnline } from './useFormQueue';
 
 /**
@@ -246,6 +248,20 @@ export function FormBlock({
     url: autofillUrl,
     enabled: !disabled && !correcting,
   });
+  // «Parece que ya existe»: aviso previo (sólo dentro de una app); nunca bloquea.
+  const recordNav = useRecordNav();
+  const dupUrl =
+    target.kind === 'custom_app' ? `${appApiBase(target)}/screens/${target.screen}/duplicates` : null;
+  const dup = useDuplicateHint({
+    url: dupUrl,
+    blockId: block.id,
+    values: effective,
+    enabled: !disabled && !correcting && !done,
+  });
+  const dupRef = useRef<HTMLDivElement>(null);
+  // Un solo envío a la vez: dos toques seguidos no mandan dos filas.
+  const sendingRef = useRef(false);
+  const attemptRef = useRef<string | null>(null);
   // «Tomar foto del documento»: sólo el equipo con sesión (nunca el enlace público ni un usuario externo).
   const scanUrl =
     target.kind === 'app'
@@ -383,9 +399,15 @@ export function FormBlock({
 
     if (correcting) {
       if (!corrector) return;
+      if (sendingRef.current) return;
+      sendingRef.current = true;
       const payload = buildPayload(true);
       start(async () => {
-        const res = await corrector(block.id, correcting.rowId, payload, correcting.token);
+        const res = await corrector(block.id, correcting.rowId, payload, correcting.token).finally(
+          () => {
+            sendingRef.current = false;
+          },
+        );
         if (res.ok) {
           queue.update(correcting.rowId, payload);
           finish({
@@ -400,10 +422,27 @@ export function FormBlock({
       return;
     }
 
+    if (dup.isPending()) {
+      // Primero el aviso: la persona decide si abre el que existe o guarda igual.
+      window.setTimeout(() => dupRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 30);
+      return;
+    }
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     start(async () => {
-      const ref = usageRef.current ?? newClientId();
-      usageRef.current = null;
-      await submitRecord(buildPayload(false), ref);
+      try {
+        // El mismo id mientras el envío no salga bien: un reintento no crea otra fila.
+        const ref = usageRef.current ?? attemptRef.current ?? newClientId();
+        attemptRef.current = ref;
+        usageRef.current = null;
+        const out = await submitRecord(buildPayload(false), ref);
+        if (out.ok) {
+          attemptRef.current = null;
+          dup.reset();
+        }
+      } finally {
+        sendingRef.current = false;
+      }
     });
   };
 
@@ -983,6 +1022,7 @@ export function FormBlock({
             attached={attachedImages(fields, values)}
             large={operator}
             online={online}
+            compact={fields.length <= 6}
             className="mb-5"
           />
         )}
@@ -1163,6 +1203,43 @@ export function FormBlock({
                 error={errors[LINES_KEY]}
                 large={operator}
               />
+            </div>
+          )}
+          {dup.pending && (
+            <div
+              ref={dupRef}
+              role="status"
+              className={clsx(
+                'rounded-sm border border-amber/30 bg-amber-soft px-3 py-3 text-amber sm:col-span-2',
+                operator ? 'text-base' : 'text-xs',
+              )}
+            >
+              <p className="font-semibold">
+                Parece que ya existe: {dup.matches[0]?.label}
+                {dup.matches.length > 1 ? ` y ${dup.matches.length - 1} más` : ''}
+              </p>
+              <p className="mt-0.5 text-ink-muted">{dup.matches[0]?.why}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {dup.openIn && recordNav && dup.matches[0] && (
+                  <button
+                    type="button"
+                    onClick={() => recordNav.open(dup.openIn as string, (dup.matches[0] as { id: string }).id)}
+                    className="inline-flex min-h-10 items-center rounded-pill border border-amber/40 bg-surface px-4 text-xs font-semibold text-ink hover:bg-surface-2"
+                  >
+                    Abrir el existente
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    dup.acknowledge();
+                    window.setTimeout(send, 0);
+                  }}
+                  className="inline-flex min-h-10 items-center rounded-pill bg-primary px-4 text-xs font-semibold text-white hover:bg-primary-strong"
+                >
+                  Guardar igual
+                </button>
+              </div>
             </div>
           )}
           {error && (

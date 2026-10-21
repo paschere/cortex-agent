@@ -1,3 +1,4 @@
+import { formatDay, formatLoose, formatNumber } from '../../format/display';
 import { type ViewSource, aggregate, formatValue, matches, todayIn } from '../../views/compute';
 import { type ViewFilter, fieldType } from '../../views/spec';
 import { displayTrackerValue } from '../../trackers/schema';
@@ -99,14 +100,18 @@ export function reportQueryProblems(
 function groupLabel(source: ViewSource, row: ViewSource['rows'][number], key: string): string {
   if (key === 'label') return row.label || NO_GROUP;
   if (key === 'created_at' || key === 'updated_at')
-    return bogotaDayOf(key === 'created_at' ? row.created_at : row.updated_at) ?? NO_GROUP;
+    return dayLabel(bogotaDayOf(key === 'created_at' ? row.created_at : row.updated_at));
   const raw = row.values[key];
   if (raw === undefined || raw === '') return NO_GROUP;
   const type = fieldType(source.tracker, key);
   if (type === 'relation' || type === 'file' || type === 'checkbox')
     return displayTrackerValue({ type }, raw) || NO_GROUP;
-  return String(raw).trim() || NO_GROUP;
+  if (type === 'money') return formatCell(Number(raw), 'money');
+  if (type === 'number') return formatCell(Number(raw), 'number');
+  return formatLoose(String(raw).trim()) === '—' ? NO_GROUP : formatLoose(String(raw).trim());
 }
+
+const dayLabel = (day: string | null | undefined) => (day ? formatDay(day) : NO_GROUP);
 
 function dayOfRow(row: ViewSource['rows'][number], key: string): string | null {
   if (key === 'created_at') return bogotaDayOf(row.created_at);
@@ -121,8 +126,8 @@ export function formatCell(value: Cell, kind: ColumnKind): string {
   if (value === null || value === '') return '—';
   if (typeof value === 'string') return value;
   if (kind === 'money') return MONEY_FULL(value);
-  if (kind === 'count') return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(value);
-  return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 }).format(value);
+  if (kind === 'count') return formatNumber(value, 0);
+  return formatNumber(value, 2);
 }
 
 export function runReportQuery(q: ReportQuerySource, source: ViewSource, now: Date): ReportResult {

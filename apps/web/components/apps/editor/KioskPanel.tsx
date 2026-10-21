@@ -1,5 +1,8 @@
 'use client';
 
+import { formatDateTime } from '@cortex/agent-tools/src/format/display';
+
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import {
   clearUserPinAction,
   createKioskPairingAction,
@@ -38,11 +41,7 @@ const STATE: Record<EditorKiosk['devices'][number]['state'], { label: string; cl
 
 function when(iso: string | null): string {
   if (!iso) return 'Sin uso todavía';
-  return `Visto ${new Intl.DateTimeFormat('es-CO', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'America/Bogota',
-  }).format(new Date(iso))}`;
+  return `Visto ${formatDateTime(iso)}`;
 }
 
 export function KioskPanel({ appId, kiosk }: { appId: string; kiosk: EditorKiosk }) {
@@ -141,9 +140,9 @@ export function KioskPanel({ appId, kiosk }: { appId: string; kiosk: EditorKiosk
                     <button
                       type="button"
                       disabled={pending}
-                      onClick={() => {
+                      onClick={async () => {
                         if (
-                          window.confirm(
+                          await confirmDialog(
                             `¿Revocar «${d.name}»? El celular deja de ser kiosco y se cierran las sesiones abiertas en él.`,
                           )
                         )

@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import { Glyph } from '@/components/apps/AppGlyph';
 import { DeleteDialog } from '@/components/ui/DeleteDialog';
 import { archiveAppAction, deleteAppAction, updateAppAction } from '@/lib/apps/actions';
@@ -271,9 +272,9 @@ export function AppEditor({
                   <MenuItem
                     tone="rose"
                     disabled={pending}
-                    onSelect={() => {
+                    onSelect={async () => {
                       if (
-                        window.confirm(
+                        await confirmDialog(
                           `¿Archivar «${app.name}»? Sus pantallas se archivan; los datos de las tablas no se tocan.`,
                         )
                       )

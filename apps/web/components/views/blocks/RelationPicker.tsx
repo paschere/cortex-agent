@@ -233,7 +233,10 @@ export function RelationSheet({
     onSelect(o);
     onOpenChange(false);
   };
+  const addingRef = useRef(false);
   const add = useCallback(async () => {
+    if (addingRef.current) return;
+    addingRef.current = true;
     setAdding(true);
     setAddError(null);
     try {
@@ -241,6 +244,7 @@ export function RelationSheet({
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'No se pudo agregar ahora.');
     } finally {
+      addingRef.current = false;
       setAdding(false);
     }
     // biome-ignore lint/correctness/useExhaustiveDependencies: choose cambia en cada render y sólo usa onSelect.

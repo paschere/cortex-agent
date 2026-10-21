@@ -43,6 +43,7 @@ import { BrandScope, ViewBrandProvider } from '../blocks/brand';
 import '../views.css';
 import { ShareDialog, type ToolbarView } from '../ViewToolbar';
 import { NewViewDialog, TemplateCard, launchFor } from './NewViewDialog';
+import { confirmDialog, promptDialog } from '@/lib/ui/dialog-queue';
 
 /**
  * /views: LA ESTANTERÍA DE PANTALLAS DE LA EMPRESA.
@@ -324,11 +325,14 @@ export function ViewsLibrary({
                   run(async () => duplicateViewAction(v.id), `Se creó «${v.name} (copia)».`)
                 }
                 onShare={() => setShareFor(v.id)}
-                onArchive={() => {
+                onArchive={async () => {
                   if (
-                    !window.confirm(
-                      `¿Archivar «${v.name}»? Desaparece de la lista y su enlace deja de abrir. Los datos no se tocan.`,
-                    )
+                    !(await confirmDialog({
+                      title: `¿Archivar «${v.name}»?`,
+                      message:
+                        'Desaparece de la lista y su enlace deja de abrir. Los datos no se tocan.',
+                      confirmLabel: 'Archivar',
+                    }))
                   )
                     return;
                   run(() => archiveViewAction(v.id), `«${v.name}» quedó archivada.`);

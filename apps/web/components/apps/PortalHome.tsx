@@ -1,5 +1,7 @@
 'use client';
 
+import { formatNumber } from '@cortex/agent-tools/src/format/display';
+
 import type { ComputedPortal, PortalSection } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { CreditCard, Download, FileText, Upload } from 'lucide-react';
@@ -38,7 +40,7 @@ function Chip({ status }: { status: { label: string; tone: string } | null }) {
 
 function size(n: number): string {
   return n > 1_000_000
-    ? `${(n / 1_000_000).toFixed(1)} MB`
+    ? `${formatNumber(n / 1_000_000, 1)} MB`
     : `${Math.max(1, Math.round(n / 1000))} KB`;
 }
 

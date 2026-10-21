@@ -62,7 +62,7 @@ function useHeroInk(): HeroInk {
   }, [brand]);
 }
 
-type Block = { type: string; design?: BlockDesign; title?: string | null };
+type Block = { type: string; id?: string; design?: BlockDesign; title?: string | null };
 
 export function DesignScope({
   block,
@@ -88,7 +88,11 @@ export function DesignScope({
     [block.type, block.design, block.title],
   );
   return (
-    <Tag className={clsx(attrs.className, className)} {...attrs.data}>
+    <Tag
+      id={block.type === 'form' ? `block-${block.id}` : undefined}
+      className={clsx(attrs.className, className)}
+      {...attrs.data}
+    >
       <Ctx.Provider value={value}>{children}</Ctx.Provider>
     </Tag>
   );

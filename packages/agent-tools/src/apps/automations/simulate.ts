@@ -122,6 +122,7 @@ export async function simulateAutomation(
     link: `${base}/a/${app.id}`,
     reason: '(el motivo que escriba quien rechaza)',
     labels: tracker ? Object.fromEntries(tracker.fields.map((f) => [f.key, f.label])) : {},
+    types: tracker ? Object.fromEntries(tracker.fields.map((f) => [f.key, f.type])) : {},
   };
   const sim = simulateRule(
     input,

@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import {
+  DAY_RE,
+  cleanText,
+  formatClock,
+  formatDay,
+  formatMoney,
+  formatNumber,
+} from '../format/display';
 import { computedProblems } from './computed';
 import { flowProblems, flowSchema, normalizeFlow } from './flow';
 import {
@@ -543,12 +551,22 @@ export function displayTrackerValue(
       return Number(value) === 1 ? 'Sí' : 'No';
     case 'number': {
       const n = Number(value);
-      if (field.percent && Number.isFinite(n))
-        return `${(Math.round(n * 1e6) / 1e4).toLocaleString('es-CO', { maximumFractionDigits: 2 })} %`;
-      return String(value);
+      if (!Number.isFinite(n)) return cleanText(value);
+      if (field.percent) return `${formatNumber(Math.round(n * 1e6) / 1e4, 2)} %`;
+      return formatNumber(n, 6);
     }
+    case 'money': {
+      const n = Number(value);
+      return Number.isFinite(n) ? formatMoney(n) : cleanText(value);
+    }
+    case 'date': {
+      const s = String(value);
+      return DAY_RE.test(s) ? formatDay(s) : cleanText(value);
+    }
+    case 'time':
+      return formatClock(String(value));
     default:
-      return String(value);
+      return cleanText(value);
   }
 }
 

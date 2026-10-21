@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import { Glyph } from '@/components/apps/AppGlyph';
 import {
   addScreenAction,
@@ -225,9 +226,9 @@ function ScreenRow({
               <MenuItem
                 tone="rose"
                 disabled={busy}
-                onSelect={() => {
+                onSelect={async () => {
                   if (
-                    window.confirm(
+                    await confirmDialog(
                       `¿Quitar la pantalla «${screen.title}»? Se archiva con su vista.`,
                     )
                   )

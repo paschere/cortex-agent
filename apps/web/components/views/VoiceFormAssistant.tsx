@@ -113,7 +113,9 @@ export function VoiceFormAssistant({
   // --- panel (bloque `voice`) ---
   return (
     <Card title={title ?? 'Asistente de voz'} className={className}>
-      {!v.supported ? (
+      {!v.probed ? (
+        <div aria-hidden className="h-12 w-full animate-pulse rounded-sm bg-surface-2 motion-reduce:animate-none" />
+      ) : !v.supported ? (
         <p className="text-sm text-ink-muted">
           Este navegador no permite hablar con el formulario. Llénalo con el dedo, o prueba con
           Chrome o Safari.

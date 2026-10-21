@@ -25,7 +25,7 @@ export function AppErrorState({
   return (
     <div
       role="alert"
-      className="mx-auto mt-10 flex max-w-sm flex-col items-center gap-3 rounded-[1.75rem] border border-border bg-surface px-6 py-8 text-center shadow-pop"
+      className="mx-auto mt-10 flex max-w-sm flex-col items-center gap-3 rounded-card border border-border bg-surface px-6 py-8 text-center shadow-pop"
     >
       <AppIllustration kind="error" />
       <h1 className="text-lg font-extrabold tracking-tight text-ink">{title}</h1>

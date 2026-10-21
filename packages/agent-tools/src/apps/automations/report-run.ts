@@ -6,7 +6,7 @@ import { type ViewSpec } from '../../views/spec';
 import { loadViewSources } from '../../views/store';
 import { getTrackerBySlug } from '../../trackers/store';
 import { listScreens, screenView } from '../store';
-import { type TemplateContext, TransientActionError, renderTemplate } from './engine';
+import { type TemplateContext, TransientActionError, renderTemplate, renderText } from './engine';
 import {
   type Cell,
   type ColumnKind,
@@ -172,7 +172,7 @@ const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 
 export async function runReportAction(a: ReportRunInput): Promise<string> {
   const { action, ctx, now } = a;
-  const title = renderTemplate(action.title, ctx).trim() || action.title;
+  const title = renderText(action.title, ctx).trim() || action.title;
 
   // 1. Destinatarios.
   const targets = new Set(action.to.map((e) => e.toLowerCase()));
@@ -226,14 +226,14 @@ export async function runReportAction(a: ReportRunInput): Promise<string> {
   const mail = renderReportEmail({
     title,
     rangeLabel: built.rangeLabel,
-    intro: action.intro ? renderTemplate(action.intro, ctx) : null,
+    intro: action.intro ? renderText(action.intro, ctx) : null,
     tables: result.tables,
     appName: a.app.name,
     notes,
     attachments: attachments.map((x) => x.filename),
     rowCount: result.rowCount,
   });
-  const subject = action.subject ? renderTemplate(action.subject, ctx) : `${title}${built.rangeLabel ? ` · ${built.rangeLabel}` : ''}`;
+  const subject = action.subject ? renderText(action.subject, ctx) : `${title}${built.rangeLabel ? ` · ${built.rangeLabel}` : ''}`;
   const delivered: string[] = [];
   const failed: string[] = [];
   let lastReason = '';

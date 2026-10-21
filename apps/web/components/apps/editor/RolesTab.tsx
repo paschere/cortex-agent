@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import {
   saveLocationSettingsAction,
   saveRolesAction,
@@ -409,9 +410,9 @@ export function RolesTab({ data }: { data: AppEditorData }) {
               </label>
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    window.confirm(
+                    await confirmDialog(
                       `¿Quitar el rol «${r.name}»? Al guardar, sus miembros quedan fuera de la app hasta que les asignes otro.`,
                     )
                   )
@@ -623,7 +624,7 @@ function LocationSection({
       if (
         location.enabled &&
         !enabled &&
-        !window.confirm(
+        !await confirmDialog(
           'Al apagar «Compartir ubicación» se borran todas las posiciones guardadas y se cierran los turnos. ¿Apagar?',
         )
       )

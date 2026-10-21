@@ -300,3 +300,19 @@ describe('simulación sin efectos', () => {
     expect(sim.actions[0]?.summary).toContain('Aprobaron 045');
   });
 });
+
+describe('renderText: lo que lee una persona', () => {
+  const ctx = {
+    after: { costo: 240000, salida: '2026-10-02', hora: '15:04', nota: 'ok', cantidad: '1250.5' },
+    labels: { costo: 'Costo', salida: 'Salida' },
+    types: { costo: 'money', salida: 'date', hora: 'time', cantidad: 'number' },
+  };
+  it('dinero, fechas y horas salen formateados; renderTemplate conserva lo crudo', async () => {
+    const { renderText, renderTemplate } = await import('../engine');
+    const t = 'Costo {{costo}} el {{Salida}} a las {{hora}} ({{cantidad}}) {{nota}} {{nada}}';
+    expect(renderText(t, ctx).replace(/ /g, ' ')).toBe(
+      'Costo $ 240.000 el 2 oct 2026 a las 3:04 p. m. (1.250,5) ok ',
+    );
+    expect(renderTemplate('{{costo}}', ctx)).toBe('240000');
+  });
+});

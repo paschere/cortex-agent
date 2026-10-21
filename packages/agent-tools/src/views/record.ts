@@ -1,3 +1,4 @@
+import { formatClock, formatLoose } from '../format/display';
 import { buildFlowView, flowOf, transitionHistory } from '../trackers/flow';
 import { displayTrackerValue, parseFileValue } from '../trackers/schema';
 import {
@@ -12,7 +13,12 @@ import {
   rowKit,
   viewShortDate,
 } from './compute';
-import { type ChangeOrigin, ORIGIN_LABEL, undoableKeys } from './row-history-shape';
+import {
+  type ChangeOrigin,
+  ORIGIN_LABEL,
+  ruleOriginLabel,
+  undoableKeys,
+} from './row-history-shape';
 import {
   APPROVE_ACTION_ID,
   type CatalogTracker,
@@ -57,6 +63,9 @@ export interface RecordHistoryRaw {
     by: string | null;
     /** De dónde vino el cambio (app, chat, rutina, enlace, deshacer); ausente = no se sabe. */
     source?: ChangeOrigin;
+    /** Cambio hecho por una regla: su nombre (vacío si quien mira no es del equipo) y el motivo. */
+    ruleName?: string;
+    reason?: string;
   }>;
   runs: Array<{ id: string; at: string; automation: string; ok: boolean }>;
 }
@@ -120,7 +129,8 @@ function showChange(tracker: CatalogTracker, key: string, v: unknown): string {
   if (type === 'number') return formatValue(Number(v), 'number');
   if (type === 'date' && typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v))
     return viewShortDate(v);
-  return clip(String(v));
+  if (type === 'time' && typeof v === 'string') return formatClock(v);
+  return clip(formatLoose(v));
 }
 
 /** Nombres de archivo que aparecen en `to` y no estaban en `from`. */
@@ -183,7 +193,12 @@ export function buildTimeline(
       from: c.from === undefined ? '—' : showChange(tracker, k, c.from),
       to: showChange(tracker, k, c.to),
     }));
-    const origin = e.source ? { origin: ORIGIN_LABEL[e.source] } : {};
+    const origin = e.source
+      ? {
+          origin: e.source === 'rule' ? ruleOriginLabel(e.ruleName) : ORIGIN_LABEL[e.source],
+          ...(e.reason ? { reason: e.reason } : {}),
+        }
+      : {};
     const undo =
       ctx.canUndo &&
       e.source !== 'undo' &&

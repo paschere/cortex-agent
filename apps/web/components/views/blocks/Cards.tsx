@@ -19,7 +19,7 @@ import { CardFlow } from './FlowStepper';
 import { useRecordOpener } from './RecordDrawer';
 import { RichValue } from './RichValue';
 import { useVariant } from './design';
-import { Card, EmptyState, StatusChip, TONE_BAR, useViewTheme } from './theme';
+import { Card, EmptyState, RegisterFirst, StatusChip, TONE_BAR, noneYet, useViewTheme } from './theme';
 
 /**
  * LA LISTA DE TARJETAS CON FILTROS RÁPIDOS.
@@ -323,13 +323,15 @@ export function CardsBlock({ block }: { block: Cards }) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<LayoutGrid className="h-5 w-5" aria-hidden />}
-          title={active ? 'Nada con esos filtros' : 'Todavía no hay registros'}
+          title={active ? 'Nada con esos filtros' : noneYet(block.source)}
           hint={
             active
               ? 'Quita un filtro para ver más.'
               : 'Cada registro nuevo aparece aquí como una tarjeta.'
           }
-        />
+        >
+          {!active && <RegisterFirst source={block.source} />}
+        </EmptyState>
       ) : (
         <div className="space-y-5">
           {groups.map((g) => (

@@ -1,5 +1,6 @@
 'use client';
 
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import {
   type AutomationView,
   type RunView,
@@ -1249,8 +1250,8 @@ export function AutomationsTab({ data }: { data: AppEditorData }) {
                 className={BTN_DANGER}
                 disabled={pending}
                 aria-label={`Borrar ${a.name}`}
-                onClick={() => {
-                  if (window.confirm(`¿Borrar «${a.name}»? Su historial también se borra.`))
+                onClick={async () => {
+                  if (await confirmDialog(`¿Borrar «${a.name}»? Su historial también se borra.`))
                     run(() => deleteAutomationAction(appId, a.id));
                 }}
               >

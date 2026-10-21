@@ -1,3 +1,4 @@
+import { formatMoney } from '../../format/display';
 import {
   type CreditNoteItem,
   type CreditNotePayload,
@@ -30,7 +31,7 @@ import type { AutomationAction } from './spec';
 
 type Customer = Extract<AutomationAction, { type: 'accounting_draft_receipt' }>['customer'];
 
-const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
+const money = (n: number) => formatMoney(Math.round(n));
 
 export function renderField(spec: string | undefined, ctx: TemplateContext): string {
   return spec ? renderTemplate(spec, ctx).trim() : '';

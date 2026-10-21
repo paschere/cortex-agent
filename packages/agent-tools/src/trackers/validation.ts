@@ -1,3 +1,4 @@
+import { formatMoney } from '../format/display';
 import { FORMAT_LABEL, checkFormat, compilePattern, testPattern } from './formats';
 import {
   type TrackerField,
@@ -210,7 +211,7 @@ function comparable(field: TrackerField, v: unknown): string {
 }
 
 function boundText(field: TrackerField, bound: string | number): string {
-  if (field.type === 'money') return `$${Number(bound).toLocaleString('es-CO')}`;
+  if (field.type === 'money') return formatMoney(Number(bound));
   return String(bound);
 }
 
