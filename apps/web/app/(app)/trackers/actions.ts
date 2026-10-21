@@ -23,6 +23,7 @@ import {
   type TrackerField,
   type TrackerRow,
   applyDuplicateRule,
+  assertRowWriteAllowed,
   defineTracker,
   getTool,
   getTrackerById,
@@ -459,6 +460,8 @@ export async function importTrackerRows(
   try {
     const { user, db } = await context('trackers.upsert');
     const tracker = await mustTracker(db, trackerId);
+    // Una tabla que se llena sola desde una integración no recibe filas importadas (0237).
+    assertRowWriteAllowed(tracker, { creating: true, after: {} });
     const list = Array.isArray(rows) ? rows.slice(0, MAX_IMPORT) : [];
     const errors: Array<{ row: number; message: string }> = [];
     const inserts: Array<Record<string, unknown>> = [];

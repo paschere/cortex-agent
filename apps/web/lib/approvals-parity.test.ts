@@ -52,6 +52,11 @@ describe('el catálogo de nombres es el mismo a los dos lados', () => {
  */
 const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
   {
+    toolId: 'trackers.write_back_sheet',
+    input: { tracker: 'vuelos', rowId: 'r1', values: { estado: 'cancelado', nota: 'sin carga' } },
+  },
+  { toolId: 'trackers.set_sheet_writeback', input: { tracker: 'vuelos', enabled: true } },
+  {
     toolId: 'apps.apply_draft',
     input: {
       name: 'Control de envíos',

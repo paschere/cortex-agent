@@ -50,6 +50,7 @@ import type {
   TrackerActions,
   TrackerScreenData,
 } from '../types';
+import { OriginStrip } from '@/components/origin/OriginStrip';
 import { AddLookupDialog, LookupsSection } from './LookupsPanel';
 
 /**
@@ -630,7 +631,42 @@ export function TrackerScreen({
         </div>
       ) : null}
 
-      {data.syncs.length || data.workType || data.syncedRows ? (
+      {data.origin ? (
+        <div className="-mt-3 mb-4 flex flex-col gap-1.5 rounded-card border border-border bg-surface-2/50 px-4 py-3">
+          <OriginStrip
+            tracker={tracker.slug}
+            originRef={data.origin.ref}
+            name={data.origin.name}
+            lockedLabels={data.origin.lockedLabels}
+            ownLabels={data.origin.ownLabels}
+            creates={data.origin.creates}
+          />
+          <p className="text-micro text-ink-muted">
+            {data.origin.creates
+              ? `Las columnas con candado vienen de ${data.origin.name}`
+              : `En las filas que trae ${data.origin.name}, las columnas con candado vienen de allá`}
+            : se cambian allá
+            {data.origin.writeHref ? (
+              <>
+                {' '}
+                o con la bandeja{' '}
+                <Link href={data.origin.writeHref} className="font-semibold text-primary-ink underline">
+                  {data.origin.writeLabel}
+                </Link>
+              </>
+            ) : null}
+            , no aquí.
+            {data.origin.creates
+              ? ''
+              : ' Las filas que agregues tú (formulario, grilla, chat) se editan libremente y la sincronización no las toca.'}
+            {data.origin.ownLabels.length
+              ? ` Lo que la empresa agregó encima (${data.origin.ownLabels.slice(0, 4).join(', ')}${data.origin.ownLabels.length > 4 ? '…' : ''}) sí se edita y la sincronización no lo toca.`
+              : ' Puedes agregar columnas propias: la sincronización no las toca.'}
+          </p>
+        </div>
+      ) : null}
+
+      {data.syncs.length || data.workType || (data.syncedRows && !data.origin) ? (
         <div className="-mt-3 mb-5 flex flex-col gap-3">
           {data.workType ? (
             <Link
@@ -648,7 +684,7 @@ export function TrackerScreen({
               ))}
             </div>
           ) : null}
-          {data.syncedRows ? (
+          {data.syncedRows && !data.origin ? (
             <p className="text-micro text-ink-muted">
               <span className="tabular">{data.syncedRows}</span> filas las trae la sincronización:
               si cambias una columna que la fuente también trae, la próxima corrida la vuelve a
@@ -753,7 +789,7 @@ export function TrackerScreen({
         onDeleteView={onDeleteView}
         onQuery={!focus && total > rows.length ? onQuery : undefined}
         onEdit={onEdit}
-        onCreate={onCreate}
+        onCreate={data.origin?.creates ? undefined : onCreate}
         onDelete={onDelete}
         onBulkEdit={onBulkEdit}
         onAddColumn={data.canChangeSchema && tracker.fields.length < 20 ? onAddColumn : undefined}

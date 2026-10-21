@@ -481,6 +481,11 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     icon: 'FolderInput',
   },
   trackers_retry_sync: { label: 'Volver a correr una sincronización', icon: 'RotateCw' },
+  trackers_write_back_sheet: { label: 'Escribir un cambio en la hoja de Google', icon: 'Table2' },
+  trackers_set_sheet_writeback: {
+    label: 'Permitir o no escribir de vuelta a la hoja',
+    icon: 'Table2',
+  },
   // Programas contables conectados directo (Siigo, Alegra, QuickBooks), 0165.
   accounting_status: { label: 'Ver cómo va el programa contable', icon: 'Calculator' },
   accounting_payroll_summary: { label: 'Ver la nómina según la contabilidad', icon: 'Wallet' },
@@ -838,6 +843,16 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       const roles = names(input.roles, 'name');
       return `Crear la aplicación «${String(input.name ?? '')}» de una vez${tables.length ? ` — tablas nuevas: ${tables.join(', ')}` : ''}; pantallas: ${screens.join(', ') || 'ninguna'}; roles: ${roles.join(', ') || 'ninguno'}. Queda en borrador, sin publicar; si algo falla se deshace todo`;
     }
+    case 'trackers_write_back_sheet': {
+      const v = (input.values && typeof input.values === 'object' ? input.values : {}) as Record<string, unknown>;
+      const changes = Object.entries(v)
+        .slice(0, 6)
+        .map(([k, x]) => `${k} = ${String(x).slice(0, 60)}`)
+        .join('; ');
+      return `Escribir EN LA HOJA de Google de la tabla «${String(input.tracker ?? '')}»: ${changes} — el cambio queda en la hoja misma`;
+    }
+    case 'trackers_set_sheet_writeback':
+      return `${input.enabled ? 'Permitir' : 'Dejar de permitir'} que los cambios a la tabla «${String(input.tracker ?? '')}» se escriban en su hoja de Google`;
     case 'trackers_set_flow':
       return `${input.remove ? 'Quitar el flujo de' : 'Darle un flujo por estados a'} la tabla «${String(input.slug ?? '')}»${Array.isArray(input.states) && input.states.length ? `: ${input.states.map(String).join(' → ')}` : ''} — el servidor rechaza cualquier otro salto de estado`;
     default:

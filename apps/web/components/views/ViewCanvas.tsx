@@ -73,6 +73,7 @@ import {
   ViewWriterProvider,
   useViewWriter,
 } from './view-writes';
+import { OriginStrip } from '../origin/OriginStrip';
 import { BlockBoundary } from './BlockBoundary';
 import { BlockFixActions } from './blocks/BlockFix';
 import './views.css';
@@ -313,6 +314,20 @@ export function ViewCanvas({
                         )}
                       >
                         <Block block={block} target={target} submit={submit} />
+                        {view.origins
+                          ?.filter((o) => o.blockIds.includes(block.id))
+                          .slice(0, 1)
+                          .map((o) => (
+                            <OriginStrip
+                              key={o.tracker}
+                              tracker={o.tracker}
+                              name={o.origin.name}
+                              lockedLabels={o.lockedLabels}
+                              ownLabels={o.ownLabels}
+                              creates={o.creates}
+                              className="mt-1.5 px-1"
+                            />
+                          ))}
                       </DesignScope>
                     ))}
                     {shown.length === 0 && (

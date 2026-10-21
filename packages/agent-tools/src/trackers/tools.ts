@@ -14,6 +14,7 @@ import {
 } from './schema';
 import { countFieldValues, fieldUsesSentence, findFieldUses } from './field-usage';
 import { mergeFields } from './merge-fields';
+import { creatingOrigin, originName, originsOf } from './origin';
 import {
   defineTracker,
   getTrackerBySlug,
@@ -73,7 +74,7 @@ function fieldsMarkdown(fields: z.infer<typeof trackerFieldsSchema>): string {
 export const trackersDefine = registerTool({
   id: 'trackers.define',
   description:
-    'Create or update a company-specific table the first-class modules do not cover. Use this when the person needs to track something this workspace has no screen for — remates, container numbers, a custom plate list, a board of invoices that are not in Siigo. Do NOT use it for clients (clients.register), due dates (commitments.record), receivables (payments.*), or fleet plates (vehicles.register). Pass a slug, a name, and the fields; add validations (min/max, format, unique), defaults and showIf conditions when the person describes rules like "required only if there is a problem", "not a future date" or "valid NIT". Creating or changing the schema requires confirmation. ON AN EXISTING TABLE the call MERGES: the fields you pass are added or replaced by key and every other field is KEPT — you only need to send the new or changed fields. To drop a field you must name it in removeFields (the approval card shows it in red with how many saved values it holds; screens that use it are listed as broken). Never remove a field just to "clean up". To fill a field from a fixed equivalence (airline from a flight code, bank, country) prefer `match` (a lookup list, no AI) over `autofill`; use autofill (Cortex) only for data that needs reasoning or the web, or as the fallback after a match.',
+    'Create or update a company-specific table the first-class modules do not cover. Use this when the person needs to track something this workspace has no screen for — remates, container numbers, a custom plate list, a board of invoices that are not in Siigo. Do NOT use it for clients (clients.register), due dates (commitments.record), receivables (payments.*), or fleet plates (vehicles.register). Pass a slug, a name, and the fields; add validations (min/max, format, unique), defaults and showIf conditions when the person describes rules like "required only if there is a problem", "not a future date" or "valid NIT". Creating or changing the schema requires confirmation. ON AN EXISTING TABLE the call MERGES: the fields you pass are added or replaced by key and every other field is KEPT — you only need to send the new or changed fields. To drop a field you must name it in removeFields (the approval card shows it in red with how many saved values it holds; screens that use it are listed as broken). Never remove a field just to "clean up". ON A TABLE THAT COMES FROM AN INTEGRATION (Siigo/Alegra/QuickBooks, a Google Sheet, a Drive folder) you may only ADD or change the OWN fields of the company: the fields the source writes cannot be changed or removed (the save is rejected naming the source) — add fields like «estado de cobro interno» or «responsable» on top and they survive every sync. To fill a field from a fixed equivalence (airline from a flight code, bank, country) prefer `match` (a lookup list, no AI) over `autofill`; use autofill (Cortex) only for data that needs reasoning or the web, or as the fallback after a match.',
   inputSchema: z.object({
     slug: trackerSlugSchema.describe('Stable id, e.g. "remates" or "contenedores".'),
     name: z.string().trim().min(1).max(80).describe('What people call it out loud.'),
@@ -180,6 +181,7 @@ export const trackersList = registerTool({
       name: t.name,
       description: t.description,
       fields: t.fields,
+      origins: t.origins ?? [],
       rowCount: t.rowCount,
     }));
     const markdown =
@@ -189,7 +191,11 @@ export const trackersList = registerTool({
             .map((t) => {
               const n = t.rowCount ?? 0;
               const count = n === 1 ? '1 fila' : `${n} filas`;
-              return `- **${t.name}** (\`${t.slug}\`) — ${count}${t.description ? `. ${t.description}` : ''}`;
+              const from = originsOf(t)[0];
+              const src = from
+                ? ` · viene de ${originName(from)}: sólo lectura salvo campos propios${creatingOrigin(t) ? ', sin filas a mano' : ''}`
+                : '';
+              return `- **${t.name}** (\`${t.slug}\`) — ${count}${src}${t.description ? `. ${t.description}` : ''}`;
             })
             .join('\n');
     return { trackers, total: trackers.length, markdown };
@@ -276,7 +282,7 @@ export const trackersQuery = registerTool({
 export const trackersUpsert = registerTool({
   id: 'trackers.upsert',
   description:
-    'Add or update a row in a company-specific table. Use it when the person gives you a new item for a board you already defined, or a correction to one. Pass the slug, the field values, and optionally the row id to update. Do not invent fields that are not in the schema — change the schema with trackers.define first. ONE row per call: for two or more rows use trackers.upsert_many (rows: [...], up to 200, one call).',
+    'Add or update a row in a company-specific table. Use it when the person gives you a new item for a board you already defined, or a correction to one. Pass the slug, the field values, and optionally the row id to update. Do not invent fields that are not in the schema — change the schema with trackers.define first. ONE row per call: for two or more rows use trackers.upsert_many (rows: [...], up to 200, one call). Tables that come from an integration (Siigo, a Sheet, a Drive folder) accept writes ONLY on the company\'s own fields: writing a source field, or adding a row by hand, is rejected with a message saying where to change it (for Siigo, the «Por enviar a Siigo» tray).',
   inputSchema: z.object({
     tracker: trackerSlugSchema,
     rowId: z.string().uuid().optional().describe('If set, updates that row instead of inserting.'),
@@ -385,7 +391,7 @@ export const MAX_UPSERT_MANY_ROWS = 200;
 
 export const trackersUpsertMany = registerTool({
   id: 'trackers.upsert_many',
-  description: `Add (or update) MANY rows of a company-specific table in ONE call (up to ${MAX_UPSERT_MANY_ROWS}). Use it whenever there is more than one row to write — loading a price list, a spreadsheet, a month of receipts. Do NOT call trackers.upsert once per row: it hits the per-minute limit and wastes turns. Pass the slug and rows: [{ values: {fieldKey: value, ...}, label?, rowId? }]. Same rules as trackers.upsert for each row (keys must exist on the table; types, options, required, unique and showIf are enforced). Rows are written in order; a row that is rejected does NOT stop the others: the result lists which ones failed and why, so fix only those and send them again. If the call runs out of time it reports how many rows are left: send the rest in another call. Counts as ONE call for the rate limit.`,
+  description: `Add (or update) MANY rows of a company-specific table in ONE call (up to ${MAX_UPSERT_MANY_ROWS}). Use it whenever there is more than one row to write — loading a price list, a spreadsheet, a month of receipts. Do NOT call trackers.upsert once per row: it hits the per-minute limit and wastes turns. Pass the slug and rows: [{ values: {fieldKey: value, ...}, label?, rowId? }]. Same rules as trackers.upsert for each row (keys must exist on the table; types, options, required, unique and showIf are enforced). Rows are written in order; a row that is rejected does NOT stop the others: the result lists which ones failed and why, so fix only those and send them again. If the call runs out of time it reports how many rows are left: send the rest in another call. Counts as ONE call for the rate limit. Tables that come from an integration (Siigo, a Sheet, a Drive folder) reject rows by hand and writes to the source\'s fields; only the company\'s own fields can be written.`,
   inputSchema: z.object({
     tracker: trackerSlugSchema,
     rows: z

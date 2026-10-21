@@ -17,6 +17,13 @@ import {
   validateDuplicateRule,
 } from './duplicates';
 import { flowOf } from './flow';
+import {
+  type TrackerOrigin,
+  isSyncedTable,
+  mergeOrigin,
+  parseOrigins,
+} from './origin';
+import { assertDefineAllowed, assertRowWriteAllowed } from './origin-guard';
 import { guardFlowWrite } from './flow-guard';
 import {
   TEXT_MAX,
@@ -34,7 +41,7 @@ import { type Violation, validateRowValues, visibleKeys, withDefaults } from './
  */
 
 export const TRACKER_COLUMNS =
-  'id, slug, name, description, fields, created_by, created_at, updated_at';
+  'id, slug, name, description, fields, origins, created_by, created_at, updated_at';
 export const TRACKER_ROW_COLUMNS =
   'id, tracker_id, label, values, created_by, created_at, updated_at';
 
@@ -44,6 +51,8 @@ export interface TrackerRow {
   name: string;
   description: string;
   fields: TrackerField[];
+  /** De dónde se llena (0237); vacío = tabla propia. Ver `origin.ts`. */
+  origins?: TrackerOrigin[];
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -71,6 +80,7 @@ function adaptTracker(row: Record<string, unknown>): TrackerRow {
     name: String(row.name),
     description: typeof row.description === 'string' ? row.description : '',
     fields: parseFields(row.fields),
+    origins: parseOrigins(row.origins),
     created_by: typeof row.created_by === 'string' ? row.created_by : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
@@ -148,6 +158,12 @@ export async function defineTracker(
      * borrarla—; `null` la quita.
      */
     duplicates?: DuplicateRule | null;
+    /**
+     * Lo escribe la propia sincronización (hoja, carpeta, programa contable):
+     * puede cambiar los campos del origen. Sin esto, una tabla que viene de una
+     * integración sólo admite agregar o cambiar campos PROPIOS (0237).
+     */
+    system?: boolean;
   },
 ): Promise<{ tracker: TrackerRow; created: boolean }> {
   if (input.duplicates) {
@@ -158,6 +174,7 @@ export async function defineTracker(
   await assertLookupTargets(db, input.slug, input.fields);
   await assertMatchSources(db, input.slug, input.fields);
   const existing = await getTrackerBySlug(db, input.slug);
+  if (!input.system) assertDefineAllowed(existing, input.fields);
   const reapply = async (tracker: TrackerRow) => {
     // Una regla nueva o cambiada se aplica a lo que la tabla ya tiene.
     if (input.duplicates) await applyDuplicateRule(db, tracker.id);
@@ -216,6 +233,33 @@ async function clearDuplicateFlags(db: SupabaseClient, trackerId: string): Promi
 }
 
 export { getDuplicateRule };
+
+/**
+ * Marca (o actualiza) de dónde viene una tabla: lo llaman las sincronizaciones
+ * al crearla o al adoptarla. Mismo tipo y `ref` reemplaza; otro origen se suma.
+ * Conserva `writeBack` si la empresa ya lo había activado.
+ */
+export async function setTrackerOrigin(
+  db: SupabaseClient,
+  trackerId: string,
+  origin: TrackerOrigin,
+): Promise<TrackerOrigin[]> {
+  const { data, error } = await db
+    .from('trackers')
+    .select('origins')
+    .eq('id', trackerId)
+    .maybeSingle();
+  if (error) throw error;
+  const current = parseOrigins((data as { origins?: unknown } | null)?.origins);
+  const next = mergeOrigin(current, origin);
+  if (JSON.stringify(next) === JSON.stringify(current)) return current;
+  const { error: updateError } = await db
+    .from('trackers')
+    .update({ origins: next })
+    .eq('id', trackerId);
+  if (updateError) throw updateError;
+  return next;
+}
 
 export async function removeTracker(db: SupabaseClient, slug: string): Promise<boolean> {
   const { data, error } = await db
@@ -571,6 +615,31 @@ export async function upsertRow(
     lenient: input.lenient,
     only: input.only,
   });
+  // Tabla que viene de una integración (0237): los campos del origen y las
+  // filas nuevas a mano se rechazan aquí, el único punto de escritura.
+  if (isSyncedTable(input.tracker)) {
+    let before: Record<string, unknown> | null = null;
+    let externalKey: string | null | undefined;
+    if (input.rowId) {
+      const { data: cur } = await db
+        .from('tracker_rows')
+        .select('values, external_key')
+        .eq('id', input.rowId)
+        .eq('tracker_id', input.tracker.id)
+        .maybeSingle();
+      before = ((cur as { values?: Record<string, unknown> } | null)?.values ?? {}) as Record<
+        string,
+        unknown
+      >;
+      externalKey = (cur as { external_key?: string | null } | null)?.external_key ?? null;
+    }
+    assertRowWriteAllowed(input.tracker, {
+      creating: !input.rowId,
+      before,
+      after: values,
+      externalKey,
+    });
+  }
   // Flujo por estados: el salto tiene que existir, el rol poder y los requisitos cumplirse.
   if (flowOf(input.tracker.fields)) {
     let prior: Record<string, unknown> | null = null;

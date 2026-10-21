@@ -9,6 +9,7 @@ import {
   type TrackerRow,
   defineTracker,
   markForReview,
+  setTrackerOrigin,
   shapeValuesDetailed,
 } from '../trackers/store';
 import { dayOfCell, headerKey } from '../views/feed-sources';
@@ -264,6 +265,15 @@ export async function createUpdateOnlySync(
     .single();
   if (upsertError) throw upsertError;
   const sync = data as unknown as TrackerSyncRow;
+  // Marca de origen (0237): sólo lo que esta fuente ESCRIBE es de sólo lectura;
+  // las columnas de cruce son de la empresa y la fuente nunca agrega filas.
+  await setTrackerOrigin(db, tracker.id, {
+    kind: 'sheet',
+    label: `la hoja «${found.sourceName.slice(0, 120)}»`,
+    ref: sync.id,
+    fields: setMapping.map((m) => m.field).filter((f) => !input.match.some((m) => m.field === f)),
+    creates: false,
+  });
   const outcome = await applyUpdateOnly(db, sync, found.sheet);
   await markSyncRun(db, sync, { ok: true, outcome });
   return { sync, tracker, outcome, added };

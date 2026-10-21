@@ -23,6 +23,8 @@ import {
   currentFlowActor,
   guardFlowWrite,
 } from '../trackers/flow-guard';
+import { parseOrigins } from '../trackers/origin';
+import { assertRowWriteAllowed } from '../trackers/origin-guard';
 import { displayTrackerValue, rowLabel } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, listTrackers, prepareValues } from '../trackers/store';
 import { type ViewRow, type ViewSource, blockWriteFields } from './compute';
@@ -298,6 +300,7 @@ export async function viewCatalog(
         name: t.name,
         description: t.description,
         fields: t.fields,
+        ...(t.origins?.length ? { origins: t.origins } : {}),
         rowCount: t.rowCount,
         kind: 'tracker',
         sensitivity: 'shareable',
@@ -570,6 +573,7 @@ export async function loadViewSources(
         slug: t.slug,
         name: t.name,
         fields: Array.isArray(t.fields) ? t.fields : [],
+        ...(parseOrigins(t.origins).length ? { origins: parseOrigins(t.origins) } : {}),
         ...(flags.has(t.slug) ? { alertFlag: flags.get(t.slug) } : {}),
       };
       const access = accessOf(t.slug);
@@ -1412,6 +1416,8 @@ export async function submitViewForm(
   if (tError) throw tError;
   if (!t) throw new NotFoundError('La tabla de este formulario ya no existe.');
   const tracker = t as unknown as TrackerRow;
+  // Una tabla que se llena sola desde una integración no recibe filas a mano (0237).
+  assertRowWriteAllowed(tracker, { creating: true, after: {} });
 
   const values = await prepareFormValues(db, view, block, tracker, input);
 
@@ -1593,6 +1599,7 @@ async function insertLineRows(
 }> {
   const cfg = input.cfg;
   const child = await trackerForBlock(db, cfg.tracker);
+  assertRowWriteAllowed(child, { creating: true, after: {} });
   const itemField = child.fields.find((f) => f.key === cfg.item);
   const allowed = input.restrictRelations
     ? new Set([...trackersOf(input.view.spec), input.parent.tracker.slug, itemField?.tracker ?? ''])
@@ -1678,7 +1685,7 @@ async function syncLineRows(
   const byApp = input.actorKind === 'app_user';
   const { data, error } = await db
     .from('tracker_rows')
-    .select('id, label, values')
+    .select('id, label, values, external_key')
     .eq('tracker_id', child.id)
     .ilike(`values->>${cfg.parent}`, `%${input.parent.id}%`)
     .limit(500);
@@ -1712,6 +1719,12 @@ async function syncLineRows(
       { ...known, [cfg.qty]: line.qty },
       { selfId: row.id, only: new Set([cfg.qty]), allowedRelationTrackers: allowed },
     );
+    assertRowWriteAllowed(child, {
+      before: known,
+      after: values,
+      keys: [cfg.qty],
+      externalKey: (row as { external_key?: string | null }).external_key ?? null,
+    });
     const label = rowLabel(child.fields, values);
     const { error: upError } = await db
       .from('tracker_rows')
@@ -2105,6 +2118,7 @@ export async function createRelationRow(
   if (!forLines && block.fields.length && !block.fields.includes(field.key))
     throw new NotFoundError('Ese campo no está en el formulario.');
   const target = await trackerForBlock(db, field.tracker);
+  assertRowWriteAllowed(target, { creating: true, after: {} });
   if (input.mayCreate && !input.mayCreate(target.slug))
     throw new ValidationError(`Tu rol no agrega filas en «${target.name}».`);
   const label = input.label.replace(/\s+/g, ' ').trim().slice(0, 120);
@@ -2258,7 +2272,7 @@ async function patchRow(
 
   const { data: current, error: readError } = await db
     .from('tracker_rows')
-    .select('id, values')
+    .select('id, values, external_key')
     .eq('id', input.rowId)
     .eq('tracker_id', input.tracker.id)
     .maybeSingle();
@@ -2301,6 +2315,13 @@ async function patchRow(
     if (before[k] !== values[k]) changes[k] = { from: before[k] ?? null, to: values[k] ?? null };
   const label = rowLabel(input.tracker.fields, values);
   if (!Object.keys(changes).length) return { label, changes, duplicate: null };
+  // Un campo que viene de una integración no se cambia desde una vista (0237).
+  assertRowWriteAllowed(input.tracker, {
+    before,
+    after: values,
+    keys: Object.keys(changes),
+    externalKey: (current as { external_key?: string | null }).external_key ?? null,
+  });
 
   const { error } = await db
     .from('tracker_rows')
@@ -2667,6 +2688,7 @@ export async function createViewTask(
   const title = input.title.trim();
   if (!title) throw new ValidationError('Escribe qué hay que hacer.');
   const tracker = await trackerForBlock(db, block.tracker);
+  assertRowWriteAllowed(tracker, { creating: true, after: {} });
   const raw: Record<string, unknown> = {
     [a.titleField]: title.slice(0, 400),
     [a.assigneeField]: input.person.id,

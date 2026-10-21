@@ -169,8 +169,43 @@ export {
   removeRow,
   removeRows,
   removeTracker,
+  setTrackerOrigin,
   shapeValues,
   shapeValuesDetailed,
   upsertRow,
 } from './store';
 export type { ShapeOptions, TrackerEntryRow, TrackerRow } from './store';
+
+export {
+  TABLE_ORIGIN_KINDS,
+  REFRESH_MIN_INTERVAL_MS,
+  SYNCED_TABLES_NOTE,
+  agoLabel,
+  creatingOrigin,
+  fieldLockedMessage,
+  hardLockedFieldKeys,
+  hardOriginOfField,
+  freshnessSentence,
+  freshnessText,
+  isSyncedTable,
+  lockedFieldKeys,
+  mergeOrigin,
+  originName,
+  originOfField,
+  originsOf,
+  ownFieldKeys,
+  parseOrigins,
+  refreshWaitSeconds,
+  rowCreateBlockedMessage,
+  trackerOriginSchema,
+} from './origin';
+export type { TableOriginKind, OriginStatus, TrackerOrigin } from './origin';
+export { assertDefineAllowed, assertRowWriteAllowed } from './origin-guard';
+export {
+  canRefreshOrigin,
+  loadOriginStatuses,
+  refreshDecision,
+  requestOriginRefresh,
+  statusOfSyncRow,
+} from './origin-status';
+export type { OriginWithStatus, RefreshResult } from './origin-status';

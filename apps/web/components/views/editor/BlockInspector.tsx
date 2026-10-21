@@ -1240,7 +1240,8 @@ function Interaction({
   if (!(RECORD_BLOCK_TYPES as readonly string[]).includes(loose.type) && loose.type !== 'detail')
     return null;
   const readOnly = !source || source.readOnly;
-  const fields = fieldOptions(source).filter((f) => !f.builtin);
+  const lockedKeys = new Set(source?.origin?.lockedFields ?? []);
+  const fields = fieldOptions(source).filter((f) => !f.builtin && !lockedKeys.has(f.key));
   const board = block as unknown as BoardLike;
   const actions = loose.actions ?? [];
   const recordEditable = loose.recordEditable ?? [];
@@ -1259,6 +1260,13 @@ function Interaction({
         </p>
       ) : (
         <>
+          {source?.origin && (
+            <p className="flex items-start gap-1.5 text-micro leading-relaxed text-ink-faint">
+              <Lock className="mt-0.5 h-3 w-3 shrink-0" />
+              Los campos que vienen de {source.origin.name} son de sólo lectura; aquí sólo se
+              ofrecen los campos propios de la empresa.
+            </p>
+          )}
           {block.type === 'table' && (
             <FieldChips
               label="Columnas que se editan en el sitio"

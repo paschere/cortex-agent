@@ -9,6 +9,7 @@ import {
   type TrackerRow,
   defineTracker,
   markForReview,
+  setTrackerOrigin,
   shapeValuesDetailed,
 } from '../trackers/store';
 import { dayOfCell, headerKey, inferSheetFields } from '../views/feed-sources';
@@ -197,6 +198,22 @@ export function planSync(
   };
 }
 
+/**
+ * Lo de antes más lo que trae la fuente: un campo que la fuente no escribe se
+ * queda como estaba (sólo si la tabla todavía lo declara).
+ */
+export function mergeOwnValues(
+  fields: Array<{ key: string }>,
+  existing: Record<string, unknown>,
+  incoming: Record<string, string | number>,
+): Record<string, string | number> {
+  const known = new Set(fields.map((f) => f.key));
+  const kept = Object.fromEntries(
+    Object.entries(existing).filter(([k]) => known.has(k) && !(k in incoming)),
+  ) as Record<string, string | number>;
+  return { ...kept, ...incoming };
+}
+
 function sameValues(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const k of keys) if (String(a[k] ?? '') !== String(b[k] ?? '')) return false;
@@ -262,6 +279,7 @@ export async function applyTrackerSync(
       description: tracker.description,
       fields: parsed,
       userId: sync.created_by,
+      system: true,
     });
     tracker = updated;
     plan = planSync(sheet, tracker.fields, sync.mapping, sync.key_fields);
@@ -306,8 +324,11 @@ export async function applyTrackerSync(
         outcome.skipped += 1;
         continue;
       }
-      const label = rowLabel(tracker.fields, values);
       const found = byKey.get(row.key);
+      // Los campos PROPIOS de la empresa (los que la hoja no trae) se conservan:
+      // la lectura escribe sólo lo que viene de la hoja (0237).
+      if (found) values = mergeOwnValues(tracker.fields, found.values ?? {}, values);
+      const label = rowLabel(tracker.fields, values);
       if (!found) {
         const { error: insertError } = await db.from('tracker_rows').insert({
           tracker_id: tracker.id,
@@ -522,6 +543,14 @@ export async function createTrackerSync(
     .single();
   if (error) throw error;
   const sync = data as unknown as TrackerSyncRow;
+  // Marca de origen (0237): las columnas que la hoja llena son de sólo lectura.
+  await setTrackerOrigin(db, tracker.id, {
+    kind: 'sheet',
+    label: `la hoja «${found.sourceName.slice(0, 120)}»`,
+    ref: sync.id,
+    fields: Object.keys(mapping),
+    creates: true,
+  });
   // La primera carga, ya, con la captura vigente.
   const outcome = await applyTrackerSync(db, sync, found.sheet);
   await markSyncRun(db, sync, { ok: true, outcome });

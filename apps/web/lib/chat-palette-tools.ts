@@ -413,6 +413,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.sync_from_drive_folder': 'Llena una tabla con los archivos de la carpeta de Drive ',
   'trackers.drive_syncs': 'Muéstrame las carpetas de Drive que llenan tablas',
   'trackers.retry_sync': 'Vuelve a correr la sincronización de ',
+  'trackers.write_back_sheet': 'Escribe en la hoja de Google este cambio de la tabla ',
+  'trackers.set_sheet_writeback': 'Permite escribir de vuelta a la hoja de la tabla ',
   'accounting.status': '¿Cómo va la conexión con el programa contable?',
   'accounting.payroll_summary': '¿Cuánto nos costó la nómina según Siigo?',
   'accounting.payroll_movements': 'Muéstrame la nómina por persona del último mes',

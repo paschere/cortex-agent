@@ -11,7 +11,16 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { workspaceHref } from '@/lib/workspace-context';
-import { getTrackerBySlug, listRowLookups, readWorkSettings } from '@cortex/agent-tools';
+import {
+  creatingOrigin,
+  getTrackerBySlug,
+  listRowLookups,
+  hardLockedFieldKeys,
+  lockedFieldKeys,
+  originName,
+  originsOf,
+  readWorkSettings,
+} from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { notFound } from 'next/navigation';
 import {
@@ -126,7 +135,16 @@ export default async function TrackerPage({ params }: { params: Promise<{ slug: 
     updateSync: updateSyncSettings,
     syncNow: runSyncNow,
   };
-  const columns = trackerColumns(tracker.fields);
+  const origins = originsOf(tracker);
+  const lockedKeys = lockedFieldKeys(tracker);
+  const lockedBy: Record<string, string> = {};
+  for (const o of origins) for (const k of o.fields) lockedBy[k] = originName(o);
+  const columns = trackerColumns(tracker.fields, {
+    locked: lockedBy,
+    frozen: hardLockedFieldKeys(tracker),
+  });
+  const firstOrigin = origins[0];
+  const maker = creatingOrigin(tracker);
   const now = Date.now();
 
   return (
@@ -148,6 +166,25 @@ export default async function TrackerPage({ params }: { params: Promise<{ slug: 
         syncs: syncs.map(({ trackerId: _t, createdBy: _c, ...s }) => s),
         workType: mapping?.workType ?? null,
         syncedRows,
+        ...(firstOrigin
+          ? {
+              origin: {
+                name: originName(firstOrigin),
+                ref: firstOrigin.ref,
+                lockedLabels: tracker.fields.filter((f) => lockedKeys.has(f.key)).map((f) => f.label),
+                ownLabels: tracker.fields.filter((f) => !lockedKeys.has(f.key)).map((f) => f.label),
+                creates: Boolean(maker),
+                writeHref:
+                  firstOrigin.kind === 'accounting' && firstOrigin.provider === 'siigo'
+                    ? ws('/prefacturas')
+                    : null,
+                writeLabel:
+                  firstOrigin.kind === 'accounting' && firstOrigin.provider === 'siigo'
+                    ? 'Por enviar a Siigo'
+                    : null,
+              },
+            }
+          : {}),
         loadedAt,
         canChangeSchema: !isToolDenied('trackers.define', denied),
         lookups: lookupRows.map((l) => lookupCardFrom(l, columns, now)),

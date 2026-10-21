@@ -11,6 +11,15 @@ import {
 import { type MatchTable, matchSourcesOf, toMatchTable } from '../trackers/match-shape';
 import { referenceList } from '../reference-lists';
 import {
+  type TrackerOrigin,
+  creatingOrigin,
+  lockedFieldKeys,
+  originName,
+  hardOriginOfField,
+  originsOf,
+  rowCreateBlockedMessage,
+} from '../trackers/origin';
+import {
   type TrackerField,
   displayTrackerValue,
   parseLocation,
@@ -737,6 +746,21 @@ export interface ComputedLines {
   };
 }
 
+export interface ComputedOrigin {
+  /** Slug de la tabla (los bloques llevan `tracker`). */
+  tracker: string;
+  trackerName: string;
+  /** Los bloques de la vista que leen esta tabla (el aviso va bajo cada uno). */
+  blockIds: string[];
+  origin: Pick<TrackerOrigin, 'kind' | 'provider' | 'label' | 'ref'> & { name: string };
+  /** Etiquetas de los campos que escribe el origen (candado). */
+  lockedLabels: string[];
+  /** Los campos propios de la empresa, que sí se editan. */
+  ownLabels: string[];
+  /** ¿Se agregan filas a mano? No, salvo escritura de vuelta. */
+  creates: boolean;
+}
+
 export interface ComputedView {
   blocks: ComputedBlock[];
   computedAt: string;
@@ -745,6 +769,11 @@ export interface ComputedView {
   refreshSeconds: number;
   /** Si quien mira puede editar y usar botones en esta vista. */
   writable: boolean;
+  /**
+   * Las tablas de esta vista que vienen de una integración (0237): el bloque
+   * dice de dónde y «Actualizar ahora» la vuelve a leer. Sin lista = ninguna.
+   */
+  origins?: ComputedOrigin[];
   alerts: ComputedAlertFeed[];
   /** La barra de filtros con lo elegido. Vacía si el spec no tiene barra. */
   filtersBar?: ComputedFilterBarItem[];
@@ -1179,6 +1208,8 @@ function editMeta(tracker: CatalogTracker, key: string) {
   if (!field) return undefined;
   // Lo que se llena solo (fórmula, lookup fijo) no se edita en la celda.
   if (field.formula || (field.lookup && !field.lookup.editable)) return undefined;
+  // Un campo que viene de una integración (Siigo, hoja, carpeta) no se edita en el sitio (0237).
+  if (hardOriginOfField(tracker, key)) return undefined;
   const meta: ComputedEditMeta = {
     type: field.type,
     options: field.options ?? [],
@@ -2059,6 +2090,11 @@ function computeBlockBody(
     }
 
     case 'form': {
+      // Una tabla que se llena sola desde una integración no recibe filas a mano:
+      // el formulario que ya existía dice por qué no se puede llenar (0237).
+      const maker = creatingOrigin(tracker);
+      if (maker && !maker.writeBack && !block.onRecord)
+        return problem(block, rowCreateBlockedMessage(maker));
       const keys = block.fields.length ? block.fields : tracker.fields.map((f) => f.key);
       return {
         type: 'form',
@@ -2453,6 +2489,7 @@ export function computeView(
         ? 30
         : spec.refreshSeconds,
     writable: options.writable,
+    ...originsOfSources(spec, sources),
     alerts,
     filtersBar: computeFilterBar(spec, unfiltered, options.filters),
     pages: computePages(spec),
@@ -2465,6 +2502,39 @@ export function computeView(
         }
       : null,
   };
+}
+
+/** Qué tablas de la vista vienen de una integración, para el aviso de cada bloque. */
+function originsOfSources(
+  spec: ViewSpec,
+  sources: Map<string, ViewSource>,
+): { origins?: ComputedOrigin[] } {
+  const out: ComputedOrigin[] = [];
+  for (const slug of new Set(spec.blocks.flatMap((b) => ('tracker' in b ? [b.tracker] : [])))) {
+    const t = sources.get(slug)?.tracker;
+    const origins = originsOf(t);
+    if (!t || !origins.length) continue;
+    const locked = lockedFieldKeys(t);
+    const first = origins[0] as TrackerOrigin;
+    out.push({
+      tracker: t.slug,
+      trackerName: t.name,
+      blockIds: spec.blocks
+        .filter((b) => 'tracker' in b && b.tracker === slug && b.type !== 'form')
+        .map((b) => b.id),
+      origin: {
+        kind: first.kind,
+        provider: first.provider,
+        label: first.label,
+        ref: first.ref,
+        name: originName(first),
+      },
+      lockedLabels: t.fields.filter((f) => locked.has(f.key)).map((f) => f.label),
+      ownLabels: t.fields.filter((f) => !locked.has(f.key)).map((f) => f.label),
+      creates: Boolean(creatingOrigin(t) && !creatingOrigin(t)?.writeBack),
+    });
+  }
+  return out.length ? { origins: out } : {};
 }
 
 /** id de botón → rótulo, de todos los bloques de la vista (incluidas las listas relacionadas). */

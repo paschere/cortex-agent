@@ -50,6 +50,11 @@ export interface EditorSource {
   readOnly: boolean;
   /** Una tabla del Feed que la vista ya usaba y quien edita no puede leer. */
   opaque?: boolean;
+  /**
+   * La tabla viene de una integración (0237): sus campos del origen no se editan
+   * desde una vista y, si el origen agrega las filas, no recibe formularios.
+   */
+  origin?: { name: string; lockedFields: string[]; blocksRows: boolean; rowsMessage: string };
   fields: TrackerField[];
 }
 
@@ -411,6 +416,7 @@ export function sourceRefusal(type: string, source: EditorSource): string | null
   if (source.opaque) return 'No puedes ver esta tabla del Feed.';
   if (type === 'form' && source.readOnly)
     return 'Un formulario sólo agrega filas a una tabla de tu empresa.';
+  if (type === 'form' && source.origin?.blocksRows) return source.origin.rowsMessage;
   if (
     (type === 'board' || type === 'zones') &&
     !fieldOptions(source).some((f) => f.type === 'select')

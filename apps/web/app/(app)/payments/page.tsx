@@ -1,5 +1,5 @@
+import { CarteraScreen } from '@/components/cartera/CarteraScreen';
 import { PageHeader } from '@/components/ui/page-header';
-import { StatCard } from '@/components/ui/panel';
 import type { PaymentKind, PaymentState } from '@/lib/payments-shape';
 import { PAYMENT_KIND_LABEL } from '@/lib/payments-shape';
 import { requireSession } from '@/lib/session';
@@ -11,61 +11,56 @@ import {
   listClients,
   listPayments,
   listWaitingReports,
+  readCartera,
   receivables,
   reportsFor,
   sourceLabel,
   sourceRank,
 } from '@cortex/agent-tools';
-import { AlertTriangle, Banknote, FileWarning, Scale } from 'lucide-react';
+import { Banknote, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { BankSection } from './_components/BankSection';
-import { PaymentsBoard } from './_components/PaymentsBoard';
+import { Fold } from './_components/Fold';
+import { Disputes, Ledger, RecordForm } from './_components/PaymentsBoard';
 import { RecoveredSection } from './_components/RecoveredSection';
 import { money, shortDate } from './_components/format';
-import type {
-  ClientOption,
-  CurrencyView,
-  DisputeView,
-  PaymentView,
-  ReceivablesView,
-} from './_components/types';
+import type { ClientOption, DisputeView, PaymentView } from './_components/types';
+import { applySuggestion } from './bank-actions';
 
 /**
- * Pagos.
+ * Cartera y pagos.
  *
- * LA PANTALLA QUE CIERRA LA RESTA. Desde la 0076 Cortex sabía leer una factura;
- * no sabía si estaba pagada, así que no podía dar una sola cifra de negocio —
- * la cartera es una resta y sólo existía el minuendo. Esto es el sustraendo, y
- * viene de varias fuentes a la vez: el contable escribiéndolo aquí, un
- * comprobante que llegó por correo, y mañana Siigo o el banco.
+ * ARRIBA LO QUE SE LEE DE UN VISTAZO (`CarteraScreen`): cuánto te deben, cuánto
+ * está vencido, cuánto entró este mes y en cuántos días se cobra, con la
+ * antigüedad, los clientes, el mes a mes y lo que se espera cobrar. Todo sale de
+ * `readCartera` y respeta lo que dice el programa contable: su saldo manda y no
+ * se resta dos veces.
  *
- * TRES COSAS COMPARTEN LA PANTALLA, Y EL ORDEN ES EL ARGUMENTO:
- *
- *   ARRIBA, LA CARTERA CON SU CONFESIÓN AL LADO. La cifra nunca aparece sola:
- *   dice sobre cuántas facturas confirmadas está hecha y cuántas hay sin
- *   revisar que no entran. No es una nota al pie, es lo que hace que el número
- *   sea honesto — y es lo que crea el incentivo correcto para que alguien
- *   revise las que faltan.
- *
- *   DEBAJO, LAS DISPUTAS. Cuando dos fuentes discrepan, el pago sale de todas
- *   las cifras y aparece aquí con lo que dijo cada una. La lista viene ordenada
- *   por la fuente más fuerte, y ese orden sólo dice por dónde empezar a mirar:
- *   la casilla marcada es una sugerencia y quien decide es quien está leyendo.
- *
- *   ABAJO, ANOTAR UN PAGO Y LA LISTA DE LO QUE HAY. Sin ninguna integración
- *   conectada, esas dos cosas ya son un producto usable.
+ * ABAJO, PLEGADO, LO QUE YA EXISTÍA y no se quitó: disputas entre fuentes,
+ * facturas leídas sin revisar, lo recuperado con Cortex, anotar un pago, el
+ * extracto del banco y el registro completo de pagos. Cada uno lleva su cuenta
+ * al lado del título para que se vea cuándo hay algo que mirar.
  */
 
 export const dynamic = 'force-dynamic';
 
 const SCAN = 120;
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
   const today = bogotaToday();
+  const q = await searchParams;
+  // «¿Y si las facturas sin plazo se cobraran a N días?»: sólo para mirar.
+  const rawPlazo = typeof q.plazo === 'string' ? Number(q.plazo) : Number.NaN;
+  const plazo = Number.isInteger(rawPlazo) && rawPlazo > 0 && rawPlazo <= 365 ? rawPlazo : null;
 
-  const [cartera, recent, disputedRows, waiting, clients] = await Promise.all([
+  const [model, cartera, recent, disputedRows, waiting, clients] = await Promise.all([
+    readCartera(db, { today, defaultTermDays: plazo }),
     receivables(db, { today }),
     hydratePayments(db, await listPayments(db, { limit: SCAN })),
     hydratePayments(db, await listPayments(db, { state: 'disputed', limit: 25 })),
@@ -77,28 +72,6 @@ export default async function PaymentsPage() {
     db,
     disputedRows.map((r) => r.id),
   );
-
-  const byCurrency: CurrencyView[] = cartera.byCurrency.map((c) => ({
-    currency: c.currency,
-    outstanding: money(c.outstanding, c.currency),
-    outstandingValue: c.outstanding,
-    invoiced: money(c.invoiced, c.currency),
-    paid: money(c.paid, c.currency),
-    openInvoices: c.openInvoices,
-    ageDays: c.ageDays,
-    overdue: money(c.overdue, c.currency),
-    overdueInvoices: c.overdueInvoices,
-  }));
-
-  const view: ReceivablesView = {
-    today,
-    byCurrency,
-    confirmedInvoices: cartera.confirmedInvoices,
-    pendingExcluded: cartera.pendingExcluded,
-    disputedPayments: cartera.disputedPayments,
-    unappliedPayments: cartera.unappliedPayments,
-    sentence: cartera.sentence,
-  };
 
   const disputes: DisputeView[] = disputedRows.map((row) => {
     const versions = (versionsBy.get(row.id) ?? [])
@@ -154,7 +127,11 @@ export default async function PaymentsPage() {
   }));
 
   const clientOptions: ClientOption[] = clients.map((c) => ({ id: c.id, name: c.name }));
-  const headline = byCurrency[0];
+  const askHref = `/chat?prompt=${encodeURIComponent(
+    '¿Cómo va la cartera? Dime quién me debe más, qué está vencido y a quién debería cobrarle primero.',
+  )}`;
+  const plazoHref = (days: number | null) => (days ? `/payments?plazo=${days}` : '/payments');
+  const stillWaiting = waiting.length + cartera.unappliedPayments;
 
   return (
     <div className="space-y-6">
@@ -165,62 +142,93 @@ export default async function PaymentsPage() {
         ← Resumen de Finanzas
       </Link>
       <PageHeader
-        title="Pagos"
-        subtitle="Lo que de verdad entró, y quién lo dice. A mano, desde un comprobante, o desde el sistema contable el día que se conecte."
+        title="Cartera y pagos"
+        subtitle="Quién te debe, cuánto está vencido y qué se espera cobrar. Los saldos son los de tu programa contable."
         icon={<Banknote className="h-5 w-5" aria-hidden />}
+        actions={
+          <Link
+            href={askHref}
+            className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-primary px-5 text-sm font-bold text-white transition-colors hover:bg-primary-strong"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden />
+            Pregúntale a Cortex sobre la cartera
+          </Link>
+        }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Cartera"
-          value={headline ? headline.outstanding : 'Sin cartera'}
-          sub={
-            headline?.ageDays != null
-              ? `a ${headline.ageDays} días, en ${headline.openInvoices} ${headline.openInvoices === 1 ? 'factura' : 'facturas'}`
-              : 'sobre facturas confirmadas'
+      <CarteraScreen
+        model={model}
+        actions={{ match: applySuggestion }}
+        plazo={plazo}
+        plazoHref={plazoHref}
+        askHref={askHref}
+        sentence={cartera.sentence}
+      />
+
+      {/* Lo que ya existía, plegado: se abre con un toque y avisa cuando hay algo. */}
+      <div className="space-y-3">
+        <Fold
+          id="disputas"
+          title="Pagos en disputa"
+          hint="Cuando dos fuentes cuentan distinto un mismo pago, sale de las cifras hasta que alguien decida."
+          badge={
+            cartera.disputedPayments > 0 ? `${cartera.disputedPayments} por resolver` : 'Ninguno'
           }
-          icon={<Banknote className="h-4 w-4" aria-hidden />}
-          tone="primary"
-        />
-        <StatCard
-          label="Sin revisar"
-          value={String(cartera.pendingExcluded)}
-          sub="facturas leídas que todavía no entran en la cifra"
-          icon={<FileWarning className="h-4 w-4" aria-hidden />}
-          tone={cartera.pendingExcluded > 0 ? 'amber' : 'emerald'}
-          delay={60}
-        />
-        <StatCard
-          label="En disputa"
-          value={String(cartera.disputedPayments)}
-          sub="pagos que dos fuentes cuentan distinto"
-          icon={<Scale className="h-4 w-4" aria-hidden />}
-          tone={cartera.disputedPayments > 0 ? 'amber' : 'emerald'}
-          delay={120}
-        />
-        <StatCard
-          label="Sin emparejar"
-          value={String(waiting.length + cartera.unappliedPayments)}
-          sub="reportes y pagos sin factura a la que atribuirse"
-          icon={<AlertTriangle className="h-4 w-4" aria-hidden />}
-          tone={waiting.length + cartera.unappliedPayments > 0 ? 'sky' : 'emerald'}
-          delay={180}
-        />
+          badgeTone={cartera.disputedPayments > 0 ? 'amber' : 'emerald'}
+        >
+          <Disputes disputes={disputes} />
+        </Fold>
+
+        <Fold
+          id="sin-revisar"
+          title="Facturas leídas sin revisar"
+          hint="Facturas que Cortex leyó de un documento y nadie ha confirmado."
+          badge={cartera.pendingExcluded > 0 ? `${cartera.pendingExcluded} sin revisar` : 'Al día'}
+          badgeTone={cartera.pendingExcluded > 0 ? 'amber' : 'emerald'}
+        >
+          <p className="px-2 py-2 text-sm text-ink-muted">
+            {cartera.pendingExcluded > 0
+              ? `Hay ${cartera.pendingExcluded} ${cartera.pendingExcluded === 1 ? 'factura leída' : 'facturas leídas'} de documentos que nadie ha confirmado, así que todavía no suman en «Por cobrar». Al confirmarlas entran a la cifra.`
+              : 'No hay facturas leídas esperando revisión. Todo lo que está en la cartera ya fue confirmado o viene de tu programa contable.'}{' '}
+            {cartera.pendingExcluded > 0 ? (
+              <Link href="/finance" className="font-semibold text-primary hover:underline">
+                Revisar las facturas leídas
+              </Link>
+            ) : null}
+          </p>
+        </Fold>
+
+        {/* 0166: la plata que volvió después de que Cortex actuó, con sus pruebas. */}
+        <RecoveredSection organizationId={user.organization.id} />
+
+        <Fold
+          id="anotar-pago"
+          title="Anotar un pago a mano"
+          hint="Para lo que no llega solo desde Siigo ni desde el banco. Queda con tu nombre."
+        >
+          <RecordForm clients={clientOptions} today={today} />
+        </Fold>
+
+        {/* El extracto del banco: importar abonos y atar cada uno a su factura. */}
+        <Fold
+          id="extractos"
+          title="Extracto del banco"
+          hint="Importa los abonos del banco y átalos a la factura que pagan."
+          badge={stillWaiting > 0 ? `${stillWaiting} sin factura` : null}
+          badgeTone="amber"
+        >
+          <BankSection organizationId={user.organization.id} />
+        </Fold>
+
+        <Fold
+          id="registro"
+          title="Registro completo de pagos"
+          hint="Todos los pagos con su estado y cuántas fuentes los confirman."
+          badge={payments.length > 0 ? `${payments.length}` : null}
+        >
+          <Ledger payments={payments} />
+        </Fold>
       </div>
-
-      {/* 0166: la plata que volvió después de que Cortex actuó, con sus pruebas. */}
-      <RecoveredSection organizationId={user.organization.id} />
-
-      <PaymentsBoard
-        receivables={view}
-        disputes={disputes}
-        payments={payments}
-        clients={clientOptions}
-        today={today}
-      />
-
-      {/* El extracto del banco: importar abonos y atar cada uno a su factura. */}
-      <BankSection organizationId={user.organization.id} />
     </div>
   );
 }

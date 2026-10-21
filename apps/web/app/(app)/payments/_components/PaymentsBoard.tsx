@@ -11,15 +11,9 @@ import { Banknote, Loader2, Quote, Scale } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState, useTransition } from 'react';
 import { recordPayment, resolveDispute } from '../actions';
-import { plural, shortDate } from './format';
+import { plural } from './format';
 import { ledgerColumns, ledgerRow } from './ledger-grid';
-import type {
-  ActionResult,
-  ClientOption,
-  DisputeView,
-  PaymentView,
-  ReceivablesView,
-} from './types';
+import type { ActionResult, ClientOption, DisputeView, PaymentView } from './types';
 
 /**
  * La pantalla de pagos, del lado del navegador.
@@ -30,108 +24,9 @@ import type {
  * de cliente que sumara dinero sería un segundo sitio donde el dinero se suma.
  */
 
-interface Props {
-  receivables: ReceivablesView;
-  disputes: DisputeView[];
-  payments: PaymentView[];
-  clients: ClientOption[];
-  today: string;
-}
+// Las tres secciones de abajo de Cartera: cada una se pliega en la página.
 
-export function PaymentsBoard({ receivables, disputes, payments, clients, today }: Props) {
-  return (
-    <div className="space-y-6">
-      <Receivables view={receivables} />
-      <Disputes disputes={disputes} />
-      <RecordForm clients={clients} today={today} />
-      <Ledger payments={payments} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function Receivables({ view }: { view: ReceivablesView }) {
-  return (
-    <Panel className="overflow-hidden">
-      <PanelHead
-        icon={<Banknote className="h-4 w-4" aria-hidden />}
-        title="Cartera"
-        right={<span className="tabular text-xs text-ink-faint">al {shortDate(view.today)}</span>}
-      />
-      {view.byCurrency.length === 0 ? (
-        <div className="px-5 py-8 text-center">
-          <p className="text-base font-semibold text-ink">Todavía no hay cartera que calcular</p>
-          <p className="mt-1 text-sm text-ink-muted">
-            {view.pendingExcluded > 0
-              ? `Hay ${plural(view.pendingExcluded, 'factura leída', 'facturas leídas')} que nadie ha confirmado. Ninguna entra en una cifra hasta que alguien las revise — y esa revisión es justo lo que convierte lo leído en algo que se puede sumar.`
-              : 'No hay ninguna factura confirmada con saldo pendiente. Conecta tu programa contable o sube tus facturas y Cortex calcula quién te debe.'}
-          </p>
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {view.pendingExcluded > 0 ? (
-              <Link
-                href="/finance"
-                className="inline-flex min-h-10 items-center rounded-pill bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-strong"
-              >
-                Revisar las facturas leídas
-              </Link>
-            ) : (
-              <>
-                <Link
-                  href="/integrations#programas-contables"
-                  className="inline-flex min-h-10 items-center rounded-pill bg-primary px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-strong"
-                >
-                  Conectar Siigo, Alegra o QuickBooks
-                </Link>
-                <Link
-                  href="/kb"
-                  className="inline-flex min-h-10 items-center rounded-pill border border-border-strong bg-surface px-5 py-2 text-sm font-bold text-ink transition-colors hover:bg-surface-2"
-                >
-                  Subir facturas
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      ) : (
-        <ul className="divide-y divide-border">
-          {view.byCurrency.map((c) => (
-            <li
-              key={c.currency}
-              className="flex flex-wrap items-baseline gap-x-6 gap-y-2 px-5 py-4"
-            >
-              <span className="stat-num text-xl font-semibold text-ink">{c.outstanding}</span>
-              <span className="text-sm text-ink-muted">
-                {c.ageDays != null ? `a ${c.ageDays} días` : 'sin edad calculable'} ·{' '}
-                {plural(c.openInvoices, 'factura abierta', 'facturas abiertas')}
-              </span>
-              {c.overdueInvoices > 0 ? (
-                <span className={chipClass('rose')}>
-                  {c.overdue} vencido en {plural(c.overdueInvoices, 'factura')}
-                </span>
-              ) : null}
-              <span className="ml-auto text-xs text-ink-faint tabular">
-                facturado {c.invoiced} · abonado {c.paid}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {/*
-        LA CONFESIÓN, ENTERA Y AL LADO DE LA CIFRA. Enseñar el número sin ella
-        enseñaría a leer un total incompleto como si fuera completo, y eso es
-        peor que no dar el número: se cita en una reunión y nadie lo audita.
-      */}
-      <p className="border-t border-border bg-surface-2 px-5 py-3 text-xs leading-relaxed text-ink-muted">
-        {view.sentence}
-      </p>
-    </Panel>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function Disputes({ disputes }: { disputes: DisputeView[] }) {
+export function Disputes({ disputes }: { disputes: DisputeView[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -306,7 +201,7 @@ function Disputes({ disputes }: { disputes: DisputeView[] }) {
 
 // ---------------------------------------------------------------------------
 
-function RecordForm({ clients, today }: { clients: ClientOption[]; today: string }) {
+export function RecordForm({ clients, today }: { clients: ClientOption[]; today: string }) {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<string>('');
   const [paidOn, setPaidOn] = useState(today);
@@ -479,7 +374,7 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
 
 // ---------------------------------------------------------------------------
 
-function Ledger({ payments }: { payments: PaymentView[] }) {
+export function Ledger({ payments }: { payments: PaymentView[] }) {
   const columns = useMemo(() => ledgerColumns(payments), [payments]);
   const rows = useMemo(() => payments.map(ledgerRow), [payments]);
   return (

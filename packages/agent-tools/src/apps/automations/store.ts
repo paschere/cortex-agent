@@ -1,5 +1,11 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  fieldLockedMessage,
+  hardOriginOfField,
+  creatingOrigin,
+  rowCreateBlockedMessage,
+} from '../../trackers/origin';
 import { type TrackerRow, getTrackerBySlug } from '../../trackers/store';
 import { isReadOnlySource } from '../../views/spec';
 import { listRoles, listScreens } from '../store';
@@ -273,12 +279,24 @@ export async function validateAutomation(
   for (const a of input.actions) {
     if (a.type === 'set_field' && triggerFields.size && !triggerFields.has(a.field))
       problems.push(`«Cambiar un campo» nombra «${a.field}», que no es un campo de «${slug}».`);
+    // Un campo que viene de un programa contable no se escribe desde una regla (0237).
+    if (a.type === 'set_field' && triggerTracker_) {
+      const o = hardOriginOfField(triggerTracker_, a.field);
+      if (o)
+        problems.push(
+          fieldLockedMessage(o, [
+            triggerTracker_.fields.find((f) => f.key === a.field)?.label ?? a.field,
+          ]),
+        );
+    }
     if (a.type === 'create_row') {
       if (isReadOnlySource(a.tracker))
         problems.push('No se crean filas en una fuente de sólo lectura.');
       else {
         const target = await getTrackerBySlug(db, a.tracker);
         if (!target) problems.push(`La tabla «${a.tracker}» donde crear la fila no existe.`);
+        else if (creatingOrigin(target))
+          problems.push(rowCreateBlockedMessage(creatingOrigin(target) as never));
         else {
           const keys = new Set(target.fields.map((f) => f.key));
           for (const k of Object.keys(a.values))
@@ -298,7 +316,9 @@ export async function validateAutomation(
         if (!screenSlugs.has(a.source.screen))
           problems.push(`La pantalla «${a.source.screen}» del reporte no es de esta app.`);
       } else if (isReadOnlySource(a.source.tracker))
-        problems.push('El reporte agrega filas de una tabla propia; para una fuente de la plataforma usa «una pantalla».');
+        problems.push(
+          'El reporte agrega filas de una tabla propia; para una fuente de la plataforma usa «una pantalla».',
+        );
       else {
         const source = await getTrackerBySlug(db, a.source.tracker);
         if (!source) problems.push(`La tabla «${a.source.tracker}» del reporte no existe.`);
@@ -314,11 +334,21 @@ export async function validateAutomation(
         if (!roleKeys.has(r)) problems.push(`El rol «${r}» no existe en esta app.`);
       if (triggerTracker_) {
         const byKey = new Map(triggerTracker_.fields.map((f) => [f.key, f]));
-        const via = a.type === 'accounting_draft_receipt' ? a.customer.via : a.type === 'accounting_upsert_customer' ? a.via : undefined;
+        const via =
+          a.type === 'accounting_draft_receipt'
+            ? a.customer.via
+            : a.type === 'accounting_upsert_customer'
+              ? a.via
+              : undefined;
         if (via && byKey.get(via)?.type !== 'relation')
-          problems.push(`«${via}» no es un campo de relación de «${slug}»: de ahí se sacan los datos del cliente.`);
+          problems.push(
+            `«${via}» no es un campo de relación de «${slug}»: de ahí se sacan los datos del cliente.`,
+          );
         for (const k of [a.writeBack?.invoiceNumber, a.writeBack?.status?.field])
-          if (k && !byKey.has(k)) problems.push(`«${k}» no es un campo de «${slug}» (donde se escribe el número o el estado).`);
+          if (k && !byKey.has(k))
+            problems.push(
+              `«${k}» no es un campo de «${slug}» (donde se escribe el número o el estado).`,
+            );
       }
     }
     if (a.type === 'accounting_draft_invoice') {
@@ -327,9 +357,14 @@ export async function validateAutomation(
       if (triggerTracker_) {
         const byKey = new Map(triggerTracker_.fields.map((f) => [f.key, f]));
         if (a.customer.via && byKey.get(a.customer.via)?.type !== 'relation')
-          problems.push(`«${a.customer.via}» no es un campo de relación de «${slug}»: de ahí se saca el cliente.`);
+          problems.push(
+            `«${a.customer.via}» no es un campo de relación de «${slug}»: de ahí se saca el cliente.`,
+          );
         for (const k of [a.writeBack?.invoiceNumber, a.writeBack?.status?.field])
-          if (k && !byKey.has(k)) problems.push(`«${k}» no es un campo de «${slug}» (donde se escribe el número o el estado).`);
+          if (k && !byKey.has(k))
+            problems.push(
+              `«${k}» no es un campo de «${slug}» (donde se escribe el número o el estado).`,
+            );
       }
     }
   }
@@ -516,9 +551,17 @@ async function relatedActionProblems(
   actions: AutomationAction[],
 ): Promise<string[]> {
   const out: string[] = [];
-  const settable = (t: Pick<TrackerRow, 'name' | 'fields'>, set: Record<string, unknown>) => {
+  const settable = (
+    t: Pick<TrackerRow, 'name' | 'fields' | 'origins'>,
+    set: Record<string, unknown>,
+  ) => {
     for (const k of Object.keys(set)) {
       const f = t.fields.find((x) => x.key === k);
+      const o = f ? hardOriginOfField(t, k) : null;
+      if (f && o) {
+        out.push(fieldLockedMessage(o, [f.label]));
+        continue;
+      }
       if (!f)
         out.push(
           `«${k}» no es un campo de «${t.name}». Sus campos: ${t.fields.map((x) => x.key).join(', ')}.`,
@@ -589,6 +632,8 @@ async function relatedActionProblems(
       }
       const target = parent.fields.find((f) => f.key === a.target);
       if (!target) out.push(`«${a.target}» no es un campo de «${parent.name}».`);
+      else if (hardOriginOfField(parent, a.target))
+        out.push(fieldLockedMessage(hardOriginOfField(parent, a.target) as never, [target.label]));
       else if (!['number', 'money'].includes(target.type) || target.formula)
         out.push(
           `«${target.label}» de «${parent.name}» tiene que ser un número o dinero sin fórmula para guardar un acumulado.`,

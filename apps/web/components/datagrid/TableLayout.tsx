@@ -6,7 +6,7 @@ import { asBoolean, formatValue, isNumericType } from '@/lib/datagrid/format';
 import type { GridGroup } from '@/lib/datagrid/view';
 import { LIVE_FLASH_CLASS } from '@/lib/live-signal';
 import { clsx } from 'clsx';
-import { ArrowDown, ArrowUp, ChevronRight, Eye, PanelRightOpen, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, Eye, Lock, PanelRightOpen, Plus } from 'lucide-react';
 import Link from 'next/link';
 import {
   type KeyboardEvent,
@@ -491,7 +491,7 @@ export function TableLayout(props: TableLayoutProps) {
                   <button
                     type="button"
                     tabIndex={-1}
-                    title={`${col.description ? `${col.description}\n` : ''}Ordenar por ${col.label} (Mayús para sumar otro orden)`}
+                    title={`${col.description ? `${col.description}\n` : ''}${col.locked ? `Viene de ${col.locked}: sólo lectura\n` : ''}Ordenar por ${col.label} (Mayús para sumar otro orden)`}
                     onClick={(e) => toggleSort(col.key, e.shiftKey)}
                     className={clsx(
                       'flex h-full min-w-0 flex-1 items-center gap-1.5 px-3 text-micro font-semibold text-ink-muted hover:text-ink',
@@ -500,6 +500,12 @@ export function TableLayout(props: TableLayoutProps) {
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
                     <span className="truncate">{col.label}</span>
+                    {col.locked ? (
+                      <Lock
+                        className="h-3 w-3 shrink-0 text-ink-faint"
+                        aria-label={`Viene de ${col.locked}: sólo lectura`}
+                      />
+                    ) : null}
                     {col.required ? (
                       <span className="text-rose" aria-hidden>
                         *

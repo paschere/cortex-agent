@@ -139,7 +139,14 @@ const GRID_TYPE: Record<TrackerFieldType, GridColumn['type']> = {
 
 export function trackerColumns(
   fields: TrackerFieldLike[],
-  opts: { editable?: boolean; withUpdated?: boolean } = {},
+  opts: {
+    editable?: boolean;
+    withUpdated?: boolean;
+    /** Campos que escribe una integración (clave → nombre del origen): candado, sin edición. */
+    locked?: Readonly<Record<string, string>>;
+    /** De ésos, los que no se editan en ninguna fila (programa contable). En hojas y carpetas sólo las filas del origen se cierran, y eso lo juzga el servidor. */
+    frozen?: ReadonlySet<string>;
+  } = {},
 ): GridColumn[] {
   const editable = opts.editable ?? true;
   const nameKey = labelFieldKey(fields) ?? fields[0]?.key ?? null;
@@ -158,7 +165,9 @@ export function trackerColumns(
         f.type !== 'relation' &&
         f.type !== 'location' &&
         !f.formula &&
+        !opts.frozen?.has(f.key) &&
         !(f.lookup && !(f.lookup as { editable?: boolean }).editable),
+      ...(opts.locked?.[f.key] ? { locked: opts.locked[f.key] } : {}),
       required: Boolean(f.required),
       ...(isName ? { pinned: true, primary: true, width: 240 } : {}),
     };

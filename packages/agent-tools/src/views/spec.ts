@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import {
+  type TrackerOrigin,
+  creatingOrigin,
+  fieldLockedMessage,
+  originName,
+  hardOriginOfField,
+  rowCreateBlockedMessage,
+} from '../trackers/origin';
 import { TRACKER_SLUG_RE, type TrackerField } from '../trackers/schema';
 import { designSchemaFor } from './design-shape';
 import { embedSrc, httpsUrl, safeHref } from './embeds';
@@ -1155,6 +1163,11 @@ export interface CatalogTracker {
   name: string;
   fields: TrackerField[];
   /**
+   * De dónde se llena la tabla (0237): los campos del origen son de sólo
+   * lectura y una tabla que se llena sola no recibe formularios.
+   */
+  origins?: TrackerOrigin[];
+  /**
    * La marca de la regla de duplicados de la tabla (0201): una fila con este
    * valor en este campo se pinta en tono de alerta (tabla, tarjetas, galería).
    */
@@ -1401,9 +1414,20 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
       for (const key of editable) {
         if (key === 'label' || key === 'created_at' || key === 'updated_at')
           problems.push(`${where}: «${key}» no se edita; edita los campos de la tabla.`);
+        else if (hardOriginOfField(tracker, key))
+          problems.push(
+            `${where}: ${fieldLockedMessage(hardOriginOfField(tracker, key) as TrackerOrigin, [
+              tracker.fields.find((f) => f.key === key)?.label ?? key,
+            ])} Quítalo de lo editable; si la tabla necesita datos de la empresa, agrégale campos propios.`,
+          );
         else need(key, 'editable');
       }
       for (const a of actions) {
+        for (const k of [a.kind === 'set_field' ? a.field : undefined, a.statusField])
+          if (k && hardOriginOfField(tracker, k))
+            problems.push(
+              `${where}: el botón «${a.label}» escribe «${k}», que viene de ${originName(hardOriginOfField(tracker, k) as TrackerOrigin)} y es de sólo lectura. Usa un campo propio.`,
+            );
         for (const k of a.requireFields ?? []) need(k, `requisito del botón «${a.label}»`);
         if (a.kind === 'assign') {
           if (a.field) need(a.field, `quién, botón «${a.label}»`);
@@ -1684,6 +1708,12 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         break;
       }
       case 'form':
+        if (creatingOrigin(tracker) && !creatingOrigin(tracker)?.writeBack) {
+          problems.push(
+            `${where}: ${rowCreateBlockedMessage(creatingOrigin(tracker) as TrackerOrigin)} Un formulario no puede agregar filas a «${tracker.name}»: usa una tabla propia, o agrega campos propios a esta y edítalos en una tabla.`,
+          );
+          break;
+        }
         if (isReadOnlySource(block.tracker)) {
           problems.push(
             `${where}: un formulario sólo agrega filas a una tabla propia del espacio; «${tracker.name}» es ${readOnlyWhat(block.tracker)} y es de sólo lectura. Crea una tabla para lo que el formulario recibe.`,

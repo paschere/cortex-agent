@@ -364,6 +364,7 @@ export async function runRowLookup(
         description: tracker.description,
         fields: trackerFieldsSchema.parse(fields),
         userId: lookup.created_by,
+        system: true,
       });
       tracker = updated;
     } catch (err) {

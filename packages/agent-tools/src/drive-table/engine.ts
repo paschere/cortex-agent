@@ -9,7 +9,7 @@ import { type SheetData, XLSX_MIME, parseSpreadsheet } from '../kb/spreadsheets'
 import { utilityModel } from '../model';
 import { applyDuplicateRule } from '../trackers/duplicates';
 import { type TrackerField, rowLabel } from '../trackers/schema';
-import { type TrackerRow, getTrackerById } from '../trackers/store';
+import { type TrackerRow, getTrackerById, setTrackerOrigin } from '../trackers/store';
 import type { ToolContext } from '../types';
 import { IMAGE_MIMES, classifyFile, listFolderTree } from './inventory';
 import {
@@ -877,7 +877,22 @@ export async function upsertDriveFolderSync(
     .select(DRIVE_SYNC_COLUMNS)
     .single();
   if (error) throw error;
-  return data as unknown as DriveFolderSyncRow;
+  const saved = data as unknown as DriveFolderSyncRow;
+  // Marca de origen (0237): lo que se lee de los documentos y la clave son del
+  // origen; estado, dolly y demás son de la empresa y la lectura no los toca.
+  const keys = new Set<string>([
+    ...input.extract.map((e) => e.key),
+    ...input.keyFields,
+    ...Object.keys(input.sheetMapping ?? {}).filter((k) => !k.startsWith('@')),
+  ]);
+  await setTrackerOrigin(db, input.trackerId, {
+    kind: 'drive_folder',
+    label: `la carpeta «${input.folder.name.slice(0, 120)}»`,
+    ref: saved.id,
+    fields: [...keys],
+    creates: true,
+  });
+  return saved;
 }
 
 export interface DriveSyncListing extends DriveFolderSyncRow {

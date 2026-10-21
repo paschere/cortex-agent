@@ -1,13 +1,17 @@
 import 'server-only';
 import {
   type CatalogTracker,
+  type TrackerOrigin,
   type ViewSource,
   blockSchema,
   checkSpecAgainst,
   computeView,
+  creatingOrigin,
   getView,
   listDirectory,
   loadViewSources,
+  hardLockedFieldKeys,
+  originName,
   personLabel,
   trackerFieldsSchema,
   trackerSlugSchema,
@@ -19,6 +23,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import {
   type EditorCatalog,
+  type EditorSource,
   type PreviewResult,
   problemsFromCheck,
   problemsFromZod,
@@ -45,6 +50,20 @@ import {
  * nunca es escribible: editar celdas en un borrador escribiría filas de verdad.
  */
 
+function originOfSource(
+  origins: TrackerOrigin[],
+  fields: Array<{ key: string }>,
+): NonNullable<EditorSource['origin']> {
+  const first = origins[0] as TrackerOrigin;
+  const maker = creatingOrigin({ origins });
+  return {
+    name: originName(first),
+    lockedFields: [...hardLockedFieldKeys({ origins })].filter((k) => fields.some((f) => f.key === k)),
+    blocksRows: Boolean(maker && !maker.writeBack),
+    rowsMessage: `Esta tabla se llena sola desde ${originName(first)}: un formulario no puede agregarle filas. Usa una tabla propia, o agrégale campos propios y edítalos en una tabla.`,
+  };
+}
+
 export async function editorCatalog(
   db: SupabaseClient,
   viewerId: string,
@@ -69,6 +88,7 @@ export async function editorCatalog(
         sensitivity: t.sensitivity,
         readOnly: t.kind !== 'tracker',
         ...(t.opaque ? { opaque: true } : {}),
+        ...(t.origins?.length ? { origin: originOfSource(t.origins, t.fields) } : {}),
         fields: t.fields,
         // Las filas que tiene (las tablas del espacio y del Feed). La columna
         // «Datos» del estudio lo muestra; null en las fuentes de la plataforma,

@@ -124,3 +124,20 @@ export type { ReceiptExtraction, ReceiptField, ReceiptOutcome } from './receipt'
 // Extractos bancarios: importar abonos y conciliarlos con sus facturas. Los
 // tools se registran al importarse este barril.
 export * from './bank';
+
+// La cartera armada para la pantalla (antigüedad, clientes, meses, semanas).
+export { BUCKET_LABEL, BUCKET_ORDER, buildCartera, bucketOf, resolveDue } from './cartera';
+export type {
+  AdvanceStatus,
+  CarteraBucketKey,
+  CarteraClient,
+  CarteraCreditNote,
+  CarteraInput,
+  CarteraInvoice,
+  CarteraModel,
+  CarteraPayment,
+  CarteraPaymentRole,
+  DueBasis,
+} from './cartera';
+export { readCartera } from './cartera-read';
+export type { ReadCarteraOptions } from './cartera-read';

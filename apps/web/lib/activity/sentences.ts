@@ -154,6 +154,13 @@ const BUILDERS: Record<string, Builder> = {
     const n = made + changed;
     return plain(n === 1 ? `Anoté una fila en ${name}` : `Anoté ${n} filas en ${name}`, 'rows');
   },
+  trackers_write_back_sheet: ({ input }) =>
+    plain(`Escribí un cambio en la hoja de ${str(input.tracker, 50) ?? 'una tabla'}`, 'rows'),
+  trackers_set_sheet_writeback: ({ input }) =>
+    plain(
+      `${input.enabled ? 'Permití' : 'Quité el permiso de'} escribir de vuelta a la hoja de ${str(input.tracker, 50) ?? 'una tabla'}`,
+      'rows',
+    ),
   trackers_remove: ({ input }) => {
     const name = str(input.tracker, 50) ?? 'una tabla';
     return plain(input.rowId ? `Borré una fila de ${name}` : `Eliminé la tabla ${name}`, 'rows');

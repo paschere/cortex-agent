@@ -4,6 +4,7 @@
 
 import './tools';
 import './enrich-tools';
+import './write-back';
 import './lookups';
 
 export { feedConnectGoogleSheet, trackersSyncFromSource, trackersSyncs } from './tools';

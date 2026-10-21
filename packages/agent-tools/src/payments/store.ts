@@ -827,6 +827,9 @@ export interface ReceivablesResult {
   /** Pagos que no se pudieron atribuir a una factura, y por tanto no restan. */
   unappliedPayments: number;
   unappliedAmount: number;
+  /** Anticipos de clientes (recibos que no pagan una factura concreta): no restan, no son «sin atribuir». */
+  advancePayments: number;
+  advanceAmount: number;
   truncated: boolean;
   /** La frase honesta, lista para decirse tal cual. */
   sentence: string;
@@ -1013,11 +1016,11 @@ export function dedupeAccountingInvoices<
 async function paymentsSettledInAccounting(
   db: SupabaseClient,
   unlinked: Array<{ invoiceNumber: string | null; amount: number }>,
-): Promise<{ count: number; amount: number }> {
+): Promise<{ count: number; amount: number; known: Set<string> }> {
   const numbers = [
     ...new Set(unlinked.map((u) => u.invoiceNumber).filter((n): n is string => Boolean(n))),
   ];
-  if (!numbers.length) return { count: 0, amount: 0 };
+  if (!numbers.length) return { count: 0, amount: 0, known: new Set() };
   const known = new Set<string>();
   for (let i = 0; i < numbers.length; i += 200) {
     const { data, error } = await db
@@ -1032,6 +1035,54 @@ async function paymentsSettledInAccounting(
   let amount = 0;
   for (const u of unlinked)
     if (u.invoiceNumber && known.has(u.invoiceNumber)) {
+      count += 1;
+      amount += u.amount;
+    }
+  return { count, amount, known };
+}
+
+/**
+ * De los pagos sin factura enlazada, los que son un ANTICIPO de cliente: en
+ * Siigo su línea `due` apunta al propio recibo («RC-1-4»), así que el «número de
+ * factura» que traen es el de su propio reporte (`reference`). No pagan una
+ * factura concreta —se cruzan después, cuenta 2805 contra 1305—, y llamarlos
+ * «sin atribuir» mandaba a buscar una factura que no existe.
+ */
+async function advanceReceiptsAmong(
+  db: SupabaseClient,
+  unlinked: Array<{ invoiceNumber: string | null; amount: number }>,
+  knownInvoices: Set<string>,
+): Promise<{ count: number; amount: number }> {
+  const numbers = [
+    ...new Set(
+      unlinked
+        .map((u) => u.invoiceNumber)
+        .filter((n): n is string => Boolean(n) && !knownInvoices.has(n as string)),
+    ),
+  ];
+  if (!numbers.length) return { count: 0, amount: 0 };
+  const own = new Set<string>();
+  try {
+    for (let i = 0; i < numbers.length; i += 200) {
+      const { data, error } = await db
+        .from('payment_reports')
+        .select('reference, invoice_number')
+        .in('reference', numbers.slice(i, i + 200))
+        .limit(SCAN_LIMIT);
+      if (error) throw error;
+      for (const r of (data ?? []) as Array<{
+        reference: string | null;
+        invoice_number: string | null;
+      }>)
+        if (r.reference && r.reference === r.invoice_number) own.add(r.reference);
+    }
+  } catch {
+    return { count: 0, amount: 0 };
+  }
+  let count = 0;
+  let amount = 0;
+  for (const u of unlinked)
+    if (u.invoiceNumber && own.has(u.invoiceNumber)) {
       count += 1;
       amount += u.amount;
     }
@@ -1203,8 +1254,9 @@ export async function receivables(
   // Un pago traído de Siigo que nombra una factura de Siigo ya está descontado
   // en el saldo que dice Siigo: no es un pago «sin atribuir».
   const settled = await paymentsSettledInAccounting(db, unlinked);
-  let unappliedPayments = unlinkedCount - settled.count;
-  let unappliedAmount = unlinkedAmount - settled.amount;
+  const advances = await advanceReceiptsAmong(db, unlinked, settled.known);
+  let unappliedPayments = unlinkedCount - settled.count - advances.count;
+  let unappliedAmount = unlinkedAmount - settled.amount - advances.amount;
 
   interface Bucket extends ReceivablesCurrency {
     ages: Array<{ balance: number; since: string | null }>;
@@ -1341,6 +1393,8 @@ export async function receivables(
     disputedAmount,
     unappliedPayments,
     unappliedAmount,
+    advancePayments: advances.count,
+    advanceAmount: advances.amount,
     truncated:
       invoices.length >= SCAN_LIMIT ||
       payments.length >= SCAN_LIMIT ||
@@ -1354,6 +1408,8 @@ export async function receivables(
       withoutCurrency,
       disputedPayments: disputed.length,
       unappliedPayments,
+      advancePayments: advances.count,
+      advanceAmount: advances.amount,
     }),
   };
 }
@@ -1374,6 +1430,8 @@ export function describeReceivables(input: {
   withoutCurrency: number;
   disputedPayments: number;
   unappliedPayments: number;
+  advancePayments?: number;
+  advanceAmount?: number;
 }): string {
   if (input.byCurrency.length === 0) {
     return input.pendingExcluded > 0
@@ -1408,6 +1466,11 @@ export function describeReceivables(input: {
   if (input.unappliedPayments > 0) {
     caveats.push(
       `${input.unappliedPayments} pago(s) no se pudieron atribuir a una factura concreta, así que tampoco restan`,
+    );
+  }
+  if ((input.advancePayments ?? 0) > 0) {
+    caveats.push(
+      `${input.advancePayments} anticipo(s) de clientes por ${formatAmount(input.advanceAmount ?? 0)} no pagan una factura concreta (se cruzan después contra facturas): no restan aquí`,
     );
   }
   if (input.withoutCurrency > 0) {

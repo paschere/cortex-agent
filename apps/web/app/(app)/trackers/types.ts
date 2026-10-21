@@ -64,6 +64,21 @@ export interface TrackerScreenData {
   workType: string | null;
   /** Hay filas que trae una sincronización (las puede sobrescribir la próxima corrida). */
   syncedRows: number;
+  /**
+   * La tabla viene de una integración (0237): de dónde, qué campos son de sólo
+   * lectura y cuáles son propios, y si se agregan filas a mano.
+   */
+  origin?: {
+    name: string;
+    ref: string;
+    lockedLabels: string[];
+    ownLabels: string[];
+    /** Las filas nuevas llegan de la fuente: no hay «Nuevo». */
+    creates: boolean;
+    /** Dónde escribir hacia el origen, si hay un camino (Siigo: la bandeja). */
+    writeHref?: string | null;
+    writeLabel?: string | null;
+  };
   /** Filas que la regla de duplicados tiene marcadas ahora. */
   duplicateCount?: number;
   /** Hora del servidor al leer la tabla: desde ahí se piden los cambios en vivo. */

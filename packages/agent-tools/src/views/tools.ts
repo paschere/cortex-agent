@@ -2,6 +2,7 @@ import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { z } from 'zod';
 import { isCompanyManager } from '../directory/store';
 import { registerTool } from '../index';
+import { SYNCED_TABLES_NOTE } from '../trackers/origin';
 import { PLATFORM_SOURCES, platformSourcesGrammar } from './sources';
 import { BLOCK_LABEL, trackersOf, viewSpecSchema } from './spec';
 import {
@@ -37,7 +38,8 @@ import {
  * pantalla de la vista.
  */
 
-export const SPEC_GRAMMAR = `Spec: {version:1, subtitle?, accent?: primary|emerald|amber|sky|rose, blocks:[...]} with 1-24 blocks. Every block has id (short, unique, a-z0-9_-) and width: full|half|third (three thirds or two halves share a row).
+export const SPEC_GRAMMAR = `${SYNCED_TABLES_NOTE}
+Spec: {version:1, subtitle?, accent?: primary|emerald|amber|sky|rose, blocks:[...]} with 1-24 blocks. Every block has id (short, unique, a-z0-9_-) and width: full|half|third (three thirds or two halves share a row).
 Block types (tracker = a table slug from trackers.list OR a built-in platform source id below; field = a field key of that table/source, or label/created_at/updated_at):
 - text {markdown}
 - metric {title, tracker, aggregate: count|sum|avg|min|max, field? (numeric, required unless count), filters?, format?: number|money|percent, goal? (bar + traffic light), goalDirection?: up|down (up: goal is a floor; down: a ceiling such as returns or overdue days), tone?, caption?, compare?: "previous_period" (with period: day|week|month and dateField: a date field; shows this period vs the previous one with a trend arrow and a sparkline), goodWhen?: up|down (down for returns, overdue days, complaints)}

@@ -9,6 +9,7 @@ import {
   getTrackerById,
   getTrackerBySlug,
   markForReview,
+  setTrackerOrigin,
   shapeValuesDetailed,
 } from '../trackers/store';
 import {
@@ -311,6 +312,34 @@ export async function ensureAccountingTable(
   spec: AccountingTableSpec,
   knownId: string | undefined,
   userId: string,
+  /** La conexión que la llena: deja la marca de origen (0237) en la tabla. */
+  origin?: { connectionId: string; provider: string },
+): Promise<TableHandle> {
+  const table = await ensureTable(db, spec, knownId, userId);
+  if (origin)
+    await setTrackerOrigin(db, table.id, {
+      kind: 'accounting',
+      provider: origin.provider,
+      label: ORIGIN_NAME[origin.provider] ?? origin.provider,
+      ref: origin.connectionId,
+      // Los campos del programa; los que el equipo agregó encima son propios.
+      fields: spec.fields.map((f) => f.key),
+      creates: true,
+    });
+  return table;
+}
+
+const ORIGIN_NAME: Record<string, string> = {
+  siigo: 'Siigo',
+  alegra: 'Alegra',
+  quickbooks: 'QuickBooks',
+};
+
+async function ensureTable(
+  db: SupabaseClient,
+  spec: AccountingTableSpec,
+  knownId: string | undefined,
+  userId: string,
 ): Promise<TableHandle> {
   const existing =
     (knownId ? await getTrackerById(db, knownId) : null) ?? (await getTrackerBySlug(db, spec.slug));
@@ -321,6 +350,7 @@ export async function ensureAccountingTable(
       description: spec.description,
       fields: trackerFieldsSchema.parse(spec.fields),
       userId,
+      system: true,
     });
     return tracker;
   }
@@ -351,6 +381,7 @@ export async function ensureAccountingTable(
     description: existing.description,
     fields: trackerFieldsSchema.parse(fields.slice(0, 20)),
     userId,
+    system: true,
   });
   return tracker;
 }
@@ -722,8 +753,7 @@ export async function runAccountingSync(
         db,
         accountingTableSpec(provider, entity),
         undefined,
-        conn.created_by,
-      );
+        conn.created_by, { connectionId: conn.id, provider: conn.provider });
       trackers[entity] = t.id;
     }
     for (const entity of entities) {
@@ -733,13 +763,12 @@ export async function runAccountingSync(
           db,
           accountingTableSpec(provider, entity),
           trackers[entity],
-          conn.created_by,
-        );
+          conn.created_by, { connectionId: conn.id, provider: conn.provider });
         trackers[entity] = t.id;
         continue;
       }
       const spec = accountingTableSpec(provider, entity);
-      const table = await ensureAccountingTable(db, spec, trackers[entity], conn.created_by);
+      const table = await ensureAccountingTable(db, spec, trackers[entity], conn.created_by, { connectionId: conn.id, provider: conn.provider });
       trackers[entity] = table.id;
       const entityCounts = emptyCounts();
       counts[entity] = entityCounts;
@@ -750,16 +779,14 @@ export async function runAccountingSync(
           db,
           accountingTableSpec(provider, 'stock'),
           trackers.stock,
-          conn.created_by,
-        );
+          conn.created_by, { connectionId: conn.id, provider: conn.provider });
       if (stockTable) trackers.stock = stockTable.id;
       if (entity === 'products' && entities.includes('product_prices'))
         pricesTable = await ensureAccountingTable(
           db,
           accountingTableSpec(provider, 'product_prices'),
           trackers.product_prices,
-          conn.created_by,
-        );
+          conn.created_by, { connectionId: conn.id, provider: conn.provider });
       if (pricesTable) trackers.product_prices = pricesTable.id;
       const plan = planEntity(provider, entity, cursors[entity], now);
       // Catálogos y estados: una vez al día; hoy no toca.
@@ -1056,8 +1083,7 @@ export async function runAccountingSync(
             db,
             accountingTableSpec(provider, 'invoices'),
             trackers.invoices,
-            conn.created_by,
-          );
+            conn.created_by, { connectionId: conn.id, provider: conn.provider });
           await loadCustomerNames(
             db,
             trackers.customers,
@@ -1110,8 +1136,7 @@ export async function runAccountingSync(
             db,
             accountingTableSpec(provider, 'purchases'),
             trackers.purchases,
-            conn.created_by,
-          );
+            conn.created_by, { connectionId: conn.id, provider: conn.provider });
           await loadCustomerNames(db, trackers.customers, missingPartyIds('purchases', fresh), names);
           const ctx = { today, customerNames: names };
           const c = counts.purchases ?? emptyCounts();

@@ -50,6 +50,8 @@ export interface GridColumn {
   /** Moneda para `money` (COP por defecto). */
   currency?: string;
   editable?: boolean;
+  /** Candado: lo escribe una integración (Siigo, una hoja…); es el nombre del origen. Sólo lectura. */
+  locked?: string;
   required?: boolean;
   /** Ancho sugerido en px; el usuario lo puede cambiar. */
   width?: number;
