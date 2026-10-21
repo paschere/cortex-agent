@@ -20,7 +20,11 @@ export interface AreaKpi {
   /** A qué pestaña lleva pulsarla. */
   href: string;
   tone?: KpiTone;
-  spark?: { values: number[]; labels?: string[]; format?: (n: number) => string };
+  /**
+   * `currency`, no una función: la tira la pinta un componente del navegador y
+   * una función no cruza del servidor al cliente (tumbó Finanzas el 2026-10-21).
+   */
+  spark?: { values: number[]; labels?: string[]; currency?: string };
   delta?: { ratio: number | null; good?: boolean | null; label?: string };
 }
 
@@ -62,7 +66,7 @@ export function financeKpis(input: FinanceInput): AreaKpi[] {
           ? {
               values: weeks.map((w) => w.closing),
               labels: weeks.map((w) => w.start),
-              format: (n) => money(n, cash.currency),
+              currency: cash.currency,
             }
           : undefined,
       delta: last ? withVerdict(deltaRatio(last.closing, cash.total), 'proyectado') : undefined,
@@ -110,7 +114,7 @@ export function financeKpis(input: FinanceInput): AreaKpi[] {
             ? {
                 values: series.map((m) => m.margin),
                 labels: series.map((m) => m.month),
-                format: (n) => money(n, pnl.currency),
+                currency: pnl.currency,
               }
             : undefined,
         delta: prev

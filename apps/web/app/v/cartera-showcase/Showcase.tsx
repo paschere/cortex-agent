@@ -36,10 +36,15 @@ export function CarteraShowcase({
         />
         <CarteraScreen
           model={model}
-          plazo={plazo}
-          plazoHref={(d) => `/v/cartera-showcase?${d ? `plazo=${d}` : ''}${modo}`}
+          plazo={plazo ?? 30}
+          savedTerm={30}
+          plazoBase={`/v/cartera-showcase${modo ? `?${modo.replace(/^&/, '')}` : ''}`}
           askHref="/chat"
           actions={{
+            setTerm: async () => {
+              await new Promise((r) => setTimeout(r, 300));
+              return { ok: true };
+            },
             match: async () => {
               await new Promise((r) => setTimeout(r, 300));
               return { ok: true, note: '(escaparate) Atado a la factura bajo tu nombre.' };

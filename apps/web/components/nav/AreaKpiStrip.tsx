@@ -74,7 +74,7 @@ export function AreaKpiStrip({
               <Sparkline
                 values={k.spark.values}
                 labels={k.spark.labels}
-                format={k.spark.format}
+                currency={k.spark.currency}
                 name={k.label}
                 color={CHART_COLOR[tone]}
                 height={30}

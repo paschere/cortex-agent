@@ -141,3 +141,11 @@ export type {
 } from './cartera';
 export { readCartera } from './cartera-read';
 export type { ReadCarteraOptions } from './cartera-read';
+// El plazo de pago por defecto de la empresa (0238).
+export {
+  DEFAULT_PAYMENT_TERMS_DAYS,
+  PAYMENT_TERM_PRESETS,
+  readDefaultTermDays,
+  saveDefaultTermDays,
+  validTermDays,
+} from './terms';

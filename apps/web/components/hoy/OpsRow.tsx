@@ -42,7 +42,6 @@ export function OpsRow({ kpis }: { kpis: OpsKpi[] }) {
                   color={CHART_COLOR[k.alert ? 'rose' : k.id === 'hecho' ? 'emerald' : 'primary']}
                   height={28}
                   name={k.label}
-                  format={(n) => String(Math.round(n))}
                 />
               )}
               <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-faint">

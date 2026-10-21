@@ -514,6 +514,7 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // las vistas compartidas, así que un filtro que faltara pondría el logo de
   // otra empresa en el tablero que se le manda a un cliente.
   company_branding: tenant(),
+  finance_settings: tenant(),
 
   // --- Tablas inventadas (migración 0115) ----------------------------------
   // El esquema de una tabla que este espacio se inventó, y sus filas. Tenant

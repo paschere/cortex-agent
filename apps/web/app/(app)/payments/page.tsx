@@ -12,6 +12,7 @@ import {
   listPayments,
   listWaitingReports,
   readCartera,
+  readDefaultTermDays,
   receivables,
   reportsFor,
   sourceLabel,
@@ -25,6 +26,7 @@ import { Disputes, Ledger, RecordForm } from './_components/PaymentsBoard';
 import { RecoveredSection } from './_components/RecoveredSection';
 import { money, shortDate } from './_components/format';
 import type { ClientOption, DisputeView, PaymentView } from './_components/types';
+import { setDefaultTermDays } from './actions';
 import { applySuggestion } from './bank-actions';
 
 /**
@@ -55,9 +57,11 @@ export default async function PaymentsPage({
   const db = getOrgScopedClient(user.organization.id);
   const today = bogotaToday();
   const q = await searchParams;
-  // «¿Y si las facturas sin plazo se cobraran a N días?»: sólo para mirar.
+  // El plazo por defecto de la empresa (0238); `?plazo=` lo reemplaza sólo para mirar.
+  const savedTerm = await readDefaultTermDays(db);
   const rawPlazo = typeof q.plazo === 'string' ? Number(q.plazo) : Number.NaN;
-  const plazo = Number.isInteger(rawPlazo) && rawPlazo > 0 && rawPlazo <= 365 ? rawPlazo : null;
+  const preview = Number.isInteger(rawPlazo) && rawPlazo > 0 && rawPlazo <= 365 ? rawPlazo : null;
+  const plazo = preview ?? savedTerm;
 
   const [model, cartera, recent, disputedRows, waiting, clients] = await Promise.all([
     readCartera(db, { today, defaultTermDays: plazo }),
@@ -130,7 +134,6 @@ export default async function PaymentsPage({
   const askHref = `/chat?prompt=${encodeURIComponent(
     '¿Cómo va la cartera? Dime quién me debe más, qué está vencido y a quién debería cobrarle primero.',
   )}`;
-  const plazoHref = (days: number | null) => (days ? `/payments?plazo=${days}` : '/payments');
   const stillWaiting = waiting.length + cartera.unappliedPayments;
 
   return (
@@ -158,9 +161,10 @@ export default async function PaymentsPage({
 
       <CarteraScreen
         model={model}
-        actions={{ match: applySuggestion }}
+        actions={{ match: applySuggestion, setTerm: setDefaultTermDays }}
         plazo={plazo}
-        plazoHref={plazoHref}
+        savedTerm={savedTerm}
+        plazoBase="/payments"
         askHref={askHref}
         sentence={cartera.sentence}
       />

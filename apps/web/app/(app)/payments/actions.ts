@@ -2,7 +2,12 @@
 
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { recordPaymentReport, resolvePaymentDispute } from '@cortex/agent-tools';
+import {
+  isCompanyManager,
+  recordPaymentReport,
+  resolvePaymentDispute,
+  saveDefaultTermDays,
+} from '@cortex/agent-tools';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 import type { ActionResult } from './_components/types';
@@ -92,5 +97,20 @@ export async function resolveDispute(input: {
     };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo resolver la disputa.') };
+  }
+}
+
+/** El plazo de pago por defecto de la empresa: sólo quien administra lo cambia. */
+export async function setDefaultTermDays(days: number): Promise<ActionResult> {
+  const user = await requireSession();
+  const db = getOrgScopedClient(user.organization.id);
+  try {
+    if (!(await isCompanyManager(db, user.id)))
+      return { ok: false, error: 'Sólo quien administra la empresa cambia el plazo por defecto.' };
+    await saveDefaultTermDays(db, days, user.id);
+    revalidatePath(PATH);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar el plazo.') };
   }
 }

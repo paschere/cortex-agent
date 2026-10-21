@@ -60,15 +60,19 @@ export interface CarteraActions {
     kind: 'accounting' | 'document';
     invoiceId: string;
   }) => Promise<{ ok: boolean; note?: string; error?: string }>;
+  /** Guardar el plazo de pago por defecto de la empresa (días). */
+  setTerm?: (days: number) => Promise<{ ok: boolean; error?: string }>;
 }
 
 interface Props {
   model: CarteraModel;
   actions: CarteraActions;
-  /** El supuesto de plazo en curso (?plazo=30), si lo hay. */
+  /** El plazo con el que se cuentan las facturas sin plazo propio. */
   plazo: number | null;
-  /** A dónde mandan los botones de plazo: la propia página. */
-  plazoHref: (days: number | null) => string;
+  /** El plazo guardado de la empresa (el de `plazo` puede ser sólo para mirar). */
+  savedTerm?: number;
+  /** La propia página: los botones de plazo agregan `?plazo=N` (o lo quitan). */
+  plazoBase: string;
   askHref: string;
   /** La frase que Cortex da en el chat sobre la cartera, entera. */
   sentence?: string;
@@ -95,7 +99,17 @@ const BUCKET_COLOR: Record<CarteraBucketKey, string> = {
 const STACK_COLORS = [CHART_COLOR.primary, CHART_COLOR.sky, CHART_COLOR.emerald, CHART_COLOR.amber];
 const OTHERS_COLOR = CHART_COLOR.ink;
 
-export function CarteraScreen({ model, actions, plazo, plazoHref, askHref, sentence }: Props) {
+export function CarteraScreen({
+  model,
+  actions,
+  plazo,
+  savedTerm,
+  plazoBase,
+  askHref,
+  sentence,
+}: Props) {
+  const plazoHref = (days: number | null) =>
+    days ? `${plazoBase}${plazoBase.includes('?') ? '&' : '?'}plazo=${days}` : plazoBase;
   const m = model;
   const money = (n: number) => formatMoney(n, m.currency);
   const [bucket, setBucket] = useState<CarteraBucketKey | null>(null);
@@ -107,7 +121,14 @@ export function CarteraScreen({ model, actions, plazo, plazoHref, askHref, sente
   return (
     <div className="space-y-6">
       <Kpis model={m} money={money} />
-      <TermNotice model={m} plazo={plazo} plazoHref={plazoHref} money={money} />
+      <TermNotice
+        model={m}
+        plazo={plazo}
+        savedTerm={savedTerm}
+        setTerm={actions.setTerm}
+        plazoHref={plazoHref}
+        money={money}
+      />
       <AdvanceNotice model={m} money={money} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -299,71 +320,125 @@ function Kpi({
 function TermNotice({
   model: m,
   plazo,
+  savedTerm,
+  setTerm,
   plazoHref,
   money,
 }: {
   model: CarteraModel;
   plazo: number | null;
+  savedTerm?: number;
+  setTerm?: (days: number) => Promise<{ ok: boolean; error?: string }>;
   plazoHref: (d: number | null) => string;
   money: (n: number) => string;
 }) {
+  const [pending, start] = useTransition();
+  const [custom, setCustom] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const counted = m.termBasis.plazo_supuesto;
   const noTerm = m.termBasis.sin_plazo;
-  const assumed = m.termBasis.plazo_supuesto;
-  if (noTerm === 0 && assumed === 0) return null;
-  const total = m.invoices.length;
+  if (counted === 0 && noTerm === 0) return null;
+  const previewing = plazo !== null && savedTerm !== undefined && plazo !== savedTerm;
+  const save = (days: number) => {
+    setError(null);
+    if (!setTerm) return;
+    start(async () => {
+      const r = await setTerm(days);
+      if (!r.ok) setError(r.error ?? 'No se pudo guardar.');
+      else setCustom('');
+    });
+  };
+  const customDays = Number(custom);
+  const customOk = Number.isInteger(customDays) && customDays >= 1 && customDays <= 365;
   return (
     <aside
-      className="rounded-card border border-amber/25 bg-amber-soft px-5 py-4"
-      aria-label="Facturas sin plazo"
+      className="rounded-card border border-border bg-surface px-5 py-4"
+      aria-label="Plazo de pago por defecto"
     >
-      {plazo ? (
-        <p className="text-sm text-ink">
-          <strong className="font-semibold">Mirando con un supuesto:</strong> las facturas que Siigo
-          trae sin plazo se están contando a {plazo} días desde su fecha. Es una simulación, no un
-          dato de Siigo.
+      <p className="text-sm text-ink">
+        <strong className="font-semibold">
+          Plazo de pago por defecto: {savedTerm ?? plazo ?? '—'} días.
+        </strong>{' '}
+        {counted > 0
+          ? `${counted} de ${m.invoices.length} facturas no traen plazo en Siigo y se cuentan con este plazo desde su fecha para saber qué está vencido.`
+          : `${noTerm} facturas no traen plazo: ${money(m.projection.noTerm)} quedan como «Sin plazo definido».`}{' '}
+        El plazo propio de cada cliente, si lo tiene, manda sobre este.
+      </p>
+      {previewing ? (
+        <p className="mt-2 text-xs text-ink-muted">
+          Estás mirando cómo se vería a {plazo} días; no está guardado.{' '}
+          <Link href={plazoHref(null)} scroll={false} className="font-semibold text-primary">
+            Volver a {savedTerm} días
+          </Link>
         </p>
-      ) : (
-        <p className="text-sm text-ink">
-          <strong className="font-semibold">
-            {noTerm === total
-              ? total === 1
-                ? 'La factura no trae plazo de pago.'
-                : 'Ninguna factura trae plazo de pago.'
-              : `${noTerm} de ${total} facturas no traen plazo de pago.`}
-          </strong>{' '}
-          En Siigo vencen el mismo día que se expiden, así que Cortex no puede decir cuáles están
-          vencidas: {money(m.projection.noTerm)} quedan como «Sin plazo definido» (cuentan como por
-          cobrar, no como vencidas). Pon el plazo en la ficha de cada cliente, o mira cómo se vería
-          con:
-        </p>
-      )}
+      ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {[15, 30, 45, 60].map((d) => (
-          <Link
-            key={d}
-            href={plazoHref(d)}
-            scroll={false}
-            aria-current={plazo === d ? 'true' : undefined}
-            className={clsx(
-              'inline-flex min-h-9 items-center rounded-pill border px-3.5 text-xs font-semibold transition-colors',
-              plazo === d
-                ? 'border-primary bg-primary text-white'
-                : 'border-border-strong bg-surface text-ink hover:bg-surface-2',
-            )}
+        {[30, 60, 90].map((d) => {
+          const active = (savedTerm ?? plazo) === d;
+          return setTerm ? (
+            <button
+              key={d}
+              type="button"
+              disabled={pending || active}
+              onClick={() => save(d)}
+              aria-pressed={active}
+              className={clsx(
+                'inline-flex min-h-9 items-center rounded-pill border px-3.5 text-xs font-semibold transition-colors disabled:cursor-default',
+                active
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-border-strong bg-surface text-ink hover:bg-surface-2',
+              )}
+            >
+              {d} días
+            </button>
+          ) : (
+            <Link
+              key={d}
+              href={plazoHref(d)}
+              scroll={false}
+              aria-current={plazo === d ? 'true' : undefined}
+              className={clsx(
+                'inline-flex min-h-9 items-center rounded-pill border px-3.5 text-xs font-semibold transition-colors',
+                plazo === d
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-border-strong bg-surface text-ink hover:bg-surface-2',
+              )}
+            >
+              {d} días
+            </Link>
+          );
+        })}
+        {setTerm ? (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (customOk) save(customDays);
+            }}
           >
-            {d} días
-          </Link>
-        ))}
-        {plazo ? (
-          <Link
-            href={plazoHref(null)}
-            scroll={false}
-            className="inline-flex min-h-9 items-center px-2 text-xs font-semibold text-primary hover:underline"
-          >
-            Quitar el supuesto
-          </Link>
+            <label className="sr-only" htmlFor="plazo-propio">
+              Otro plazo en días
+            </label>
+            <input
+              id="plazo-propio"
+              inputMode="numeric"
+              placeholder="Otro"
+              value={custom}
+              onChange={(e) => setCustom(e.target.value.replace(/\D/g, '').slice(0, 3))}
+              className="h-9 w-20 rounded-pill border border-border-strong bg-surface px-3 text-xs text-ink"
+            />
+            <button
+              type="submit"
+              disabled={pending || !customOk}
+              className="inline-flex min-h-9 items-center rounded-pill px-2 text-xs font-semibold text-primary disabled:text-ink-faint"
+            >
+              Guardar
+            </button>
+          </form>
         ) : null}
+        {pending ? <span className="text-xs text-ink-muted">Guardando…</span> : null}
       </div>
+      {error ? <p className="mt-2 text-xs text-rose">{error}</p> : null}
     </aside>
   );
 }
@@ -962,7 +1037,7 @@ function InvoicesPanel({
                     Expedida {formatDay(i.issuedOn)}
                     {i.dueOn ? ` · vence ${formatDay(i.dueOn)}` : ''}
                     {i.dueBasis === 'plazo_cliente' ? ' (plazo del cliente)' : ''}
-                    {i.dueBasis === 'plazo_supuesto' ? ' (plazo supuesto)' : ''}
+                    {i.dueBasis === 'plazo_supuesto' ? ' (plazo por defecto)' : ''}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">

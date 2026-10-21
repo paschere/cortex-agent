@@ -24,7 +24,7 @@ export default async function CarteraShowcasePage({
   if (process.env.NODE_ENV === 'production') notFound();
   const q = await searchParams;
   const one = (k: string) => (typeof q[k] === 'string' ? (q[k] as string) : null);
-  const plazo = Number(one('plazo')) > 0 ? Number(one('plazo')) : null;
+  const plazo = Number(one('plazo')) > 0 ? Number(one('plazo')) : 30;
   return (
     <CarteraShowcase
       dark={one('modo') === 'oscuro'}
