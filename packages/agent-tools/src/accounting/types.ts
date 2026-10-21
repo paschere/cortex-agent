@@ -1,7 +1,7 @@
 import type { ProviderWriter } from '../close/writeback/shape';
 import type { LiveRequest, LiveResult } from './live/shape';
 import type { PayrollPage } from './payroll-provider';
-import type { PurchasePage } from './providers/purchases';
+import type { NormalizedPurchase, PurchasePage } from './providers/purchases';
 import type { ProviderReports } from './providers/reports';
 /**
  * LA FORMA COMÚN DE UN PROGRAMA CONTABLE (migración 0165).
@@ -26,14 +26,70 @@ export type AccountingEntity =
   | 'products'
   | 'invoices'
   | 'payments'
-  | 'credit_notes';
+  | 'credit_notes'
+  // 0234: todo lo demás del programa, como tablas para tableros, apps y reglas.
+  | 'purchases'
+  | 'supplier_payments'
+  | 'journal_lines'
+  | 'quotations'
+  | 'stock'
+  | 'statements'
+  | 'payroll_costs'
+  | 'cost_centers'
+  | 'taxes'
+  | 'payment_methods'
+  | 'warehouses'
+  | 'document_types'
+  | 'sellers';
+
+/**
+ * El orden de la corrida. Primero los catálogos y los terceros (para que los
+ * documentos salgan con nombres de cliente, de centro de costo), después los
+ * documentos, y al final lo que se arma a partir de otras lecturas.
+ */
 export const ACCOUNTING_ENTITIES: readonly AccountingEntity[] = [
   'customers',
+  'cost_centers',
+  'taxes',
+  'payment_methods',
+  'warehouses',
+  'document_types',
+  'sellers',
   'products',
+  'stock',
   'invoices',
   'payments',
   'credit_notes',
+  'purchases',
+  'supplier_payments',
+  'quotations',
+  'journal_lines',
+  'statements',
+  'payroll_costs',
 ] as const;
+
+/**
+ * Cosas que NO se piden al programa en una lista propia:
+ *   - `stock` sale de la misma lectura de productos (existencias por bodega);
+ *   - `statements` y `payroll_costs` se arman del balance de prueba / estado de
+ *     resultados mensual (sync-derived.ts), con copia guardada por mes.
+ */
+export const DERIVED_ENTITIES: readonly AccountingEntity[] = [
+  'stock',
+  'statements',
+  'payroll_costs',
+] as const;
+
+/** Catálogos de referencia: tablas pequeñas que se revisan una vez al día. */
+export const CATALOG_ENTITIES = [
+  'cost_centers',
+  'taxes',
+  'payment_methods',
+  'warehouses',
+  'document_types',
+  'sellers',
+] as const satisfies readonly AccountingEntity[];
+export type CatalogEntity = (typeof CATALOG_ENTITIES)[number];
 
 /**
  * Cosas opcionales que se traen aparte de las tablas (0217). No llenan Tablas
@@ -142,12 +198,143 @@ export interface NormalizedCreditNote {
   notes?: string;
 }
 
+/**
+ * Pago a un proveedor (comprobante de egreso). Espejo de `NormalizedPayment`
+ * del lado de las compras: a qué compras abona, una línea por compra.
+ */
+export interface NormalizedSupplierPayment {
+  externalId: string;
+  number?: string;
+  date: string;
+  supplierExternalId?: string;
+  supplierName?: string;
+  supplierTaxId?: string;
+  amount: number;
+  currency: string;
+  method?: string;
+  notes?: string;
+  annulled?: boolean;
+  /** A qué compras abona («FC-1-23»); vacío = anticipo sin compra. */
+  applications: Array<{ ref: string; purchaseNumber: string | null; amount: number }>;
+}
+
+/** Un movimiento de un comprobante contable: una cuenta, un sentido, un valor. */
+export interface NormalizedJournalLine {
+  /** `id del comprobante:posición`: único y estable. */
+  externalId: string;
+  journalId: string;
+  journalNumber: string;
+  date: string;
+  /** Cuenta PUC, sólo dígitos. */
+  account: string;
+  accountName?: string;
+  movement: 'debit' | 'credit';
+  /** Siempre positivo; el sentido lo dice `movement`. */
+  value: number;
+  partyExternalId?: string;
+  partyTaxId?: string;
+  partyName?: string;
+  costCenter?: string;
+  description?: string;
+  /** Línea de nómina: no se guarda tercero ni descripción (confidencial). */
+  confidential?: boolean;
+}
+
+export interface NormalizedQuotation {
+  externalId: string;
+  number: string;
+  date: string;
+  validUntil?: string;
+  customerExternalId?: string;
+  customerName?: string;
+  customerTaxId?: string;
+  sellerExternalId?: string;
+  total: number;
+  currency: string;
+  status?: string;
+  notes?: string;
+}
+
+/** Existencias de un producto en una bodega. */
+export interface NormalizedStockLine {
+  /** `id del producto:id de la bodega`. */
+  externalId: string;
+  productExternalId: string;
+  productName?: string;
+  productCode?: string;
+  warehouseExternalId: string;
+  warehouseName: string;
+  quantity: number;
+  minStock?: number;
+  unit?: string;
+}
+
+export const CATALOG_KIND_LABEL: Record<CatalogEntity, string> = {
+  cost_centers: 'Centro de costo',
+  taxes: 'Impuesto o retención',
+  payment_methods: 'Forma de pago',
+  warehouses: 'Bodega',
+  document_types: 'Tipo de documento',
+  sellers: 'Vendedor',
+};
+
+/** Una fila de un catálogo de referencia (centro de costo, impuesto, bodega…). */
+export interface NormalizedCatalogItem {
+  externalId: string;
+  catalog: CatalogEntity;
+  name: string;
+  code?: string;
+  /** Impuestos: «IVA», «ReteFuente»…; formas de pago: «Contado»/«Crédito»; documentos: su sigla. */
+  kind?: string;
+  /** Impuestos: 19, 2.5… */
+  percentage?: number;
+  active?: boolean;
+}
+
+export type StatementKind = 'Estado de resultados' | 'Balance general';
+
+/** Un renglón de un estado financiero de un mes. */
+export interface NormalizedStatementLine {
+  /** `pnl|AAAA-MM|sección|código o nombre`. */
+  externalId: string;
+  /** AAAA-MM. */
+  period: string;
+  statement: StatementKind;
+  section: string;
+  code?: string;
+  name: string;
+  amount: number;
+  /** El mes todavía no cierra. */
+  inProgress: boolean;
+}
+
+/** Costo de personal de un mes por área y concepto: sólo totales de la empresa. */
+export interface NormalizedPayrollCost {
+  externalId: string;
+  period: string;
+  area: string;
+  group: string;
+  concept: string;
+  amount: number;
+  inProgress: boolean;
+}
+
+export type { NormalizedPurchase };
+
 export type NormalizedRecord =
   | NormalizedCustomer
   | NormalizedProduct
   | NormalizedInvoice
   | NormalizedPayment
-  | NormalizedCreditNote;
+  | NormalizedCreditNote
+  | NormalizedPurchase
+  | NormalizedSupplierPayment
+  | NormalizedJournalLine
+  | NormalizedQuotation
+  | NormalizedStockLine
+  | NormalizedCatalogItem
+  | NormalizedStatementLine
+  | NormalizedPayrollCost;
 
 /** Un filtro de un listado del programa, opaco para el motor (se guarda para reanudar). */
 export type ProviderQuery = Record<string, string>;
@@ -201,6 +388,12 @@ export interface ProviderSession {
    */
   refreshInvoices?(numbers: string[]): Promise<NormalizedInvoice[]>;
   /**
+   * Lo mismo para las compras: un comprobante de egreso baja el saldo de la
+   * compra sin marcarla como modificada, así que al llegar un pago a
+   * proveedor se vuelven a leer las compras que abona (por su número, «FC-2-22»).
+   */
+  refreshPurchases?(numbers: string[]): Promise<NormalizedPurchase[]>;
+  /**
    * Cuántos registros dice tener el programa de una cosa, sin filtros (una sola
    * petición de una fila). Sirve para comprobar que la tabla sincronizada no
    * se quedó corta. `null` si el programa no lo puede decir.
@@ -245,6 +438,14 @@ export interface ProviderSession {
    * vista previa y la aprobación de una persona (close/writeback/store.ts).
    */
   writer?: ProviderWriter;
+  /**
+   * Avisos del programa (webhooks) de productos y existencias (0234). Sólo
+   * Siigo. Suscribir es CONFIGURACIÓN en el programa, no datos: lo pide un
+   * administrador, nunca la sincronización sola.
+   */
+  webhooks?: {
+    subscribe(url: string): Promise<{ topics: string[]; failed: string[] }>;
+  };
   /**
    * Escrituras hacia el programa desde las apps (0232): cliente (tercero),
    * recibo de caja contra varias facturas y nota crédito. Igual que `invoicing`,

@@ -1,13 +1,23 @@
 import type { SystemPaymentRow } from '../payments/import';
 import type { TrackerField } from '../trackers/schema';
-import type {
-  AccountingEntity,
-  NormalizedCreditNote,
-  NormalizedCustomer,
-  NormalizedInvoice,
-  NormalizedPayment,
-  NormalizedProduct,
-  NormalizedRecord,
+import type { NormalizedPurchase } from './providers/purchases';
+import {
+  type AccountingEntity,
+  CATALOG_KIND_LABEL,
+  type CatalogEntity,
+  type NormalizedCatalogItem,
+  type NormalizedCreditNote,
+  type NormalizedCustomer,
+  type NormalizedInvoice,
+  type NormalizedJournalLine,
+  type NormalizedPayment,
+  type NormalizedPayrollCost,
+  type NormalizedProduct,
+  type NormalizedQuotation,
+  type NormalizedRecord,
+  type NormalizedStatementLine,
+  type NormalizedStockLine,
+  type NormalizedSupplierPayment,
 } from './types';
 
 /**
@@ -69,15 +79,46 @@ export const INVOICE_STATES = ['Por cobrar', 'Vencida', 'Pagada', 'Anulada'] as 
 const PAYMENT_KINDS = ['Abono a factura', 'Anticipo', 'Detallado', 'Otro'];
 const EINVOICE_STATES = ['Aceptada', 'Rechazada', 'Pendiente', 'Sin enviar', 'Otro'];
 
-const BASE: Record<
-  AccountingEntity,
-  { slug: string; name: string; noun: string; what: string; fields: TrackerField[] }
-> = {
+export const PURCHASE_KINDS = ['Compra', 'Documento soporte'] as const;
+export const PURCHASE_STATES = ['Por pagar', 'Vencida', 'Pagada', 'Anulada'] as const;
+export const STOCK_STATES = ['Sin existencias', 'Bajo mínimo', 'Con existencias'] as const;
+
+interface BaseSpec {
+  slug: string;
+  name: string;
+  noun: string;
+  what: string;
+  fields: TrackerField[];
+}
+
+/** Un catálogo de referencia: nombre, código y, si aplica, tipo y porcentaje. */
+function catalogBase(
+  slug: string,
+  name: string,
+  what: string,
+  extra: { kind?: string; percentage?: boolean } = {},
+): BaseSpec {
+  return {
+    slug,
+    name,
+    noun: name.toLowerCase(),
+    what,
+    fields: [
+      text('nombre', 'Nombre'),
+      text('codigo', 'Código'),
+      ...(extra.kind ? [text('tipo', extra.kind)] : []),
+      ...(extra.percentage ? [number('porcentaje', 'Porcentaje')] : []),
+      select('estado', 'Estado', ACTIVE),
+    ],
+  };
+}
+
+const BASE: Record<AccountingEntity, BaseSpec> = {
   customers: {
     slug: 'clientes',
     name: 'Clientes',
     noun: 'clientes',
-    what: 'los clientes (terceros) de la empresa',
+    what: 'los terceros de la empresa: clientes y proveedores (se filtran por el campo «Relación»)',
     fields: [
       text('nombre', 'Nombre'),
       text('nit', 'NIT / Documento'),
@@ -162,6 +203,140 @@ const BASE: Record<
       text('observaciones', 'Observaciones'),
     ],
   },
+  purchases: {
+    slug: 'compras',
+    name: 'Compras',
+    noun: 'compras',
+    what: 'facturas de compra y documentos soporte (lo que se le debe a proveedores), con su saldo y vencimiento',
+    fields: [
+      text('numero', 'Número del proveedor'),
+      text('documento', 'Documento'),
+      select('tipo', 'Tipo', [...PURCHASE_KINDS]),
+      text('proveedor', 'Proveedor'),
+      text('nit', 'NIT proveedor'),
+      date('fecha', 'Fecha'),
+      date('vence', 'Vence'),
+      money('total', 'Total'),
+      money('saldo', 'Saldo por pagar'),
+      text('moneda', 'Moneda'),
+      select('estado', 'Estado', [...PURCHASE_STATES]),
+      text('observaciones', 'Observaciones'),
+    ],
+  },
+  supplier_payments: {
+    slug: 'pagos_proveedores',
+    name: 'Pagos a proveedores',
+    noun: 'pagos a proveedores',
+    what: 'los comprobantes de egreso: lo que se le pagó a cada proveedor y qué compras cubre',
+    fields: [
+      text('numero', 'Número'),
+      text('proveedor', 'Proveedor'),
+      text('nit', 'NIT proveedor'),
+      date('fecha', 'Fecha'),
+      money('valor', 'Valor'),
+      text('moneda', 'Moneda'),
+      text('compras', 'Compras que paga'),
+      text('forma_pago', 'Forma de pago'),
+      select('estado', 'Estado', ['Registrado', 'Anulado']),
+      text('observaciones', 'Observaciones'),
+    ],
+  },
+  journal_lines: {
+    slug: 'movimientos_contables',
+    name: 'Movimientos contables',
+    noun: 'movimientos contables',
+    what: 'cada movimiento de los comprobantes contables: cuenta PUC, débito o crédito, tercero y centro de costo (los de nómina van sin tercero)',
+    fields: [
+      text('comprobante', 'Comprobante'),
+      date('fecha', 'Fecha'),
+      text('mes', 'Mes (AAAA-MM)'),
+      text('cuenta', 'Cuenta PUC'),
+      text('nombre_cuenta', 'Nombre de la cuenta'),
+      select('movimiento', 'Movimiento', ['Débito', 'Crédito']),
+      money('debito', 'Débito'),
+      money('credito', 'Crédito'),
+      text('nit_tercero', 'NIT del tercero'),
+      text('tercero', 'Tercero'),
+      text('centro_costo', 'Centro de costo'),
+      text('descripcion', 'Descripción'),
+    ],
+  },
+  quotations: {
+    slug: 'cotizaciones',
+    name: 'Cotizaciones',
+    noun: 'cotizaciones',
+    what: 'las cotizaciones a clientes, con su valor y vigencia',
+    fields: [
+      text('numero', 'Número'),
+      text('cliente', 'Cliente'),
+      text('nit', 'NIT cliente'),
+      date('fecha', 'Fecha'),
+      date('vigencia', 'Válida hasta'),
+      money('total', 'Total'),
+      text('moneda', 'Moneda'),
+      text('vendedor', 'Vendedor'),
+      text('observaciones', 'Observaciones'),
+    ],
+  },
+  stock: {
+    slug: 'existencias',
+    name: 'Existencias por bodega',
+    noun: 'existencias',
+    what: 'cuántas unidades de cada producto hay en cada bodega y si están bajo el mínimo',
+    fields: [
+      text('producto', 'Producto'),
+      text('codigo', 'Código'),
+      text('bodega', 'Bodega'),
+      number('existencias', 'Existencias'),
+      number('minimo', 'Mínimo'),
+      text('unidad', 'Unidad'),
+      select('alerta', 'Alerta', [...STOCK_STATES]),
+    ],
+  },
+  statements: {
+    slug: 'estados_financieros',
+    name: 'Estados financieros mes a mes',
+    noun: 'renglones de estados financieros',
+    what: 'estado de resultados y balance general mes a mes, un renglón por mes y rubro contable (del balance de prueba, base causación)',
+    fields: [
+      text('periodo', 'Mes (AAAA-MM)'),
+      date('mes', 'Primer día del mes'),
+      select('estado', 'Estado', ['Estado de resultados', 'Balance general']),
+      text('seccion', 'Sección'),
+      text('codigo', 'Cuenta'),
+      text('renglon', 'Renglón'),
+      money('valor', 'Valor'),
+      select('en_curso', 'Mes en curso', ['Sí', 'No']),
+    ],
+  },
+  payroll_costs: {
+    slug: 'costo_nomina',
+    name: 'Costo de nómina por mes',
+    noun: 'renglones de costo de nómina',
+    what: 'costo de personal por mes, área y concepto (totales de la empresa, sin datos de personas)',
+    fields: [
+      text('periodo', 'Mes (AAAA-MM)'),
+      date('mes', 'Primer día del mes'),
+      text('area', 'Área'),
+      text('grupo', 'Grupo'),
+      text('concepto', 'Concepto'),
+      money('valor', 'Valor'),
+      select('en_curso', 'Mes en curso', ['Sí', 'No']),
+    ],
+  },
+  cost_centers: catalogBase('centros_costo', 'Centros de costo', 'los centros de costo'),
+  taxes: catalogBase('impuestos', 'Impuestos y retenciones', 'los impuestos y retenciones', {
+    kind: 'Tipo',
+    percentage: true,
+  }),
+  payment_methods: catalogBase('formas_pago', 'Formas de pago', 'las formas de pago', {
+    kind: 'Plazo',
+  }),
+  warehouses: catalogBase('bodegas', 'Bodegas', 'las bodegas'),
+  document_types: catalogBase('tipos_documento', 'Tipos de documento', 'los tipos de documento', {
+    kind: 'Clase',
+  }),
+  sellers: catalogBase('vendedores', 'Vendedores', 'los vendedores'),
 };
 
 /**
@@ -203,6 +378,14 @@ export interface RowContext {
   today: string;
   /** id del cliente en el programa → nombre (de la tabla de clientes). */
   customerNames: Map<string, string>;
+  /** 0234: NIT (sólo dígitos, sin DV) → nombre, para los terceros de los movimientos. */
+  nitNames?: Map<string, string>;
+  /** 0234: id del centro de costo → nombre (de su catálogo). */
+  costCenterNames?: Map<string, string>;
+  /** 0234: id del vendedor → nombre (de su catálogo). */
+  sellerNames?: Map<string, string>;
+  /** 0234: umbral por defecto de «bajo mínimo» cuando el producto no trae mínimo. */
+  lowStockDefault?: number;
 }
 
 export function invoiceState(
@@ -303,6 +486,163 @@ export function creditNoteValues(n: NormalizedCreditNote, ctx: RowContext): Valu
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// 0234: compras, egresos, movimientos, cotizaciones, existencias, estados
+// ---------------------------------------------------------------------------
+
+export function purchaseState(
+  p: Pick<NormalizedPurchase, 'status' | 'balance' | 'dueDate'>,
+  today: string,
+): (typeof PURCHASE_STATES)[number] {
+  if (p.status === 'annulled') return 'Anulada';
+  if (p.status === 'paid' || p.balance <= 0.005) return 'Pagada';
+  return p.dueDate && p.dueDate < today ? 'Vencida' : 'Por pagar';
+}
+
+export function purchaseValues(p: NormalizedPurchase, ctx: RowContext): Values {
+  const supplier =
+    p.supplierName ||
+    (p.supplierExternalId && ctx.customerNames.get(p.supplierExternalId)) ||
+    undefined;
+  return compact({
+    numero: p.number,
+    documento: p.documentNumber,
+    tipo: p.kind ?? 'Compra',
+    proveedor: supplier,
+    nit: p.supplierTaxId?.replace(/\D/g, '') || undefined,
+    fecha: p.date,
+    vence: p.dueDate ?? undefined,
+    total: p.total,
+    saldo: p.status === 'annulled' ? 0 : p.balance,
+    moneda: p.currency,
+    estado: purchaseState(p, ctx.today),
+    observaciones: p.notes,
+  });
+}
+
+export function supplierPaymentValues(p: NormalizedSupplierPayment, ctx: RowContext): Values {
+  const purchases = [...new Set(p.applications.map((a) => a.purchaseNumber).filter(Boolean))].join(
+    ', ',
+  );
+  return compact({
+    numero: p.number,
+    proveedor:
+      p.supplierName ||
+      (p.supplierExternalId && ctx.customerNames.get(p.supplierExternalId)) ||
+      undefined,
+    nit: p.supplierTaxId?.replace(/\D/g, '') || undefined,
+    fecha: p.date,
+    valor: p.amount,
+    moneda: p.currency,
+    compras: purchases.slice(0, 400),
+    forma_pago: p.method,
+    estado: p.annulled ? 'Anulado' : 'Registrado',
+    observaciones: p.notes,
+  });
+}
+
+export const CONFIDENTIAL_PARTY_LABEL = 'Nómina (confidencial)';
+
+export function journalLineValues(l: NormalizedJournalLine, ctx: RowContext): Values {
+  const debit = l.movement === 'debit';
+  const party = l.confidential
+    ? CONFIDENTIAL_PARTY_LABEL
+    : l.partyName ||
+      (l.partyExternalId && ctx.customerNames.get(l.partyExternalId)) ||
+      (l.partyTaxId && ctx.nitNames?.get(l.partyTaxId.replace(/\D/g, ''))) ||
+      undefined;
+  return compact({
+    comprobante: l.journalNumber,
+    fecha: l.date,
+    mes: l.date.slice(0, 7),
+    cuenta: l.account,
+    nombre_cuenta: l.accountName,
+    movimiento: debit ? 'Débito' : 'Crédito',
+    debito: debit ? l.value : undefined,
+    credito: debit ? undefined : l.value,
+    nit_tercero: l.confidential ? undefined : l.partyTaxId,
+    tercero: party,
+    centro_costo: l.costCenter ? (ctx.costCenterNames?.get(l.costCenter) ?? l.costCenter) : undefined,
+    descripcion: l.confidential ? undefined : l.description,
+  });
+}
+
+export function quotationValues(q: NormalizedQuotation, ctx: RowContext): Values {
+  return compact({
+    numero: q.number,
+    cliente: nameFor(q, ctx),
+    nit: q.customerTaxId,
+    fecha: q.date,
+    vigencia: q.validUntil,
+    total: q.total,
+    moneda: q.currency,
+    vendedor: q.sellerExternalId ? ctx.sellerNames?.get(q.sellerExternalId) : undefined,
+    observaciones: q.notes,
+  });
+}
+
+/** Sin existencias, bajo el mínimo (el del producto, o el de la regla) o con existencias. */
+export function stockState(
+  quantity: number,
+  min: number | undefined,
+  fallbackMin = 0,
+): (typeof STOCK_STATES)[number] {
+  if (quantity <= 0) return 'Sin existencias';
+  const floor = min !== undefined && min > 0 ? min : fallbackMin;
+  return floor > 0 && quantity <= floor ? 'Bajo mínimo' : 'Con existencias';
+}
+
+export function stockValues(s: NormalizedStockLine, ctx: RowContext): Values {
+  return compact({
+    producto: s.productName,
+    codigo: s.productCode,
+    bodega: s.warehouseName,
+    existencias: s.quantity,
+    minimo: s.minStock,
+    unidad: s.unit,
+    alerta: stockState(s.quantity, s.minStock, ctx.lowStockDefault ?? 0),
+  });
+}
+
+export function catalogValues(c: NormalizedCatalogItem): Values {
+  return compact({
+    nombre: c.name,
+    codigo: c.code,
+    tipo: c.kind,
+    porcentaje: c.percentage,
+    estado: c.active === false ? 'Inactivo' : 'Activo',
+  });
+}
+
+export function statementValues(l: NormalizedStatementLine): Values {
+  return compact({
+    periodo: l.period,
+    mes: `${l.period}-01`,
+    estado: l.statement,
+    seccion: l.section,
+    codigo: l.code,
+    renglon: l.name,
+    valor: l.amount,
+    en_curso: l.inProgress ? 'Sí' : 'No',
+  });
+}
+
+export function payrollCostValues(c: NormalizedPayrollCost): Values {
+  return compact({
+    periodo: c.period,
+    mes: `${c.period}-01`,
+    area: c.area,
+    grupo: c.group,
+    concepto: c.concept,
+    valor: c.amount,
+    en_curso: c.inProgress ? 'Sí' : 'No',
+  });
+}
+
+export { CATALOG_KIND_LABEL };
+export type { CatalogEntity };
+
 /** El slug de la tabla de una cosa de un programa («siigo_facturas»). */
 export function accountingTableSlug(providerId: string, entity: AccountingEntity): string {
   return `${providerId}_${BASE[entity].slug}`.slice(0, 48);
@@ -324,6 +664,27 @@ export function valuesFor(
       return paymentValues(record as NormalizedPayment, ctx);
     case 'credit_notes':
       return creditNoteValues(record as NormalizedCreditNote, ctx);
+    case 'purchases':
+      return purchaseValues(record as NormalizedPurchase, ctx);
+    case 'supplier_payments':
+      return supplierPaymentValues(record as NormalizedSupplierPayment, ctx);
+    case 'journal_lines':
+      return journalLineValues(record as NormalizedJournalLine, ctx);
+    case 'quotations':
+      return quotationValues(record as NormalizedQuotation, ctx);
+    case 'stock':
+      return stockValues(record as NormalizedStockLine, ctx);
+    case 'statements':
+      return statementValues(record as NormalizedStatementLine);
+    case 'payroll_costs':
+      return payrollCostValues(record as NormalizedPayrollCost);
+    case 'cost_centers':
+    case 'taxes':
+    case 'payment_methods':
+    case 'warehouses':
+    case 'document_types':
+    case 'sellers':
+      return catalogValues(record as NormalizedCatalogItem);
   }
 }
 

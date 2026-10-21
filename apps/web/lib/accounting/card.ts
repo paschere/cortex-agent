@@ -21,9 +21,36 @@ export const ENTITY_LABELS: Record<AccountingSelection, string> = {
   payments: 'Pagos recibidos',
   // 0232: para el disparador «se crea una nota crédito».
   credit_notes: 'Notas crédito',
+  // 0234: todo lo demás del programa, como tablas.
+  purchases: 'Compras y documentos soporte',
+  supplier_payments: 'Pagos a proveedores',
+  journal_lines: 'Movimientos contables',
+  quotations: 'Cotizaciones',
+  stock: 'Existencias por bodega',
+  statements: 'Estados financieros mes a mes',
+  payroll_costs: 'Costo de nómina por mes',
+  cost_centers: 'Centros de costo',
+  taxes: 'Impuestos y retenciones',
+  payment_methods: 'Formas de pago',
+  warehouses: 'Bodegas',
+  document_types: 'Tipos de documento',
+  sellers: 'Vendedores',
   // 0217: Siigo no tiene API de nómina; se leen los comprobantes contables.
   payroll: 'Nómina (desde los comprobantes contables)',
 };
+
+/** Cómo se agrupan en «Qué traer»: lo que se trae por defecto está todo marcado. */
+export const ENTITY_GROUPS: Array<{ title: string; entities: AccountingSelection[] }> = [
+  { title: 'Ventas', entities: ['customers', 'invoices', 'payments', 'credit_notes', 'quotations'] },
+  { title: 'Compras y pagos', entities: ['purchases', 'supplier_payments'] },
+  { title: 'Inventario', entities: ['products', 'stock'] },
+  { title: 'Contabilidad', entities: ['journal_lines', 'statements', 'payroll_costs'] },
+  {
+    title: 'Catálogos',
+    entities: ['cost_centers', 'taxes', 'payment_methods', 'warehouses', 'document_types', 'sellers'],
+  },
+  { title: 'Opcional', entities: ['payroll'] },
+];
 
 export const INTERVAL_OPTIONS = [
   { value: 15, label: 'Cada 15 minutos' },
@@ -132,7 +159,7 @@ export function buildAccountingCards(
         : 'Todavía no se ha traído';
       const text =
         provider.id === 'siigo'
-          ? `${conn.cursors?.[entity]?.since ? 'Carga inicial finalizada' : 'Carga inicial pendiente'} · ${activity}`
+          ? `${conn.cursors?.[entity === 'stock' ? 'products' : entity]?.since ? 'Carga inicial finalizada' : 'Carga inicial pendiente'} · ${activity}`
           : activity;
       return {
         entity,

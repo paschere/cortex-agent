@@ -14,9 +14,10 @@ import {
   openAccountingSession,
   requestAccountingSync,
   saveAccountingConnection,
+  siigoWebhookUrl,
   updateAccountingSettings,
 } from '@cortex/agent-tools';
-import { NotFoundError, ValidationError } from '@cortex/core';
+import { NotFoundError, ValidationError, getEnv } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 
 /**
@@ -165,5 +166,42 @@ export async function disconnectAccountingProgram(input: {
     };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo desconectar.') };
+  }
+}
+
+/**
+ * Pide a Siigo que avise cuando cambien productos o existencias (0234): la
+ * sincronización corre al minuto en vez de esperar sus 15 minutos. Es
+ * configuración en Siigo, no datos, y sólo la pide quien administra.
+ */
+export async function enableSiigoStockWebhook(): Promise<AccountingActionResult> {
+  try {
+    const { user, db } = await adminDb();
+    const conn = await getAccountingConnection(db, 'siigo');
+    if (!conn) return { ok: false, error: 'Siigo no está conectado.' };
+    const url = siigoWebhookUrl(getEnv().APP_BASE_URL, user.organization.id, conn.id);
+    if (!url)
+      return {
+        ok: false,
+        error:
+          'Falta el secreto de avisos en esta instalación (ACCOUNTING_WEBHOOK_SECRET). Sin él no se puede recibir avisos de Siigo; la sincronización sigue cada 15 minutos.',
+      };
+    const session = await openAccountingSession(db, conn.id);
+    if (!session.webhooks) return { ok: false, error: 'Siigo no ofrece avisos en esta cuenta.' };
+    const { topics, failed } = await session.webhooks.subscribe(url);
+    if (!topics.length)
+      return {
+        ok: false,
+        error:
+          'Siigo no aceptó el aviso (puede que su cuenta no lo tenga habilitado). La sincronización sigue cada 15 minutos.',
+      };
+    return {
+      ok: true,
+      note: failed.length
+        ? `Siigo avisará de ${topics.length} de ${topics.length + failed.length} cambios de productos y existencias.`
+        : 'Siigo avisará cuando cambien productos y existencias.',
+    };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo activar el aviso de Siigo.') };
   }
 }

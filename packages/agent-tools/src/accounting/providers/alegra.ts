@@ -60,7 +60,7 @@ const FALLBACK_CURRENCY = 'COP';
 /** Los filtros que empiezan con «_» son de Cortex y no viajan a Alegra. */
 const SINCE_KEY = '_desde';
 
-const PATHS: Record<AccountingEntity, string> = {
+const PATHS: Partial<Record<AccountingEntity, string>> = {
   customers: '/contacts',
   products: '/items',
   invoices: '/invoices',
@@ -370,6 +370,15 @@ const PAYMENTS_NEWEST_FIRST = { type: 'in', order_field: 'date', order_direction
 
 export function alegraQueries(entity: AccountingEntity, input: QueryPlanInput): ProviderQuery[] {
   const incremental = input.mode === 'incremental' && input.since;
+  // Se arman de otras lecturas (existencias de los productos, estados mensuales).
+  if (entity === 'stock' || entity === 'statements') return [];
+  if (entity === 'purchases') {
+    // Las facturas de proveedor (bills) vienen del más nuevo al más viejo: la fecha corta.
+    const from = incremental
+      ? daysBefore(input.since as string, PAYMENT_LOOKBACK_DAYS)
+      : monthsAgo(input.now, input.mode === 'sweep' ? SWEEP_MONTHS : INITIAL_MONTHS);
+    return [{ [SINCE_KEY]: from }];
+  }
   if (entity === 'invoices') {
     const from = incremental
       ? daysBefore(input.since as string, INVOICE_LOOKBACK_DAYS)
@@ -403,7 +412,7 @@ export const alegraProvider: AccountingProvider = {
     { key: 'token', label: 'Token de la API', secret: true, placeholder: 'Pega el token' },
   ],
   accountLabelField: 'email',
-  entities: ['customers', 'products', 'invoices', 'payments'],
+  entities: ['customers', 'products', 'invoices', 'payments', 'purchases', 'stock', 'statements'],
   paymentsLabel: 'Pagos recibidos',
   queries: alegraQueries,
   open(credentials, runtime: ProviderRuntime = {}): ProviderSession {
@@ -443,9 +452,20 @@ export const alegraProvider: AccountingProvider = {
       listPurchases: async (since, page) =>
         alegraBillPage(client, since, page, await companyCurrency()),
       async listPage(entity, query, page) {
+        if (entity === 'purchases') {
+          const bills = await alegraBillPage(
+            client,
+            query[SINCE_KEY] ?? monthsAgo(new Date(), INITIAL_MONTHS),
+            page,
+            await companyCurrency(),
+          );
+          return { records: bills.records, hasMore: bills.hasMore };
+        }
+        const path = PATHS[entity];
+        if (!path) return { records: [], hasMore: false };
         const params: Record<string, string> = {};
         for (const [k, v] of Object.entries(query)) if (!k.startsWith('_')) params[k] = v;
-        const result = await client.page<unknown>(PATHS[entity], params, page);
+        const result = await client.page<unknown>(path, params, page);
         let raw = result.results.filter((r) => !ignore(entity, r));
         // Pagos del más reciente al más viejo: al pasar la fecha de corte, se acabó.
         let reachedCutoff = false;
@@ -470,7 +490,7 @@ export const alegraProvider: AccountingProvider = {
                 return normalizeAlegraInvoice(r as AlegraInvoice, currency);
               case 'payments':
                 return normalizeAlegraPayment(r as AlegraPayment, currency);
-              case 'credit_notes':
+              default:
                 return null;
             }
           })

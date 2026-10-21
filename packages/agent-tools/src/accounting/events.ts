@@ -24,6 +24,11 @@ export const ACCOUNTING_EVENTS = [
   'receipt_created',
   'credit_note_created',
   'customer_created',
+  // 0234
+  'purchase_created',
+  'supplier_payment_created',
+  'stock_low',
+  'quotation_created',
 ] as const;
 export type AccountingEventId = (typeof ACCOUNTING_EVENTS)[number];
 
@@ -35,6 +40,10 @@ export const ACCOUNTING_EVENT_LABEL: Record<AccountingEventId, string> = {
   receipt_created: 'Entra un recibo de caja (pago de un cliente)',
   credit_note_created: 'Se crea una nota crédito',
   customer_created: 'Hay un cliente nuevo en el programa contable',
+  purchase_created: 'Entra una compra (factura de proveedor o documento soporte)',
+  supplier_payment_created: 'Se registra un pago a un proveedor (egreso)',
+  stock_low: 'Un producto queda bajo de existencias en una bodega',
+  quotation_created: 'Se crea una cotización',
 };
 
 export const ACCOUNTING_EVENT_ENTITY: Record<AccountingEventId, AccountingEntity> = {
@@ -45,6 +54,10 @@ export const ACCOUNTING_EVENT_ENTITY: Record<AccountingEventId, AccountingEntity
   receipt_created: 'payments',
   credit_note_created: 'credit_notes',
   customer_created: 'customers',
+  purchase_created: 'purchases',
+  supplier_payment_created: 'supplier_payments',
+  stock_low: 'stock',
+  quotation_created: 'quotations',
 };
 
 /** Con qué tarda en salir cada uno, para decírselo a la persona sin prometer de más. */
@@ -56,6 +69,10 @@ export const ACCOUNTING_EVENT_DELAY: Record<AccountingEventId, string> = {
   receipt_created: 'a los pocos minutos de entrar',
   credit_note_created: 'a los pocos minutos de crearse',
   customer_created: 'a los pocos minutos de crearse',
+  purchase_created: 'a los pocos minutos de registrarse en el programa (cada vez que Cortex sincroniza)',
+  supplier_payment_created: 'a los pocos minutos de registrarse el egreso',
+  stock_low: 'cuando cambian las existencias de la bodega: a los pocos minutos si el programa avisa del movimiento, o en la siguiente sincronización',
+  quotation_created: 'a los pocos minutos de crearse',
 };
 
 export function accountingEventTableSlug(
@@ -71,7 +88,16 @@ export function accountingSlugParts(
 ): { provider: AccountingProviderId; entity: AccountingEntity } | null {
   if (!slug) return null;
   for (const provider of ACCOUNTING_PROVIDER_IDS)
-    for (const entity of ['invoices', 'payments', 'credit_notes', 'customers'] as const)
+    for (const entity of [
+      'invoices',
+      'payments',
+      'credit_notes',
+      'customers',
+      'purchases',
+      'supplier_payments',
+      'quotations',
+      'stock',
+    ] as const)
       if (accountingTableSlug(provider, entity) === slug) return { provider, entity };
   return null;
 }
@@ -94,6 +120,7 @@ export function detectAccountingEvents(
   kind: 'row_created' | 'row_updated',
   before: Values,
   after: Values,
+  options: { threshold?: number } = {},
 ): AccountingEventId[] {
   const out: AccountingEventId[] = [];
   const created = kind === 'row_created';
@@ -108,6 +135,18 @@ export function detectAccountingEvents(
     case 'credit_notes':
       if (created) out.push('credit_note_created');
       break;
+    case 'purchases':
+      if (created) out.push('purchase_created');
+      break;
+    case 'supplier_payments':
+      if (created) out.push('supplier_payment_created');
+      break;
+    case 'quotations':
+      if (created) out.push('quotation_created');
+      break;
+    case 'stock':
+      if (stockBecameLow(created, before, after, options.threshold)) out.push('stock_low');
+      break;
     case 'invoices': {
       if (created) out.push('invoice_created');
       const reached = (state: string) =>
@@ -119,6 +158,37 @@ export function detectAccountingEvents(
     }
   }
   return out;
+}
+
+const num = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const LOW_ALERTS = ['bajo mínimo', 'sin existencias'];
+
+/**
+ * «Un producto queda bajo de existencias»: cruza hacia abajo, no repite mientras
+ * siga bajo. Con umbral (el de la regla): existencias ≤ umbral. Sin umbral: la
+ * alerta de la fila («Bajo mínimo» o «Sin existencias», contra el mínimo del
+ * producto). Una fila nueva ya baja cuenta como llegar.
+ */
+export function stockBecameLow(
+  created: boolean,
+  before: Values,
+  after: Values,
+  threshold?: number,
+): boolean {
+  if (threshold !== undefined) {
+    const now = num(after?.existencias);
+    if (now === null || now > threshold) return false;
+    if (created) return true;
+    const was = num(before?.existencias);
+    return was === null || was > threshold;
+  }
+  const low = (v: Values) => LOW_ALERTS.includes(String(v?.alerta ?? '').trim().toLowerCase());
+  return low(after) && (created || !low(before));
 }
 
 /** Los sucesos de un tipo, para el editor y las instrucciones del chat. */

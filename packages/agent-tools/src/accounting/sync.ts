@@ -11,7 +11,15 @@ import {
   markForReview,
   shapeValuesDetailed,
 } from '../trackers/store';
+import {
+  derivedMonthQueries,
+  isMonthlyDerived,
+  readStatementMonth,
+  recordsForMonth,
+  stockLinesFromProduct,
+} from './derived';
 import { getAccountingProvider } from './providers';
+import type { NormalizedPurchase } from './providers/purchases';
 import type {
   AccountingConnectionRow,
   EntityCounts,
@@ -25,6 +33,7 @@ import {
   accountingTableSpec,
   paymentRowsFor,
   receivableFor,
+  stockValues,
   valuesFor,
 } from './tables';
 import type {
@@ -34,11 +43,14 @@ import type {
   NormalizedCustomer,
   NormalizedInvoice,
   NormalizedPayment,
+  NormalizedJournalLine,
   NormalizedProduct,
+  NormalizedQuotation,
   NormalizedRecord,
+  NormalizedSupplierPayment,
   ProviderSession,
 } from './types';
-import { ACCOUNTING_ENTITIES } from './types';
+import { ACCOUNTING_ENTITIES, CATALOG_ENTITIES } from './types';
 
 /**
  * EL MOTOR: TRAER DE UN PROGRAMA CONTABLE A LAS TABLAS Y A LA CARTERA (0165).
@@ -82,7 +94,44 @@ const ENTITY_LABEL: Record<AccountingEntity, string> = {
   invoices: 'facturas',
   payments: 'recibos de caja',
   credit_notes: 'notas crédito',
+  purchases: 'compras',
+  supplier_payments: 'pagos a proveedores',
+  journal_lines: 'movimientos contables',
+  quotations: 'cotizaciones',
+  stock: 'existencias',
+  statements: 'estados financieros',
+  payroll_costs: 'costo de nómina',
+  cost_centers: 'centros de costo',
+  taxes: 'impuestos',
+  payment_methods: 'formas de pago',
+  warehouses: 'bodegas',
+  document_types: 'tipos de documento',
+  sellers: 'vendedores',
 };
+
+/** Los catálogos y los estados mensuales se revisan una vez al día, no cada 15 minutos. */
+const DAILY_ENTITIES = new Set<AccountingEntity>([
+  ...CATALOG_ENTITIES,
+  'statements',
+  'payroll_costs',
+]);
+/** Los que se repasan cada día por lo que cambia sin «modificar» el documento (saldos). */
+const SWEEP_ENTITIES = new Set<AccountingEntity>([
+  'invoices',
+  'payments',
+  'purchases',
+  'supplier_payments',
+]);
+/** Los que se comparan con el total que dice el programa. */
+const AUDITED_ENTITIES = new Set<AccountingEntity>([
+  'invoices',
+  'payments',
+  'credit_notes',
+  'purchases',
+  'quotations',
+]);
+/** Se arman de otras lecturas: no cuentan para «terminó la primera carga». */
+const SOFT_ENTITIES = new Set<AccountingEntity>(['stock', 'statements', 'payroll_costs']);
 
 export const ENTITY_ORDER: readonly AccountingEntity[] = ACCOUNTING_ENTITIES;
 
@@ -92,6 +141,8 @@ export interface EntityPlan {
   page: number;
   startedAt: string;
   mode: 'initial' | 'sweep' | 'incremental';
+  /** Hoy no toca: se revisó hace menos de un día. */
+  skip?: boolean;
 }
 
 /** Qué pedir de una cosa en esta corrida. Puro. */
@@ -103,22 +154,30 @@ export function planEntity(
 ): EntityPlan {
   if (cursor?.resume?.queries?.length) return { ...cursor.resume };
   const startedAt = now.toISOString();
+  const today = bogotaToday(now);
+  const queriesFor = (input: Parameters<AccountingProvider['queries']>[1]) =>
+    isMonthlyDerived(entity)
+      ? derivedMonthQueries(input.mode, today)
+      : provider.queries(entity, input);
   if (!cursor?.since || (provider.id === 'siigo' && cursor.coverage_version !== 2))
     return {
-      queries: provider.queries(entity, { mode: 'initial', now }),
+      queries: queriesFor({ mode: 'initial', now }),
       index: 0,
       page: 1,
       startedAt,
       mode: 'initial',
     };
+  // Catálogos y estados mensuales: una vez al día.
+  if (DAILY_ENTITIES.has(entity) && now.getTime() - Date.parse(cursor.since) < SWEEP_EVERY_MS)
+    return { queries: [], index: 0, page: 1, startedAt, mode: 'incremental', skip: true };
   const since = new Date(Date.parse(cursor.since) - OVERLAP_MS).toISOString();
-  const incremental = provider.queries(entity, { mode: 'incremental', since, now });
+  const incremental = queriesFor({ mode: 'incremental', since, now });
   const sweepDue =
-    (entity === 'invoices' || entity === 'payments') &&
+    SWEEP_ENTITIES.has(entity) &&
     (!cursor.full_at || now.getTime() - Date.parse(cursor.full_at) >= SWEEP_EVERY_MS);
   if (sweepDue)
     return {
-      queries: [...provider.queries(entity, { mode: 'sweep', now }), ...incremental],
+      queries: [...queriesFor({ mode: 'sweep', now }), ...incremental],
       index: 0,
       page: 1,
       startedAt,
@@ -382,7 +441,22 @@ export interface SyncDeps {
     db: SupabaseClient,
     input: { provider: string; records: NormalizedProduct[]; userId: string | null; today: string },
   ) => Promise<{ created: number; updated: number; adjusted: number }>;
+  /**
+   * 0234: las compras que entran a la tabla también entran a cuentas por pagar
+   * (con dedupe contra lo que llegó por correo o a mano); una compra que el
+   * programa ya muestra pagada marca la factura pagada. Sin esto, sólo la tabla.
+   */
+  importPurchases?: ImportPurchases;
+  /** Para probar sin el reloj. */
+  readMonth?: typeof readStatementMonth;
 }
+
+/** 0234: lo que el motor necesita para llevar las compras a cuentas por pagar (lo pasa el trabajo programado). */
+export type ImportPurchases = (
+  db: SupabaseClient,
+  purchases: readonly NormalizedPurchase[],
+  opts: { system: string; today: string },
+) => Promise<{ created: number; duplicates: number; paid: number; errors: string[] }>;
 
 export interface SyncRunOutcome {
   result: RunResult;
@@ -434,6 +508,74 @@ async function loadCustomerNames(
   }
 }
 
+/** NIT (sólo dígitos, sin DV) → nombre, de la tabla de clientes; para los terceros de los movimientos. */
+async function loadNamesByNit(
+  db: SupabaseClient,
+  customersTableId: string | undefined,
+  nits: string[],
+  names: Map<string, string>,
+): Promise<void> {
+  const missing = [...new Set(nits.map((n) => n.replace(/\D/g, '')).filter((n) => n && !names.has(n)))];
+  if (!customersTableId || !missing.length) return;
+  for (let i = 0; i < missing.length; i += 40) {
+    const chunk = missing.slice(i, i + 40);
+    const { data, error } = await db
+      .from('tracker_rows')
+      .select('values')
+      .eq('tracker_id', customersTableId)
+      .or(chunk.map((n) => `values->>nit.like.${n}%`).join(','))
+      .limit(200);
+    if (error) throw error;
+    for (const r of (data ?? []) as Array<{ values: Record<string, unknown> }>) {
+      const nit = String(r.values?.nit ?? '').replace(/\D/g, '');
+      const name = r.values?.nombre;
+      if (typeof name !== 'string' || !name) continue;
+      // «9001234567» puede ser 900123456 + DV 7: se asigna al NIT pedido que lo empieza.
+      for (const wanted of chunk) if (nit === wanted || nit.startsWith(wanted)) names.set(wanted, name);
+    }
+  }
+  // Los que no se encontraron se recuerdan vacíos: no se vuelven a buscar en esta corrida.
+  for (const n of missing) if (!names.has(n)) names.set(n, '');
+}
+
+/** Un catálogo (centros de costo, vendedores) → id del programa → nombre. */
+async function loadCatalogNames(
+  db: SupabaseClient,
+  tableId: string | undefined,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (!tableId) return map;
+  const { data, error } = await db
+    .from('tracker_rows')
+    .select('external_key, values')
+    .eq('tracker_id', tableId)
+    .limit(2000);
+  if (error) throw error;
+  for (const r of (data ?? []) as Array<{ external_key: string; values: Record<string, unknown> }>) {
+    const name = r.values?.nombre;
+    if (typeof name === 'string' && name) map.set(r.external_key, name);
+  }
+  return map;
+}
+
+/** Los terceros de cuyos nombres hace falta leer la tabla de clientes (por id del programa). */
+function missingPartyIds(kind: AccountingEntity, records: NormalizedRecord[]): string[] {
+  const ids: string[] = [];
+  for (const r of records) {
+    if (kind === 'invoices' || kind === 'payments' || kind === 'credit_notes' || kind === 'quotations') {
+      const x = r as { customerName?: string; customerExternalId?: string };
+      if (!x.customerName && x.customerExternalId) ids.push(x.customerExternalId);
+    } else if (kind === 'purchases' || kind === 'supplier_payments') {
+      const x = r as { supplierName?: string | null; supplierExternalId?: string };
+      if (!x.supplierName && x.supplierExternalId) ids.push(x.supplierExternalId);
+    } else if (kind === 'journal_lines') {
+      const x = r as NormalizedJournalLine;
+      if (!x.confidential && !x.partyName && x.partyExternalId) ids.push(x.partyExternalId);
+    }
+  }
+  return ids;
+}
+
 async function writeReceivables(
   db: SupabaseClient,
   rows: AccountingInvoiceInput[],
@@ -476,6 +618,10 @@ export async function runAccountingSync(
   const counts: RunCounts = {};
   const newLabels: Partial<Record<AccountingEntity, string[]>> = {};
   const names = new Map<string, string>();
+  const nitNames = new Map<string, string>();
+  let catalogNames: { costCenters: Map<string, string>; sellers: Map<string, string> } | null = null;
+  let stockTable: TableHandle | null = null;
+  const refreshPurchaseNumbers = new Set<string>();
   let clientIds: Map<string, string> | null = null;
   let partial = false;
   let ranInitial = false;
@@ -487,6 +633,17 @@ export async function runAccountingSync(
 
   try {
     for (const entity of entities) {
+      // Las existencias salen de la misma lectura de productos: aquí sólo la tabla.
+      if (entity === 'stock') {
+        const t = await ensureAccountingTable(
+          db,
+          accountingTableSpec(provider, 'stock'),
+          trackers.stock,
+          conn.created_by,
+        );
+        trackers.stock = t.id;
+        continue;
+      }
       const spec = accountingTableSpec(provider, entity);
       const table = await ensureAccountingTable(db, spec, trackers[entity], conn.created_by);
       trackers[entity] = table.id;
@@ -494,24 +651,47 @@ export async function runAccountingSync(
       counts[entity] = entityCounts;
       const labels: string[] = [];
       newLabels[entity] = labels;
+      if (entity === 'products' && entities.includes('stock'))
+        stockTable = await ensureAccountingTable(
+          db,
+          accountingTableSpec(provider, 'stock'),
+          trackers.stock,
+          conn.created_by,
+        );
+      if (stockTable) trackers.stock = stockTable.id;
       const plan = planEntity(provider, entity, cursors[entity], now);
-      if (plan.mode === 'initial') ranInitial = true;
+      // Catálogos y estados: una vez al día; hoy no toca.
+      if (plan.skip) continue;
+      if (plan.mode === 'initial' && !SOFT_ENTITIES.has(entity)) ranInitial = true;
 
       const processRecords = async (kind: AccountingEntity, records: NormalizedRecord[]) => {
         if (!records.length) return;
         if (kind === 'customers')
           for (const c of records as NormalizedCustomer[])
             if (c.name) names.set(c.externalId, c.name);
-        if (kind === 'invoices' || kind === 'payments' || kind === 'credit_notes')
-          await loadCustomerNames(
+        await loadCustomerNames(db, trackers.customers, missingPartyIds(kind, records), names);
+        if (kind === 'journal_lines')
+          await loadNamesByNit(
             db,
             trackers.customers,
-            (records as Array<NormalizedInvoice | NormalizedPayment | NormalizedCreditNote>)
-              .filter((r) => !r.customerName && r.customerExternalId)
-              .map((r) => r.customerExternalId as string),
-            names,
+            (records as NormalizedJournalLine[])
+              .filter((l) => !l.confidential && !l.partyName && l.partyTaxId)
+              .map((l) => l.partyTaxId as string),
+            nitNames,
           );
-        const ctx = { today, customerNames: names };
+        if ((kind === 'journal_lines' || kind === 'quotations') && !catalogNames) {
+          catalogNames = {
+            costCenters: await loadCatalogNames(db, trackers.cost_centers),
+            sellers: await loadCatalogNames(db, trackers.sellers),
+          };
+        }
+        const ctx = {
+          today,
+          customerNames: names,
+          nitNames,
+          costCenterNames: catalogNames?.costCenters,
+          sellerNames: catalogNames?.sellers,
+        };
         await upsertAccountingRows(
           db,
           table,
@@ -552,6 +732,49 @@ export async function runAccountingSync(
             counts.inventory_errors = (counts.inventory_errors ?? 0) + 1;
           }
         }
+        if (kind === 'products' && stockTable) {
+          const lines = (records as NormalizedProduct[]).flatMap(stockLinesFromProduct);
+          if (lines.length) {
+            const stockCounts = counts.stock ?? emptyCounts();
+            counts.stock = stockCounts;
+            const stockLabels = newLabels.stock ?? [];
+            newLabels.stock = stockLabels;
+            stockCounts.fetched += lines.length;
+            await upsertAccountingRows(
+              db,
+              stockTable,
+              lines.map((l) => ({ key: l.externalId, values: stockValues(l, ctx) })),
+              conn.created_by,
+              stockCounts,
+              stockLabels,
+              { backfill: plan.mode === 'initial' },
+            );
+          }
+        }
+        if (kind === 'purchases') {
+          if (deps.importPurchases) {
+            try {
+              const imported = await deps.importPurchases(db, records as NormalizedPurchase[], {
+                system: provider.id,
+                today,
+              });
+              counts.payables_created = (counts.payables_created ?? 0) + imported.created;
+              counts.payables_paid = (counts.payables_paid ?? 0) + imported.paid;
+              if (imported.errors.length)
+                warnings.push(
+                  `${imported.errors.length} compra(s) no pasaron a cuentas por pagar: ${imported.errors[0]}`,
+                );
+            } catch (err) {
+              warnings.push(
+                `Las compras no pasaron a cuentas por pagar: ${err instanceof Error ? err.message : 'falló la importación'}.`,
+              );
+            }
+          }
+        }
+        if (kind === 'supplier_payments' && plan.mode !== 'initial')
+          // Un egreso baja el saldo de la compra sin «modificarla»: se vuelve a leer ya.
+          for (const p of records as NormalizedSupplierPayment[])
+            for (const a of p.applications) if (a.purchaseNumber) refreshPurchaseNumbers.add(a.purchaseNumber);
         if (kind === 'payments') {
           const rows = (records as NormalizedPayment[]).flatMap((p) =>
             paymentRowsFor(p, provider.name),
@@ -587,7 +810,40 @@ export async function runAccountingSync(
             finished = false;
             break outer;
           }
-          const result = await deps.session.listPage(entity, query, page);
+          let result: Awaited<ReturnType<ProviderSession['listPage']>>;
+          if (isMonthlyDerived(entity)) {
+            // Estados y costo de nómina: un mes por consulta, de la copia o del programa.
+            const reports = deps.session.reports;
+            if (!reports) {
+              warnings.push(`${provider.name} no entrega estados financieros por API.`);
+              result = { records: [], hasMore: false };
+            } else
+            try {
+              const reading = await (deps.readMonth ?? readStatementMonth)(db, {
+                provider: provider.id,
+                reports,
+                month: query.month ?? today.slice(0, 7),
+                today,
+                userId: conn.created_by ?? null,
+                want: {
+                  pnl: true,
+                  balance: entity === 'statements',
+                  personnel: entity === 'payroll_costs',
+                },
+              });
+              result = {
+                records: recordsForMonth(entity, query.month ?? today.slice(0, 7), reading),
+                hasMore: false,
+              };
+            } catch (err) {
+              // Un mes que el programa no entrega no frena el resto: se avisa; el
+              // mes en curso y el anterior se reintentan en la próxima revisión diaria.
+              warnings.push(
+                `No pude leer ${ENTITY_LABEL[entity]} de ${query.month}: ${err instanceof Error ? err.message : 'falló la lectura'}`,
+              );
+              result = { records: [], hasMore: false };
+            }
+          } else result = await deps.session.listPage(entity, query, page);
           pages += 1;
           entityCounts.fetched += result.records.length;
           entityCounts.skipped += result.skipped ?? 0;
@@ -598,7 +854,7 @@ export async function runAccountingSync(
       if (finished) {
         cursors[entity] = finishedCursor(plan, cursors[entity]);
         // ¿Quedó corta? Se compara con el total que dice el programa.
-        if (deps.session.remoteTotal && (entity === 'invoices' || entity === 'payments')) {
+        if (deps.session.remoteTotal && AUDITED_ENTITIES.has(entity)) {
           try {
             const remote = await deps.session.remoteTotal(entity);
             if (remote !== null) {
@@ -677,6 +933,43 @@ export async function runAccountingSync(
         // El repaso diario las alcanza: no tumba la sincronización.
       }
     }
+    // Lo mismo con las compras que un egreso acaba de pagar: se vuelven a leer
+    // para que su saldo —y cuentas por pagar— queden al día a los minutos.
+    if (
+      refreshPurchaseNumbers.size &&
+      deps.session.refreshPurchases &&
+      trackers.purchases &&
+      entities.includes('purchases')
+    ) {
+      try {
+        const fresh = await deps.session.refreshPurchases([...refreshPurchaseNumbers]);
+        if (fresh.length) {
+          const table = await ensureAccountingTable(
+            db,
+            accountingTableSpec(provider, 'purchases'),
+            trackers.purchases,
+            conn.created_by,
+          );
+          await loadCustomerNames(db, trackers.customers, missingPartyIds('purchases', fresh), names);
+          const ctx = { today, customerNames: names };
+          const c = counts.purchases ?? emptyCounts();
+          counts.purchases = c;
+          await upsertAccountingRows(
+            db,
+            table,
+            fresh.map((r) => ({ key: r.externalId, values: valuesFor('purchases', r, ctx) })),
+            conn.created_by,
+            c,
+            [],
+            { backfill: false },
+          );
+          if (deps.importPurchases)
+            await deps.importPurchases(db, fresh, { system: provider.id, today });
+        }
+      } catch {
+        // El repaso diario las alcanza: no tumba la sincronización.
+      }
+    }
   } catch (err) {
     counts.requests = deps.session.requests;
     return {
@@ -693,7 +986,9 @@ export async function runAccountingSync(
 
   counts.requests = deps.session.requests;
   if (warnings.length) counts.warnings = warnings;
-  const stillLoading = entities.some((e) => !cursors[e]?.since || cursors[e]?.resume);
+  const stillLoading = entities.some(
+    (e) => !SOFT_ENTITIES.has(e) && (!cursors[e]?.since || cursors[e]?.resume),
+  );
   return {
     result: { status: partial ? 'partial' : 'ok', counts, cursors, trackers },
     newLabels,
@@ -713,6 +1008,19 @@ const NOUN: Record<AccountingEntity, [string, string]> = {
   invoices: ['factura nueva', 'facturas nuevas'],
   payments: ['pago nuevo', 'pagos nuevos'],
   credit_notes: ['nota crédito nueva', 'notas crédito nuevas'],
+  purchases: ['compra nueva', 'compras nuevas'],
+  supplier_payments: ['pago a proveedor nuevo', 'pagos a proveedores nuevos'],
+  journal_lines: ['movimiento contable nuevo', 'movimientos contables nuevos'],
+  quotations: ['cotización nueva', 'cotizaciones nuevas'],
+  stock: ['existencia nueva', 'existencias nuevas'],
+  statements: ['renglón nuevo', 'renglones nuevos'],
+  payroll_costs: ['renglón de nómina nuevo', 'renglones de nómina nuevos'],
+  cost_centers: ['centro de costo nuevo', 'centros de costo nuevos'],
+  taxes: ['impuesto nuevo', 'impuestos nuevos'],
+  payment_methods: ['forma de pago nueva', 'formas de pago nuevas'],
+  warehouses: ['bodega nueva', 'bodegas nuevas'],
+  document_types: ['tipo de documento nuevo', 'tipos de documento nuevos'],
+  sellers: ['vendedor nuevo', 'vendedores nuevos'],
 };
 
 /**
@@ -734,7 +1042,7 @@ export function noticeFor(
     };
   const parts: string[] = [];
   const sample: string[] = [];
-  for (const entity of ['invoices', 'payments'] as const) {
+  for (const entity of ['invoices', 'payments', 'purchases', 'supplier_payments', 'quotations'] as const) {
     const n = outcome.result.counts[entity]?.inserted ?? 0;
     if (!n) continue;
     const [one, many] = NOUN[entity];

@@ -33,9 +33,11 @@ describe('compras del programa contable (cuentas por pagar, 0181)', () => {
         balance: 2380000,
         payments: [{ value: 2380000, due_date: '2026-10-28' }],
       }),
-    ).toEqual({
+    ).toMatchObject({
       externalId: 'abc',
       number: 'FEPA451',
+      documentNumber: 'FC-1-22',
+      kind: 'Compra',
       date: '2026-09-28',
       dueDate: '2026-10-28',
       supplierName: null,
@@ -50,6 +52,11 @@ describe('compras del programa contable (cuentas por pagar, 0181)', () => {
         ?.status,
     ).toBe('paid');
     expect(normalizeSiigoPurchase({ id: 'x' })).toBeNull();
+    // Un documento soporte comparte el listado; se separa por su prefijo «DS».
+    expect(
+      normalizeSiigoPurchase({ id: 'ds', name: 'DS-1-4', date: '2026-01-01', total: 10, balance: 10 })
+        ?.kind,
+    ).toBe('Documento soporte');
   });
 
   it('Alegra: factura de proveedor con su numeración y estado', () => {

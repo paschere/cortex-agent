@@ -94,6 +94,8 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
         deadline: Date.now() + RUN_BUDGET_MS,
         // 0183: los productos también entran al inventario, con existencias.
         importProducts: importAccountingProducts,
+        // 0234: las compras de la tabla también entran a cuentas por pagar.
+        importPurchases: importAccountingPurchases,
       });
     } catch (err) {
       result = {
@@ -162,20 +164,23 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
       try {
         const { data: conn, error } = await db
           .from('accounting_connections')
-          .select('provider, cursors')
+          .select('provider, entities, cursors')
           .eq('id', connectionId)
           .maybeSingle();
         if (error) throw error;
         const system = (conn as { provider?: string } | null)?.provider;
         if (!system) return false;
+        // 0234: con la tabla «Compras» activa, el motor ya las lleva a cuentas por pagar.
+        const selected = (conn as { entities?: string[] } | null)?.entities ?? [];
+        if (selected.includes('purchases')) return false;
         const session = await openAccountingSession(db, connectionId);
         if (!session.listPurchases) return false;
         const today = bogotaToday();
         const cursors = ((conn as { cursors?: Record<string, unknown> }).cursors ?? {}) as Record<
           string,
           unknown
-        > & { purchases?: PurchaseCursor };
-        const previous = cursors.purchases;
+        > & { payables?: PurchaseCursor };
+        const previous = cursors.payables;
         const provider = getAccountingProvider(system);
         if (!provider) return false;
         const plan = planPurchaseSync(provider.id, previous, new Date());
@@ -208,7 +213,7 @@ export const accountingRunJob: JobHandler = async ({ event, step }) => {
         const { error: updateError } = await db
           .from('accounting_connections')
           .update({
-            cursors: { ...cursors, purchases: nextPurchaseState },
+            cursors: { ...cursors, payables: nextPurchaseState },
             ...(partial ? { last_status: 'partial', next_run_at: new Date().toISOString() } : {}),
           })
           .eq('id', connectionId);

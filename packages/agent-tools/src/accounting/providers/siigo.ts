@@ -4,6 +4,7 @@ import { siigoPayrollPage } from '../payroll-provider';
 import type {
   AccountingEntity,
   AccountingProvider,
+  CatalogEntity,
   NormalizedCreditNote,
   NormalizedCustomer,
   NormalizedInvoice,
@@ -15,12 +16,25 @@ import type {
   ProviderSession,
   QueryPlanInput,
 } from '../types';
+import { CATALOG_ENTITIES } from '../types';
 import { siigoLive } from '../live/siigo-live';
 import { siigoInvoicing } from './invoicing';
 import { siigoOutbound } from './outbound';
-import { siigoPurchasePage } from './purchases';
+import { type NormalizedPurchase, normalizeSiigoPurchase, siigoPurchasePage } from './purchases';
 import { siigoReports } from './reports-siigo';
-import { SiigoClient, SiigoError, hasMorePages } from './siigo-client';
+import {
+  CATALOG_PATH,
+  DOCUMENT_TYPE_CLASSES,
+  PAYMENT_TYPE_CLASSES,
+  catalogRows,
+  isEgressName,
+  normalizeSiigoCatalogItem,
+  normalizeSiigoJournalLines,
+  normalizeSiigoQuotation,
+  normalizeSiigoSupplierPayment,
+} from './siigo-extra';
+import { SiigoClient, SiigoError, hasMorePages, siigoPartnerId } from './siigo-client';
+import { SIIGO_WEBHOOK_TOPICS } from '../webhook';
 
 /**
  * SIIGO NUBE (Colombia), el primer programa contable conectado.
@@ -47,12 +61,17 @@ const LOCAL_CURRENCY = 'COP';
 /** El repaso diario mira las facturas de los últimos seis meses. */
 const SWEEP_MONTHS = 6;
 
-const PATHS: Record<AccountingEntity, string> = {
+/** Las cosas que se piden al programa en su propio listado (el resto se arma de otras lecturas). */
+const PATHS: Partial<Record<AccountingEntity, string>> = {
   customers: '/v1/customers',
   products: '/v1/products',
   invoices: '/v1/invoices',
   payments: '/v1/vouchers',
   credit_notes: '/v1/credit-notes',
+  purchases: '/v1/purchases',
+  supplier_payments: '/v1/payment-receipts',
+  quotations: '/v1/quotations',
+  journal_lines: '/v1/journals',
 };
 
 // ---------------------------------------------------------------------------
@@ -382,18 +401,29 @@ export function normalizeSiigoCreditNote(n: SiigoCreditNote): NormalizedCreditNo
   };
 }
 
-function normalize(entity: AccountingEntity, record: unknown): NormalizedRecord | null {
+function normalize(entity: AccountingEntity, record: unknown): NormalizedRecord[] {
+  const one = (r: NormalizedRecord | null): NormalizedRecord[] => (r ? [r] : []);
   switch (entity) {
     case 'customers':
-      return normalizeSiigoCustomer(record as SiigoCustomer);
+      return one(normalizeSiigoCustomer(record as SiigoCustomer));
     case 'products':
-      return normalizeSiigoProduct(record as SiigoProduct);
+      return one(normalizeSiigoProduct(record as SiigoProduct));
     case 'invoices':
-      return normalizeSiigoInvoice(record as SiigoInvoice);
+      return one(normalizeSiigoInvoice(record as SiigoInvoice));
     case 'payments':
-      return normalizeSiigoVoucher(record as SiigoVoucher);
+      return one(normalizeSiigoVoucher(record as SiigoVoucher));
     case 'credit_notes':
-      return normalizeSiigoCreditNote(record as SiigoCreditNote);
+      return one(normalizeSiigoCreditNote(record as SiigoCreditNote));
+    case 'purchases':
+      return one(normalizeSiigoPurchase(record as Record<string, unknown>));
+    case 'supplier_payments':
+      return one(normalizeSiigoSupplierPayment(record as Record<string, unknown>));
+    case 'quotations':
+      return one(normalizeSiigoQuotation(record as Record<string, unknown>));
+    case 'journal_lines':
+      return normalizeSiigoJournalLines(record as Record<string, unknown>);
+    default:
+      return [];
   }
 }
 
@@ -401,7 +431,40 @@ function normalize(entity: AccountingEntity, record: unknown): NormalizedRecord 
 // El programa
 // ---------------------------------------------------------------------------
 
+/** Cuánta historia de movimientos contables trae la primera carga (el volumen sube rápido). */
+export const JOURNAL_HISTORY_MONTHS = 12;
+
+/** Los meses de la ventana de movimientos, de AAAA-MM-01 a fin de mes (UTC). */
+export function journalWindows(now: Date, months = JOURNAL_HISTORY_MONTHS): ProviderQuery[] {
+  const out: ProviderQuery[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
+    out.push({
+      date_start: start.toISOString().slice(0, 10),
+      date_end: end.toISOString().slice(0, 10),
+    });
+  }
+  return out;
+}
+
+/** Catálogos: una consulta, o una por clase de documento cuando Siigo lo exige. */
+function catalogQueries(entity: AccountingEntity): ProviderQuery[] {
+  if (entity === 'payment_methods') return PAYMENT_TYPE_CLASSES.map((c) => ({ document_type: c }));
+  if (entity === 'document_types') return DOCUMENT_TYPE_CLASSES.map((c) => ({ type: c }));
+  return [{}];
+}
+
 export function siigoQueries(entity: AccountingEntity, input: QueryPlanInput): ProviderQuery[] {
+  if ((CATALOG_ENTITIES as readonly string[]).includes(entity)) return catalogQueries(entity);
+  if (entity === 'journal_lines') {
+    if (input.mode === 'incremental' && input.since) {
+      const since = siigoDateTime(input.since);
+      return [{ created_start: since }, { updated_start: since }];
+    }
+    return journalWindows(input.now);
+  }
+  if (entity === 'stock' || entity === 'statements' || entity === 'payroll_costs') return [];
   if (entity === 'customers' || entity === 'products') {
     // Siigo defaults to active Customers. Enumerate every third-party kind
     // and activity state; products default to active Products without stock
@@ -433,7 +496,7 @@ export function siigoQueries(entity: AccountingEntity, input: QueryPlanInput): P
     // (2026-10-19: Siigo tenía 11 y la tabla 4, cada corrida «+0»). Además se
     // pide siempre una ventana por fecha del documento, que es el filtro con
     // el que `accounting.query` sí los ve; son pocas páginas.
-    if (entity === 'payments')
+    if (entity === 'payments' || entity === 'supplier_payments')
       return [
         { created_start: since },
         { updated_start: since },
@@ -445,8 +508,16 @@ export function siigoQueries(entity: AccountingEntity, input: QueryPlanInput): P
   // across runs, so an old unpaid invoice or its receipt cannot be omitted.
   if (entity === 'credit_notes' && input.mode === 'sweep')
     return [{ created_start: monthsAgo(input.now, SWEEP_MONTHS) }];
-  if ((entity === 'invoices' || entity === 'payments') && input.mode === 'sweep')
-    return [{ date_start: monthsAgo(input.now, entity === 'payments' ? 12 : SWEEP_MONTHS) }];
+  // Compras y egresos: un pago baja el saldo de la compra sin «modificarla».
+  if (entity === 'purchases' && input.mode === 'sweep')
+    return [{ date_start: monthsAgo(input.now, SWEEP_MONTHS) }];
+  if (
+    (entity === 'invoices' || entity === 'payments' || entity === 'supplier_payments') &&
+    input.mode === 'sweep'
+  )
+    return [
+      { date_start: monthsAgo(input.now, entity === 'invoices' ? SWEEP_MONTHS : 12) },
+    ];
   return [{}];
 }
 
@@ -490,7 +561,26 @@ export const siigoProvider: AccountingProvider = {
     { key: 'access_key', label: 'Access key', secret: true, placeholder: 'Pega la access key' },
   ],
   accountLabelField: 'username',
-  entities: ['customers', 'products', 'invoices', 'payments', 'credit_notes'],
+  entities: [
+    'customers',
+    'products',
+    'invoices',
+    'payments',
+    'credit_notes',
+    'purchases',
+    'supplier_payments',
+    'journal_lines',
+    'quotations',
+    'stock',
+    'statements',
+    'payroll_costs',
+    'cost_centers',
+    'taxes',
+    'payment_methods',
+    'warehouses',
+    'document_types',
+    'sellers',
+  ],
   options: ['payroll'],
   paymentsLabel: 'Recibos de caja',
   queries: siigoQueries,
@@ -516,10 +606,27 @@ export const siigoProvider: AccountingProvider = {
       reports: siigoReports(client, { fetch: runtime.fetch }),
       live: (req) => siigoLive(client, req),
       writer: siigoWriter(client),
+      webhooks: {
+        async subscribe(url) {
+          const topics: string[] = [];
+          const failed: string[] = [];
+          for (const topic of SIIGO_WEBHOOK_TOPICS) {
+            try {
+              await client.post('/v1/webhooks', { application_id: siigoPartnerId(), topic, url }, {
+                noun: 'el aviso de Siigo',
+              });
+              topics.push(topic);
+            } catch {
+              failed.push(topic);
+            }
+          }
+          return { topics, failed };
+        },
+      },
       async refreshInvoices(numbers) {
         const out: NormalizedInvoice[] = [];
         for (const name of [...new Set(numbers)].slice(0, 25)) {
-          const result = await client.page<unknown>(PATHS.invoices, { name }, 1, 5);
+          const result = await client.page<unknown>(PATHS.invoices as string, { name }, 1, 5);
           for (const r of result.results) {
             const inv = normalizeSiigoInvoice(r as SiigoInvoice);
             if (inv) out.push(inv);
@@ -527,25 +634,110 @@ export const siigoProvider: AccountingProvider = {
         }
         return out;
       },
+      async refreshPurchases(numbers) {
+        const out: NormalizedPurchase[] = [];
+        for (const name of [...new Set(numbers)].slice(0, 25)) {
+          const result = await client.page<unknown>(PATHS.purchases as string, { name }, 1, 5);
+          for (const r of result.results) {
+            const p = normalizeSiigoPurchase(r as Record<string, unknown>);
+            if (p) out.push(p);
+          }
+        }
+        return out;
+      },
       async remoteTotal(entity) {
         // Sólo las que se piden sin filtros: clientes y productos se piden por
-        // alcance (tipo, activo), así que su total no es una sola cifra.
-        if (entity !== 'invoices' && entity !== 'payments') return null;
-        const result = await client.page<unknown>(PATHS[entity], {}, 1, 1);
+        // alcance (tipo, activo), así que su total no es una sola cifra. Los
+        // movimientos son líneas de comprobantes en una ventana: no se auditan.
+        if (!REMOTE_TOTAL.has(entity)) return null;
+        const path = PATHS[entity];
+        if (!path) return null;
+        const result = await client.page<unknown>(path, {}, 1, 1);
         return result.total > 0 ? result.total : result.results.length;
       },
       async listPage(entity, query, page) {
-        const result = await pageRelaxing(client, PATHS[entity], query, page);
-        const records = result.results
-          .map((r) => normalize(entity, r))
-          .filter((r): r is NormalizedRecord => r !== null);
+        if ((CATALOG_ENTITIES as readonly string[]).includes(entity)) {
+          // Los catálogos no se paginan: una respuesta con todo.
+          if (page > 1) return { records: [], hasMore: false };
+          const catalog = entity as CatalogEntity;
+          const body = await client.get<unknown>(CATALOG_PATH[catalog], query);
+          const hint = query.document_type ?? query.type;
+          const raw = catalogRows(body);
+          const records: NormalizedRecord[] = [];
+          for (const r of raw) {
+            const item = normalizeSiigoCatalogItem(catalog, r, hint);
+            if (item) records.push(item);
+          }
+          return { records, hasMore: false, total: raw.length, skipped: raw.length - records.length };
+        }
+        const path = PATHS[entity];
+        if (!path) return { records: [], hasMore: false };
+        const fetched = await pageForEntity(client, entity, path, query, page);
+        let skipped = 0;
+        const records: NormalizedRecord[] = [];
+        for (const r of fetched.results) {
+          if (entity === 'supplier_payments' && fetched.usedVouchers) {
+            const name = (r as { name?: string }).name;
+            if (!isEgressName(name)) continue;
+          }
+          const normalized = normalize(entity, r);
+          if (!normalized.length) skipped += 1;
+          records.push(...normalized);
+        }
         return {
           records,
-          hasMore: hasMorePages(result),
-          total: result.total,
-          skipped: result.results.length - records.length,
+          hasMore: hasMorePages(fetched),
+          total: fetched.total,
+          skipped,
         };
       },
     };
   },
 };
+
+/** Las que tienen un total de verdad en su listado sin filtros. */
+const REMOTE_TOTAL = new Set<AccountingEntity>([
+  'invoices',
+  'payments',
+  'credit_notes',
+  'purchases',
+  'quotations',
+]);
+
+/**
+ * Una página de un listado, con dos salidas ante lo que Siigo no documenta:
+ *   - filtros `created_start`/`updated_start` que un listado no acepta (400):
+ *     se pide por fecha del documento, que todos los listados conocen;
+ *   - egresos: si `/v1/payment-receipts` no se puede listar (404), se leen los
+ *     «CE» del listado de recibos de caja.
+ */
+async function pageForEntity(
+  client: SiigoClient,
+  entity: AccountingEntity,
+  path: string,
+  query: ProviderQuery,
+  page: number,
+): Promise<Awaited<ReturnType<SiigoClient['page']>> & { usedVouchers?: boolean }> {
+  const attempt = async (p: string, q: ProviderQuery) => {
+    try {
+      return await pageRelaxing(client, p, q, page);
+    } catch (err) {
+      const since = q.created_start ?? q.updated_start;
+      if (err instanceof SiigoError && err.status === 400 && since && !q.date_start)
+        return pageRelaxing(
+          client,
+          p,
+          { date_start: since.slice(0, 10), ...(q.date_end ? { date_end: q.date_end } : {}) },
+          page,
+        );
+      throw err;
+    }
+  };
+  if (entity !== 'supplier_payments') return attempt(path, query);
+  try {
+    return await attempt(path, query);
+  } catch (err) {
+    if (!(err instanceof SiigoError) || (err.status !== 404 && err.status !== 405)) throw err;
+    return { ...(await attempt('/v1/vouchers', query)), usedVouchers: true };
+  }
+}

@@ -72,6 +72,9 @@ export interface RunCounts extends Partial<Record<AccountingEntity, EntityCounts
   requests?: number;
   /** 0183: productos creados o actualizados en el catálogo de inventario. */
   inventory_products?: number;
+  /** 0234: compras nuevas en cuentas por pagar y las que quedaron pagadas por el programa. */
+  payables_created?: number;
+  payables_paid?: number;
   /** 0183: ajustes de existencias por la diferencia con el programa. */
   inventory_adjusted?: number;
   /** 0183: páginas de productos que no se pudieron pasar al inventario. */
@@ -92,7 +95,12 @@ export interface AccountingConnectionRow {
   entities: AccountingSelection[];
   trackers: Partial<Record<AccountingEntity, string>>;
   cursors: Partial<Record<AccountingEntity, EntityCursor>> & {
-    purchases?: PurchaseCursor;
+    /**
+     * Compras hacia cuentas por pagar SIN la tabla (0181). Desde 0234 la tabla de
+     * compras lleva su propio cursor en `purchases`; éste es sólo para
+     * conexiones que apagaron «Compras».
+     */
+    payables?: PurchaseCursor;
     payroll?: PurchaseCursor;
   };
   interval_minutes: number;
@@ -120,7 +128,8 @@ export function cleanEntities(
   provider: AccountingProvider,
   raw: readonly string[] | undefined,
 ): AccountingSelection[] {
-  const wanted = new Set(raw ?? []);
+  // 0234: sin elegir nada se trae TODO lo que el programa sabe traer (la nómina por persona es opcional).
+  const wanted = new Set(raw ?? provider.entities);
   const entities: AccountingSelection[] = ACCOUNTING_ENTITIES.filter(
     (e) => wanted.has(e) && provider.entities.includes(e),
   );

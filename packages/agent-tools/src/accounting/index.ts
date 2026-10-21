@@ -45,6 +45,13 @@ export type {
   RunCounts as AccountingRunCounts,
 } from './store';
 export { accountingTableSpec } from './tables';
+export {
+  SIIGO_WEBHOOK_TOPICS,
+  siigoWebhookSignature,
+  siigoWebhookUrl,
+  verifySiigoWebhook,
+  webhookShouldRunNow,
+} from './webhook';
 export { nextPurchaseCursor, planPurchaseSync } from './purchase-plan';
 export { planPayrollSync } from './payroll-plan';
 export {

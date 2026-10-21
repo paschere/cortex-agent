@@ -464,3 +464,120 @@ describe('Siigo rechaza combinaciones de filtros (parameters_exclusive)', () => 
     ).rejects.toThrow();
   });
 });
+
+describe('0234 · la sesión de Siigo con las cosas nuevas', () => {
+  function session(handler: (url: URL, n: number) => Response) {
+    const { fetchImpl, calls } = fakeSiigo((url, _init, n) =>
+      url.pathname === '/auth' ? json(201, AUTH_OK) : handler(url, n),
+    );
+    const s = siigoProvider.open(
+      { username: 'u@x.co', access_key: 'k' },
+      { fetch: fetchImpl, sleep: async () => undefined, minIntervalMs: 0 },
+    );
+    return { s, calls };
+  }
+  const page = (results: unknown[], total = results.length) =>
+    json(200, { pagination: { page: 1, page_size: 100, total_results: total }, results });
+
+  it('los egresos se leen de /v1/payment-receipts', async () => {
+    const { s, calls } = session(() =>
+      page([
+        {
+          id: 'e1',
+          name: 'RP-1-15',
+          date: '2026-10-02',
+          supplier: { identification: '900373115' },
+          items: [{ due: { prefix: 'FC', consecutive: 22 }, value: 100 }],
+          payment: { value: 100 },
+        },
+      ]),
+    );
+    const r = await s.listPage('supplier_payments', { created_start: '2026-10-01T00:00:00Z' }, 1);
+    expect(r.records).toHaveLength(1);
+    expect(calls.find((c) => c.url.includes('/v1/'))?.url).toContain('/v1/payment-receipts');
+  });
+
+  it('si payment-receipts no se puede listar (404) se leen los «CE» de los recibos de caja', async () => {
+    const { s, calls } = session((url) =>
+      url.pathname === '/v1/payment-receipts'
+        ? json(404, { Errors: [{ Code: 'not_found', Message: 'no' }] })
+        : page([
+            { id: 'rc', name: 'RC-1-4', date: '2026-10-02', customer: { identification: '1' }, payment: { value: 5 } },
+            { id: 'ce', name: 'CE-1-9', date: '2026-10-03', supplier: { identification: '900373115' }, payment: { value: 70 } },
+          ]),
+    );
+    const r = await s.listPage('supplier_payments', {}, 1);
+    expect(r.records.map((x) => x.externalId)).toEqual(['ce']);
+    expect(calls.some((c) => c.url.includes('/v1/vouchers'))).toBe(true);
+  });
+
+  it('un listado que rechaza created_start/updated_start (400) se pide por fecha del documento', async () => {
+    const { s, calls } = session((url) =>
+      url.searchParams.has('created_start')
+        ? json(400, { Errors: [{ Code: 'invalid_params', Message: 'created_start' }] })
+        : page([{ id: 'q1', name: 'CO-1-5', date: '2026-10-10', customer: { identification: '8' }, total: 9 }]),
+    );
+    const r = await s.listPage('quotations', { created_start: '2026-10-01T00:00:00Z' }, 1);
+    expect(r.records).toHaveLength(1);
+    const last = calls[calls.length - 1]?.url ?? '';
+    expect(last).toContain('date_start=2026-10-01');
+    expect(last).not.toContain('created_start');
+  });
+
+  it('los movimientos de un comprobante salen como líneas y se cuentan los que no se leen', async () => {
+    const { s } = session(() =>
+      page([
+        {
+          id: 'j1',
+          name: 'CC-1-1',
+          date: '2026-09-30',
+          items: [
+            { account: { code: '1105', movement: 'Debit' }, value: 10 },
+            { account: { code: '4135', movement: 'Credit' }, value: 10 },
+          ],
+        },
+        { id: 'j2' },
+      ]),
+    );
+    const r = await s.listPage('journal_lines', { date_start: '2026-09-01', date_end: '2026-09-30' }, 1);
+    expect(r.records).toHaveLength(2);
+    expect(r.skipped).toBe(1);
+  });
+
+  it('un catálogo llega como lista, sin paginar, con su clase de documento', async () => {
+    const { s, calls } = session(() =>
+      json(200, [
+        { id: 3, name: 'Contado', type: 'Cash' },
+        { id: 4, name: 'Crédito 30 días', type: 'Credit', due_date: true },
+      ]),
+    );
+    const r = await s.listPage('payment_methods', { document_type: 'FV' }, 1);
+    expect(r.records).toHaveLength(2);
+    expect(calls.find((c) => c.url.includes('payment-types'))?.url).toContain('document_type=FV');
+    expect((await s.listPage('payment_methods', { document_type: 'FV' }, 2)).records).toEqual([]);
+  });
+
+  it('las compras pagadas se vuelven a leer por su número, y el total remoto sirve para auditar', async () => {
+    const { s, calls } = session(() =>
+      page([{ id: 'p1', name: 'FC-2-22', date: '2026-09-28', total: 10, balance: 0 }], 42),
+    );
+    const fresh = await s.refreshPurchases?.(['FC-2-22', 'FC-2-22']);
+    expect(fresh).toHaveLength(1);
+    expect(calls.filter((c) => c.url.includes('/v1/purchases'))).toHaveLength(1);
+    expect(calls.find((c) => c.url.includes('/v1/purchases'))?.url).toContain('name=FC-2-22');
+    expect(await s.remoteTotal?.('purchases')).toBe(42);
+    expect(await s.remoteTotal?.('journal_lines')).toBeNull();
+    expect(await s.remoteTotal?.('customers')).toBeNull();
+  });
+
+  it('avisos: se suscribe a cada tópico y dice cuáles no aceptó', async () => {
+    const { s, calls } = session((url, n) =>
+      url.pathname === '/v1/webhooks' && n > 4 ? json(400, { Errors: [{ Code: 'x', Message: 'no' }] }) : json(201, {}),
+    );
+    const out = await s.webhooks?.subscribe('https://app.test/api/webhooks/siigo/o/c/sig');
+    expect(out?.topics.length).toBeGreaterThan(0);
+    expect(out ? out.topics.length + out.failed.length : 0).toBe(3);
+    const body = JSON.parse(String(calls.find((c) => c.url.endsWith('/v1/webhooks'))?.init.body));
+    expect(body).toMatchObject({ url: 'https://app.test/api/webhooks/siigo/o/c/sig', topic: expect.stringContaining('products') });
+  });
+});

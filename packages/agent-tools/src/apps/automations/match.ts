@@ -79,9 +79,9 @@ export function matchesTrigger(
     if (event.backfill) return false;
     const parts = accountingSlugParts(trackerSlug ?? event.trackerSlug);
     if (!parts || parts.provider !== trigger.provider) return false;
-    return detectAccountingEvents(parts.entity, event.kind, event.before, event.after).includes(
-      trigger.event,
-    );
+    return detectAccountingEvents(parts.entity, event.kind, event.before, event.after, {
+      threshold: trigger.event === 'stock_low' ? trigger.threshold : undefined,
+    }).includes(trigger.event);
   }
   if (trigger.type !== event.kind) return false;
   if ('tracker' in trigger && trackerSlug && trigger.tracker !== trackerSlug) return false;

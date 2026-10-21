@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { trackerFieldsSchema } from '../trackers/schema';
 import { listAccountingProviders } from './providers';
-import { accountingTableSpec, invoiceValues, paymentRowsFor, receivableFor } from './tables';
+import {
+  accountingTableSpec,
+  catalogValues,
+  customerValues,
+  invoiceValues,
+  journalLineValues,
+  paymentRowsFor,
+  purchaseState,
+  receivableFor,
+  statementValues,
+  stockState,
+  valuesFor,
+} from './tables';
 import { ACCOUNTING_ENTITIES, type NormalizedInvoice, type NormalizedPayment } from './types';
 
 const ctx = { today: '2026-10-01', customerNames: new Map([['c-1', 'Coltrans S.A.S.']]) };
@@ -130,5 +142,95 @@ describe('las tablas de un programa contable', () => {
     } finally {
       process.env = env;
     }
+  });
+});
+
+describe('0234 · tablas de compras, egresos, movimientos, existencias, estados y catálogos', () => {
+  const siigo = { id: 'siigo', name: 'Siigo' };
+  const ctx = { today: '2026-10-21', customerNames: new Map([['s-1', 'Papelería Andina']]) };
+
+  it('cada cosa nueva tiene su tabla siigo_*, con campos legibles y una clave única', () => {
+    const slugs = ACCOUNTING_ENTITIES.map((e) => accountingTableSpec(siigo, e).slug);
+    expect(new Set(slugs).size).toBe(ACCOUNTING_ENTITIES.length);
+    expect(slugs).toEqual(expect.arrayContaining([
+      'siigo_compras',
+      'siigo_pagos_proveedores',
+      'siigo_movimientos_contables',
+      'siigo_cotizaciones',
+      'siigo_existencias',
+      'siigo_estados_financieros',
+      'siigo_costo_nomina',
+      'siigo_centros_costo',
+      'siigo_impuestos',
+      'siigo_formas_pago',
+      'siigo_bodegas',
+      'siigo_tipos_documento',
+      'siigo_vendedores',
+    ]));
+    for (const e of ACCOUNTING_ENTITIES) {
+      const spec = accountingTableSpec(siigo, e);
+      expect(spec.fields.length).toBeGreaterThan(0);
+      expect(spec.fields.length).toBeLessThanOrEqual(20);
+      expect(spec.slug.length).toBeLessThanOrEqual(48);
+      for (const f of spec.fields) expect(f.label).toMatch(/[a-záéíóúñ]/i);
+    }
+  });
+
+  it('proveedores y clientes comparten la tabla, filtrable por «Relación»', () => {
+    const spec = accountingTableSpec(siigo, 'customers');
+    const rel = spec.fields.find((f) => f.key === 'relacion');
+    expect(rel?.options).toEqual(['Cliente', 'Proveedor', 'Otro']);
+    expect(spec.description).toContain('proveedores');
+    expect(customerValues({ externalId: '1', name: 'X', relationship: 'Proveedor' })).toMatchObject({ relacion: 'Proveedor' });
+  });
+
+  it('compra: estado Por pagar, Vencida, Pagada o Anulada', () => {
+    const base = { externalId: 'p', number: 'F1', date: '2026-09-01', total: 100, currency: 'COP' };
+    expect(purchaseState({ status: 'open', balance: 100, dueDate: '2026-12-01' }, '2026-10-21')).toBe('Por pagar');
+    expect(purchaseState({ status: 'open', balance: 100, dueDate: '2026-10-01' }, '2026-10-21')).toBe('Vencida');
+    expect(purchaseState({ status: 'paid', balance: 0 }, '2026-10-21')).toBe('Pagada');
+    expect(purchaseState({ status: 'annulled', balance: 100 }, '2026-10-21')).toBe('Anulada');
+    expect(
+      valuesFor('purchases', { ...base, balance: 100, status: 'open', supplierExternalId: 's-1', supplierTaxId: '900.373.115-2' } as never, ctx),
+    ).toMatchObject({ proveedor: 'Papelería Andina', nit: '9003731152', estado: 'Por pagar', tipo: 'Compra' });
+  });
+
+  it('movimiento: débito o crédito en su columna, y la nómina sin tercero', () => {
+    const line = {
+      externalId: 'j:0',
+      journalId: 'j',
+      journalNumber: 'CC-1-1',
+      date: '2026-09-30',
+      account: '2205',
+      movement: 'credit' as const,
+      value: 70,
+    };
+    const v = journalLineValues(line, ctx);
+    expect(v).toMatchObject({ credito: 70, movimiento: 'Crédito', mes: '2026-09' });
+    expect(v.debito).toBeUndefined();
+    const conf = journalLineValues({ ...line, confidential: true, partyTaxId: '123', description: 'Ana' }, ctx);
+    expect(conf.tercero).toBe('Nómina (confidencial)');
+    expect(conf.nit_tercero).toBeUndefined();
+    expect(conf.descripcion).toBeUndefined();
+  });
+
+  it('existencias: sin existencias, bajo el mínimo (del producto o de la regla) o con existencias', () => {
+    expect(stockState(0, 5)).toBe('Sin existencias');
+    expect(stockState(4, 5)).toBe('Bajo mínimo');
+    expect(stockState(6, 5)).toBe('Con existencias');
+    expect(stockState(6, undefined)).toBe('Con existencias');
+    expect(stockState(8, undefined, 10)).toBe('Bajo mínimo');
+  });
+
+  it('un catálogo y un renglón de estado llevan sus campos', () => {
+    expect(catalogValues({ externalId: '1', catalog: 'taxes', name: 'IVA 19%', kind: 'IVA', percentage: 19, active: false })).toEqual({
+      nombre: 'IVA 19%',
+      tipo: 'IVA',
+      porcentaje: 19,
+      estado: 'Inactivo',
+    });
+    expect(
+      statementValues({ externalId: 'x', period: '2026-09', statement: 'Balance general', section: 'Activo', name: 'Efectivo', amount: 5, inProgress: true }),
+    ).toMatchObject({ periodo: '2026-09', mes: '2026-09-01', en_curso: 'Sí' });
   });
 });

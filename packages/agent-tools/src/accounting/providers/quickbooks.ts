@@ -63,7 +63,7 @@ const SWEEP_MONTHS = 6;
 /** Si QuickBooks no dice la moneda de la empresa (no debería pasar). */
 const FALLBACK_CURRENCY = 'USD';
 
-const TABLES: Record<AccountingEntity, string> = {
+const TABLES: Partial<Record<AccountingEntity, string>> = {
   customers: 'Customer',
   products: 'Item',
   invoices: 'Invoice',
@@ -292,6 +292,18 @@ export function quickbooksQueries(
   entity: AccountingEntity,
   input: QueryPlanInput,
 ): ProviderQuery[] {
+  // Los estados mensuales se arman de otra lectura; las compras (Bill) se
+  // piden por fecha del documento.
+  if (entity === 'statements' || entity === 'stock' || entity === 'payroll_costs') return [];
+  if (entity === 'purchases')
+    return [
+      {
+        since:
+          input.mode === 'incremental' && input.since
+            ? monthsAgo(new Date(Date.parse(input.since)), 1)
+            : monthsAgo(input.now, input.mode === 'sweep' ? SWEEP_MONTHS : INITIAL_MONTHS),
+      },
+    ];
   if (input.mode === 'incremental' && input.since)
     return [
       {
@@ -336,7 +348,7 @@ export const quickbooksProvider: AccountingProvider = {
     { key: 'company_name', label: 'Nombre de la empresa', secret: false },
   ],
   accountLabelField: 'company_name',
-  entities: ['customers', 'products', 'invoices', 'payments'],
+  entities: ['customers', 'products', 'invoices', 'payments', 'purchases', 'statements'],
   paymentsLabel: 'Pagos recibidos',
   connect: 'oauth',
   setupMissing: () => quickbooksSetupMissing(),
@@ -410,8 +422,19 @@ export const quickbooksProvider: AccountingProvider = {
       reports: quickbooksReports(ready, homeCurrency),
       writer: quickbooksWriter(ready),
       async listPage(entity, query, page) {
+        if (entity === 'purchases') {
+          const bills = await quickbooksBillPage(
+            ready(),
+            query.since ?? monthsAgo(new Date(), INITIAL_MONTHS),
+            page,
+            await homeCurrency(),
+          );
+          return { records: bills.records, hasMore: bills.hasMore };
+        }
+        const table = TABLES[entity];
+        if (!table) return { records: [], hasMore: false };
         const result = await ready().page<unknown>(
-          TABLES[entity],
+          table,
           query.where,
           query.orderby,
           page,
@@ -440,7 +463,7 @@ export const quickbooksProvider: AccountingProvider = {
                 return normalizeQuickbooksInvoice(r as QuickBooksInvoice, currency);
               case 'payments':
                 return normalizeQuickbooksPayment(r as QuickBooksPayment, invoiceNumbers, currency);
-              case 'credit_notes':
+              default:
                 return null;
             }
           })

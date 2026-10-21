@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   type AccountingCardData,
   type CardTone,
+  ENTITY_GROUPS,
   ENTITY_LABELS,
   INTERVAL_OPTIONS,
 } from '@/lib/accounting/card';
@@ -18,6 +19,7 @@ import {
   type AccountingActionResult,
   connectAccountingProgram,
   disconnectAccountingProgram,
+  enableSiigoStockWebhook,
   saveAccountingProgramSettings,
   syncAccountingProgramNow,
 } from '../accounting-actions';
@@ -59,31 +61,52 @@ function EntityPicker({
   onChange: (next: AccountingSelection[]) => void;
   disabled: boolean;
 }) {
+  const offered = new Set<AccountingSelection>([
+    ...card.provider.entities,
+    ...card.provider.options,
+  ]);
+  const groups = ENTITY_GROUPS.map((g) => ({
+    ...g,
+    entities: g.entities.filter((e) => offered.has(e)),
+  })).filter((g) => g.entities.length);
   return (
     <fieldset className="mt-3">
       <legend className="text-xs font-semibold text-ink">Qué traer</legend>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {[...card.provider.entities, ...card.provider.options].map((entity) => {
-          const on = value.includes(entity);
-          return (
-            <button
-              key={entity}
-              type="button"
-              disabled={disabled}
-              aria-pressed={on}
-              onClick={() => onChange(on ? value.filter((e) => e !== entity) : [...value, entity])}
-              className={clsx(
-                'rounded-pill border px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50',
-                on
-                  ? 'border-primary bg-primary-soft text-primary'
-                  : 'border-border bg-surface text-ink-muted hover:bg-surface-2',
-              )}
-            >
-              {entityLabel(card, entity)}
-            </button>
-          );
-        })}
-      </div>
+      <p className="mt-0.5 text-xs leading-snug text-ink-muted">
+        Se trae todo por defecto. Apaga lo que no quieras: queda sin sincronizar, y la tabla que ya
+        existe se conserva.
+      </p>
+      {groups.map((group) => (
+        <div key={group.title} className="mt-2">
+          <div className="text-micro font-semibold uppercase tracking-wide text-ink-muted">
+            {group.title}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {group.entities.map((entity) => {
+              const on = value.includes(entity);
+              return (
+                <button
+                  key={entity}
+                  type="button"
+                  disabled={disabled}
+                  aria-pressed={on}
+                  onClick={() =>
+                    onChange(on ? value.filter((e) => e !== entity) : [...value, entity])
+                  }
+                  className={clsx(
+                    'rounded-pill border px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50',
+                    on
+                      ? 'border-primary bg-primary-soft text-primary'
+                      : 'border-border bg-surface text-ink-muted hover:bg-surface-2',
+                  )}
+                >
+                  {entityLabel(card, entity)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
       {card.provider.options.includes('payroll') ? (
         <p className="mt-1.5 text-xs leading-snug text-ink-muted">
           Nómina: {card.provider.name} no tiene API de nómina; se leen los comprobantes contables de
@@ -467,6 +490,16 @@ export function AccountingProviderCard({ card }: { card: AccountingCardData }) {
           >
             Ajustes
           </Button>
+          {card.provider.id === 'siigo' ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending || !card.enabled}
+              onClick={() => run(() => enableSiigoStockWebhook())}
+            >
+              Avisos de inventario
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="ghost"

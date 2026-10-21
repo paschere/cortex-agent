@@ -4,11 +4,20 @@ import { forgetAutomationWatch } from '../apps/automations/emit';
 import type { ImportSystemPaymentsInput, ImportSystemPaymentsResult } from '../payments/import';
 import { createFakeSupabase } from '../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../tenancy/scoped-client';
+import type { MonthReading } from './derived';
 import { alegraProvider } from './providers/alegra';
+import type { NormalizedPurchase } from './providers/purchases';
 import { quickbooksProvider } from './providers/quickbooks';
 import { siigoProvider } from './providers/siigo';
 import type { AccountingConnectionRow } from './store';
-import { auditCoverage, finishedCursor, noticeFor, planEntity, runAccountingSync } from './sync';
+import {
+  type ImportPurchases,
+  auditCoverage,
+  finishedCursor,
+  noticeFor,
+  planEntity,
+  runAccountingSync,
+} from './sync';
 import type {
   AccountingEntity,
   NormalizedRecord,
@@ -781,5 +790,403 @@ describe('Siigo → app: sucesos contables que salen de la sincronización (0232
     });
     if (out.result.status === 'error') throw new Error(out.result.error);
     expect(asked).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 0234: todo lo del programa como tablas
+// ---------------------------------------------------------------------------
+
+const purchaseRecords: NormalizedRecord[] = [
+  {
+    externalId: 'pu-1',
+    number: 'FEPA451',
+    documentNumber: 'FC-2-22',
+    kind: 'Compra',
+    date: '2026-09-28',
+    dueDate: '2026-10-28',
+    supplierExternalId: 'c-9',
+    supplierTaxId: '900373115',
+    total: 2_380_000,
+    balance: 2_380_000,
+    currency: 'COP',
+    status: 'open',
+  } as NormalizedPurchase,
+  {
+    externalId: 'pu-2',
+    number: 'DS-1-4',
+    documentNumber: 'DS-1-4',
+    kind: 'Documento soporte',
+    date: '2026-09-10',
+    dueDate: '2026-09-20',
+    supplierName: 'Persona natural',
+    total: 100_000,
+    balance: 100_000,
+    currency: 'COP',
+    status: 'open',
+  } as NormalizedPurchase,
+];
+
+function purchasesImporter() {
+  const calls: NormalizedPurchase[][] = [];
+  const importPurchases: ImportPurchases = async (_db, list) => {
+    calls.push([...list]);
+    return { created: list.length, duplicates: 0, paid: 0, errors: [] };
+  };
+  return { calls, importPurchases };
+}
+
+describe('0234 · compras, egresos, existencias, movimientos, estados y catálogos', () => {
+  const all = (over: Partial<AccountingConnectionRow> = {}) =>
+    connection({
+      entities: [
+        'customers',
+        'cost_centers',
+        'products',
+        'stock',
+        'purchases',
+        'supplier_payments',
+        'quotations',
+        'journal_lines',
+        'statements',
+        'payroll_costs',
+      ],
+      ...over,
+    });
+
+  it('las compras llenan su tabla (con estado y proveedor) y pasan a cuentas por pagar', async () => {
+    const w = world();
+    const imp = purchasesImporter();
+    const { session } = fakeSession({
+      customers: [[{ externalId: 'c-9', name: 'Papelería Andina', relationship: 'Proveedor', taxId: '900373115' }]],
+      purchases: [purchaseRecords],
+    });
+    const out = await runAccountingSync(w.db, all({ entities: ['customers', 'purchases'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+      importPurchases: imp.importPurchases,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    const rows = (w.tables.tracker_rows ?? []) as Row[];
+    expect(rows.find((r) => r.external_key === 'pu-1')?.values).toMatchObject({
+      numero: 'FEPA451',
+      documento: 'FC-2-22',
+      tipo: 'Compra',
+      proveedor: 'Papelería Andina',
+      saldo: 2_380_000,
+      estado: 'Por pagar',
+    });
+    expect(rows.find((r) => r.external_key === 'pu-2')?.values).toMatchObject({
+      tipo: 'Documento soporte',
+      estado: 'Vencida',
+    });
+    expect(imp.calls.flat().map((p) => p.externalId)).toEqual(['pu-1', 'pu-2']);
+    expect(out.result.counts.payables_created).toBe(2);
+    expect((w.tables.trackers as Row[]).map((t) => t.slug)).toContain('siigo_compras');
+  });
+
+  it('un egreso vuelve a leer las compras que paga y las marca pagadas en cuentas por pagar', async () => {
+    const w = world();
+    const imp = purchasesImporter();
+    const conn = all({ entities: ['purchases', 'supplier_payments'] });
+    const first = await runAccountingSync(w.db, conn, {
+      session: fakeSession({ purchases: [purchaseRecords] }).session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+      importPurchases: imp.importPurchases,
+    });
+    if (first.result.status === 'error') throw new Error(first.result.error);
+    const asked: string[][] = [];
+    const base = fakeSession({
+      supplier_payments: [
+        [
+          {
+            externalId: 'e-1',
+            number: 'RP-1-15',
+            date: '2026-10-02',
+            supplierName: 'Papelería Andina',
+            supplierTaxId: '900373115',
+            amount: 2_380_000,
+            currency: 'COP',
+            applications: [{ ref: 'e-1:0', purchaseNumber: 'FC-2-22', amount: 2_380_000 }],
+          } as never,
+        ],
+      ],
+    });
+    const session: ProviderSession = {
+      ...base.session,
+      refreshPurchases: async (numbers) => {
+        asked.push(numbers);
+        return [{ ...(purchaseRecords[0] as NormalizedPurchase), balance: 0, status: 'paid' }];
+      },
+    };
+    const second = await runAccountingSync(
+      w.db,
+      { ...conn, cursors: first.result.cursors, trackers: first.result.trackers },
+      { session, now: NOW, importPayments: recorder().importPayments, importPurchases: imp.importPurchases },
+    );
+    if (second.result.status === 'error') throw new Error(second.result.error);
+    expect(asked).toEqual([['FC-2-22']]);
+    const rows = (w.tables.tracker_rows ?? []) as Row[];
+    expect(rows.find((r) => r.external_key === 'pu-1')?.values).toMatchObject({ saldo: 0, estado: 'Pagada' });
+    expect(rows.find((r) => r.external_key === 'e-1')?.values).toMatchObject({
+      numero: 'RP-1-15',
+      compras: 'FC-2-22',
+      valor: 2_380_000,
+      estado: 'Registrado',
+    });
+    // La compra pagada también viajó a cuentas por pagar (la marca como pagada).
+    expect(imp.calls[imp.calls.length - 1]?.[0]).toMatchObject({ externalId: 'pu-1', status: 'paid' });
+  });
+
+  it('los productos llenan además las existencias por bodega, con su alerta', async () => {
+    const w = world();
+    const { session } = fakeSession({
+      products: [
+        [
+          {
+            externalId: 'p-1',
+            name: 'Estiba',
+            code: 'EST',
+            stock: 3,
+            minStock: 5,
+            warehouses: [
+              { externalId: '1', name: 'Principal', quantity: 3 },
+              { externalId: '2', name: 'Bogotá', quantity: 40 },
+            ],
+          },
+        ],
+      ],
+    });
+    const out = await runAccountingSync(w.db, all({ entities: ['products', 'stock'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    const stock = ((w.tables.tracker_rows ?? []) as Row[]).filter((r) => String(r.external_key).startsWith('p-1:'));
+    expect(stock.map((r) => r.values)).toMatchObject([
+      { producto: 'Estiba', bodega: 'Principal', existencias: 3, minimo: 5, alerta: 'Bajo mínimo' },
+      { bodega: 'Bogotá', existencias: 40, alerta: 'Con existencias' },
+    ]);
+    expect(out.result.counts.stock).toMatchObject({ inserted: 2 });
+    expect(Object.keys(out.result.trackers)).toContain('stock');
+    // Las existencias no tienen cursor propio: cuentan con los productos.
+    expect(out.result.cursors.stock).toBeUndefined();
+  });
+
+  it('los movimientos salen con centro de costo y tercero con nombre; los de nómina sin tercero', async () => {
+    const w = world();
+    const { session } = fakeSession({
+      customers: [[{ externalId: 'c-1', name: 'Coltrans S.A.S.', taxId: '900123456', taxIdDisplay: '900123456-7' }]],
+      cost_centers: [[{ externalId: '12', catalog: 'cost_centers', name: 'Operación', code: 'CC1' }]],
+      journal_lines: [
+        [
+          {
+            externalId: 'j-1:0',
+            journalId: 'j-1',
+            journalNumber: 'CC-1-33',
+            date: '2026-09-30',
+            account: '5135050101',
+            movement: 'debit',
+            value: 500_000,
+            partyTaxId: '900123456',
+            costCenter: '12',
+            description: 'Flete',
+          },
+          {
+            externalId: 'j-1:1',
+            journalId: 'j-1',
+            journalNumber: 'CC-1-33',
+            date: '2026-09-30',
+            account: '51050601',
+            movement: 'debit',
+            value: 3_000_000,
+            partyTaxId: '1012345678',
+            description: 'Sueldo de Ana',
+            confidential: true,
+          },
+        ],
+      ],
+    });
+    const out = await runAccountingSync(w.db, all({ entities: ['customers', 'cost_centers', 'journal_lines'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    const rows = (w.tables.tracker_rows ?? []) as Row[];
+    expect(rows.find((r) => r.external_key === 'j-1:0')?.values).toMatchObject({
+      comprobante: 'CC-1-33',
+      mes: '2026-09',
+      cuenta: '5135050101',
+      movimiento: 'Débito',
+      debito: 500_000,
+      nit_tercero: '900123456',
+      tercero: 'Coltrans S.A.S.',
+      centro_costo: 'Operación',
+      descripcion: 'Flete',
+    });
+    const payroll = rows.find((r) => r.external_key === 'j-1:1')?.values as Row;
+    expect(payroll).toMatchObject({ tercero: 'Nómina (confidencial)', debito: 3_000_000 });
+    expect(payroll.nit_tercero).toBeUndefined();
+    expect(payroll.descripcion).toBeUndefined();
+    expect(JSON.stringify(rows)).not.toContain('1012345678');
+  });
+
+  it('estados y costo de nómina salen de la lectura mensual y quedan como tablas', async () => {
+    const w = world();
+    const asked: string[] = [];
+    const readMonth = async (_db: unknown, input: { month: string; want: { balance: boolean } }): Promise<MonthReading> => {
+      asked.push(`${input.month}:${input.want.balance ? 'estados' : 'nomina'}`);
+      return {
+        pnl: {
+          provider: 'siigo',
+          from: `${input.month}-01`,
+          to: `${input.month}-28`,
+          currency: 'COP',
+          revenue: 100,
+          costOfSales: 40,
+          operatingExpenses: 30,
+          otherIncome: 0,
+          otherExpenses: 0,
+          incomeTax: null,
+          netIncome: 30,
+          lines: [{ section: 'ingreso', code: '41', name: 'Operacionales', amount: 100 }],
+          personnel: [{ code: '51050601', name: 'SUELDOS', amount: 20 }],
+          notes: [],
+        },
+        balance: null,
+        fetched: 0,
+        inProgress: false,
+      };
+    };
+    const base = fakeSession({});
+    const session: ProviderSession = { ...base.session, reports: {} as never };
+    const out = await runAccountingSync(w.db, all({ entities: ['statements', 'payroll_costs'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+      readMonth: readMonth as never,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    // 24 meses cada una, de la lectura (no del listado del programa).
+    expect(asked.filter((a) => a.endsWith('estados'))).toHaveLength(24);
+    expect(asked.filter((a) => a.endsWith('nomina'))).toHaveLength(24);
+    expect(base.asked).toEqual([]);
+    const rows = (w.tables.tracker_rows ?? []) as Row[];
+    expect(rows.find((r) => r.external_key === 'pnl|2026-10|ingresos|41')?.values).toMatchObject({
+      periodo: '2026-10',
+      estado: 'Estado de resultados',
+      renglon: 'Operacionales',
+      valor: 100,
+      en_curso: 'No',
+    });
+    expect(rows.find((r) => r.external_key === 'payroll|2026-10|51050601')?.values).toMatchObject({
+      area: 'Administración',
+      concepto: 'Sueldos',
+      valor: 20,
+    });
+  });
+
+  it('un mes que el programa no entrega se avisa y no frena el resto', async () => {
+    const w = world();
+    let n = 0;
+    const readMonth = async (): Promise<MonthReading> => {
+      n += 1;
+      if (n === 3) throw new Error('Siigo no entregó el balance de prueba');
+      return { pnl: null, balance: null, fetched: 0, inProgress: false };
+    };
+    const session: ProviderSession = { ...fakeSession({}).session, reports: {} as never };
+    const out = await runAccountingSync(w.db, all({ entities: ['statements'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+      readMonth: readMonth as never,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    expect(n).toBe(24);
+    expect(out.result.counts.warnings?.[0]).toContain('No pude leer');
+    expect(out.result.cursors.statements?.since).toBeDefined();
+  });
+
+  it('los catálogos y los estados se revisan una vez al día', () => {
+    const provider = siigoProvider;
+    const cursor = { since: '2026-10-21T10:00:00.000Z', coverage_version: 2 };
+    const within = new Date('2026-10-21T20:00:00Z');
+    const nextDay = new Date('2026-10-22T11:00:00Z');
+    for (const e of ['cost_centers', 'taxes', 'warehouses', 'sellers', 'statements', 'payroll_costs'] as const) {
+      expect(planEntity(provider, e, cursor, within).skip).toBe(true);
+      expect(planEntity(provider, e, cursor, nextDay).skip).toBeUndefined();
+    }
+    // Lo demás sigue cada 15 minutos.
+    expect(planEntity(provider, 'purchases', cursor, within).skip).toBeUndefined();
+    // Compras y egresos se repasan una vez al día por lo que cambia sin modificar el documento.
+    const sweep = planEntity(provider, 'purchases', { ...cursor, full_at: '2026-10-20T00:00:00Z' }, within);
+    expect(sweep.mode).toBe('sweep');
+    expect(planEntity(provider, 'supplier_payments', { ...cursor, full_at: '2026-10-20T00:00:00Z' }, within).mode).toBe('sweep');
+  });
+
+  it('la primera carga de estados son 24 meses y la de movimientos 12 ventanas', () => {
+    const noCursor = undefined;
+    expect(planEntity(siigoProvider, 'statements', noCursor, NOW).queries).toHaveLength(24);
+    expect(planEntity(siigoProvider, 'journal_lines', noCursor, NOW).queries).toHaveLength(12);
+    expect(planEntity(siigoProvider, 'cost_centers', noCursor, NOW).queries).toEqual([{}]);
+  });
+
+  it('las compras se comparan con el total de Siigo; si faltan, se repite la carga completa', async () => {
+    const w = world();
+    const base = fakeSession({ purchases: [purchaseRecords] });
+    const session: ProviderSession = { ...base.session, remoteTotal: async () => 5 };
+    const out = await runAccountingSync(w.db, all({ entities: ['purchases'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    expect(out.result.counts.warnings?.[0]).toContain('El programa tiene 5 compras y la tabla 2');
+  });
+
+  it('cotizaciones: tabla con cliente y vigencia', async () => {
+    const w = world();
+    const { session } = fakeSession({
+      quotations: [
+        [
+          {
+            externalId: 'q-1',
+            number: 'CO-1-5',
+            date: '2026-10-10',
+            validUntil: '2026-10-25',
+            customerTaxId: '800555111',
+            customerName: 'Nexa Logística',
+            total: 1_190_000,
+            currency: 'COP',
+          },
+        ],
+      ],
+    });
+    const out = await runAccountingSync(w.db, all({ entities: ['quotations'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    expect(((w.tables.tracker_rows ?? []) as Row[])[0]?.values).toMatchObject({
+      numero: 'CO-1-5',
+      cliente: 'Nexa Logística',
+      vigencia: '2026-10-25',
+      total: 1_190_000,
+    });
+  });
+
+  it('Alegra y QuickBooks traen compras con la misma tabla', async () => {
+    for (const provider of [alegraProvider, quickbooksProvider]) {
+      expect(provider.entities).toContain('purchases');
+      expect(provider.entities).toContain('statements');
+    }
+    expect(alegraProvider.entities).toContain('stock');
+    expect(planEntity(alegraProvider, 'purchases', undefined, NOW).queries).toHaveLength(1);
+    expect(planEntity(quickbooksProvider, 'purchases', undefined, NOW).queries).toHaveLength(1);
   });
 });

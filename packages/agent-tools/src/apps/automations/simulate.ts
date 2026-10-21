@@ -70,7 +70,15 @@ export async function simulateAutomation(
   // llegaría («una factura queda pagada» → Pagada, saldo 0), con su «antes».
   let kind: AutomationEvent['kind'] = trigger.type;
   if (trigger.type === 'accounting_event') {
-    const created = ['invoice_created', 'receipt_created', 'credit_note_created', 'customer_created'];
+    const created = [
+      'invoice_created',
+      'receipt_created',
+      'credit_note_created',
+      'customer_created',
+      'purchase_created',
+      'supplier_payment_created',
+      'quotation_created',
+    ];
     const target =
       trigger.event === 'invoice_paid'
         ? 'Pagada'
@@ -82,6 +90,12 @@ export async function simulateAutomation(
     if (created.includes(trigger.event)) {
       kind = 'row_created';
       before = null;
+    } else if (trigger.event === 'stock_low') {
+      // Las existencias bajan del nivel de antes al del umbral (o a «Bajo mínimo»).
+      const low = trigger.threshold ?? 0;
+      kind = 'row_updated';
+      before = { ...after, existencias: low + 10, alerta: 'Con existencias' };
+      after = { ...after, existencias: low, alerta: low > 0 ? 'Bajo mínimo' : 'Sin existencias' };
     } else {
       kind = 'row_updated';
       before = { ...after, estado: 'Por cobrar' };

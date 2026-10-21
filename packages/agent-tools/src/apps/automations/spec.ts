@@ -135,6 +135,11 @@ export const automationTriggerSchema = z.discriminatedUnion('type', [
     type: z.literal('accounting_event'),
     event: z.enum(ACCOUNTING_EVENTS),
     provider: z.enum(ACCOUNTING_PROVIDER_IDS as unknown as [string, ...string[]]).default('siigo'),
+    /**
+     * Sólo para `stock_low`: avisa cuando las existencias de una bodega llegan a
+     * este número o menos. Sin él, usa el mínimo de cada producto.
+     */
+    threshold: z.number().min(0).max(1_000_000_000).optional(),
   }),
   z.object({
     type: z.literal('button'),

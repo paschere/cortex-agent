@@ -32,6 +32,12 @@ export interface NormalizedPurchase {
   balance: number;
   currency: string;
   status: 'open' | 'paid' | 'annulled';
+  /** 0234: lo que sólo usa la tabla de compras. */
+  /** El nombre del documento en el programa («FC-2-22»): lo que citan los egresos. */
+  documentNumber?: string;
+  kind?: 'Compra' | 'Documento soporte';
+  supplierExternalId?: string;
+  notes?: string;
 }
 
 type Raw = Record<string, unknown>;
@@ -65,6 +71,7 @@ export function normalizeSiigoPurchase(
     .filter((d): d is string => Boolean(d))
     .sort();
   const balance = Math.max(0, amount(r.balance) ?? total);
+  const documentNumber = clip(r.name, 60) || clip(r.number, 60) || undefined;
   return {
     externalId: id,
     number,
@@ -76,6 +83,10 @@ export function normalizeSiigoPurchase(
     balance,
     currency: currencyCode(obj(r.currency)?.code) ?? fallbackCurrency,
     status: statusOf(balance, r.annulled === true),
+    documentNumber,
+    kind: documentNumber && /^DS/i.test(documentNumber) ? 'Documento soporte' : 'Compra',
+    supplierExternalId: clip(supplier?.id, 60),
+    notes: clip(r.observations, 400),
   };
 }
 

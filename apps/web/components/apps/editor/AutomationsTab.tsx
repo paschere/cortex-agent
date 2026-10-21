@@ -174,6 +174,8 @@ interface Draft {
     /** Suceso contable (event) y programa (provider) cuando type = accounting_event. */
     acEvent: string;
     acProvider: string;
+    /** Sólo para «bajo de existencias»: unidades; vacío = el mínimo de cada producto. */
+    acThreshold: string;
   };
   conditions: Cond[];
   actions: Act[];
@@ -189,7 +191,7 @@ const TRIGGERS: Array<{ type: string; label: string }> = [
   { type: 'schedule', label: 'A una hora (diaria o semanal)' },
   { type: 'button', label: 'Alguien toca un botón en una pantalla' },
   { type: 'rows_poll', label: 'Cada cierto tiempo, para cada fila que cumpla' },
-  { type: 'accounting_event', label: 'Pasa algo en el programa contable (Siigo): factura pagada, recibo, nota crédito…' },
+  { type: 'accounting_event', label: 'Pasa algo en el programa contable (Siigo): factura pagada, compra, pago a proveedor, poco inventario…' },
 ];
 
 /** Sucesos contables y la tabla sincronizada de la que salen (mismo nombre que accounting/tables.ts). */
@@ -201,6 +203,10 @@ const ACCOUNTING_EVENTS: Array<{ id: string; label: string; table: string }> = [
   { id: 'receipt_created', label: 'Entra un recibo de caja (pago de un cliente)', table: 'pagos' },
   { id: 'credit_note_created', label: 'Se crea una nota crédito', table: 'notas_credito' },
   { id: 'customer_created', label: 'Hay un cliente nuevo', table: 'clientes' },
+  { id: 'purchase_created', label: 'Entra una compra (factura de proveedor o documento soporte)', table: 'compras' },
+  { id: 'supplier_payment_created', label: 'Se registra un pago a un proveedor', table: 'pagos_proveedores' },
+  { id: 'stock_low', label: 'Un producto queda bajo de existencias', table: 'existencias' },
+  { id: 'quotation_created', label: 'Se crea una cotización', table: 'cotizaciones' },
 ];
 const ACCOUNTING_PROVIDERS = [
   { id: 'siigo', name: 'Siigo' },
@@ -477,6 +483,7 @@ const emptyDraft = (): Draft => ({
     thenPairs: [{ key: '', value: '' }],
     acEvent: 'invoice_paid',
     acProvider: 'siigo',
+    acThreshold: '',
   },
   conditions: [],
   actions: [emptyAct('notify_app_user')],
@@ -538,7 +545,14 @@ function toInput(d: Draft): unknown {
                     : {}),
                 }
               : t.type === 'accounting_event'
-                ? { type: t.type, event: t.acEvent, provider: t.acProvider }
+                ? {
+                    type: t.type,
+                    event: t.acEvent,
+                    provider: t.acProvider,
+                    ...(t.acEvent === 'stock_low' && t.acThreshold.trim() !== '' && Number(t.acThreshold) >= 0
+                      ? { threshold: Number(t.acThreshold) }
+                      : {}),
+                  }
                 : t.type === 'rows_poll'
                 ? {
                     type: t.type,
@@ -827,6 +841,7 @@ function toDraft(v: AutomationView): Draft {
     winAfter: Number((t.window as { afterHours?: number } | undefined)?.afterHours ?? 24),
     acEvent: String(t.event ?? 'invoice_paid'),
     acProvider: String(t.provider ?? 'siigo'),
+    acThreshold: t.threshold === undefined || t.threshold === null ? '' : String(t.threshold),
     thenScreen: String((t.next as { screen?: string } | undefined)?.screen ?? ''),
     thenPairs: pairsDraft((t.next as { prefill?: unknown } | undefined)?.prefill),
   };
@@ -1723,6 +1738,20 @@ function RuleEditor({
                 ))}
               </select>
             </div>
+            {t.acEvent === 'stock_low' && (
+              <label className="flex flex-wrap items-center gap-2">
+                Avisar cuando queden
+                <input
+                  type="number"
+                  min={0}
+                  value={t.acThreshold}
+                  onChange={(e) => setT({ acThreshold: e.target.value })}
+                  placeholder="mínimo del producto"
+                  className={INPUT}
+                />
+                unidades o menos (vacío = el mínimo de cada producto)
+              </label>
+            )}
             <p className="text-micro text-ink-muted">
               Cortex se entera cuando sincroniza con el programa (cada 15 minutos), así que sale a los
               pocos minutos. «Se vence» y los pagos que Siigo no registra como recibo salen en el repaso

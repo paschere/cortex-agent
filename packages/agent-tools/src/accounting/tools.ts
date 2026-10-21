@@ -33,6 +33,19 @@ const ENTITY_LABEL: Record<AccountingEntity, string> = {
   invoices: 'facturas',
   payments: 'pagos',
   credit_notes: 'notas crédito',
+  purchases: 'compras y documentos soporte',
+  supplier_payments: 'pagos a proveedores (egresos)',
+  journal_lines: 'movimientos de comprobantes contables',
+  quotations: 'cotizaciones',
+  stock: 'existencias por bodega',
+  statements: 'estados financieros mes a mes',
+  payroll_costs: 'costo de nómina por mes (totales de la empresa)',
+  cost_centers: 'centros de costo',
+  taxes: 'impuestos y retenciones',
+  payment_methods: 'formas de pago',
+  warehouses: 'bodegas',
+  document_types: 'tipos de documento',
+  sellers: 'vendedores',
 };
 
 function when(iso: string | null): string {
@@ -81,7 +94,7 @@ function describeConnection(c: AccountingConnectionRow): string {
 export const accountingStatus = registerTool({
   id: 'accounting.status',
   description:
-    'Show the connected accounting programs (Siigo, Alegra, QuickBooks Online): whether each is up to date, last sync, what it brings (customers, products, invoices, payments), which company tables it fills and any error. Read-only. Use it when the person asks about Siigo, Alegra, QuickBooks, their accounting program, or why invoices are or are not showing.',
+    'Show the connected accounting programs (Siigo, Alegra, QuickBooks Online): whether each is up to date, last sync, what it brings (customers and suppliers, products, invoices, payments, credit notes, purchases, supplier payments, journal movements, quotations, stock by warehouse, statements by month, payroll cost, catalogs), which company tables it fills and any error. Read-only. Use it when the person asks about Siigo, Alegra, QuickBooks, their accounting program, or why invoices are or are not showing.',
   inputSchema: z.object({}),
   outputSchema: z.object({ markdown: z.string(), connected: z.number().int() }),
   rateLimit: { perMinute: 20 },
