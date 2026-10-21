@@ -18,12 +18,15 @@ export function Sparkline({
   color,
   height = 40,
   currency,
-  format = currency
+  fmt,
+  format = currency || fmt === 'money'
     ? (n) =>
-        currency === 'COP'
+        (currency ?? 'COP') === 'COP'
           ? formatCompact(n, { money: true })
           : `${formatCompact(n)} ${currency}`
-    : (n) => formatCompact(n),
+    : fmt === 'percent'
+      ? (n) => formatCompact(n * 100, { percent: true })
+      : (n) => formatCompact(n),
   name = 'Serie',
   className,
   showLabels = false,
@@ -36,6 +39,8 @@ export function Sparkline({
   format?: (n: number) => string;
   /** Para un servidor que no puede pasar `format`: la moneda de los valores. */
   currency?: string;
+  /** Idem: cómo se escriben los valores (`money` usa `currency`, `percent` espera fracciones). */
+  fmt?: 'money' | 'count' | 'percent';
   name?: string;
   className?: string;
   /** Primer y último rótulo bajo la línea. */

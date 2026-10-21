@@ -1,6 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
+import Link from 'next/link';
 import { useState } from 'react';
 import { ChartEmpty } from './ChartEmpty';
 
@@ -9,6 +10,12 @@ export interface RankItem {
   value: number;
   display: string;
   color?: string;
+  /** Texto bajo la etiqueta («2 facturas · 41 días vencida»). */
+  sub?: string;
+  /** Con destino, la fila entera abre esa pantalla. */
+  href?: string;
+  /** La fila pide atención: la etiqueta y la cifra no cambian, pero lleva un punto rosa. */
+  alert?: boolean;
 }
 
 const PCT = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
@@ -49,7 +56,24 @@ export function RankBars({
           style={{ opacity: hover === null || hover === i ? 1 : 0.45 }}
         >
           <div className="mb-1.5 flex items-baseline justify-between gap-3 text-xs">
-            <span className="min-w-0 truncate font-medium text-ink">{p.label}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              {p.alert && (
+                <>
+                  <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-pill bg-rose" />
+                  <span className="sr-only">(pide atención) </span>
+                </>
+              )}
+              {p.href ? (
+                <Link
+                  href={p.href}
+                  className="min-w-0 truncate font-medium text-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/40"
+                >
+                  {p.label}
+                </Link>
+              ) : (
+                <span className="min-w-0 truncate font-medium text-ink">{p.label}</span>
+              )}
+            </span>
             <span className="shrink-0">
               <span className="tabular tabular-nums font-semibold text-ink">{p.display}</span>
               {showShare && (
@@ -70,6 +94,7 @@ export function RankBars({
               }}
             />
           </div>
+          {p.sub && <p className="mt-1 text-micro text-ink-faint">{p.sub}</p>}
         </li>
       ))}
     </ul>

@@ -1,4 +1,17 @@
+import { fixtureModel } from '@/app/v/cartera-showcase/data';
 import { addDaysIso } from '@/components/charts/interactive';
+import {
+  type DianInvoiceRow,
+  type FlightRow,
+  type HoyInsights,
+  type StatementRow,
+  buildDian,
+  buildFlow,
+  buildOperation,
+  buildReceivable,
+  buildResult,
+  buildWeekCards,
+} from '@/lib/hoy/insights';
 import { buildOps } from '@/lib/hoy/ops';
 import { buildHoyMetrics, narrative } from '@/lib/hoy/shape';
 import type { HoyView } from '@/lib/hoy/view';
@@ -10,7 +23,7 @@ import type {
 
 /** «Hoy» con una empresa inventada (Transportes Andinos). Determinista: sin azar. */
 
-export const TODAY = '2026-10-10';
+export const TODAY = '2026-10-21';
 const CLIENTS = [
   'Frigoandes',
   'Agrícola del Sur',
@@ -105,7 +118,7 @@ function forecast(startingCash: number): ForecastResult {
   const weeks: ForecastWeek[] = [];
   let cash = startingCash;
   for (let w = 0; w < 10; w++) {
-    const start = addDaysIso('2026-10-05', w * 7);
+    const start = addDaysIso(addDaysIso(TODAY, -2), w * 7);
     const inflows = Math.round(9_500_000 * wave(w, 6, 0.3));
     const outflows = Math.round(
       8_200_000 * wave(w + 2, 5, 0.25) + (w === 1 || w === 3 || w === 5 ? 11_800_000 : 0),
@@ -147,7 +160,7 @@ function forecast(startingCash: number): ForecastResult {
                 amount: 11_800_000,
                 expectedAmount: 11_800_000,
                 probability: 1,
-                expectedDate: w === 1 ? '2026-10-15' : w === 3 ? '2026-10-30' : '2026-11-15',
+                expectedDate: w === 1 ? '2026-10-30' : w === 3 ? '2026-11-13' : '2026-11-27',
                 reason: 'Nómina quincenal',
                 category: 'nomina',
               },
@@ -169,6 +182,101 @@ function forecast(startingCash: number): ForecastResult {
   };
 }
 
+/** Estados de resultados de Siigo (resumen): un año y medio, con el mes en curso a medias. */
+function statements(): StatementRow[] {
+  const rows: StatementRow[] = [];
+  const row = (periodo: string, renglon: string, valor: number, live: boolean) =>
+    rows.push({
+      periodo,
+      estado: 'Estado de resultados',
+      seccion: 'Resumen',
+      renglon,
+      valor,
+      en_curso: live ? 'Sí' : 'No',
+    });
+  for (let i = -11; i <= 0; i++) {
+    const total = Number(TODAY.slice(0, 4)) * 12 + (Number(TODAY.slice(5, 7)) - 1) + i;
+    const periodo = `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
+    const k = i + 11;
+    const live = i === 0;
+    const sales = Math.round((310_000_000 * wave(k, 7, 0.28) * (1 + k / 22)) / 1000) * 1000;
+    const margin = 0.16 + 0.06 * Math.sin(k);
+    row(periodo, 'Ventas', live ? Math.round(sales * 0.62) : sales, live);
+    row(periodo, 'Otros ingresos', live ? 0 : 1_200_000, live);
+    row(
+      periodo,
+      'Utilidad neta',
+      Math.round(((live ? sales * 0.62 : sales) * (live ? 0.3 : margin)) / 1000) * 1000,
+      live,
+    );
+  }
+  return rows;
+}
+
+const SIIGO_INVOICES: DianInvoiceRow[] = [
+  ...Array.from({ length: 24 }, (_, i) => ({
+    numero: `FV-2-${i + 1}`,
+    cliente: i % 2 ? 'CHARTER LINE AIR SOARA SAS' : 'TRANEXCO S.A.S',
+    total: 4_200_000 + i * 310_000,
+    fecha: addDaysIso(TODAY, -i * 3),
+    estado: 'Vencida',
+    factura_electronica: 'Aceptada',
+  })),
+  {
+    numero: 'FV-2-318',
+    cliente: 'AEROREGIONAL SKY SAS',
+    total: 9_870_000,
+    fecha: addDaysIso(TODAY, -2),
+    estado: 'Vencida',
+    factura_electronica: 'Rechazada',
+    mensaje_dian: 'NIT del adquirente no coincide con el RUT',
+    enlace: 'https://documentview.siigo.com/',
+  },
+  {
+    numero: 'FV-2-319',
+    cliente: 'COLOCAR CARGO LOGISTICS S.A.S.',
+    total: 3_150_000,
+    fecha: addDaysIso(TODAY, -1),
+    estado: 'Vencida',
+    factura_electronica: 'En proceso',
+  },
+];
+
+const FLIGHTS: FlightRow[] = [
+  { fecha: TODAY, estado: 'Aterrizó', aerolinea: 'Avianca Cargo', numero_vuelo: 'av8441' },
+  { fecha: TODAY, estado: 'En vuelo', aerolinea: 'Atlas Air', numero_vuelo: 'gti3290' },
+  {
+    fecha: addDaysIso(TODAY, 1),
+    estado: 'Programado',
+    aerolinea: 'Amerijet',
+    numero_vuelo: 'm6867',
+  },
+  {
+    fecha: addDaysIso(TODAY, 1),
+    estado: 'Demorado',
+    aerolinea: 'Kalitta Air',
+    numero_vuelo: 'k44865',
+  },
+  {
+    fecha: addDaysIso(TODAY, 3),
+    estado: 'Programado',
+    aerolinea: 'Amerijet',
+    numero_vuelo: 'm6871',
+  },
+  {
+    fecha: addDaysIso(TODAY, -2),
+    estado: 'Aterrizó',
+    aerolinea: 'Atlas Air',
+    numero_vuelo: 'gti3288',
+  },
+  {
+    fecha: addDaysIso(TODAY, -4),
+    estado: 'Programado',
+    aerolinea: 'Amerijet',
+    numero_vuelo: 'cks867',
+  },
+];
+
 export interface FixtureOptions {
   /** Sin la plata a la vista (módulo de finanzas apagado). */
   sinPlata?: boolean;
@@ -176,6 +284,10 @@ export interface FixtureOptions {
   apuro?: boolean;
   /** Nada que decidir. */
   vacio?: boolean;
+  /** Quien mira no administra: sin el resultado del mes ni la nómina. */
+  equipo?: boolean;
+  /** Sin tablas de operación ni facturas con estado ante la DIAN. */
+  sinOperacion?: boolean;
 }
 
 export function hoyFixture(opts: FixtureOptions = {}): HoyView {
@@ -189,14 +301,13 @@ export function hoyFixture(opts: FixtureOptions = {}): HoyView {
   const built = buildHoyMetrics({
     today: TODAY,
     currency: 'COP',
-    isAdmin: true,
+    isAdmin: !opts.equipo,
     cashTotal,
     movements: ms,
     forecast: fc,
     minimumCash: 15_000_000,
     runs,
   });
-  const overdueNow = built.metrics.find((m) => m.id === 'vencido')?.daily.at(-1)?.value ?? 0;
   const todos = opts.vacio
     ? []
     : [
@@ -258,9 +369,36 @@ export function hoyFixture(opts: FixtureOptions = {}): HoyView {
       late: false,
     },
   ];
+  const cartera = fixtureModel({ plazo: 30 });
+  const dian = opts.sinOperacion || opts.sinPlata ? null : buildDian(SIIGO_INVOICES);
+  const insights: HoyInsights = {
+    currency: 'COP',
+    week: buildWeekCards({
+      today: TODAY,
+      currency: 'COP',
+      cartera,
+      defaultTermDays: 30,
+      movements: ms,
+      isAdmin: !opts.equipo,
+      dian,
+    }),
+    flow: buildFlow(fc, 15_000_000),
+    result: opts.equipo ? null : buildResult(statements(), TODAY),
+    receivable: buildReceivable(cartera),
+    dian,
+    operation: opts.sinOperacion
+      ? null
+      : buildOperation({
+          today: TODAY,
+          flights: FLIGHTS,
+          prealertDays: [0, 0, 1, 1, 1, 2, 3, 4, 4, 5, 6, 8, 9, 10].map((d) =>
+            addDaysIso(TODAY, -d),
+          ),
+        }),
+  };
   const view: HoyView = {
     today: TODAY,
-    dateLabel: 'sábado 10 de octubre',
+    dateLabel: 'miércoles 21 de octubre',
     greeting: 'Buenos días',
     firstName: 'Mateo',
     narrative: narrative({
@@ -268,11 +406,29 @@ export function hoyFixture(opts: FixtureOptions = {}): HoyView {
       currency: 'COP',
       cash: opts.sinPlata ? null : { total: cashTotal, minimum: 15_000_000 },
       forecast: opts.sinPlata ? null : fc,
-      overdue: opts.sinPlata ? null : { total: overdueNow, biggest: 'Frigoandes' },
+      overdue: opts.sinPlata
+        ? null
+        : { total: cartera.kpis.overdue.value, biggest: cartera.clients[0]?.name ?? null },
       waiting: todos.length,
       autopilotDone: 4,
     }),
-    money: opts.sinPlata ? null : { currency: 'COP', metrics: built.metrics, kpis: built.kpis },
+    money: opts.sinPlata
+      ? null
+      : {
+          currency: 'COP',
+          // Como en producción: lo vencido sale de la cartera, no de la serie del libro.
+          metrics: built.metrics.filter((m) => m.id !== 'vencido'),
+          kpis: built.kpis.filter((k) => k.id !== 'vencido'),
+        },
+    insights: opts.sinPlata
+      ? {
+          ...insights,
+          week: insights.week.filter((c) => c.id === 'dian'),
+          flow: null,
+          result: null,
+          receivable: null,
+        }
+      : insights,
     todos,
     todosMore: opts.vacio ? 0 : 2,
     snoozed: opts.vacio ? 0 : 2,

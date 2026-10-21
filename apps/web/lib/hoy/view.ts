@@ -1,5 +1,6 @@
 import type { MetricModel } from '@/components/charts/metric-types';
 import type { StatusTone } from '@/lib/status-chip';
+import type { HoyInsights } from './insights';
 import type { ActivityRowView, OpsKpi } from './ops';
 import type { KpiView, NarrativePart } from './shape';
 
@@ -68,6 +69,8 @@ export interface HoyView {
     parties: DuePartyView[];
     href: string;
   };
+  /** Lo que el dueño mira al empezar el día: semana, flujo, resultado, cartera, DIAN, operación. */
+  insights?: HoyInsights;
   /** La fila «Operación»; vacía si no hay de dónde sacarla. */
   ops?: OpsKpi[];
   /** Lo que hizo Cortex, para la tabla de abajo. */

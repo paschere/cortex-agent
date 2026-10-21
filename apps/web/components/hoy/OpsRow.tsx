@@ -15,8 +15,10 @@ import Link from 'next/link';
 export function OpsRow({ kpis }: { kpis: OpsKpi[] }) {
   if (kpis.length === 0) return null;
   return (
-    <section aria-label="Operación" className="flex flex-col gap-2">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Operación</h2>
+    <section aria-label="Lo que hace Cortex" className="flex flex-col gap-2">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        Lo que hace Cortex
+      </h2>
       <ul className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {kpis.map((k) => (
           <li key={k.id} className="min-w-0">

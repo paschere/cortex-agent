@@ -1,6 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
+import Link from 'next/link';
 import { useState } from 'react';
 import { ChartEmpty } from './ChartEmpty';
 import { formatDelta, segmentShares } from './scales';
@@ -12,6 +13,8 @@ export interface SegmentItem {
   /** La cifra tal como se escribe («$ 12,4 M»). */
   display: string;
   color: string;
+  /** Con destino, la fila de la leyenda abre esa pantalla. */
+  href?: string;
 }
 
 /**
@@ -27,6 +30,7 @@ export function SegmentBar({
   className,
   name = 'Composición',
   emptyNote = 'Sin datos suficientes',
+  compact = false,
 }: {
   items: SegmentItem[];
   /** Cifra del total para el encabezado (opcional). */
@@ -36,6 +40,8 @@ export function SegmentBar({
   className?: string;
   name?: string;
   emptyNote?: string;
+  /** Leyenda en una sola columna (para un contenedor angosto). */
+  compact?: boolean;
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const segs = segmentShares(items.map((i) => ({ key: i.key, value: i.value })));
@@ -87,7 +93,7 @@ export function SegmentBar({
           );
         })}
       </div>
-      <ul className="mt-3 grid gap-x-5 gap-y-1 sm:grid-cols-2">
+      <ul className={clsx('mt-3 grid gap-x-5 gap-y-1', !compact && 'sm:grid-cols-2')}>
         {items.map((it) => {
           const share = segShare(segs, it.key);
           return (
@@ -106,7 +112,16 @@ export function SegmentBar({
                 className="h-2.5 w-2.5 rounded-[3px]"
                 style={{ background: it.color }}
               />
-              <span className="truncate text-ink-muted">{it.label}</span>
+              {it.href ? (
+                <Link
+                  href={it.href}
+                  className="truncate text-ink-muted hover:text-ink hover:underline"
+                >
+                  {it.label}
+                </Link>
+              ) : (
+                <span className="truncate text-ink-muted">{it.label}</span>
+              )}
               <span className="tabular tabular-nums font-semibold text-ink">{it.display}</span>
               <span className="tabular w-9 text-right tabular-nums text-micro text-ink-faint">
                 {Math.round(share * 100)} %

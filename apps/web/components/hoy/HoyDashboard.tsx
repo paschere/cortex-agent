@@ -2,30 +2,42 @@ import type { HoyView } from '@/lib/hoy/view';
 import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { ActivityTable } from './ActivityTable';
+import { DianPanel } from './DianPanel';
+import { HoyFlow } from './HoyFlow';
 import { HoyHero } from './HoyHero';
+import { HoyOperation } from './HoyOperation';
+import { HoyReceivable } from './HoyReceivable';
+import { HoyResult } from './HoyResult';
 import { OpsRow } from './OpsRow';
+import { SectionHead } from './SectionHead';
 import { type DecideFn, type SnoozeFn, TodoList } from './TodoList';
+import { WeekStrip } from './WeekStrip';
 
 /**
  * «HOY»: UN CUADERNO CON LOS NÚMEROS ADENTRO.
  *
  * Arriba, el saludo y una frase escrita con reglas (no un modelo): cómo está la
- * caja, qué te deben y cuántas cosas te necesitan. Después la cifra de la caja
- * con su gráfico y la tira de indicadores; «Para ti, hoy» como lista de
- * pendientes con lo que Cortex ya dejó listo; quién te debe; y una línea de lo
- * que hizo. Sin la plata a la vista (módulo apagado), la página sigue siendo
- * el saludo, los pendientes y lo hecho. Se pinta igual en /piloto y en
- * /v/hoy-showcase.
+ * caja, qué te deben y cuántas cosas te necesitan. Luego, en este orden: lo que
+ * espera tu decisión («Para ti, hoy»); «Esta semana» (vencido, lo que entra, lo
+ * que se paga, la DIAN); la caja con su gráfico y la tira de indicadores; las
+ * entradas y salidas semana a semana; cómo va el mes (sólo administradores);
+ * quién te debe; la operación del día (vuelos y prealertas); lo que hace Cortex.
+ * Sin la plata a la vista (módulo apagado) la página sigue siendo el saludo, los
+ * pendientes y lo hecho. Se pinta igual en /piloto y en /v/hoy-showcase.
+ *
+ * Aquí no se pasa ninguna función a un componente de cliente: todo llega como
+ * datos (ver `lib/hoy/insights.ts`) y cada gráfico escribe sus cifras.
  */
 export function HoyDashboard({
   view,
   decide,
   snooze,
 }: { view: HoyView; decide: DecideFn; snooze?: SnoozeFn }) {
+  const ins = view.insights;
   return (
     <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-10 pb-16 pt-2 sm:pt-6">
       <header className="flex flex-col gap-3">
-        <p className="text-[0.8125rem] font-semibold text-ink-faint first-letter:uppercase">
+        <p className="text-xs font-semibold text-ink-faint first-letter:uppercase">
           {view.dateLabel}
         </p>
         <h1 className="title-display text-[2.4rem] leading-[1.08] text-ink sm:text-[2.9rem]">
@@ -50,12 +62,6 @@ export function HoyDashboard({
         </p>
       </header>
 
-      {view.money && view.money.metrics.length > 0 && (
-        <HoyHero metrics={view.money.metrics} kpis={view.money.kpis} today={view.today} />
-      )}
-
-      {view.ops && view.ops.length > 0 && <OpsRow kpis={view.ops} />}
-
       <TodoList
         todos={view.todos}
         done={view.done}
@@ -67,19 +73,30 @@ export function HoyDashboard({
         moreHref={view.todosMoreHref}
       />
 
-      {view.due && view.due.parties.length > 0 && (
+      {ins && ins.week.length > 0 && <WeekStrip cards={ins.week} />}
+
+      {view.money && view.money.metrics.length > 0 && (
+        <HoyHero metrics={view.money.metrics} kpis={view.money.kpis} today={view.today} />
+      )}
+
+      {ins?.flow && <HoyFlow flow={ins.flow} />}
+
+      {(ins?.result || ins?.receivable) && (
+        <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-8">
+          {ins.result && <HoyResult result={ins.result} />}
+          {ins.receivable && <HoyReceivable data={ins.receivable} />}
+        </div>
+      )}
+
+      {ins?.dian && <DianPanel dian={ins.dian} />}
+
+      {ins?.operation && <HoyOperation op={ins.operation} />}
+
+      {view.ops && view.ops.length > 0 && <OpsRow kpis={view.ops} />}
+
+      {view.due && view.due.parties.length > 0 && !ins?.receivable && (
         <section aria-label="Quién te debe" className="flex flex-col gap-2">
-          <div className="flex items-baseline gap-3">
-            <h2 className="title-display flex-1 text-[1.75rem] leading-tight text-ink">
-              Quién te debe
-            </h2>
-            <Link
-              href={view.due.href}
-              className="text-[0.8125rem] font-semibold text-primary-ink hover:underline"
-            >
-              Abrir la cartera
-            </Link>
-          </div>
+          <SectionHead title="Quién te debe" href={view.due.href} hrefLabel="Abrir la cartera" />
           <table className="w-full border-collapse text-sm">
             <caption className="sr-only">
               Los clientes que más te deben: en total {view.due.total}, de lo cual{' '}

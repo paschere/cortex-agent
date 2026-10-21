@@ -27,7 +27,9 @@ import { listAccounts, loadLedger } from '@cortex/agent-tools/src/ledger/store';
 import type { ForecastResult, LedgerMovement } from '@cortex/agent-tools/src/ledger/types';
 import { withPayablesOverlay } from '@cortex/agent-tools/src/payables/overlay';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hasInsights } from './insights';
 import { activityRows, buildOps } from './ops';
+import { readInsights } from './read-insights';
 import { buildHoyMetrics, greetingFor, narrative } from './shape';
 import { withoutSnoozed } from './snooze';
 import { loadSnoozedKeys } from './snooze-store';
@@ -74,6 +76,21 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
     safe(() => readWaitingIndex(input.organizationId, input.userId)),
     safe(() => isCompanyManager(db, input.userId)),
   ]);
+
+  // Lo que se mira al empezar el día (cartera, estados, DIAN, operación): arranca ya y se
+  // espera antes de armar la plata, porque la cartera manda sobre «lo vencido».
+  const insightsP = safe(() =>
+    readInsights({
+      db,
+      today,
+      isAdmin,
+      financeOn,
+      currency: money?.currency ?? 'COP',
+      money: money
+        ? { movements: money.movements, forecast: money.forecast, minimumCash: money.minimumCash }
+        : null,
+    }),
+  );
 
   // ---- Para ti, hoy -------------------------------------------------------
   const todos: TodoView[] = [];
@@ -134,6 +151,7 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
   const more = Math.max(0, todos.length - shown.length) + queueExtra + (pilot?.moreAsks ?? 0);
 
   // ---- Plata --------------------------------------------------------------
+  const insights = await insightsP;
   let moneyView: HoyView['money'] = null;
   let dueView: HoyView['due'] = null;
   let overdueInfo: { total: number; biggest: string | null } | null = null;
@@ -148,9 +166,18 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
       minimumCash: money.minimumCash,
       runs: pilot ? pilot.runs : null,
     });
-    moneyView = { currency: money.currency, metrics: built.metrics, kpis: built.kpis };
+    // «Te deben vencido» sale de la cartera (con el plazo por defecto de la empresa): la serie
+    // del libro cuenta como vencida toda factura con «vence» el mismo día y daría otra cifra.
+    const byCartera = !!insights?.receivable;
+    moneyView = {
+      currency: money.currency,
+      metrics: built.metrics.filter((m) => !(byCartera && m.id === 'vencido')),
+      kpis: built.kpis.filter((k) => !(byCartera && k.id === 'vencido')),
+    };
     const r = money.due.receivable;
-    overdueInfo = { total: r.overdue, biggest: r.parties.find((p) => p.overdueDays)?.name ?? null };
+    overdueInfo = insights?.receivable
+      ? { total: insights.receivable.overdue, biggest: insights.receivable.topOverdue }
+      : { total: r.overdue, biggest: r.parties.find((p) => p.overdueDays)?.name ?? null };
     dueView = {
       total: fullMoney(r.total, money.currency),
       overdue: fullMoney(r.overdue, money.currency),
@@ -240,6 +267,7 @@ export async function readHoy(input: ReadHoyInput): Promise<HoyView> {
     done: pilot?.done ?? [],
     ops,
     activity,
+    insights: hasInsights(insights) ? insights : undefined,
     due: dueView,
     closing,
     panelHref: autopilotOn ? '/piloto/panel' : null,

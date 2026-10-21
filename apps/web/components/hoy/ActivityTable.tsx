@@ -16,12 +16,10 @@ export function ActivityTable({
   return (
     <section aria-label="Lo que hizo Cortex" className="flex flex-col gap-2">
       <div className="flex items-baseline gap-3">
-        <h2 className="title-display flex-1 text-[1.75rem] leading-tight text-ink">
-          Lo que hizo Cortex
-        </h2>
+        <h2 className="font-display flex-1 text-xl leading-tight text-ink">Lo que hizo Cortex</h2>
         <Link
           href="/actividad"
-          className="inline-flex items-center gap-1 text-[0.8125rem] font-semibold text-primary-ink hover:underline"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-primary-ink hover:underline"
         >
           Ver todo
           <ArrowRight className="h-3.5 w-3.5" aria-hidden />
