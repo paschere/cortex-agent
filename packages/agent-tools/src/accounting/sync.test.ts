@@ -1190,3 +1190,232 @@ describe('0234 · compras, egresos, existencias, movimientos, estados y catálog
     expect(planEntity(quickbooksProvider, 'purchases', undefined, NOW).queries).toHaveLength(1);
   });
 });
+
+describe('0235 · el resto de la API de Siigo', () => {
+  const sessionWith = (pages: Parameters<typeof fakeSession>[0], extra: Partial<ProviderSession> = {}) => ({
+    ...fakeSession(pages).session,
+    ...extra,
+  });
+
+  it('causa de la tabla de nómina que faltaba: toda cosa elegida tiene su tabla desde la primera corrida, aunque los estados sigan cargando', async () => {
+    const w = world();
+    let n = 0;
+    const readMonth = async (): Promise<MonthReading> => {
+      n += 1;
+      return { pnl: null, balance: null, fetched: 0, inProgress: false };
+    };
+    const session: ProviderSession = { ...fakeSession({}).session, reports: {} as never };
+    // Se acaba el tiempo en el primer mes de estados: payroll_costs ni se alcanza a leer.
+    const out = await runAccountingSync(
+      w.db,
+      connection({ entities: ['statements', 'payroll_costs'] }),
+      {
+        session,
+        now: NOW,
+        deadline: 0,
+        clock: () => 1,
+        importPayments: recorder().importPayments,
+        readMonth: readMonth as never,
+      },
+    );
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    expect(out.result.status).toBe('partial');
+    const slugs = ((w.tables.trackers ?? []) as Row[]).map((t) => t.slug);
+    expect(slugs).toContain('siigo_estados_financieros');
+    expect(slugs).toContain('siigo_costo_nomina');
+    expect(out.result.trackers.payroll_costs).toBeDefined();
+  });
+
+  it('un listado opcional que Siigo responde 404 es una nota, no una falla, y el resto sigue', async () => {
+    const w = world();
+    const base = fakeSession({});
+    const session: ProviderSession = {
+      ...base.session,
+      listPage: async (entity, query, page) => {
+        if (entity === 'cities') throw Object.assign(new Error('Siigo no encontró /v1/cities.'), { status: 404 });
+        return base.session.listPage(entity, query, page);
+      },
+    };
+    const out = await runAccountingSync(w.db, connection({ entities: ['cities', 'customers'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    expect(out.result.status).toBe('ok');
+    if (out.result.status === 'error') return;
+    expect(out.result.counts.notes?.[0]).toContain('ciudades');
+    expect(out.result.counts.warnings).toBeUndefined();
+  });
+
+  it('un error de credenciales en un listado opcional sí es una falla', async () => {
+    const w = world();
+    const session: ProviderSession = {
+      ...fakeSession({}).session,
+      listPage: async () => {
+        throw Object.assign(new Error('Credenciales'), { status: 401 });
+      },
+    };
+    const out = await runAccountingSync(w.db, connection({ entities: ['fixed_assets'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    expect(out.result.status).toBe('error');
+  });
+
+  it('los productos con lista de precios llenan «Precios por lista»', async () => {
+    const w = world();
+    const { session } = fakeSession({
+      products: [
+        [
+          {
+            externalId: 'p1',
+            name: 'Café',
+            code: 'CAF1',
+            kind: 'Producto',
+            priceLists: [
+              { position: 1, name: 'Detal', currency: 'COP', value: 12000 },
+              { position: 2, name: 'Mayorista', currency: 'COP', value: 9000 },
+            ],
+          },
+        ],
+      ],
+    });
+    const out = await runAccountingSync(
+      w.db,
+      connection({ entities: ['products', 'product_prices'] }),
+      { session, now: NOW, importPayments: recorder().importPayments },
+    );
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    const rows = (w.tables.tracker_rows ?? []) as Row[];
+    expect(rows.find((r) => r.external_key === 'p1:COP:2')?.values).toMatchObject({
+      codigo: 'CAF1',
+      lista: 'Mayorista',
+      precio: 9000,
+    });
+    expect(out.result.counts.product_prices?.inserted).toBe(2);
+  });
+
+  it('cuentas por pagar: un vencimiento que sale del reporte queda saldado', async () => {
+    const w = world();
+    const due = (id: string, balance: number) => ({
+      externalId: id,
+      document: id,
+      balance,
+      currency: 'COP',
+      dueDate: '2026-10-30',
+      supplierName: 'Café del Sur',
+    });
+    const first = fakeSession({ accounts_payable: [[due('FC-1-1', 500), due('FC-1-2', 700)]] });
+    const conn = connection({ entities: ['accounts_payable'] });
+    const a = await runAccountingSync(w.db, conn, {
+      session: first.session,
+      now: new Date('2026-10-20T15:00:00Z'),
+      importPayments: recorder().importPayments,
+    });
+    if (a.result.status === 'error') throw new Error(a.result.error);
+    // Al día siguiente el reporte sólo trae FC-1-2.
+    const second = fakeSession({ accounts_payable: [[due('FC-1-2', 700)]] });
+    const b = await runAccountingSync(
+      w.db,
+      { ...conn, trackers: a.result.trackers, cursors: a.result.cursors },
+      {
+        session: second.session,
+        now: new Date('2026-10-22T15:00:00Z'),
+        importPayments: recorder().importPayments,
+      },
+    );
+    if (b.result.status === 'error') throw new Error(b.result.error);
+    const rows = (w.tables.tracker_rows ?? []) as Row[];
+    expect(rows.find((r) => r.external_key === 'FC-1-1')?.values).toMatchObject({
+      estado: 'Saldada',
+      saldo: 0,
+    });
+    expect(rows.find((r) => r.external_key === 'FC-1-2')?.values).toMatchObject({
+      estado: expect.stringMatching(/Por pagar|Vencida/),
+      saldo: 700,
+    });
+    expect(b.result.counts.payables_retired).toBe(1);
+  });
+
+  it('saldos por tercero: un mes por consulta, de la lectura, y la nómina sin tercero', async () => {
+    const w = world();
+    const asked: string[] = [];
+    const readPartyMonth = async (_db: unknown, input: { month: string }) => {
+      asked.push(input.month);
+      return {
+        rows: [
+          { account: '13050501', partyTaxId: '900111222', partyName: 'Cliente SAS', initial: 0, debit: 100, credit: 0, final: 100 },
+          { account: '25050501', partyTaxId: '1032000111', partyName: 'Ana Pérez', initial: 0, debit: 0, credit: 50, final: -50 },
+        ],
+        fetched: 1,
+        inProgress: false,
+      };
+    };
+    const session: ProviderSession = { ...fakeSession({}).session, reports: {} as never };
+    const out = await runAccountingSync(w.db, connection({ entities: ['party_balances'] }), {
+      session,
+      now: NOW,
+      importPayments: recorder().importPayments,
+      readPartyMonth: readPartyMonth as never,
+    });
+    if (out.result.status === 'error') throw new Error(out.result.error);
+    expect(asked).toHaveLength(12);
+    const rows = (w.tables.tracker_rows ?? []) as Row[];
+    const nomina = rows.find((r) => String(r.external_key).startsWith('party|2026-10|25050501'));
+    expect(nomina?.values).toMatchObject({ tercero: 'Nómina (confidencial)', nit_tercero: 'nomina' });
+    expect(JSON.stringify(rows)).not.toContain('1032000111');
+    expect(JSON.stringify(rows)).not.toContain('Ana Pérez');
+  });
+
+  it('la tabla de facturas lleva el enlace de descarga sólo si el programa entrega documentos', async () => {
+    const w = world();
+    const inv = {
+      externalId: 'inv-uuid-1',
+      number: 'FV-1-1',
+      date: '2026-10-01',
+      total: 100,
+      balance: 100,
+      currency: 'COP',
+      status: 'open' as const,
+      einvoiceStatus: 'Rechazada' as const,
+      cufe: undefined,
+      dianMessage: 'NIT inválido',
+    };
+    const withDocs = sessionWith({ invoices: [[inv]] }, { documents: { fetch: async () => ({ bytes: new Uint8Array(), contentType: 'application/pdf' }) } });
+    await runAccountingSync(w.db, connection({ entities: ['invoices'] }), {
+      session: withDocs,
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    const rows = (w.tables.tracker_rows ?? []) as Row[];
+    expect(rows[0]?.values).toMatchObject({
+      factura_electronica: 'Rechazada',
+      mensaje_dian: 'NIT inválido',
+      pdf: '/api/accounting/siigo/invoices/inv-uuid-1/pdf',
+    });
+    const w2 = world();
+    await runAccountingSync(w2.db, connection({ entities: ['invoices'] }), {
+      session: sessionWith({ invoices: [[inv]] }),
+      now: NOW,
+      importPayments: recorder().importPayments,
+    });
+    expect(((w2.tables.tracker_rows ?? []) as Row[])[0]?.values).not.toHaveProperty('pdf');
+  });
+
+  it('Siigo entrega las ocho cosas nuevas y las trae por defecto en una conexión nueva', () => {
+    for (const e of [
+      'accounts_payable',
+      'party_balances',
+      'product_prices',
+      'fixed_assets',
+      'price_lists',
+      'account_groups',
+      'expense_concepts',
+      'cities',
+    ] as const)
+      expect(siigoProvider.entities).toContain(e);
+    expect(siigoProvider.options).toContain('payroll');
+  });
+});
+

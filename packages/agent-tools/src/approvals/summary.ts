@@ -345,6 +345,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   trackers_retry_sync: 'Volver a correr una sincronización',
   accounting_status: 'Ver cómo va el programa contable',
   accounting_payroll_summary: 'Ver la nómina según la contabilidad',
+  accounting_payroll_movements: 'Ver los movimientos de nómina por persona (confidencial)',
   accounting_query: 'Consultar el programa contable en vivo',
   accounting_sync_now: 'Traer ya los datos del programa contable',
   trackers_define: 'Crear o cambiar una tabla',
@@ -658,6 +659,11 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
           bits.push(`«${name}» = ${f.formula.trim().replace(/^=\s*/, '')}`);
         const lk = f?.lookup as { via?: string; field?: string } | undefined;
         if (lk?.via) bits.push(`«${name}» se trae de ${lk.via} → ${lk.field ?? ''}`);
+        const mt = f?.match as { source?: string; fills?: Record<string, string> } | undefined;
+        if (mt?.source)
+          bits.push(
+            `«${name}»: se busca en la lista ${mt.source} y llena ${Object.keys(mt.fills ?? {}).join(', ')} (sin IA)`,
+          );
         const af = f?.autofill as { instruction?: string; fills?: string[] } | undefined;
         if (af?.instruction)
           bits.push(
@@ -665,7 +671,11 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
           );
         return bits;
       });
-      return `Crear o cambiar la tabla «${String(input.name ?? input.slug ?? '')}»${auto.length ? ` — se llenan solos: ${auto.join('; ')}. Las fórmulas se recalculan en las filas que ya hay` : ''}`;
+      const removing = Array.isArray(input.removeFields) ? input.removeFields.map(String) : [];
+      const quitar = removing.length
+        ? ` — SE QUITARÁN los campos: ${removing.join(', ')} (los demás se conservan)`
+        : '';
+      return `Crear o cambiar la tabla «${String(input.name ?? input.slug ?? '')}»${quitar}${auto.length ? ` — se llenan solos: ${auto.join('; ')}. Las fórmulas se recalculan en las filas que ya hay` : ''}`;
     }
     case 'trackers_set_flow':
       return `${input.remove ? 'Quitar el flujo de' : 'Darle un flujo por estados a'} la tabla «${String(input.slug ?? '')}»${Array.isArray(input.states) && input.states.length ? `: ${input.states.map(String).join(' → ')}` : ''} — el servidor rechaza cualquier otro salto de estado`;

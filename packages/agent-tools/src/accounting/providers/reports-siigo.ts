@@ -12,6 +12,7 @@ import {
   readSpreadsheetSheets,
 } from './reports';
 import type { SiigoClient } from './siigo-client';
+import { type PartyBalanceRow, parsePartyBalanceRows } from './siigo-more';
 
 /**
  * LOS ESTADOS FINANCIEROS DE SIIGO (0191).
@@ -39,6 +40,31 @@ export function isSiigoReportUrl(raw: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Pide un reporte de Excel a Siigo (POST → `file_url`) y lo lee, hoja por hoja. */
+async function reportSheets(
+  client: SiigoClient,
+  doFetch: typeof fetch,
+  path: string,
+  body: Record<string, unknown>,
+  label: string,
+) {
+  let out: { file_url?: string } | null;
+  try {
+    out = await client.post<{ file_url?: string } | null>(path, body);
+  } catch (err) {
+    if (err instanceof ProviderUncertainError || err instanceof ProviderValidationError)
+      throw new Error(`Siigo no entregó ${label} (${err.message.split('.')[0]}). Inténtalo en unos minutos.`);
+    throw err;
+  }
+  const url = out?.file_url ?? '';
+  if (!isSiigoReportUrl(url)) throw new Error(`Siigo no devolvió el enlace de ${label}.`);
+  const res = await doFetch(url, { signal: AbortSignal.timeout(60_000) });
+  if (!res.ok) throw new Error(`No se pudo descargar ${label} de Siigo (${res.status}).`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.length > 25 * 1024 * 1024) throw new Error(`${label} de Siigo es demasiado grande.`);
+  return readSpreadsheetSheets(bytes, { contentType: res.headers.get('content-type') });
 }
 
 async function trialBalance(
@@ -114,6 +140,27 @@ export function siigoReports(
       if (year(from) !== year(to))
         throw new Error('Siigo arma el balance de prueba de un solo año a la vez.');
       return trialBalance(client, doFetch, year(from), month(from), month(to));
+    },
+    async trialBalanceByParty(y: number, m: number): Promise<PartyBalanceRow[]> {
+      const sheets = await reportSheets(
+        client,
+        doFetch,
+        '/v1/test-balance-report-by-thirdparty',
+        { year: y, month_start: m, month_end: m, includes_tax_difference: false },
+        `el balance de prueba por tercero de ${y}-${String(m).padStart(2, '0')}`,
+      );
+      for (const sheet of sheets) {
+        const rows = parsePartyBalanceRows(sheet.rows);
+        if (rows) return rows;
+      }
+      // Un mes sin movimientos puede venir sin la tabla: sólo es error si hay cifras.
+      if (sheets.every((s) => !s.rows.some((r) => (r ?? []).some((c) => typeof c === 'number'))))
+        return [];
+      logger.warn(
+        { year: y, month: m, ...describeSheetsForLog(sheets) },
+        'siigo: no reconocí las columnas del balance de prueba por tercero',
+      );
+      throw new Error('No reconocí las columnas del balance de prueba por tercero de Siigo.');
     },
     async profitAndLoss(from: string, to: string): Promise<ProviderPnl> {
       if (year(from) !== year(to))

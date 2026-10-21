@@ -76,6 +76,7 @@ import {
   proyectosSource,
   withModule,
 } from './module-sources';
+import { REFERENCE_LISTS, type ReferenceList } from '../reference-lists';
 import { type ViewSpec, isFeedSourceId, trackersOf } from './spec';
 
 /**
@@ -1837,11 +1838,38 @@ const pyg: PlatformSource = {
 };
 
 // ---------------------------------------------------------------------------
+// Listas de referencia (aerolíneas, aeropuertos, bancos, monedas)
+// ---------------------------------------------------------------------------
+
+/**
+ * Las listas que mantiene el repo (`reference-lists/`) también se leen como
+ * tabla de sólo lectura: una vista puede listar las aerolíneas, y un campo con
+ * `match` las usa como fuente. Datos públicos: `shareable`.
+ */
+function referenceSource(list: ReferenceList): PlatformSource {
+  return {
+    id: list.id,
+    name: list.name,
+    description: list.description,
+    sensitivity: 'shareable',
+    fields: list.columns.map((c) => field(c.key, c.label, 'text')),
+    async read(_db, cap) {
+      const created = new Date(0).toISOString();
+      const rows = list.rows
+        .slice(0, cap)
+        .map((r, i) => row(`${list.id}:${i}`, r[list.keyColumn] ?? '', { ...r }, created));
+      return { rows, truncated: list.rows.length > cap };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // El registro
 // ---------------------------------------------------------------------------
 
 export const PLATFORM_SOURCES: ReadonlyMap<string, PlatformSource> = new Map(
   [
+    ...[...REFERENCE_LISTS.values()].map(referenceSource),
     ventas,
     pagos,
     cartera,

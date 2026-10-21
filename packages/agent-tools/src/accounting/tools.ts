@@ -7,6 +7,7 @@ import { PAYROLL_GROUP_LABEL } from './payroll';
 import { livePayrollMarkdown, livePayrollRanges, readLivePayroll } from './payroll-live';
 import { canSeePayrollDetail } from '../ledger/privacy';
 import { monthEnd } from '../statements/store';
+import { auditPayrollRead, readPayrollMovements } from './payroll-access';
 import { readPayrollView } from './payroll-store';
 import { getAccountingProvider, listAccountingProviders, providerName } from './providers';
 import {
@@ -46,6 +47,14 @@ const ENTITY_LABEL: Record<AccountingEntity, string> = {
   warehouses: 'bodegas',
   document_types: 'tipos de documento',
   sellers: 'vendedores',
+  accounts_payable: 'cuentas por pagar (reporte oficial del programa, con vencimientos; compáralo con las compras)',
+  party_balances: 'saldos por tercero y cuenta mes a mes (balance de prueba por tercero; sirve para cuadrar cartera y por pagar contra la contabilidad)',
+  product_prices: 'precios de cada producto por lista de precios',
+  fixed_assets: 'activos fijos',
+  price_lists: 'listas de precios',
+  account_groups: 'grupos de inventario',
+  expense_concepts: 'conceptos de descuento de los recibos de caja',
+  cities: 'ciudades y municipios con código DANE',
 };
 
 function when(iso: string | null): string {
@@ -80,6 +89,11 @@ function describeConnection(c: AccountingConnectionRow): string {
     );
   }
   for (const w of c.last_counts?.warnings ?? []) lines.push(`- ATENCIÓN: ${w}`);
+  for (const n of c.last_counts?.notes ?? []) lines.push(`- Nota (no es una falla): ${n}`);
+  if (c.entities.includes('invoices') && c.provider === 'siigo')
+    lines.push(
+      '- Cada factura y nota crédito trae su estado ante la DIAN (factura_electronica: Aceptada, Rechazada, Pendiente, Sin enviar), el CUFE/CUDE, el mensaje de rechazo (mensaje_dian) y un enlace «Descargar PDF» (pdf) que pide el archivo a Siigo en el momento; el XML de facturas está en la misma ruta cambiando pdf por xml.',
+    );
   if (c.entities.includes('payroll'))
     lines.push(
       '- nómina → comprobantes contables de nómina (no hay API de nómina en Siigo), confidenciales; se consultan con accounting.payroll_summary.',
@@ -94,7 +108,7 @@ function describeConnection(c: AccountingConnectionRow): string {
 export const accountingStatus = registerTool({
   id: 'accounting.status',
   description:
-    'Show the connected accounting programs (Siigo, Alegra, QuickBooks Online): whether each is up to date, last sync, what it brings (customers and suppliers, products, invoices, payments, credit notes, purchases, supplier payments, journal movements, quotations, stock by warehouse, statements by month, payroll cost, catalogs), which company tables it fills and any error. Read-only. Use it when the person asks about Siigo, Alegra, QuickBooks, their accounting program, or why invoices are or are not showing.',
+    'Show the connected accounting programs (Siigo, Alegra, QuickBooks Online): whether each is up to date, last sync, what it brings (customers and suppliers, products, invoices, payments, credit notes, purchases, supplier payments, journal movements, quotations, stock by warehouse, statements by month, payroll cost, catalogs), which company tables it fills (including DIAN status of invoices, official accounts payable, balance by third party, fixed assets, price lists, inventory groups and DANE cities) and any error. Read-only. Use it when the person asks about Siigo, Alegra, QuickBooks, their accounting program, or why invoices are or are not showing.',
   inputSchema: z.object({}),
   outputSchema: z.object({ markdown: z.string(), connected: z.number().int() }),
   rateLimit: { perMinute: 20 },
@@ -254,6 +268,14 @@ export const accountingPayrollSummary = registerTool({
           : 'No hay ningún programa contable conectado, así que no hay de dónde leer la nómina contable. Un administrador conecta Siigo en Integraciones → Programas contables, o la nómina se liquida en la pantalla Nómina de Cortex. No inventes cifras.',
       };
     }
+    if (view.people.length)
+      await auditPayrollRead(ctx.db, {
+        userId: ctx.userId,
+        allowed: true,
+        what: 'resumen de nómina por persona',
+        period: input.period ?? view.periods[0]?.period ?? null,
+        people: view.people.length,
+      });
     const lines = view.periods.map(
       (p) =>
         `**${p.period}** — costo para la empresa ${cop(p.costoTotal)} (devengado ${cop(p.devengado)}, prestaciones ${cop(p.prestaciones)}, aportes ${cop(p.aportes)}${p.otrosPersonal ? `, otros ${cop(p.otrosPersonal)}` : ''}); neto a pagar ${cop(p.neto)}; deducciones ${cop(p.deducciones)}; provisiones ${cop(p.provisiones)}. ${p.comprobantes} comprobante(s).`,
@@ -283,6 +305,63 @@ export const accountingPayrollSummary = registerTool({
           ? `\nPor persona en ${top?.period} (confidencial):\n${peopleLines.join('\n')}`
           : '',
         privacy,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    };
+  },
+});
+
+export const accountingPayrollMovements = registerTool({
+  id: 'accounting.payroll_movements',
+  description:
+    'The payroll accounting entries of one month WITH the third party (the person) of each line, read from the payroll entries synced from the accounting program (Siigo). CONFIDENTIAL: only admins and owners of the company can see it; for anyone else it returns nothing and says so, and you must answer with company totals (accounting.payroll_summary) instead. Every read is written to the audit log. The shared table «Movimientos contables» never shows the person on payroll accounts (5105, 2505…); this is the only door to that detail. Use it only when an admin or owner asks who was paid what, or for the entries behind a payroll month. Never copy the figures outside the conversation.',
+  inputSchema: z.object({
+    period: z.string().regex(/^\d{4}-\d{2}$/).describe('The month, YYYY-MM.'),
+    account: z
+      .string()
+      .regex(/^\d{1,10}$/)
+      .nullish()
+      .describe('Optional PUC account prefix, e.g. 2505 (salaries payable) or 5105.'),
+    limit: z.number().int().min(1).max(500).default(100),
+  }),
+  outputSchema: z.object({
+    markdown: z.string(),
+    allowed: z.boolean(),
+    lines: z.array(z.any()),
+  }),
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    const r = await readPayrollMovements(ctx.db, {
+      viewerId: ctx.userId,
+      period: input.period,
+      account: input.account ?? undefined,
+      limit: input.limit,
+    });
+    if (!r.allowed)
+      return {
+        allowed: false,
+        lines: [],
+        markdown:
+          'El detalle de nómina por persona es confidencial: sólo lo ven los administradores y el dueño de la empresa. Puedo darte los totales por mes y concepto con accounting.payroll_summary. No inventes cifras por persona.',
+      };
+    if (!r.lines.length)
+      return {
+        allowed: true,
+        lines: [],
+        markdown: `No hay movimientos de nómina sincronizados en ${input.period}. Si «Nómina por persona» está apagada en Integraciones → Programa contable → «Qué traer», un administrador puede activarla.`,
+      };
+    const rows = r.lines.map(
+      (l) =>
+        `- ${l.date} ${l.journal ?? ''} · cuenta ${l.account} (${l.concept}) · ${l.movement === 'debit' ? 'débito' : 'crédito'} ${cop(l.amount)} · ${l.personName ?? (l.personTaxId ? `Doc. ${l.personTaxId}` : 'sin tercero')}`,
+    );
+    return {
+      allowed: true,
+      lines: r.lines,
+      markdown: [
+        `Movimientos de nómina de ${input.period} (confidencial; esta lectura quedó en la auditoría):`,
+        ...rows,
+        r.truncated ? `\n(Hay más líneas; filtra por cuenta para verlas.)` : '',
       ]
         .filter(Boolean)
         .join('\n'),

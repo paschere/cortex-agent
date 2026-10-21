@@ -16,7 +16,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const generateText = vi.hoisted(() => vi.fn());
-vi.mock('ai', () => ({ generateText }));
+vi.mock('ai', () => ({ generateText, wrapLanguageModel: ({ model }: { model: unknown }) => model }));
 
 import { matchesLiteral } from '../answer';
 import { JUDGE_PROBES, calibrateJudge, judgeAnswer } from '../judge';

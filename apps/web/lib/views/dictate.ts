@@ -182,14 +182,16 @@ export async function dictateForm(
   view: CustomViewRow,
   blockId: string,
   input: DictationInput,
-  opts: { signal?: AbortSignal } = {},
+  opts: { signal?: AbortSignal; actorId?: string | null } = {},
 ): Promise<DictationResult> {
   const fields = await formFields(db, view, blockId);
   if (!fields.length) throw new ValidationError('Este formulario no tiene campos para llenar.');
 
-  // Tope por vista, no por persona: en un enlace público no hay persona.
+  // Con persona (equipo o usuario de la app) el tope es POR PERSONA: quien dicta mucho no le
+  // quita el turno a los demás del mismo formulario. En un enlace público no hay persona:
+  // el tope es de la vista. En los dos casos cuenta además como respuesta del plan de la empresa.
   try {
-    await consumeToken(db, view.id, 'views.dictate', DICTATIONS_PER_MINUTE);
+    await consumeToken(db, opts.actorId ?? view.id, 'views.dictate', DICTATIONS_PER_MINUTE);
   } catch {
     throw new DictationLimitError();
   }

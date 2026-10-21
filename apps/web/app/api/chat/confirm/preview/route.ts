@@ -1,3 +1,8 @@
+import {
+  countFieldValues,
+  fieldUsesSentence,
+  findFieldUses,
+} from '@cortex/agent-tools/src/trackers/field-usage';
 import { confirmationResults, pendingConfirmationIndex } from '@/lib/confirmation-claim';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -69,7 +74,25 @@ export async function POST(req: NextRequest) {
       .eq('slug', String(i?.slug))
       .maybeSingle();
     if (!current) return NextResponse.json({ exists: false });
+    // Lo que costaría quitar campos: valores guardados y pantallas que se rompen.
+    const removeKeys = Array.isArray((input as { removeFields?: unknown })?.removeFields)
+      ? ((input as { removeFields: unknown[] }).removeFields.map(String).slice(0, 20))
+      : [];
+    let removalImpact: { counts: Record<string, number>; uses: string[] } | null = null;
+    if (removeKeys.length) {
+      const { data: tid } = await db
+        .from('trackers')
+        .select('id')
+        .eq('slug', String(i?.slug))
+        .maybeSingle();
+      const counts = tid ? await countFieldValues(db, String(tid.id), removeKeys) : {};
+      const uses = (await findFieldUses(db, String(i?.slug), removeKeys)).map((u) =>
+        fieldUsesSentence([u]),
+      );
+      removalImpact = { counts, uses };
+    }
     return NextResponse.json({
+      removalImpact,
       exists: true,
       current: {
         name: current.name,

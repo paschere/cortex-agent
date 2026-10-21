@@ -323,8 +323,10 @@ function inspectForm(
   const asked = new Set(entries.map((e) => e.key));
   const whitelist = writableFieldsFor(ctx.role, ctx.tracker.slug);
   const autofillTargets = new Map<string, string>();
-  for (const f of ctx.tracker.fields)
+  for (const f of ctx.tracker.fields) {
     for (const t of f.autofill?.fills ?? []) autofillTargets.set(t, f.label);
+    for (const t of Object.keys(f.match?.fills ?? {})) autofillTargets.set(t, f.label);
+  }
 
   if (!canCreateIn(ctx.role, ctx.tracker.slug))
     issues.push(

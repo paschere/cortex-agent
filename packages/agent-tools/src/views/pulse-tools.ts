@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { draftsFromPulseFacts } from '../follow-through/recommendations/sources';
 import { recordRecommendations } from '../follow-through/recommendations/store';
 import { registerTool } from '../index';
-import { utilityModel } from '../model';
+import { simpleModel } from '../model';
 import { computeNextRun } from '../schedule/recurrence';
 import { listTrackers } from '../trackers/store';
 import { type ViewSource, computeView, todayIn } from './compute';
@@ -152,7 +152,7 @@ const draftSchema = z.object({
 
 export const modelSummaryWriter: SummaryWriter = async ({ viewName, day, facts, rejected }) => {
   const { object } = await generateObject({
-    model: utilityModel(),
+    model: simpleModel(),
     schema: draftSchema,
     maxTokens: 1200,
     abortSignal: AbortSignal.timeout(45_000),

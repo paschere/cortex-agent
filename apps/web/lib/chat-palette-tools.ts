@@ -415,6 +415,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.retry_sync': 'Vuelve a correr la sincronización de ',
   'accounting.status': '¿Cómo va la conexión con el programa contable?',
   'accounting.payroll_summary': '¿Cuánto nos costó la nómina según Siigo?',
+  'accounting.payroll_movements': 'Muéstrame la nómina por persona del último mes',
   'accounting.query': 'Consulta en el programa contable las facturas de ',
   'accounting.sync_now': 'Trae ya lo nuevo del programa contable',
   'apps.list': 'Muéstrame las aplicaciones que tenemos',

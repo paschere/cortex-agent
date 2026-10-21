@@ -127,3 +127,21 @@ describe('0234 · el disparador «bajo de existencias» con su umbral', () => {
     expect(automationTriggerSchema.safeParse({ type: 'accounting_event', event: 'stock_low', threshold: -1 }).success).toBe(false);
   });
 });
+
+describe('0235 · factura rechazada por la DIAN', () => {
+  it('sale al pasar a Rechazada, una sola vez, y también si nace rechazada', () => {
+    expect(
+      detectAccountingEvents('invoices', 'row_updated', { factura_electronica: 'Pendiente' }, { factura_electronica: 'Rechazada' }),
+    ).toContain('invoice_rejected');
+    expect(
+      detectAccountingEvents('invoices', 'row_updated', { factura_electronica: 'Rechazada' }, { factura_electronica: 'Rechazada' }),
+    ).not.toContain('invoice_rejected');
+    expect(
+      detectAccountingEvents('invoices', 'row_created', null, { factura_electronica: 'Rechazada' }),
+    ).toContain('invoice_rejected');
+    expect(
+      detectAccountingEvents('invoices', 'row_updated', { factura_electronica: 'Pendiente' }, { factura_electronica: 'Aceptada' }),
+    ).not.toContain('invoice_rejected');
+  });
+});
+

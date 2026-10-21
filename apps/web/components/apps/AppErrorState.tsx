@@ -1,7 +1,9 @@
 'use client';
 
 import { RotateCcw } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
+import { BlockFixActions } from '../views/blocks/BlockFix';
 import { AppIllustration } from './AppIllustration';
 
 /**
@@ -22,6 +24,11 @@ export function AppErrorState({
   useEffect(() => {
     console.error('[apps] pantalla con error:', error.digest ?? error.message);
   }, [error]);
+  // De la dirección sale la app y la pantalla: /apps/<app>/<pantalla> o /a/<app>/<pantalla>.
+  const path = usePathname() ?? '';
+  const m = /^\/(?:apps|a)\/([^/]+)(?:\/([^/?#]+))?/.exec(path);
+  const appRef = m?.[1] ? decodeURIComponent(m[1]) : null;
+  const screenSlug = m?.[2] && m[2] !== 'edit' ? decodeURIComponent(m[2]) : undefined;
   return (
     <div
       role="alert"
@@ -32,6 +39,13 @@ export function AppErrorState({
       <p className="text-sm text-ink-muted">
         Puede ser la señal o un problema nuestro. Lo que ya registraste está guardado.
       </p>
+      {appRef && (
+        <BlockFixActions
+          className="justify-center"
+          info={{ kind: 'app', appRef, screenSlug }}
+          message={`${title}${error.digest ? ` (código ${error.digest})` : ''}`}
+        />
+      )}
       <button
         type="button"
         onClick={reset}

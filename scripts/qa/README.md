@@ -11,3 +11,8 @@ Solo local. La base `cortex_qa` vive dentro del contenedor `supabase_db_cortex-a
 4. Crear cuentas (`/api/auth/sign-up/email`), una empresa (`/api/auth/organization/create`), añadir miembros a `ba_member`, entrar una vez con cada uno.
 5. `QA_ORG=<id empresa> tsx scripts/qa/seed-vuelos.ts` monta la app; `tsx scripts/qa/run-automations.ts` ejecuta la cola de reglas (Inngest no corre en local).
 Contraseña local de las cuentas @qa.test (solo base cortex_qa): QaLocal-2026-vuelos
+
+Notas (2026-10-21):
+- Un miembro entra por `/apps/<slug>/<pantalla>` (las rutas `/a/<id>` de afuera usan el id de la app, no el slug).
+- Si aparece la ventana de consentimiento legal, insertar las filas de `legal_consents` de los usuarios QA en `cortex_qa` (documentos tratamiento, terminos, privacidad; versión que pida la ventana).
+- `QA_ORG=<id> tsx scripts/qa/seed-compuesto.ts` (después de seed-vuelos): líneas con monto al instante, «Cerrar atención» sobre el registro (dos secciones de líneas) y «Buscar en una lista» (aerolínea por prefijo del número de vuelo).

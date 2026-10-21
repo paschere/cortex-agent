@@ -1,5 +1,6 @@
 'use client';
 
+import { BlockFixProvider } from '@/components/views/blocks/BlockFix';
 import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import type { SubmitTarget } from '@/components/views/ViewCanvas';
 import { BrandScope } from '@/components/views/blocks/brand';
@@ -547,24 +548,35 @@ export function AppRunner({
                                 ))}
                               </ul>
                             )}
-                            <LiveViewCanvas
-                              initial={computed}
-                              target={target}
-                              dataUrl={dataUrl ?? null}
-                              heading={{ title }}
-                              showBrand={false}
-                              canExport={canExport}
-                              readOnly={readOnly && !viewAs?.sampled}
-                              onView={
-                                captureWho
-                                  ? (view) =>
-                                      void rememberScreen(
-                                        { appKey, userKey: captureWho.key, screen: current, title },
-                                        view,
-                                      )
-                                  : undefined
-                              }
-                            />
+                            <BlockFixProvider
+                              value={{
+                                kind: 'app',
+                                appName: app.name,
+                                appRef: target && 'appId' in target ? target.appId : app.slug,
+                                screenTitle: title,
+                                screenSlug: current,
+                                canFix: readOnly ? false : canManage ? true : undefined,
+                              }}
+                            >
+                              <LiveViewCanvas
+                                initial={computed}
+                                target={target}
+                                dataUrl={dataUrl ?? null}
+                                heading={{ title }}
+                                showBrand={false}
+                                canExport={canExport}
+                                readOnly={readOnly && !viewAs?.sampled}
+                                onView={
+                                  captureWho
+                                    ? (view) =>
+                                        void rememberScreen(
+                                          { appKey, userKey: captureWho.key, screen: current, title },
+                                          view,
+                                        )
+                                    : undefined
+                                }
+                              />
+                            </BlockFixProvider>
                           </>
                         )
                       )}

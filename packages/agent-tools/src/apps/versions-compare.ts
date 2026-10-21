@@ -81,6 +81,16 @@ function blockChanges(before: ViewBlock, after: ViewBlock): string[] {
     if (d.removed.length) out.push(`${label} quitados: ${names(d.removed)}`);
   }
   if (before.type === 'form' && after.type === 'form') {
+    const linesOf = (b: typeof before) =>
+      [b.lines, ...(b.moreLines ?? [])].flatMap((l) => (l ? [`«${l.title}»${l.amount ? ` con ${l.amountLabel ?? l.amount}` : ''}`] : []));
+    if (!same(linesOf(before), linesOf(after))) {
+      const d = listDelta(linesOf(before), linesOf(after));
+      if (d.added.length) out.push(`listas de ítems nuevas: ${d.added.join(', ')}`);
+      if (d.removed.length) out.push(`listas de ítems quitadas: ${d.removed.join(', ')}`);
+      if (!d.added.length && !d.removed.length) out.push('listas de ítems ajustadas');
+    }
+    if (Boolean(before.onRecord) !== Boolean(after.onRecord))
+      out.push(after.onRecord ? 'completa un registro que ya existe' : 'vuelve a ser un formulario de registro nuevo');
     if (before.submitLabel !== after.submitLabel)
       out.push(`botón «${before.submitLabel}» → «${after.submitLabel}»`);
     if (!same(before.approval, after.approval))
@@ -205,6 +215,17 @@ function permissionLines(
  * Qué cambió de `before` a `after`, por pantalla, bloque, campo y permiso. Una
  * lista vacía = son iguales (en lo que una versión guarda).
  */
+/** Lo que cambia en UNA pantalla (su spec y quién la ve): la comparación de una propuesta de Cortex. */
+export function compareScreenSpecs(
+  before: { title: string; roles: string[]; spec: Snapshot['screens'][number]['spec'] },
+  after: { title: string; roles: string[]; spec: Snapshot['screens'][number]['spec'] },
+): CompareLine[] {
+  return screenChanges(
+    before as Snapshot['screens'][number],
+    after as Snapshot['screens'][number],
+  );
+}
+
 export function compareSnapshots(before: Snapshot, after: Snapshot): CompareLine[] {
   const out: CompareLine[] = [];
 

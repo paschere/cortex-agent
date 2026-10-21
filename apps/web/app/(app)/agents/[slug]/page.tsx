@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Eyebrow, Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { resolveModelId } from '@cortex/agent-tools';
 import {
   ArrowLeft,
   Bell,
@@ -297,13 +298,13 @@ export default async function AgentDetailPage({
         <Panel className="p-5">
           <Eyebrow>Modelo por defecto</Eyebrow>
           <div className="mt-3 flex flex-wrap gap-2">
-            {['claude-opus-5', 'claude-sonnet-5'].map((m) => (
+            {['claude-opus-5-5', 'claude-sonnet-5-5'].map((m) => (
               <label key={m} className="cursor-pointer" aria-disabled={!isAdmin}>
                 <input
                   type="radio"
                   name="default_model"
                   value={m}
-                  defaultChecked={agent.default_model === m}
+                  defaultChecked={resolveModelId(agent.default_model) === m}
                   disabled={!isAdmin}
                   className="peer sr-only"
                 />

@@ -1,4 +1,5 @@
 import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
+import { ModelComparisonSection } from '@/components/admin/ModelComparisonSection';
 import { UsageCostSection } from '@/components/admin/UsageCostSection';
 import { BarChart } from '@/components/charts/BarChart';
 import { SegmentBar } from '@/components/charts/SegmentBar';
@@ -6,10 +7,11 @@ import { CHART_COLOR } from '@/components/charts/colors';
 import { shortDay, toneOfClass } from '@/components/charts/scales';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { buildModelComparison } from '@/lib/model-comparison';
 import { cacheSavingsUsd, formatUsd, rateFor, stepCostUsd } from '@/lib/model-pricing';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { bogotaDay } from '@/lib/usage-cost';
+import { type UsageRow, bogotaDay } from '@/lib/usage-cost';
 import { loadUsageRows, loadUsdCopRate } from '@/lib/usage-cost-store';
 import { buildUsageCostData } from '@/lib/usage-cost-view';
 import { clsx } from 'clsx';
@@ -267,9 +269,10 @@ export default async function UsagePage({
     let tokens = 0;
     for (const r of rows2) {
       if (r.tokens <= 0) continue;
-      // Los agentes corren en el modelo por defecto del workspace (sonnet-5
-      // desde la migración 0071); estas tablas no guardan el modelo por fila.
-      const rate = rateFor('claude-sonnet-5', r.at);
+      // Los agentes corren en el modelo por defecto del workspace (Sonnet 5.5
+      // desde 2026-10; antes sonnet-5, migración 0071); estas tablas no guardan
+      // el modelo por fila.
+      const rate = rateFor('claude-sonnet-5-5', r.at);
       if (!rate) continue;
       const out = Math.round(r.tokens * outShare);
       usd += stepCostUsd(rate, { input: r.tokens - out, cacheRead: 0, cacheWrite: 0, output: out });
@@ -296,6 +299,7 @@ export default async function UsagePage({
   // aparte y tolerante: sin la tabla (migración sin aplicar) la sección se omite.
   const CHART_DAYS = 90;
   const todayBogota = bogotaDay(new Date().toISOString());
+  let comparisonRows: UsageRow[] = [];
   const costData = await (async () => {
     try {
       const sinceChart = new Date(Date.now() - CHART_DAYS * 86_400_000).toISOString();
@@ -303,6 +307,7 @@ export default async function UsagePage({
         loadUsageRows(sb, { since: sinceChart }),
         loadUsdCopRate(sb),
       ]);
+      comparisonRows = usageRows.filter((r) => r.at >= since);
       const ids = (pick: (r: (typeof usageRows)[number]) => string | null) => [
         ...new Set(usageRows.map(pick).filter((v): v is string => Boolean(v))),
       ];
@@ -346,6 +351,34 @@ export default async function UsagePage({
     } catch {
       return null;
     }
+  })();
+
+  // Comparación por modelo (experimento Haiku 5.5 / Sonnet 5.5): el 👍/👎 sale de
+  // la tabla de valoraciones del chat. Tolerante: sin ella, sin valoraciones.
+  const comparison = await (async () => {
+    if (comparisonRows.length === 0) return null;
+    let feedback: Array<{ conversationId: string; messageId: string; rating: number }> = [];
+    try {
+      const { data } = await sb
+        .from('chat_message_feedback')
+        .select('conversation_id, message_id, rating')
+        .gte('created_at', since)
+        .limit(5000);
+      feedback = (
+        (data ?? []) as unknown as Array<{
+          conversation_id: string;
+          message_id: string;
+          rating: number;
+        }>
+      ).map((f) => ({
+        conversationId: f.conversation_id,
+        messageId: f.message_id,
+        rating: Number(f.rating) || 0,
+      }));
+    } catch {
+      // Sin valoraciones la comparación sigue.
+    }
+    return buildModelComparison(comparisonRows, feedback);
   })();
 
   const pct = (arr: number[], p: number) => {
@@ -649,15 +682,18 @@ export default async function UsagePage({
           )}
 
           <p className="mt-3 text-micro leading-relaxed text-ink-faint">
-            Estimado con precios de lista (Sonnet 5: $2/$10 por millón hasta el 31 de agosto, luego
-            $3/$15). El chat se calcula con el detalle real del caché; encargos y orquestador
-            guardan solo totales, así que su cifra es techo, no piso. Las llamadas utilitarias
-            (títulos, extractores, sugerencias) no registran consumo y no aparecen aquí — la cifra
-            autoritativa está en la consola de Anthropic.
+            Estimado con precios de lista por millón de tokens (Sonnet 5.5 $2/$10; Opus 5.5 $4/$20;
+            Haiku 5.5 $0,10/$0,50 hasta 100K de prompt y $0,50/$2,50 por encima; Sonnet 5 histórico
+            $2/$10 hasta el 31 de agosto, luego $3/$15). El chat se calcula con el detalle real del
+            caché; encargos y orquestador guardan solo totales, así que su cifra es techo, no piso.
+            Las llamadas utilitarias (títulos, extractores, sugerencias) no registran consumo y no
+            aparecen aquí — la cifra autoritativa está en la consola de Anthropic.
           </p>
         </Panel>
 
         {costData && <UsageCostSection data={costData} saveRate={saveUsdCopRateAction} />}
+
+        {comparison && <ModelComparisonSection data={comparison} days={days} />}
 
         <div className="grid gap-4 lg:grid-cols-2">
           {/* By tool */}

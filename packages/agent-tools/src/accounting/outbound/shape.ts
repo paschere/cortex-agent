@@ -103,20 +103,53 @@ function plain(s: string): string {
     .trim();
 }
 
+export interface SyncedCity {
+  name: string;
+  /** Nombre del departamento, si el programa lo da. */
+  stateName?: string;
+  /** Código DANE de 5 dígitos. */
+  code: string;
+}
+
+/** Las ciudades completas que trajo la sincronización (0235); vacío = sólo la lista a mano. */
+let synced: SyncedCity[] = [];
+export function setSyncedCities(list: readonly SyncedCity[]): void {
+  synced = [...list];
+}
+
+function findSyncedCity(text: string): CityRef | null {
+  if (!synced.length) return null;
+  if (/^\d{5}$/.test(text)) {
+    const hit = synced.find((c) => c.code === text);
+    return hit ? { name: hit.name, stateCode: text.slice(0, 2), cityCode: text } : null;
+  }
+  const [cityPart, statePart] = text.split(',').map((x) => plain(x ?? '').replace(/ d c$/, ''));
+  const matches = synced.filter(
+    (c) => plain(c.name).replace(/ d c$/, '') === cityPart &&
+      (!statePart || !c.stateName || plain(c.stateName) === statePart),
+  );
+  // Dos municipios con el mismo nombre en distintos departamentos: no se elige uno.
+  if (matches.length !== 1) return null;
+  const hit = matches[0] as SyncedCity;
+  return { name: hit.name, stateCode: hit.code.slice(0, 2), cityCode: hit.code };
+}
+
 /**
  * La ciudad por nombre («Bogotá», «bogota d.c.», «Medellín, Antioquia») o por
  * código DANE de 5 dígitos. `null` si no se reconoce: no se inventa un código.
+ * Primero la lista a mano; después, el listado completo del programa (0235).
  */
 export function findCity(raw: string | null | undefined): CityRef | null {
   const text = (raw ?? '').trim();
   if (!text) return null;
   if (/^\d{5}$/.test(text)) {
     const hit = CITIES.find((c) => c[2] === text);
-    return { name: hit?.[0] ?? text, stateCode: text.slice(0, 2), cityCode: text };
+    if (hit) return { name: hit[0], stateCode: text.slice(0, 2), cityCode: text };
+    return findSyncedCity(text) ?? { name: text, stateCode: text.slice(0, 2), cityCode: text };
   }
   const key = plain(text.split(',')[0] ?? text).replace(/ d c$/, '');
   const hit = CITIES.find((c) => plain(c[0]) === key);
-  return hit ? { name: hit[0], stateCode: hit[1], cityCode: hit[2] } : null;
+  return hit ? { name: hit[0], stateCode: hit[1], cityCode: hit[2] } : findSyncedCity(text);
 }
 
 export type CustomerPersonType = 'Company' | 'Person';

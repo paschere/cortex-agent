@@ -1,6 +1,5 @@
 import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
-import type { Sandbox } from '@vercel/sandbox';
 import {
   CODER_TOOLS,
   type CheckOutcome,
@@ -15,6 +14,7 @@ import {
 } from '@cortex/agent-tools';
 import type { DevRepository, DevTask } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
+import type { Sandbox } from '@vercel/sandbox';
 import { REPO_ROOT, readTranscript, run, truncateOutput, writeTranscript } from './sandbox';
 
 /**
@@ -29,8 +29,25 @@ import { REPO_ROOT, readTranscript, run, truncateOutput, writeTranscript } from 
  * another turn.
  */
 
-/** Model choice: this is coding work, not the chat path's Gemini traffic. */
-const MODEL = 'claude-opus-5';
+/**
+ * Model choice: this is coding work, so Opus 5.5 ($4/$20, thinking always on).
+ *
+ * Migrated from Opus 5, which is what the transcripts of runs already in flight
+ * were written against — Opus 5.5 reads Opus 5's thinking blocks, so a run that
+ * spans the deploy keeps its reasoning. The loop is append-only (it only ever
+ * pushes to `messages`; `system` is rebuilt identically each turn and `tools`
+ * is a constant), which is what the history-editing check of preserved
+ * thinking requires. Forced `tool_choice` is not used here (it 400s on 5.5).
+ */
+const MODEL = 'claude-opus-5-5';
+/**
+ * Explicit, because Opus 5.5's default dropped to `medium` and the levels were
+ * recalibrated: 5.5 at `medium` matches Opus 5 at `high` on coding, and thinks
+ * more per turn than Opus 5 at the same level. `xhigh` (what Opus 5 ran at) would
+ * mean longer turns and more output for a gain nobody has measured here; `high`
+ * is the conservative step down. Re-run the sweep before raising it.
+ */
+const EFFORT = 'high' as const;
 const MAX_TOKENS = 32_000;
 
 export type TurnOutcome =
@@ -89,7 +106,7 @@ export async function runTurn(ctx: TurnContext): Promise<TurnResult> {
     max_tokens: MAX_TOKENS,
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     thinking: { type: 'adaptive' },
-    output_config: { effort: 'xhigh' },
+    output_config: { effort: EFFORT },
     tools: CODER_TOOLS,
     messages,
   });

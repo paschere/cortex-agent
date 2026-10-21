@@ -10,6 +10,7 @@ import { Archive, ChevronLeft, ExternalLink, Loader2, MoreHorizontal, Trash2 } f
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
+import { AppAskBar } from './AppAskBar';
 import { AppearanceTab } from './AppearanceTab';
 import { AutomationsTab } from './AutomationsTab';
 import { FlowsTab } from './FlowsTab';
@@ -387,6 +388,13 @@ export function AppEditor({
       {tab === 'history' && <HistoryTab data={data} />}
       {tab === 'usage' && <UsageTab data={data} />}
       {tab === 'preview' && <PreviewTab data={data} />}
+
+      {data.screens.length > 0 && (
+        <AppAskBar
+          appId={app.id}
+          screens={data.screens.map((s) => ({ slug: s.slug, title: s.title }))}
+        />
+      )}
     </div>
   );
 }

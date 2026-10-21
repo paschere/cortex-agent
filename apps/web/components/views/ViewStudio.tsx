@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useRef, useState, useTransition } from 'react';
 import { LiveViewCanvas } from './LiveViewCanvas';
 import { PromptBar } from './PromptBar';
+import { BlockFixProvider } from './blocks/BlockFix';
 import { ViewCanvas } from './ViewCanvas';
 import type { ToolbarView } from './ViewToolbar';
 import { ViewCover } from './blocks/ViewChrome';
@@ -330,13 +331,15 @@ export function ViewStudio({
           className={clsx('transition-opacity duration-200', designer.designing && 'opacity-60')}
         >
           {!draft ? (
-            <LiveViewCanvas
-              initial={shown}
-              target={{ kind: 'app', viewId: view.id }}
-              dataUrl={`/api/views/${view.id}/data`}
-              heading={{ title: view.name, subtitle: view.spec.subtitle ?? view.description }}
-              actions={headerActions}
-            />
+            <BlockFixProvider value={{ kind: 'view', viewName: view.name, canFix: true }}>
+              <LiveViewCanvas
+                initial={shown}
+                target={{ kind: 'app', viewId: view.id }}
+                dataUrl={`/api/views/${view.id}/data`}
+                heading={{ title: view.name, subtitle: view.spec.subtitle ?? view.description }}
+                actions={headerActions}
+              />
+            </BlockFixProvider>
           ) : (
             <>
               <ViewCover

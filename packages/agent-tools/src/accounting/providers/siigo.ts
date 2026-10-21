@@ -23,6 +23,11 @@ import { siigoOutbound } from './outbound';
 import { type NormalizedPurchase, normalizeSiigoPurchase, siigoPurchasePage } from './purchases';
 import { siigoReports } from './reports-siigo';
 import {
+  normalizeSiigoAccountPayable,
+  siigoDocuments,
+  stampInfo,
+} from './siigo-more';
+import {
   CATALOG_PATH,
   DOCUMENT_TYPE_CLASSES,
   PAYMENT_TYPE_CLASSES,
@@ -72,6 +77,7 @@ const PATHS: Partial<Record<AccountingEntity, string>> = {
   supplier_payments: '/v1/payment-receipts',
   quotations: '/v1/quotations',
   journal_lines: '/v1/journals',
+  accounts_payable: '/v1/accounts-payable',
 };
 
 // ---------------------------------------------------------------------------
@@ -107,7 +113,7 @@ export interface SiigoProduct {
   account_group?: { id?: number; name?: string };
   prices?: Array<{
     currency_code?: string;
-    price_list?: Array<{ position?: number; value?: number }>;
+    price_list?: Array<{ position?: number; name?: string; value?: number }>;
   }>;
   unit?: { code?: string; name?: string };
   unit_label?: string;
@@ -132,7 +138,7 @@ export interface SiigoInvoice {
   annulled?: boolean;
   observations?: string;
   payments?: Array<{ id?: number; name?: string; value?: number; due_date?: string }>;
-  stamp?: { status?: string } | null;
+  stamp?: { status?: string; cufe?: string; cude?: string; observations?: string; errors?: unknown } | null;
   public_url?: string;
   metadata?: Metadata;
 }
@@ -264,6 +270,18 @@ export function normalizeSiigoProduct(p: SiigoProduct): NormalizedProduct {
                 quantity: amount(w.quantity) as number,
               })),
           ),
+    priceLists: nonEmpty(
+      (p.prices ?? []).flatMap((pr) =>
+        (pr.price_list ?? [])
+          .filter((l) => typeof l.position === 'number' && amount(l.value) !== undefined)
+          .map((l) => ({
+            position: l.position as number,
+            name: clip(l.name, 100),
+            currency: currencyOf({ currency: { code: pr.currency_code } }),
+            value: amount(l.value) as number,
+          })),
+      ),
+    ),
   };
 }
 
@@ -298,6 +316,7 @@ export function normalizeSiigoInvoice(inv: SiigoInvoice): NormalizedInvoice | nu
   const rawBalance = inv.annulled ? 0 : (amount(inv.balance) ?? 0);
   const balance = Math.min(Math.max(rawBalance, 0), total);
   const url = clip(inv.public_url, 1000);
+  const stamp = stampInfo(inv.stamp);
   return {
     externalId: String(inv.id),
     number,
@@ -309,7 +328,9 @@ export function normalizeSiigoInvoice(inv: SiigoInvoice): NormalizedInvoice | nu
     balance,
     currency: currencyOf(inv),
     status: inv.annulled ? 'annulled' : balance <= 0.005 ? 'paid' : 'open',
-    einvoiceStatus: einvoiceStatus(inv.stamp?.status ?? undefined),
+    einvoiceStatus: stamp.status ?? einvoiceStatus(inv.stamp?.status ?? undefined),
+    cufe: stamp.cufe,
+    dianMessage: stamp.status === 'Aceptada' ? undefined : stamp.message,
     notes: clip(inv.observations, 400),
     url,
   };
@@ -379,6 +400,7 @@ export interface SiigoCreditNote {
   currency?: { code?: string } | null;
   total?: number;
   observations?: string;
+  stamp?: SiigoInvoice['stamp'];
   metadata?: Metadata;
 }
 
@@ -388,6 +410,7 @@ export function normalizeSiigoCreditNote(n: SiigoCreditNote): NormalizedCreditNo
   const date = day(n.date);
   const total = amount(n.total);
   if (!n.id || !number || !date || total === undefined || total < 0) return null;
+  const creditStamp = stampInfo(n.stamp);
   return {
     externalId: String(n.id),
     number,
@@ -397,6 +420,9 @@ export function normalizeSiigoCreditNote(n: SiigoCreditNote): NormalizedCreditNo
     invoiceNumber: clip(n.invoice?.name, 120),
     total,
     currency: currencyOf(n),
+    einvoiceStatus: creditStamp.status,
+    cufe: creditStamp.cufe,
+    dianMessage: creditStamp.status === 'Aceptada' ? undefined : creditStamp.message,
     notes: clip(n.observations, 400),
   };
 }
@@ -422,6 +448,8 @@ function normalize(entity: AccountingEntity, record: unknown): NormalizedRecord[
       return one(normalizeSiigoQuotation(record as Record<string, unknown>));
     case 'journal_lines':
       return normalizeSiigoJournalLines(record as Record<string, unknown>);
+    case 'accounts_payable':
+      return one(normalizeSiigoAccountPayable(record as Record<string, unknown>));
     default:
       return [];
   }
@@ -464,7 +492,17 @@ export function siigoQueries(entity: AccountingEntity, input: QueryPlanInput): P
     }
     return journalWindows(input.now);
   }
-  if (entity === 'stock' || entity === 'statements' || entity === 'payroll_costs') return [];
+  if (
+    entity === 'stock' ||
+    entity === 'statements' ||
+    entity === 'payroll_costs' ||
+    entity === 'party_balances' ||
+    entity === 'product_prices'
+  )
+    return [];
+  // Reporte oficial de cuentas por pagar: siempre completo (un vencimiento
+  // saldado desaparece del reporte, no se «modifica»).
+  if (entity === 'accounts_payable') return [{}];
   if (entity === 'customers' || entity === 'products') {
     // Siigo defaults to active Customers. Enumerate every third-party kind
     // and activity state; products default to active Products without stock
@@ -580,6 +618,14 @@ export const siigoProvider: AccountingProvider = {
     'warehouses',
     'document_types',
     'sellers',
+    'accounts_payable',
+    'party_balances',
+    'product_prices',
+    'fixed_assets',
+    'price_lists',
+    'account_groups',
+    'expense_concepts',
+    'cities',
   ],
   options: ['payroll'],
   paymentsLabel: 'Recibos de caja',
@@ -604,6 +650,7 @@ export const siigoProvider: AccountingProvider = {
       listPurchases: (since, page) => siigoPurchasePage(client, since, page),
       listPayroll: (since, page) => siigoPayrollPage(client, since, page),
       reports: siigoReports(client, { fetch: runtime.fetch }),
+      documents: siigoDocuments(client),
       live: (req) => siigoLive(client, req),
       writer: siigoWriter(client),
       webhooks: {

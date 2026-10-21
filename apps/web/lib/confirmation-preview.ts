@@ -10,6 +10,7 @@
  * pasan por String(): ver confirmation-values.ts.
  */
 
+import { mergeFields } from '@cortex/agent-tools/src/trackers/merge-fields';
 import { canonicalInput } from './confirmation-claim';
 import {
   TECHNICAL_KEYS,
@@ -30,6 +31,8 @@ export interface PreviewRow {
   after: string;
   changed: boolean;
   long?: boolean;
+  /** Se pinta en rojo: algo que se pierde o se rompe. */
+  danger?: boolean;
   /** Un valor estructurado: una línea por elemento (el total puede ser mayor). */
   items?: string[];
   total?: number;
@@ -56,6 +59,8 @@ export interface PreviewContext {
   trackerExists?: boolean;
   /** trackers.define: la definición actual, para enseñar sólo lo que cambia. */
   trackerBefore?: { name?: string; description?: string; fields: unknown[] } | null;
+  /** trackers.define con removeFields: valores guardados por campo y pantallas que se rompen. */
+  removalImpact?: { counts: Record<string, number>; uses: string[] } | null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -204,7 +209,19 @@ function buildTrackerDefinePreview(
         after: truncate(desc || '—', 80),
         changed: true,
       });
-    const d = diffFields(before.fields, fields);
+    // Redefinir FUSIONA: lo que no viene se conserva; sólo se quita lo de removeFields.
+    const removeKeys = Array.isArray(input.removeFields) ? input.removeFields.map(String) : [];
+    let merged: unknown[] = fields;
+    try {
+      merged = mergeFields(
+        before.fields as Array<{ key: string }>,
+        fields as Array<{ key: string }>,
+        removeKeys,
+      ).fields;
+    } catch {
+      /* removeFields y fields chocan: la herramienta lo rechaza; aquí se muestra lo que viene */
+    }
+    const d = diffFields(before.fields, merged);
     const list = (key: string, label: string, items: string[]) =>
       rows.push({
         key,
@@ -221,7 +238,34 @@ function buildTrackerDefinePreview(
         'Campos que cambian',
         d.changed.map((c) => describeFieldChange(c.before, c.after)),
       );
-    if (d.removed.length) list('removed', 'Campos que se quitan', d.removed.map(describeItem));
+    if (d.removed.length) {
+      const counts = ctx.removalImpact?.counts ?? {};
+      const items = d.removed.map((f) => {
+        const k = isRecord(f) && typeof f.key === 'string' ? f.key : '';
+        const n = counts[k];
+        return `${describeItem(f)}${n === undefined ? '' : ` · con ${n} ${n === 1 ? 'valor guardado' : 'valores guardados'}`}`;
+      });
+      rows.push({
+        key: 'removed',
+        label: 'Se quitarán',
+        after: `${items.length}`,
+        changed: true,
+        danger: true,
+        items,
+        total: items.length,
+      });
+      const uses = ctx.removalImpact?.uses ?? [];
+      if (uses.length)
+        rows.push({
+          key: 'breaks',
+          label: 'Se romperán',
+          after: `${uses.length}`,
+          changed: true,
+          danger: true,
+          items: uses,
+          total: uses.length,
+        });
+    }
     if (d.same > 0 || rows.length === 0)
       rows.push({
         key: 'same',

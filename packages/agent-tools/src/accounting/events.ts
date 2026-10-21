@@ -29,6 +29,8 @@ export const ACCOUNTING_EVENTS = [
   'supplier_payment_created',
   'stock_low',
   'quotation_created',
+  // 0235
+  'invoice_rejected',
 ] as const;
 export type AccountingEventId = (typeof ACCOUNTING_EVENTS)[number];
 
@@ -44,6 +46,7 @@ export const ACCOUNTING_EVENT_LABEL: Record<AccountingEventId, string> = {
   supplier_payment_created: 'Se registra un pago a un proveedor (egreso)',
   stock_low: 'Un producto queda bajo de existencias en una bodega',
   quotation_created: 'Se crea una cotización',
+  invoice_rejected: 'La DIAN rechaza una factura electrónica',
 };
 
 export const ACCOUNTING_EVENT_ENTITY: Record<AccountingEventId, AccountingEntity> = {
@@ -58,6 +61,7 @@ export const ACCOUNTING_EVENT_ENTITY: Record<AccountingEventId, AccountingEntity
   supplier_payment_created: 'supplier_payments',
   stock_low: 'stock',
   quotation_created: 'quotations',
+  invoice_rejected: 'invoices',
 };
 
 /** Con qué tarda en salir cada uno, para decírselo a la persona sin prometer de más. */
@@ -73,6 +77,7 @@ export const ACCOUNTING_EVENT_DELAY: Record<AccountingEventId, string> = {
   supplier_payment_created: 'a los pocos minutos de registrarse el egreso',
   stock_low: 'cuando cambian las existencias de la bodega: a los pocos minutos si el programa avisa del movimiento, o en la siguiente sincronización',
   quotation_created: 'a los pocos minutos de crearse',
+  invoice_rejected: 'a los pocos minutos de que Siigo reciba la respuesta de la DIAN (cada vez que Cortex sincroniza); la fila trae el mensaje de la DIAN (mensaje_dian)',
 };
 
 export function accountingEventTableSlug(
@@ -154,6 +159,11 @@ export function detectAccountingEvents(
       if (reached('Pagada')) out.push('invoice_paid');
       if (reached('Vencida')) out.push('invoice_overdue');
       if (reached('Anulada')) out.push('invoice_annulled');
+      if (
+        eq(after?.factura_electronica, 'Rechazada') &&
+        (created || !eq(before?.factura_electronica, 'Rechazada'))
+      )
+        out.push('invoice_rejected');
       break;
     }
   }

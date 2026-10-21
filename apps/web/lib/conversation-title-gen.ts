@@ -1,4 +1,4 @@
-import { NO_THINKING, utilityModel } from '@cortex/agent-tools';
+import { NO_THINKING, simpleModel } from '@cortex/agent-tools';
 import { generateText } from 'ai';
 import { TITLE_PROMPT, cleanGeneratedTitle, titleFromText } from './conversation-title';
 import { toTuteo } from './es-co';
@@ -7,7 +7,7 @@ import { toTuteo } from './es-co';
 export async function generateConversationTitle(request: string): Promise<string> {
   try {
     const { text } = await generateText({
-      model: utilityModel(),
+      model: simpleModel(),
       prompt: TITLE_PROMPT(request),
       providerOptions: NO_THINKING,
       maxTokens: 64,

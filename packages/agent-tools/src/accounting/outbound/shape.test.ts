@@ -195,3 +195,24 @@ describe('llave de idempotencia', () => {
     expect(a).toMatch(/^[A-Za-z0-9]{1,30}$/);
   });
 });
+
+describe('0235 · ciudades DANE completas', () => {
+  it('con el listado del programa reconoce municipios que la lista a mano no tiene', async () => {
+    const { findCity, setSyncedCities } = await import('./shape');
+    expect(findCity('Támesis')).toBeNull();
+    setSyncedCities([
+      { name: 'Támesis', stateName: 'Antioquia', code: '05789' },
+      { name: 'San Pedro', stateName: 'Antioquia', code: '05664' },
+      { name: 'San Pedro', stateName: 'Valle del Cauca', code: '76670' },
+    ]);
+    expect(findCity('Támesis')).toEqual({ name: 'Támesis', stateCode: '05', cityCode: '05789' });
+    expect(findCity('05789')?.name).toBe('Támesis');
+    // Ambiguo sin departamento: no se elige uno.
+    expect(findCity('San Pedro')).toBeNull();
+    expect(findCity('San Pedro, Valle del Cauca')?.cityCode).toBe('76670');
+    // La lista a mano sigue mandando.
+    expect(findCity('Bogotá')?.cityCode).toBe('11001');
+    setSyncedCities([]);
+  });
+});
+

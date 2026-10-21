@@ -483,6 +483,7 @@ export function buildDetail(
     actions: K.actionsFor(opts, block.actions, tracker, [row]),
     timeline,
     ...(flow ? { flow } : {}),
+    ...(block.completeWith ? { completeWith: block.completeWith } : {}),
   };
 }
 

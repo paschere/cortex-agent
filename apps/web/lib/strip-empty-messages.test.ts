@@ -15,6 +15,27 @@ const result = (id: string) => ({
   result: 'ok',
 });
 
+describe('bloques de pensamiento (preserved thinking)', () => {
+  it('conserva el pensamiento sin texto pero con firma; quita el que no tiene ninguna de las dos', () => {
+    const out = sanitizeHistory([
+      { role: 'user', content: 'hola' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '', signature: 'sig' },
+          { type: 'reasoning', text: '  ' },
+          call('1'),
+        ],
+      },
+      { role: 'tool', content: [result('1')] },
+      { role: 'user', content: 'sigue' },
+    ] as CoreMessage[]);
+    const assistant = out[1] as { content: Array<{ type: string; signature?: string }> };
+    expect(assistant.content.map((p) => p.type)).toEqual(['reasoning', 'tool-call']);
+    expect(assistant.content[0]?.signature).toBe('sig');
+  });
+});
+
 describe('historial dañado: cada caso que la API rechaza', () => {
   it('EL FALLO DE PRODUCCIÓN: una respuesta guardada vacía', () => {
     const out = sanitizeHistory([

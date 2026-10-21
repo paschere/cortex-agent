@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitAutomationEvent, watchesTracker } from '../apps/automations/emit';
+import { referenceListsGrammar } from '../reference-lists';
 import {
   applyComputed,
   changedComputedKeys,
@@ -155,6 +156,7 @@ export async function defineTracker(
   }
   const withRule = input.duplicates === undefined ? {} : { duplicates: input.duplicates };
   await assertLookupTargets(db, input.slug, input.fields);
+  await assertMatchSources(db, input.slug, input.fields);
   const existing = await getTrackerBySlug(db, input.slug);
   const reapply = async (tracker: TrackerRow) => {
     // Una regla nueva o cambiada se aplica a lo que la tabla ya tiene.
@@ -461,6 +463,29 @@ async function assertLookupTargets(
     if (!other.fields.some((f) => f.key === s.target))
       throw new ValidationError(
         `Lookup de «${s.field.label}»: «${other.name}» no tiene un campo «${s.target}». Sus campos: ${other.fields.map((f) => f.key).join(', ')}.`,
+      );
+  }
+}
+
+/** «Buscar en una lista» contra una tabla del espacio: que exista y tenga las columnas. */
+async function assertMatchSources(
+  db: SupabaseClient,
+  slug: string,
+  fields: TrackerField[],
+): Promise<void> {
+  for (const f of fields) {
+    const m = f.match;
+    if (!m || m.source.startsWith('cortex.')) continue;
+    const cols = [m.key, ...Object.values(m.fills)];
+    const other = m.source === slug ? { name: 'esta tabla', fields } : await getTrackerBySlug(db, m.source);
+    if (!other)
+      throw new ValidationError(
+        `Buscar en lista de «${f.label}»: la tabla «${m.source}» no existe (ni es una lista de la plataforma: ${referenceListsGrammar()}).`,
+      );
+    const missing = cols.filter((c) => !other.fields.some((x) => x.key === c));
+    if (missing.length)
+      throw new ValidationError(
+        `Buscar en lista de «${f.label}»: ${other.name} no tiene ${missing.length === 1 ? 'el campo' : 'los campos'} ${missing.map((c) => `«${c}»`).join(', ')}. Sus campos: ${other.fields.map((x) => x.key).join(', ')}.`,
       );
   }
 }

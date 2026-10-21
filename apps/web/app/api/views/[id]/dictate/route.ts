@@ -26,7 +26,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if ('error' in read) return NextResponse.json({ error: read.error }, { status: 400 });
   try {
     return NextResponse.json(
-      await dictateForm(db, view, read.blockId, read.input, { signal: req.signal }),
+      await dictateForm(db, view, read.blockId, read.input, {
+        signal: req.signal,
+        actorId: user.id,
+      }),
     );
   } catch (err) {
     logger.warn({ err, viewId: view.id }, 'views: dictation failed');

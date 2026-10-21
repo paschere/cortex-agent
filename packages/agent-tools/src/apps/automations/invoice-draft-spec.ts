@@ -25,6 +25,13 @@ export const invoiceItemSchema = z.object({
   quantity: amount,
   /** Precio unitario ANTES de IVA, en la moneda de la prefactura: número, `{{campo}}` o fórmula. */
   unitPrice: amount,
+  /**
+   * Lista de precios de Siigo (nombre o posición, fijo o `{{campo}}`: «la lista
+   * del cliente»). Con ella y el código del producto, el precio sale de la
+   * tabla «Precios por lista»; `unitPrice` queda de respaldo si ese producto no
+   * tiene precio en esa lista.
+   */
+  priceList: z.string().trim().min(1).max(100).optional(),
   taxRate: z.enum(INVOICE_TAX_RATES).default('iva_19'),
   unit: z.string().trim().min(1).max(40).optional(),
   discountPct: z.number().min(0).max(100).optional(),

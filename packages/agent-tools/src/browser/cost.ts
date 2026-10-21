@@ -5,8 +5,10 @@ import type { ModelSpend } from './types';
  * arithmetic rather than an impression.
  *
  * The rates are Anthropic's published list prices for the model this repo runs
- * on (`UTILITY_MODEL` in model.ts, currently claude-sonnet-5): $3.00 per
- * million input tokens, $15.00 per million output. List rather than the
+ * on (`UTILITY_MODEL` in model.ts, currently claude-sonnet-5-5, whose list price is
+ * now $2 / $10): kept at the Sonnet 5 standard $3.00 per million input tokens,
+ * $15.00 per million output, so rows recorded before and after the 5.5 move stay
+ * comparable — it errs high, which is the direction an estimate should err. List rather than the
  * promotional rate in force this month, because a number stored on a row is
  * read next year and a promotion that has ended makes every historical row lie
  * downwards. Real spend during an introductory period is lower than what is

@@ -2,6 +2,7 @@
 
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { BlockFixActions } from './blocks/BlockFix';
 
 /**
  * UN BLOQUE QUE FALLA NO TUMBA LA PANTALLA.
@@ -18,18 +19,22 @@ interface Props {
   resetKey?: unknown;
   /** Nombre del bloque, para el lector de pantalla y el registro. */
   name?: string;
+  /** Id del bloque, para «Arreglar con Cortex» / «Avisar al administrador». */
+  blockId?: string;
 }
 
 interface State {
   failed: boolean;
+  /** El mensaje técnico, sólo para el contexto que se le da a Cortex (no se muestra). */
+  detail?: string;
 }
 
 export class BlockBoundary extends Component<Props, State> {
   override state: State = { failed: false };
   private lastKey: unknown;
 
-  static getDerivedStateFromError(): State {
-    return { failed: true };
+  static getDerivedStateFromError(error: unknown): State {
+    return { failed: true, detail: error instanceof Error ? error.message.slice(0, 300) : undefined };
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo) {
@@ -51,15 +56,23 @@ export class BlockBoundary extends Component<Props, State> {
     return (
       <div
         role="alert"
-        className="flex items-center gap-3 rounded-card border border-amber/30 bg-amber-soft/50 px-4 py-3"
+        className="flex items-start gap-3 rounded-card border border-amber/30 bg-amber-soft/50 px-4 py-3"
       >
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-pill bg-amber-soft text-amber">
           <AlertTriangle className="h-4 w-4" aria-hidden />
         </span>
-        <p className="min-w-0 flex-1 text-xs font-semibold text-ink">
-          No se pudo cargar este bloque
-          {this.props.name ? <span className="font-normal text-ink-muted"> · {this.props.name}</span> : null}
-        </p>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-ink">
+            No se pudo cargar este bloque
+            {this.props.name ? <span className="font-normal text-ink-muted"> · {this.props.name}</span> : null}
+          </p>
+          <BlockFixActions
+            className="mt-2"
+            blockId={this.props.blockId}
+            blockTitle={this.props.name}
+            message={`No se pudo cargar este bloque${this.state.detail ? ` (${this.state.detail})` : ''}`}
+          />
+        </div>
         <button
           type="button"
           onClick={() => this.setState({ failed: false })}

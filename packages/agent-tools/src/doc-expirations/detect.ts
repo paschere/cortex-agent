@@ -8,7 +8,7 @@ import {
   prepareChunks,
   quoteSupportsText,
 } from '../documents/verify';
-import { UTILITY_MODEL, utilityModel } from '../model';
+import { FAST_MODEL, simpleModel } from '../model';
 import { findDates, quoteStatesDate, readValidity } from './dates';
 import {
   type Confidence,
@@ -212,7 +212,7 @@ export async function proposeExpirations(
 ): Promise<ExpirationClaim[]> {
   if (chunks.length === 0) return [];
   const result = await generateText({
-    model: utilityModel(),
+    model: simpleModel(),
     system: prompt(hint),
     prompt: documentText(chunks),
     maxTokens: 1200,
@@ -457,7 +457,7 @@ export async function readExpirations(
   return {
     items,
     modelCalled: true,
-    modelId: UTILITY_MODEL,
+    modelId: FAST_MODEL,
     reason: items.length === 0 ? 'no es un papel que venza' : null,
   };
 }

@@ -207,6 +207,7 @@ const ACCOUNTING_EVENTS: Array<{ id: string; label: string; table: string }> = [
   { id: 'supplier_payment_created', label: 'Se registra un pago a un proveedor', table: 'pagos_proveedores' },
   { id: 'stock_low', label: 'Un producto queda bajo de existencias', table: 'existencias' },
   { id: 'quotation_created', label: 'Se crea una cotización', table: 'cotizaciones' },
+  { id: 'invoice_rejected', label: 'La DIAN rechaza una factura electrónica', table: 'facturas' },
 ];
 const ACCOUNTING_PROVIDERS = [
   { id: 'siigo', name: 'Siigo' },

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { documentTotals, roundCents } from '../../sales/totals';
 import { type TemplateContext, lookupRaw, renderRaw, renderTemplate } from './engine';
+import type { ListPriceLookup } from '../../accounting/price-lists';
 import type { InvoiceItemSpec, InvoiceWriteBack } from './invoice-draft-spec';
 
 /**
@@ -154,6 +155,8 @@ export interface BuildDraftInput {
   ctx: TemplateContext;
   /** Contexto del cliente: el de la fila relacionada si `customer.via`. */
   customerCtx?: TemplateContext;
+  /** Precios por lista de precios (0235), si algún ítem pide `priceList`. */
+  listPrice?: ListPriceLookup;
 }
 
 export function cleanNit(raw: string): string {
@@ -193,7 +196,18 @@ export function buildInvoiceDraft(input: BuildDraftInput): DraftBuild {
   for (const [i, item] of input.items.entries()) {
     const description = renderTemplate(item.description, ctx).trim() || `Ítem ${i + 1}`;
     const quantity = evalAmount(item.quantity, ctx);
-    const price = evalAmount(item.unitPrice, ctx);
+    let price = evalAmount(item.unitPrice, ctx);
+    const codeForList = item.productCode ? renderTemplate(item.productCode, ctx).trim() : '';
+    const listName = item.priceList ? renderTemplate(item.priceList, cctx).trim() : '';
+    if (listName && codeForList && input.listPrice) {
+      const fromList = input.listPrice(codeForList, listName);
+      if (fromList !== undefined) price = fromList;
+      else if (Number.isNaN(price))
+        return {
+          ok: false,
+          reason: `El producto ${codeForList} no tiene precio en la lista «${listName}» y el ítem ${i + 1} no trae un precio de respaldo.`,
+        };
+    }
     if (Number.isNaN(quantity))
       return { ok: false, reason: `La cantidad del ítem ${i + 1} («${String(item.quantity)}») no es un número en esta fila.` };
     if (Number.isNaN(price))

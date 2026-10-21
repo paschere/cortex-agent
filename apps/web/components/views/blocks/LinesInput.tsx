@@ -1,6 +1,7 @@
 'use client';
 
-import { formatNumber } from '@/lib/datagrid/format';
+import { formatCompactMoney, formatNumber } from '@/lib/datagrid/format';
+import { applyComputed } from '@cortex/agent-tools/src/trackers/computed';
 import {
   type FormLine,
   MAX_LINES,
@@ -34,6 +35,15 @@ export interface LinesConfig {
   min?: number;
   max?: number;
   decimals?: boolean;
+  /** Monto por línea (fórmula de la tabla hija), calculado aquí al instante. */
+  amount?: {
+    key: string;
+    label: string;
+    qtyKey: string;
+    itemKey: string;
+    fields: Array<{ key: string; label: string; type: string; formula?: string; lookup?: { via: string; field: string; editable?: boolean }; percent?: boolean; options?: string[] }>;
+    format: 'money' | 'number';
+  };
 }
 
 export function LinesInput({
@@ -75,6 +85,23 @@ export function LinesInput({
     write(lines.map((l) => (l.item.id === itemId ? { ...l, qty } : l)));
   const step = config.decimals ? 0.5 : 1;
   const total = lines.reduce((n, l) => n + (Number.isFinite(l.qty) ? l.qty : 0), 0);
+  // El monto de cada línea con la MISMA fórmula que corre el servidor al guardar.
+  const amountOf = (l: FormLine): number | null => {
+    const a = config.amount;
+    if (!a) return null;
+    const res = applyComputed<string | number>(a.fields, {
+      ...(l.pick ?? {}),
+      [a.qtyKey]: l.qty,
+    });
+    const raw = res.values[a.key];
+    const n = raw === undefined ? Number.NaN : Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const showAmount = (n: number) =>
+    config.amount?.format === 'money' ? formatCompactMoney(n) : formatNumber(n, 2);
+  const amounts = lines.map(amountOf);
+  const grand = amounts.reduce<number>((n, v) => n + (v ?? 0), 0);
+  const missingPrice = config.amount ? amounts.filter((v) => v === null).length : 0;
 
   return (
     <div id={id} role="group" aria-label={config.title} onBlur={onBlur} className="space-y-2">
@@ -92,6 +119,15 @@ export function LinesInput({
                 <span className="block truncate text-base font-semibold text-ink">
                   {l.item.label || 'Sin nombre'}
                 </span>
+                {config.amount && (
+                  <span className="block text-xs text-ink-muted" aria-live="polite">
+                    {config.amount.label}:{' '}
+                    {(() => {
+                      const v = amountOf(l);
+                      return v === null ? 'sin tarifa' : <strong className="text-ink">{showAmount(v)}</strong>;
+                    })()}
+                  </span>
+                )}
               </span>
               <button
                 type="button"
@@ -170,6 +206,14 @@ export function LinesInput({
               ? `Agrega al menos ${config.min}.`
               : 'Opcional: puedes dejarla vacía.'
             : `${lines.length} ${lines.length === 1 ? 'ítem' : 'ítems'} · ${formatNumber(total, 3)} en total`}
+          {config.amount && lines.length > 0 && (
+            <span aria-live="polite">
+              {' · '}
+              {config.amount.label} total:{' '}
+              <strong className="text-ink">{showAmount(grand)}</strong>
+              {missingPrice > 0 ? ` (${missingPrice} sin tarifa)` : ''}
+            </span>
+          )}
         </span>
         {lines.length >= max && <span>Máximo {max}.</span>}
       </p>
@@ -189,7 +233,10 @@ export function LinesInput({
         source={source}
         onSelect={(o) =>
           write(
-            normalizeLines([...lines, { item: { id: o.id, label: o.label }, qty: 1 }]).slice(0, max),
+            normalizeLines([
+              ...lines,
+              { item: { id: o.id, label: o.label }, qty: 1, ...(o.pick ? { pick: o.pick } : {}) },
+            ]).slice(0, max),
           )
         }
       />

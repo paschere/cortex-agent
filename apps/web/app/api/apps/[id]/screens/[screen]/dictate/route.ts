@@ -41,7 +41,10 @@ export async function POST(
     );
   try {
     return NextResponse.json(
-      await dictateForm(db, view, read.blockId, read.input, { signal: req.signal }),
+      await dictateForm(db, view, read.blockId, read.input, {
+        signal: req.signal,
+        actorId: opened.actor.id,
+      }),
     );
   } catch (err) {
     logger.warn({ err, viewId: view.id }, 'apps: dictation failed');

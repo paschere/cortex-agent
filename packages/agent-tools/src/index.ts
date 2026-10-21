@@ -20,6 +20,9 @@ export * from './tenancy';
 // registra herramientas — exportado temprano por la misma razón que tenancy.
 export * from './files';
 export * from './model';
+// El experimento Haiku 5.5 contra Sonnet 5.5 en el chat (asignación estable por
+// conversación y salida a Sonnet). Puro.
+export * from './model-experiment';
 // Reparar lo que un modelo devuelve con la forma correcta dentro de la forma
 // equivocada. Módulo hoja y puro; va junto a ./model porque es conocimiento
 // sobre cómo contesta el proveedor, no sobre ningún dominio del producto.

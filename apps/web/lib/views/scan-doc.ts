@@ -3,18 +3,18 @@ import {
   type CustomViewRow,
   NO_THINKING,
   type Suggestion,
-  chatModel,
   checkMeter,
   consumeToken,
   isRefused,
   scannableFields,
   shapeScan,
+  simpleModel,
   writeAuditEvent,
 } from '@cortex/agent-tools';
 import { type UUID, ValidationError, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
 import { generateObject } from 'ai';
+import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { formFields, todayInBogota } from './dictate';
 
@@ -82,7 +82,8 @@ export async function scanDocument(input: {
 
   const all = await formFields(db, input.view, input.blockId);
   const fields = scannableFields(all);
-  if (!fields.length) throw new ScanError('Este formulario no tiene campos que se lean de un papel.');
+  if (!fields.length)
+    throw new ScanError('Este formulario no tiene campos que se lean de un papel.');
 
   try {
     await consumeToken(db, input.userId, 'views.scan_document', SCAN_PER_MINUTE);
@@ -115,7 +116,7 @@ export async function scanDocument(input: {
   const meta = { block: input.blockId, fields: fields.length };
   try {
     const { object } = await generateObject({
-      model: chatModel(),
+      model: simpleModel(),
       experimental_providerMetadata: NO_THINKING,
       schema,
       maxTokens: 1500,
@@ -192,7 +193,10 @@ export async function scanDocument(input: {
 /** Lee el multipart de la petición: `blockId` y `image`. */
 export async function readScanRequest(
   form: FormData | null,
-): Promise<{ blockId: string; image: { bytes: Uint8Array; mime: string } } | { error: string; status: number }> {
+): Promise<
+  | { blockId: string; image: { bytes: Uint8Array; mime: string } }
+  | { error: string; status: number }
+> {
   if (!form) return { error: 'Falta la foto.', status: 400 };
   const blockId = String(form.get('blockId') ?? '');
   if (!blockId || blockId.length > 40) return { error: 'Falta el formulario.', status: 400 };

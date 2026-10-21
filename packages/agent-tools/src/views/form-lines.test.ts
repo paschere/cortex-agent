@@ -48,3 +48,30 @@ describe('form-lines', () => {
     expect(checkLines(one, { min: 1 })).toBeNull();
   });
 });
+
+describe('secciones de líneas', () => {
+  it('la primera va en __lines y las siguientes en __lines2 y __lines3', async () => {
+    const { formLineSections, isLinesKey, linesIndexOf } = await import('./form-lines');
+    const secs = formLineSections({ lines: { t: 'a' }, moreLines: [{ t: 'b' }, { t: 'c' }, { t: 'd' }] });
+    expect(secs.map((s) => s.key)).toEqual(['__lines', '__lines2', '__lines3']);
+    expect(isLinesKey('__lines2')).toBe(true);
+    expect(isLinesKey('__lines4')).toBe(false);
+    expect(linesIndexOf('__lines3')).toBe(2);
+    expect(formLineSections({})).toEqual([]);
+  });
+
+  it('el pick (la tarifa del ítem) viaja para mostrar el monto, y sólo claves válidas', () => {
+    const lines = [{ item: { id: A, label: 'Dolly' }, qty: 2, pick: { tarifa_unitaria: 120 } }];
+    expect(parseLinesValue(serializeLines(lines))).toEqual(lines);
+    const dirty = JSON.stringify([{ item: { id: A, label: 'x' }, qty: 1, pick: { 'MAL KEY': 1, ok: 'y' } }]);
+    expect(parseLinesValue(dirty)?.[0]?.pick).toEqual({ ok: 'y' });
+  });
+
+  it('al sumar un ítem repetido se conserva su pick', () => {
+    const out = normalizeLines([
+      { item: { id: A, label: 'Dolly' }, qty: 1, pick: { t: 5 } },
+      { item: { id: A, label: 'Dolly' }, qty: 1 },
+    ]);
+    expect(out).toEqual([{ item: { id: A, label: 'Dolly' }, qty: 2, pick: { t: 5 } }]);
+  });
+});

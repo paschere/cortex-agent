@@ -5,8 +5,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** La lectura de `model_usage` (0228). Cada consulta revisa su `error`. */
 
-const COLUMNS =
+const BASE_COLUMNS =
   'user_id, conversation_id, task_id, surface, source, model, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, occurred_at';
+// `steps` y `message_id` existen desde 0228; lo del experimento, desde 0236.
+const COLUMNS = `${BASE_COLUMNS}, steps, message_id`;
+const EXPERIMENT_COLUMNS = `${COLUMNS}, experiment_arm, tool_errors, retries, refusals, fell_back`;
 
 interface Raw {
   user_id: string | null;
@@ -20,6 +23,13 @@ interface Raw {
   cache_write_tokens: number | string;
   output_tokens: number | string;
   occurred_at: string;
+  steps?: number | string | null;
+  message_id?: string | null;
+  experiment_arm?: string | null;
+  tool_errors?: number | string | null;
+  retries?: number | string | null;
+  refusals?: number | string | null;
+  fell_back?: boolean | null;
 }
 
 function adapt(r: Raw): UsageRow {
@@ -35,6 +45,13 @@ function adapt(r: Raw): UsageRow {
     cacheWrite: Number(r.cache_write_tokens) || 0,
     output: Number(r.output_tokens) || 0,
     at: r.occurred_at,
+    steps: Math.max(Number(r.steps) || 1, 1),
+    messageId: r.message_id ?? null,
+    arm: r.experiment_arm === 'haiku' || r.experiment_arm === 'sonnet' ? r.experiment_arm : null,
+    toolErrors: Number(r.tool_errors) || 0,
+    retries: Number(r.retries) || 0,
+    refusals: Number(r.refusals) || 0,
+    fellBack: r.fell_back === true,
   };
 }
 
@@ -44,16 +61,19 @@ export async function loadUsageRows(
   db: SupabaseClient,
   opts: { since?: string; conversationId?: string; taskId?: string; userId?: string },
 ): Promise<{ rows: UsageRow[]; truncated: boolean }> {
-  let q = db.from('model_usage').select(COLUMNS);
-  if (opts.since) q = q.gte('occurred_at', opts.since);
-  if (opts.conversationId) q = q.eq('conversation_id', opts.conversationId);
-  if (opts.taskId) q = q.eq('task_id', opts.taskId);
-  if (opts.userId) q = q.eq('user_id', opts.userId);
-  const { data, error } = await q
-    .order('occurred_at', { ascending: false })
-    .limit(USAGE_READ_CAP + 1);
-  if (error) throw error;
-  const all = ((data ?? []) as Raw[]).map(adapt);
+  const query = (columns: string) => {
+    let q = db.from('model_usage').select(columns);
+    if (opts.since) q = q.gte('occurred_at', opts.since);
+    if (opts.conversationId) q = q.eq('conversation_id', opts.conversationId);
+    if (opts.taskId) q = q.eq('task_id', opts.taskId);
+    if (opts.userId) q = q.eq('user_id', opts.userId);
+    return q.order('occurred_at', { ascending: false }).limit(USAGE_READ_CAP + 1);
+  };
+  let res = await query(EXPERIMENT_COLUMNS);
+  // Sin la 0236 las columnas del experimento no existen: se lee lo de siempre.
+  if (res.error) res = await query(COLUMNS);
+  if (res.error) throw res.error;
+  const all = ((res.data ?? []) as unknown as Raw[]).map(adapt);
   return { rows: all.slice(0, USAGE_READ_CAP), truncated: all.length > USAGE_READ_CAP };
 }
 

@@ -12,12 +12,15 @@ import {
   shapeValuesDetailed,
 } from '../trackers/store';
 import {
+  PARTY_HISTORY_MONTHS,
   derivedMonthQueries,
   isMonthlyDerived,
+  readPartyBalanceMonth,
   readStatementMonth,
   recordsForMonth,
   stockLinesFromProduct,
 } from './derived';
+import { partyBalanceLines, productPriceLines } from './providers/siigo-more';
 import { getAccountingProvider } from './providers';
 import type { NormalizedPurchase } from './providers/purchases';
 import type {
@@ -32,6 +35,8 @@ import {
   type AccountingTableSpec,
   accountingTableSpec,
   paymentRowsFor,
+  productPriceValues,
+  accountPayableState,
   receivableFor,
   stockValues,
   valuesFor,
@@ -107,6 +112,14 @@ const ENTITY_LABEL: Record<AccountingEntity, string> = {
   warehouses: 'bodegas',
   document_types: 'tipos de documento',
   sellers: 'vendedores',
+  accounts_payable: 'cuentas por pagar (reporte oficial)',
+  party_balances: 'saldos por tercero',
+  product_prices: 'precios por lista',
+  fixed_assets: 'activos fijos',
+  price_lists: 'listas de precios',
+  account_groups: 'grupos de inventario',
+  expense_concepts: 'conceptos de descuento',
+  cities: 'ciudades',
 };
 
 /** Los catálogos y los estados mensuales se revisan una vez al día, no cada 15 minutos. */
@@ -114,6 +127,22 @@ const DAILY_ENTITIES = new Set<AccountingEntity>([
   ...CATALOG_ENTITIES,
   'statements',
   'payroll_costs',
+  'party_balances',
+  'accounts_payable',
+]);
+/**
+ * Lo que el programa puede no exponer (endpoints sin documentar o que depende
+ * del plan): si responde «no existe» o «no permitido», no es una falla de la
+ * sincronización sino una nota; el resto sigue.
+ */
+const OPTIONAL_ENTITIES = new Set<AccountingEntity>([
+  'cities',
+  'expense_concepts',
+  'fixed_assets',
+  'price_lists',
+  'account_groups',
+  'accounts_payable',
+  'party_balances',
 ]);
 /** Los que se repasan cada día por lo que cambia sin «modificar» el documento (saldos). */
 const SWEEP_ENTITIES = new Set<AccountingEntity>([
@@ -131,7 +160,20 @@ const AUDITED_ENTITIES = new Set<AccountingEntity>([
   'quotations',
 ]);
 /** Se arman de otras lecturas: no cuentan para «terminó la primera carga». */
-const SOFT_ENTITIES = new Set<AccountingEntity>(['stock', 'statements', 'payroll_costs']);
+const SOFT_ENTITIES = new Set<AccountingEntity>([
+  'stock',
+  'statements',
+  'payroll_costs',
+  'party_balances',
+  'product_prices',
+  ...OPTIONAL_ENTITIES,
+]);
+
+/** ¿Un error del programa que significa «esto no está disponible aquí»? */
+export function isUnavailableError(err: unknown): boolean {
+  const status = (err as { status?: number } | null)?.status;
+  return status === 404 || status === 405 || status === 403 || status === 400;
+}
 
 export const ENTITY_ORDER: readonly AccountingEntity[] = ACCOUNTING_ENTITIES;
 
@@ -157,7 +199,11 @@ export function planEntity(
   const today = bogotaToday(now);
   const queriesFor = (input: Parameters<AccountingProvider['queries']>[1]) =>
     isMonthlyDerived(entity)
-      ? derivedMonthQueries(input.mode, today)
+      ? derivedMonthQueries(
+          input.mode,
+          today,
+          entity === 'party_balances' ? PARTY_HISTORY_MONTHS : undefined,
+        )
       : provider.queries(entity, input);
   if (!cursor?.since || (provider.id === 'siigo' && cursor.coverage_version !== 2))
     return {
@@ -449,6 +495,7 @@ export interface SyncDeps {
   importPurchases?: ImportPurchases;
   /** Para probar sin el reloj. */
   readMonth?: typeof readStatementMonth;
+  readPartyMonth?: typeof readPartyBalanceMonth;
 }
 
 /** 0234: lo que el motor necesita para llevar las compras a cuentas por pagar (lo pasa el trabajo programado). */
@@ -576,6 +623,38 @@ function missingPartyIds(kind: AccountingEntity, records: NormalizedRecord[]): s
   return ids;
 }
 
+/**
+ * Un vencimiento que ya no sale en el reporte oficial de cuentas por pagar se
+ * saldó (el reporte sólo trae lo que falta): se marca «Saldada» con saldo cero
+ * en vez de dejarlo como deuda. Sólo se llama tras leer el reporte completo.
+ */
+export async function retireUnseenPayables(
+  db: SupabaseClient,
+  tableId: string,
+  today: string,
+): Promise<number> {
+  const { data, error } = await db
+    .from('tracker_rows')
+    .select('id, values')
+    .eq('tracker_id', tableId)
+    .lt('values->>ultima_lectura', today)
+    .limit(1000);
+  if (error) throw error;
+  let retired = 0;
+  for (const r of (data ?? []) as Array<{ id: string; values: Record<string, unknown> }>) {
+    if (r.values?.estado === 'Saldada') continue;
+    const values = { ...r.values, estado: 'Saldada', saldo: 0, saldo_extranjero: 0 };
+    const { error: updateError } = await db
+      .from('tracker_rows')
+      .update({ values, updated_at: new Date().toISOString() })
+      .eq('id', r.id)
+      .eq('tracker_id', tableId);
+    if (updateError) throw updateError;
+    retired += 1;
+  }
+  return retired;
+}
+
 async function writeReceivables(
   db: SupabaseClient,
   rows: AccountingInvoiceInput[],
@@ -621,6 +700,8 @@ export async function runAccountingSync(
   const nitNames = new Map<string, string>();
   let catalogNames: { costCenters: Map<string, string>; sellers: Map<string, string> } | null = null;
   let stockTable: TableHandle | null = null;
+  let pricesTable: TableHandle | null = null;
+  const notes: string[] = [];
   const refreshPurchaseNumbers = new Set<string>();
   let clientIds: Map<string, string> | null = null;
   let partial = false;
@@ -632,16 +713,29 @@ export async function runAccountingSync(
   );
 
   try {
+    // Toda cosa elegida tiene su tabla desde la primera corrida, aunque le toque
+    // más tarde: antes, «costo de nómina» no existía hasta que los 24 meses de
+    // estados financieros (que van antes y se reanudan por tandas) terminaban.
     for (const entity of entities) {
-      // Las existencias salen de la misma lectura de productos: aquí sólo la tabla.
-      if (entity === 'stock') {
+      if (trackers[entity]) continue;
+      const t = await ensureAccountingTable(
+        db,
+        accountingTableSpec(provider, entity),
+        undefined,
+        conn.created_by,
+      );
+      trackers[entity] = t.id;
+    }
+    for (const entity of entities) {
+      // Las existencias y los precios por lista salen de la misma lectura de productos: aquí sólo la tabla.
+      if (entity === 'stock' || entity === 'product_prices') {
         const t = await ensureAccountingTable(
           db,
-          accountingTableSpec(provider, 'stock'),
-          trackers.stock,
+          accountingTableSpec(provider, entity),
+          trackers[entity],
           conn.created_by,
         );
-        trackers.stock = t.id;
+        trackers[entity] = t.id;
         continue;
       }
       const spec = accountingTableSpec(provider, entity);
@@ -659,6 +753,14 @@ export async function runAccountingSync(
           conn.created_by,
         );
       if (stockTable) trackers.stock = stockTable.id;
+      if (entity === 'products' && entities.includes('product_prices'))
+        pricesTable = await ensureAccountingTable(
+          db,
+          accountingTableSpec(provider, 'product_prices'),
+          trackers.product_prices,
+          conn.created_by,
+        );
+      if (pricesTable) trackers.product_prices = pricesTable.id;
       const plan = planEntity(provider, entity, cursors[entity], now);
       // Catálogos y estados: una vez al día; hoy no toca.
       if (plan.skip) continue;
@@ -691,6 +793,7 @@ export async function runAccountingSync(
           nitNames,
           costCenterNames: catalogNames?.costCenters,
           sellerNames: catalogNames?.sellers,
+          provider: deps.session.documents ? provider.id : undefined,
         };
         await upsertAccountingRows(
           db,
@@ -747,6 +850,25 @@ export async function runAccountingSync(
               conn.created_by,
               stockCounts,
               stockLabels,
+              { backfill: plan.mode === 'initial' },
+            );
+          }
+        }
+        if (kind === 'products' && pricesTable) {
+          const lines = (records as NormalizedProduct[]).flatMap(productPriceLines);
+          if (lines.length) {
+            const priceCounts = counts.product_prices ?? emptyCounts();
+            counts.product_prices = priceCounts;
+            const priceLabels = newLabels.product_prices ?? [];
+            newLabels.product_prices = priceLabels;
+            priceCounts.fetched += lines.length;
+            await upsertAccountingRows(
+              db,
+              pricesTable,
+              lines.map((l) => ({ key: l.externalId, values: productPriceValues(l) })),
+              conn.created_by,
+              priceCounts,
+              priceLabels,
               { backfill: plan.mode === 'initial' },
             );
           }
@@ -817,6 +939,28 @@ export async function runAccountingSync(
             if (!reports) {
               warnings.push(`${provider.name} no entrega estados financieros por API.`);
               result = { records: [], hasMore: false };
+            } else if (entity === 'party_balances') {
+              try {
+                const month = query.month ?? today.slice(0, 7);
+                const reading = await (deps.readPartyMonth ?? readPartyBalanceMonth)(db, {
+                  provider: provider.id,
+                  reports,
+                  month,
+                  today,
+                  userId: conn.created_by ?? null,
+                });
+                result = {
+                  records: partyBalanceLines(month, reading.rows, reading.inProgress),
+                  hasMore: false,
+                };
+              } catch (err) {
+                if (!isUnavailableError(err) && !(err instanceof Error && /reconoc|descarg|entreg|devolvi/.test(err.message)))
+                  throw err;
+                warnings.push(
+                  `No pude leer saldos por tercero de ${query.month}: ${err instanceof Error ? err.message : 'falló la lectura'}`,
+                );
+                result = { records: [], hasMore: false };
+              }
             } else
             try {
               const reading = await (deps.readMonth ?? readStatementMonth)(db, {
@@ -843,7 +987,18 @@ export async function runAccountingSync(
               );
               result = { records: [], hasMore: false };
             }
-          } else result = await deps.session.listPage(entity, query, page);
+          } else {
+            try {
+              result = await deps.session.listPage(entity, query, page);
+            } catch (err) {
+              if (!OPTIONAL_ENTITIES.has(entity) || !isUnavailableError(err)) throw err;
+              // Un listado que este programa no entrega (o no permite) no tumba el resto.
+              notes.push(
+                `${ENTITY_LABEL[entity]}: el programa no lo entrega por API${err instanceof Error ? ` (${err.message.split('.')[0]})` : ''}.`,
+              );
+              result = { records: [], hasMore: false };
+            }
+          }
           pages += 1;
           entityCounts.fetched += result.records.length;
           entityCounts.skipped += result.skipped ?? 0;
@@ -853,6 +1008,9 @@ export async function runAccountingSync(
       }
       if (finished) {
         cursors[entity] = finishedCursor(plan, cursors[entity]);
+        if (entity === 'accounts_payable' && !notes.some((n) => n.startsWith(ENTITY_LABEL[entity])))
+          counts.payables_retired =
+            (counts.payables_retired ?? 0) + (await retireUnseenPayables(db, table.id, today));
         // ¿Quedó corta? Se compara con el total que dice el programa.
         if (deps.session.remoteTotal && AUDITED_ENTITIES.has(entity)) {
           try {
@@ -906,7 +1064,11 @@ export async function runAccountingSync(
             fresh.filter((r) => !r.customerName && r.customerExternalId).map((r) => r.customerExternalId as string),
             names,
           );
-          const ctx = { today, customerNames: names };
+          const ctx = {
+            today,
+            customerNames: names,
+            provider: deps.session.documents ? provider.id : undefined,
+          };
           const c = counts.invoices ?? emptyCounts();
           counts.invoices = c;
           await upsertAccountingRows(
@@ -986,6 +1148,7 @@ export async function runAccountingSync(
 
   counts.requests = deps.session.requests;
   if (warnings.length) counts.warnings = warnings;
+  if (notes.length) counts.notes = [...new Set(notes)];
   const stillLoading = entities.some(
     (e) => !SOFT_ENTITIES.has(e) && (!cursors[e]?.since || cursors[e]?.resume),
   );
@@ -1021,6 +1184,14 @@ const NOUN: Record<AccountingEntity, [string, string]> = {
   warehouses: ['bodega nueva', 'bodegas nuevas'],
   document_types: ['tipo de documento nuevo', 'tipos de documento nuevos'],
   sellers: ['vendedor nuevo', 'vendedores nuevos'],
+  accounts_payable: ['vencimiento por pagar nuevo', 'vencimientos por pagar nuevos'],
+  party_balances: ['saldo por tercero nuevo', 'saldos por tercero nuevos'],
+  product_prices: ['precio nuevo', 'precios nuevos'],
+  fixed_assets: ['activo fijo nuevo', 'activos fijos nuevos'],
+  price_lists: ['lista de precios nueva', 'listas de precios nuevas'],
+  account_groups: ['grupo de inventario nuevo', 'grupos de inventario nuevos'],
+  expense_concepts: ['concepto de descuento nuevo', 'conceptos de descuento nuevos'],
+  cities: ['ciudad nueva', 'ciudades nuevas'],
 };
 
 /**

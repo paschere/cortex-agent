@@ -40,7 +40,16 @@ export type AccountingEntity =
   | 'payment_methods'
   | 'warehouses'
   | 'document_types'
-  | 'sellers';
+  | 'sellers'
+  // 0235: lo que faltaba de la API de Siigo.
+  | 'accounts_payable'
+  | 'party_balances'
+  | 'product_prices'
+  | 'fixed_assets'
+  | 'price_lists'
+  | 'account_groups'
+  | 'expense_concepts'
+  | 'cities';
 
 /**
  * El orden de la corrida. Primero los catálogos y los terceros (para que los
@@ -55,17 +64,25 @@ export const ACCOUNTING_ENTITIES: readonly AccountingEntity[] = [
   'warehouses',
   'document_types',
   'sellers',
+  'price_lists',
+  'account_groups',
+  'fixed_assets',
+  'expense_concepts',
+  'cities',
   'products',
   'stock',
+  'product_prices',
   'invoices',
   'payments',
   'credit_notes',
   'purchases',
   'supplier_payments',
+  'accounts_payable',
   'quotations',
   'journal_lines',
   'statements',
   'payroll_costs',
+  'party_balances',
 ] as const;
 
 /**
@@ -76,8 +93,10 @@ export const ACCOUNTING_ENTITIES: readonly AccountingEntity[] = [
  */
 export const DERIVED_ENTITIES: readonly AccountingEntity[] = [
   'stock',
+  'product_prices',
   'statements',
   'payroll_costs',
+  'party_balances',
 ] as const;
 
 /** Catálogos de referencia: tablas pequeñas que se revisan una vez al día. */
@@ -88,6 +107,11 @@ export const CATALOG_ENTITIES = [
   'warehouses',
   'document_types',
   'sellers',
+  'price_lists',
+  'account_groups',
+  'fixed_assets',
+  'expense_concepts',
+  'cities',
 ] as const satisfies readonly AccountingEntity[];
 export type CatalogEntity = (typeof CATALOG_ENTITIES)[number];
 
@@ -135,6 +159,8 @@ export interface NormalizedProduct {
   minStock?: number;
   /** 0183: existencias por bodega, si el programa las da (Siigo, Alegra). */
   warehouses?: Array<{ externalId: string; name: string; quantity: number }>;
+  /** 0235: precio en cada lista de precios (Siigo: `prices[].price_list[]`). */
+  priceLists?: Array<{ position: number; name?: string; currency: string; value: number }>;
 }
 
 export type InvoiceStatus = 'open' | 'paid' | 'annulled';
@@ -157,6 +183,10 @@ export interface NormalizedInvoice {
   status: InvoiceStatus;
   /** Estado de la factura electrónica (DIAN), ya en español, si aplica. */
   einvoiceStatus?: 'Aceptada' | 'Rechazada' | 'Pendiente' | 'Sin enviar' | 'Otro';
+  /** 0235: CUFE que dio la DIAN al aceptar la factura. */
+  cufe?: string;
+  /** 0235: por qué la DIAN la rechazó (o sus observaciones), en una línea. */
+  dianMessage?: string;
   notes?: string;
   url?: string;
 }
@@ -195,6 +225,11 @@ export interface NormalizedCreditNote {
   total: number;
   currency: string;
   reason?: string;
+  /** 0235: estado de la nota crédito electrónica ante la DIAN. */
+  einvoiceStatus?: 'Aceptada' | 'Rechazada' | 'Pendiente' | 'Sin enviar' | 'Otro';
+  /** 0235: CUDE de la nota crédito. */
+  cufe?: string;
+  dianMessage?: string;
   notes?: string;
 }
 
@@ -276,6 +311,11 @@ export const CATALOG_KIND_LABEL: Record<CatalogEntity, string> = {
   warehouses: 'Bodega',
   document_types: 'Tipo de documento',
   sellers: 'Vendedor',
+  price_lists: 'Lista de precios',
+  account_groups: 'Grupo de inventario',
+  fixed_assets: 'Activo fijo',
+  expense_concepts: 'Concepto de gasto o descuento',
+  cities: 'Ciudad',
 };
 
 /** Una fila de un catálogo de referencia (centro de costo, impuesto, bodega…). */
@@ -319,6 +359,54 @@ export interface NormalizedPayrollCost {
   inProgress: boolean;
 }
 
+/** 0235: un vencimiento del reporte oficial de cuentas por pagar. */
+export interface NormalizedAccountPayable {
+  /** `prefijo-consecutivo-cuota`. */
+  externalId: string;
+  /** «FC-2-22»: el documento de compra al que pertenece. */
+  document: string;
+  quote?: string;
+  supplierExternalId?: string;
+  supplierTaxId?: string;
+  supplierName?: string;
+  /** AAAA-MM-DD. */
+  dueDate?: string;
+  balance: number;
+  currency: string;
+  foreignCurrency?: string;
+  foreignBalance?: number;
+  costCenter?: string;
+}
+
+/** 0235: saldos de una cuenta de un tercero en un mes (del balance de prueba por tercero). */
+export interface NormalizedPartyBalance {
+  /** `party|AAAA-MM|cuenta|nit`. */
+  externalId: string;
+  period: string;
+  account: string;
+  accountName?: string;
+  partyTaxId: string;
+  partyName?: string;
+  initial: number;
+  debit: number;
+  credit: number;
+  final: number;
+  inProgress: boolean;
+}
+
+/** 0235: el precio de un producto en una lista de precios. */
+export interface NormalizedProductPrice {
+  /** `id del producto:moneda:posición de la lista`. */
+  externalId: string;
+  productExternalId: string;
+  productName?: string;
+  productCode?: string;
+  listPosition: number;
+  listName?: string;
+  currency: string;
+  price: number;
+}
+
 export type { NormalizedPurchase };
 
 export type NormalizedRecord =
@@ -334,7 +422,10 @@ export type NormalizedRecord =
   | NormalizedStockLine
   | NormalizedCatalogItem
   | NormalizedStatementLine
-  | NormalizedPayrollCost;
+  | NormalizedPayrollCost
+  | NormalizedAccountPayable
+  | NormalizedPartyBalance
+  | NormalizedProductPrice;
 
 /** Un filtro de un listado del programa, opaco para el motor (se guarda para reanudar). */
 export type ProviderQuery = Record<string, string>;
@@ -453,6 +544,26 @@ export interface ProviderSession {
    * «Por enviar a Siigo»); nunca desatendido.
    */
   outbound?: ProviderOutbound;
+  /**
+   * PDF y XML de un documento electrónico, pedidos al programa en el momento
+   * (0235). No se guardan: la ruta segura de la app los pide con la conexión de
+   * la empresa cada vez que alguien los descarga. Sólo lectura.
+   */
+  documents?: ProviderDocuments;
+}
+
+export type ProviderDocumentKind = 'invoice' | 'credit_note';
+export type ProviderDocumentFormat = 'pdf' | 'xml';
+
+export interface ProviderDocuments {
+  /** El archivo del documento; lanza con un mensaje en español si el programa no lo da. */
+  fetch(
+    kind: ProviderDocumentKind,
+    externalId: string,
+    format: ProviderDocumentFormat,
+  ): Promise<{ bytes: Uint8Array; contentType: string }>;
+  /** Por qué la DIAN rechazó una factura (sus mensajes). */
+  stampErrors?(externalId: string): Promise<string[]>;
 }
 
 /** Un documento creado en el programa. */

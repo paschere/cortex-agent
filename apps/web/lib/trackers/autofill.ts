@@ -3,7 +3,6 @@ import { buildToolContext } from '@/lib/agent';
 import {
   type Suggestion,
   type TrackerField,
-  chatModel,
   checkMeter,
   consumeToken,
   getTool,
@@ -12,6 +11,7 @@ import {
   isToolAvailable,
   runTool,
   sanitizeSuggestion,
+  simpleModel,
   triggerSignature,
   writeAuditEvent,
 } from '@cortex/agent-tools';
@@ -168,7 +168,7 @@ export async function runAutofill(input: {
   try {
     const result = await generateText({
       abortSignal: signal,
-      model: chatModel(),
+      model: simpleModel(),
       system,
       prompt,
       tools,

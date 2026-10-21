@@ -90,6 +90,14 @@ export async function simulateAutomation(
     if (created.includes(trigger.event)) {
       kind = 'row_created';
       before = null;
+    } else if (trigger.event === 'invoice_rejected') {
+      kind = 'row_updated';
+      before = { ...after, factura_electronica: 'Pendiente' };
+      after = {
+        ...after,
+        factura_electronica: 'Rechazada',
+        mensaje_dian: after.mensaje_dian ?? 'Ejemplo: el NIT del adquirente no es válido.',
+      };
     } else if (trigger.event === 'stock_low') {
       // Las existencias bajan del nivel de antes al del umbral (o a «Bajo mínimo»).
       const low = trigger.threshold ?? 0;

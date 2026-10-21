@@ -1,5 +1,5 @@
 import { generateText } from 'ai';
-import { utilityModel } from '../model';
+import { simpleModel } from '../model';
 import { isoDate } from './shape';
 
 /**
@@ -262,7 +262,7 @@ export async function proposeCommitments(chunks: DocumentChunk[]): Promise<Extra
     .slice(0, MAX_PROMPT_CHARS);
 
   const result = await generateText({
-    model: utilityModel(),
+    model: simpleModel(),
     system: EXTRACTION_PROMPT,
     prompt: text,
     maxTokens: 1500,

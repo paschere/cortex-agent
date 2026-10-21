@@ -74,6 +74,7 @@ import {
   useViewWriter,
 } from './view-writes';
 import { BlockBoundary } from './BlockBoundary';
+import { BlockFixActions } from './blocks/BlockFix';
 import './views.css';
 
 /**
@@ -162,9 +163,14 @@ export function ViewCanvas({
       ? view.blocks.find((b) => b.id === view.record?.blockId && b.type === 'detail')
       : undefined;
   const tv = theme?.layout === 'tv' && !openDetail;
+  // Un formulario `onRecord` completa un registro: vive dentro de su detalle, no suelto en la página.
   const inPage = (visible ? view.blocks.filter((b) => visible.has(b.id)) : view.blocks).filter(
-    (b) => b.type !== 'detail' || !nav,
+    (b) => (b.type !== 'detail' || !nav) && !(b.type === 'form' && b.onRecord && nav),
   );
+  const completion =
+    openDetail && openDetail.type === 'detail' && openDetail.completeWith
+      ? view.blocks.find((b) => b.id === openDetail.completeWith && b.type === 'form')
+      : undefined;
   // Planta: el formulario manda. Sube arriba (orden estable) para que quien
   // llega con el celular en la mano registre sin bajar por nada.
   const shown = operator
@@ -224,6 +230,16 @@ export function ViewCanvas({
                   <DesignScope as="section" block={openDetail} className="view-block min-w-0">
                     <Block block={openDetail} target={target} submit={submit} />
                   </DesignScope>
+                  {completion && (
+                    <DesignScope as="section" block={completion} className="view-block mt-4 min-w-0">
+                      <Block
+                        key={`${completion.id}:${view.record?.rowId ?? ''}`}
+                        block={completion}
+                        target={target}
+                        submit={submit}
+                      />
+                    </DesignScope>
+                  )}
                 </div>
               ) : tv ? (
                 <div
@@ -348,7 +364,7 @@ export function ViewBlockPreview({ block }: { block: ComputedBlock }) {
 
 function Block(props: { block: ComputedBlock; target: SubmitTarget; submit?: SubmitFn }) {
   return (
-    <BlockBoundary resetKey={props.block} name={'title' in props.block && typeof props.block.title === 'string' ? props.block.title : undefined}>
+    <BlockBoundary resetKey={props.block} blockId={props.block.id} name={'title' in props.block && typeof props.block.title === 'string' ? props.block.title : undefined}>
       <BlockBody {...props} />
     </BlockBoundary>
   );
@@ -421,6 +437,12 @@ function BlockBody({
             <div>
               <p className="text-sm font-semibold text-ink">{block.title}</p>
               <p className="mt-1 text-xs leading-relaxed text-ink-muted">{block.message}</p>
+              <BlockFixActions
+                className="mt-2.5"
+                blockId={block.id}
+                blockTitle={block.title}
+                message={block.message}
+              />
             </div>
           </div>
         </Card>

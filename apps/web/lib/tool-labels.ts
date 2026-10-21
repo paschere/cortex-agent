@@ -484,6 +484,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   // Programas contables conectados directo (Siigo, Alegra, QuickBooks), 0165.
   accounting_status: { label: 'Ver cómo va el programa contable', icon: 'Calculator' },
   accounting_payroll_summary: { label: 'Ver la nómina según la contabilidad', icon: 'Wallet' },
+  accounting_payroll_movements: { label: 'Ver los movimientos de nómina por persona (confidencial)', icon: 'Wallet' },
   accounting_query: { label: 'Consultar el programa contable en vivo', icon: 'Calculator' },
   accounting_sync_now: { label: 'Traer ya los datos del programa contable', icon: 'RefreshCw' },
   trackers_define: { label: 'Crear o cambiar una tabla', icon: 'Table2' },

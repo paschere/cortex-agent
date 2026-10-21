@@ -7,7 +7,18 @@ import './tools';
 import './live/tools';
 
 export { accountingQuery } from './live/tools';
-export { accountingPayrollSummary, accountingStatus, accountingSyncNow } from './tools';
+export {
+  accountingPayrollMovements,
+  accountingPayrollSummary,
+  accountingStatus,
+  accountingSyncNow,
+} from './tools';
+export {
+  PAYROLL_DETAIL_TOOL_ID,
+  auditPayrollRead,
+  canReadPayroll,
+  readPayrollMovements,
+} from './payroll-access';
 export {
   ACCOUNTING_PROVIDERS,
   getAccountingProvider,

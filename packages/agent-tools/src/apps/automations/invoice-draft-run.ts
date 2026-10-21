@@ -4,7 +4,8 @@ import { orgAdmins } from '../../directory/store';
 import { getTrackerBySlug, upsertRow } from '../../trackers/store';
 import { relationParts } from '../../trackers/computed';
 import type { Values } from './match';
-import { type TemplateContext } from './engine';
+import { type TemplateContext, renderTemplate } from './engine';
+import { loadListPrices } from '../../accounting/price-lists';
 import { buildInvoiceDraft, invoiceDraftKey, writeBackValues } from './invoice-draft';
 import { createInvoiceDraft, INVOICE_DRAFT_STATUS_LABEL, type InvoiceDraftRow } from './invoice-drafts';
 import type { AutomationAction } from './spec';
@@ -100,6 +101,15 @@ export async function runDraftInvoiceAction(a: InvoiceDraftRunInput): Promise<st
     if ('error' in rel) throw new Error(rel.error);
     customerCtx = rel.ctx;
   }
+  const wantsLists = action.items.some((i) => i.priceList && i.productCode);
+  const listPrice = wantsLists
+    ? await loadListPrices(
+        db,
+        action.items
+          .filter((i) => i.priceList && i.productCode)
+          .map((i) => renderTemplate(i.productCode as string, ctx)),
+      )
+    : undefined;
   const built = buildInvoiceDraft({
     customer: action.customer,
     items: action.items,
@@ -110,6 +120,7 @@ export async function runDraftInvoiceAction(a: InvoiceDraftRunInput): Promise<st
     paymentDays: action.paymentDays,
     ctx,
     customerCtx,
+    listPrice,
   });
   if (!built.ok) throw new Error(`No se armó la prefactura: ${built.reason}`);
 

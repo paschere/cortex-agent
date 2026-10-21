@@ -136,6 +136,7 @@ export function ConfirmationPrompt({
             trackerName?: string;
             exists?: boolean;
             current?: { name?: string; description?: string; fields: unknown[] } | null;
+            removalImpact?: { counts: Record<string, number>; uses: string[] } | null;
           } | null,
         ) => {
           if (!alive || !data) return;
@@ -144,6 +145,7 @@ export function ConfirmationPrompt({
             setPreviewCtx({
               trackerExists: data.exists,
               trackerBefore: data.exists ? (data.current ?? null) : null,
+              removalImpact: data.removalImpact ?? null,
             });
             return;
           }
@@ -656,8 +658,14 @@ export function PreviewBlock({
             key={r.key}
             className="grid grid-cols-[minmax(0,7rem)_1fr] gap-x-3 text-xs sm:grid-cols-[8rem_1fr]"
           >
-            <dt className="font-medium text-ink-faint [overflow-wrap:anywhere]">{r.label}</dt>
-            <dd className="min-w-0 leading-snug text-ink [overflow-wrap:anywhere]">
+            <dt
+              className={`font-medium [overflow-wrap:anywhere] ${r.danger ? 'text-rose' : 'text-ink-faint'}`}
+            >
+              {r.label}
+            </dt>
+            <dd
+              className={`min-w-0 leading-snug [overflow-wrap:anywhere] ${r.danger ? 'font-semibold text-rose' : 'text-ink'}`}
+            >
               {r.items ? (
                 <RowList items={r.items} total={r.total ?? r.items.length} />
               ) : preview.kind === 'diff' && r.before !== undefined && r.changed ? (

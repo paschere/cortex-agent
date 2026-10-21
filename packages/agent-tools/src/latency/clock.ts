@@ -91,6 +91,12 @@ export class TurnClock {
   private toolMs = 0;
   private promptTokens: number | null = null;
   private completionTokens: number | null = null;
+  // El experimento de modelos (0236). Contadores en memoria, como todo aquí.
+  private arm: 'haiku' | 'sonnet' | null = null;
+  private fellBack = false;
+  private toolErrors = 0;
+  private retries = 0;
+  private refusals = 0;
 
   /**
    * The turn starts when the object is constructed unless the caller says
@@ -100,6 +106,32 @@ export class TurnClock {
   constructor(init: TurnClockInit) {
     this.init = init;
     this.t0 = init.startedAt ?? performance.now();
+  }
+
+  /** Brazo del experimento de modelos de esta conversación (y si ya cayó a Sonnet). */
+  setExperiment(arm: 'haiku' | 'sonnet' | null, fellBack = false): void {
+    this.arm = arm;
+    this.fellBack = fellBack;
+  }
+
+  /** El turno terminó en otro modelo que con el que empezó (reintento tras un refusal). */
+  setModel(model: string): void {
+    this.init.model = model;
+  }
+
+  /** Una herramienta devolvió error en este turno. */
+  noteToolError(count = 1): void {
+    this.toolErrors += count;
+  }
+
+  /** Un reintento: reparación de argumentos, herramienta forzada repetida, caída a Sonnet. */
+  noteRetry(count = 1): void {
+    this.retries += count;
+  }
+
+  /** El modelo se negó (`stop_reason: refusal`). */
+  noteRefusal(count = 1): void {
+    this.refusals += count;
   }
 
   /** Milliseconds since the turn began. */
@@ -282,6 +314,13 @@ export class TurnClock {
           cacheReadTokens: spent.cacheRead,
           cacheWriteTokens: spent.cacheWrite,
           outputTokens: m.completionTokens ?? 0,
+          experiment: {
+            arm: this.arm,
+            toolErrors: this.toolErrors,
+            retries: this.retries,
+            refusals: this.refusals,
+            fellBack: this.fellBack,
+          },
         },
         this.init.logger,
       );

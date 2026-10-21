@@ -111,15 +111,39 @@ describe('trackers.define', () => {
         field('d', 'select', { options: ['x'] }),
         field('e', 'date'),
       ],
+      removeFields: ['c'],
     };
-    const p = buildPreview('trackers.define', next, { trackerExists: true, trackerBefore: before });
+    const p = buildPreview('trackers.define', next, {
+      trackerExists: true,
+      trackerBefore: before,
+      removalImpact: { counts: { c: 3 }, uses: ['«Detalle» (App › Pantalla): c'] },
+    });
     const by = Object.fromEntries((p?.rows ?? []).map((r) => [r.key, r]));
     expect(p?.kind).toBe('diff');
     expect(by.added?.items).toEqual(['E · Fecha']);
-    expect(by.removed?.items).toEqual(['C · Texto']);
+    expect(by.removed?.label).toBe('Se quitarán');
+    expect(by.removed?.danger).toBe(true);
+    expect(by.removed?.items).toEqual(['C · Texto · con 3 valores guardados']);
+    expect(by.breaks?.danger).toBe(true);
+    expect(by.breaks?.items).toEqual(['«Detalle» (App › Pantalla): c']);
     expect(by.changed?.items).toEqual(['B · tipo: Número → Dinero; obligatorio: no → sí']);
     expect(by.same?.after).toBe('2 campos');
     expect(by.same?.changed).toBe(false);
+  });
+
+  it('un campo que no viene se CONSERVA: sólo agregar uno no quita los demás', () => {
+    const before = {
+      fields: [field('a'), field('estado', 'select', { options: ['x'] }), field('obs', 'longtext')],
+    };
+    const p = buildPreview(
+      'trackers.define',
+      { slug: 's', name: 'S', fields: [field('a', 'text', { autofill: { instruction: 'x', from: ['a'], fills: ['n'] } }), field('n')] },
+      { trackerExists: true, trackerBefore: before },
+    );
+    const by = Object.fromEntries((p?.rows ?? []).map((r) => [r.key, r]));
+    expect(by.removed).toBeUndefined();
+    expect(by.added?.items).toEqual(['N · Texto']);
+    expect(by.same?.after).toBe('2 campos');
   });
 
   it('un campo con los valores por omisión explícitos no cuenta como cambio', () => {

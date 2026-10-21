@@ -5,14 +5,17 @@ import {
   type AccountingEntity,
   CATALOG_KIND_LABEL,
   type CatalogEntity,
+  type NormalizedAccountPayable,
   type NormalizedCatalogItem,
   type NormalizedCreditNote,
   type NormalizedCustomer,
   type NormalizedInvoice,
   type NormalizedJournalLine,
+  type NormalizedPartyBalance,
   type NormalizedPayment,
   type NormalizedPayrollCost,
   type NormalizedProduct,
+  type NormalizedProductPrice,
   type NormalizedQuotation,
   type NormalizedRecord,
   type NormalizedStatementLine,
@@ -165,6 +168,9 @@ const BASE: Record<AccountingEntity, BaseSpec> = {
       text('moneda', 'Moneda'),
       select('estado', 'Estado', [...INVOICE_STATES]),
       select('factura_electronica', 'Factura electrónica', EINVOICE_STATES),
+      text('cufe', 'CUFE (DIAN)'),
+      text('mensaje_dian', 'Mensaje de la DIAN'),
+      text('pdf', 'Descargar PDF'),
       text('observaciones', 'Observaciones'),
       text('enlace', 'Ver en el programa'),
     ],
@@ -182,6 +188,10 @@ const BASE: Record<AccountingEntity, BaseSpec> = {
       text('factura', 'Factura que afecta'),
       money('valor', 'Valor'),
       text('moneda', 'Moneda'),
+      select('factura_electronica', 'Nota electrónica (DIAN)', EINVOICE_STATES),
+      text('cufe', 'CUDE (DIAN)'),
+      text('mensaje_dian', 'Mensaje de la DIAN'),
+      text('pdf', 'Descargar PDF'),
       text('observaciones', 'Observaciones'),
     ],
   },
@@ -324,6 +334,74 @@ const BASE: Record<AccountingEntity, BaseSpec> = {
       select('en_curso', 'Mes en curso', ['Sí', 'No']),
     ],
   },
+  accounts_payable: {
+    slug: 'cuentas_por_pagar',
+    name: 'Cuentas por pagar (reporte oficial)',
+    noun: 'vencimientos por pagar',
+    what: 'el reporte oficial de cuentas por pagar: cada vencimiento con proveedor, fecha y saldo, para cuadrarlo contra las compras',
+    fields: [
+      text('documento', 'Documento'),
+      text('cuota', 'Cuota'),
+      text('proveedor', 'Proveedor'),
+      text('nit', 'NIT proveedor'),
+      date('vence', 'Vence'),
+      money('saldo', 'Saldo por pagar'),
+      text('moneda', 'Moneda'),
+      text('moneda_extranjera', 'Moneda extranjera'),
+      money('saldo_extranjero', 'Saldo en moneda extranjera'),
+      text('centro_costo', 'Centro de costo'),
+      select('estado', 'Estado', ['Por pagar', 'Vencida', 'Saldada']),
+      date('ultima_lectura', 'Última lectura'),
+    ],
+  },
+  party_balances: {
+    slug: 'saldos_terceros',
+    name: 'Saldos por tercero y cuenta mes a mes',
+    noun: 'saldos por tercero',
+    what: 'el balance de prueba por tercero: saldo inicial, movimientos y saldo final de cada cuenta y cada tercero por mes, para cuadrar cartera y cuentas por pagar contra la contabilidad (las cuentas de nómina van sin tercero)',
+    fields: [
+      text('periodo', 'Mes (AAAA-MM)'),
+      date('mes', 'Primer día del mes'),
+      text('cuenta', 'Cuenta PUC'),
+      text('nombre_cuenta', 'Nombre de la cuenta'),
+      text('nit_tercero', 'NIT del tercero'),
+      text('tercero', 'Tercero'),
+      money('saldo_inicial', 'Saldo inicial'),
+      money('debito', 'Débito'),
+      money('credito', 'Crédito'),
+      money('saldo_final', 'Saldo final'),
+      select('en_curso', 'Mes en curso', ['Sí', 'No']),
+    ],
+  },
+  product_prices: {
+    slug: 'precios_productos',
+    name: 'Precios por lista',
+    noun: 'precios de productos',
+    what: 'el precio de cada producto en cada lista de precios (las prefacturas usan la lista del cliente)',
+    fields: [
+      text('producto', 'Producto'),
+      text('codigo', 'Código'),
+      text('lista', 'Lista de precios'),
+      number('posicion', 'Posición de la lista'),
+      text('moneda', 'Moneda'),
+      money('precio', 'Precio'),
+    ],
+  },
+  fixed_assets: catalogBase('activos_fijos', 'Activos fijos', 'los activos fijos', {
+    kind: 'Grupo',
+  }),
+  price_lists: catalogBase('listas_precios', 'Listas de precios', 'las listas de precios', {
+    kind: 'Posición',
+  }),
+  account_groups: catalogBase('grupos_inventario', 'Grupos de inventario', 'los grupos de inventario'),
+  expense_concepts: catalogBase(
+    'conceptos_gasto',
+    'Conceptos de descuento y gasto',
+    'los conceptos de descuento (ajustes) de los recibos de caja',
+  ),
+  cities: catalogBase('ciudades', 'Ciudades (DANE)', 'las ciudades y municipios con su código DANE', {
+    kind: 'Departamento',
+  }),
   cost_centers: catalogBase('centros_costo', 'Centros de costo', 'los centros de costo'),
   taxes: catalogBase('impuestos', 'Impuestos y retenciones', 'los impuestos y retenciones', {
     kind: 'Tipo',
@@ -386,6 +464,21 @@ export interface RowContext {
   sellerNames?: Map<string, string>;
   /** 0234: umbral por defecto de «bajo mínimo» cuando el producto no trae mínimo. */
   lowStockDefault?: number;
+  /**
+   * 0235: de dónde se descarga el PDF de una factura o nota crédito. Es la ruta
+   * segura de la app (`/api/accounting/<programa>/<tipo>/<id>/pdf`): pide el
+   * archivo al programa con la conexión de la empresa. Sin programa, no hay enlace.
+   */
+  provider?: string;
+}
+
+function pdfLink(
+  ctx: RowContext,
+  kind: 'invoice' | 'credit_note',
+  externalId: string,
+): string | undefined {
+  if (!ctx.provider || !externalId) return undefined;
+  return `/api/accounting/${ctx.provider}/${kind === 'invoice' ? 'invoices' : 'credit-notes'}/${encodeURIComponent(externalId)}/pdf`;
 }
 
 export function invoiceState(
@@ -449,6 +542,9 @@ export function invoiceValues(inv: NormalizedInvoice, ctx: RowContext): Values {
     moneda: inv.currency,
     estado: invoiceState(inv, ctx.today),
     factura_electronica: inv.einvoiceStatus,
+    cufe: inv.cufe,
+    mensaje_dian: inv.dianMessage,
+    pdf: pdfLink(ctx, 'invoice', inv.externalId),
     observaciones: inv.notes,
     // Un enlace cortado no abre nada: si no cabe, no se guarda.
     enlace: inv.url && inv.url.length <= 400 ? inv.url : undefined,
@@ -482,6 +578,10 @@ export function creditNoteValues(n: NormalizedCreditNote, ctx: RowContext): Valu
     factura: n.invoiceNumber,
     valor: n.total,
     moneda: n.currency,
+    factura_electronica: n.einvoiceStatus,
+    cufe: n.cufe,
+    mensaje_dian: n.dianMessage,
+    pdf: pdfLink(ctx, 'credit_note', n.externalId),
     observaciones: n.notes,
   });
 }
@@ -539,6 +639,61 @@ export function supplierPaymentValues(p: NormalizedSupplierPayment, ctx: RowCont
     forma_pago: p.method,
     estado: p.annulled ? 'Anulado' : 'Registrado',
     observaciones: p.notes,
+  });
+}
+
+export function accountPayableState(
+  p: Pick<NormalizedAccountPayable, 'balance' | 'dueDate'>,
+  today: string,
+): 'Por pagar' | 'Vencida' | 'Saldada' {
+  if (p.balance <= 0.005) return 'Saldada';
+  return p.dueDate && p.dueDate < today ? 'Vencida' : 'Por pagar';
+}
+
+export function accountPayableValues(p: NormalizedAccountPayable, ctx: RowContext): Values {
+  return compact({
+    documento: p.document,
+    cuota: p.quote,
+    proveedor:
+      p.supplierName ||
+      (p.supplierExternalId && ctx.customerNames.get(p.supplierExternalId)) ||
+      undefined,
+    nit: p.supplierTaxId?.replace(/\D/g, '') || undefined,
+    vence: p.dueDate,
+    saldo: p.balance,
+    moneda: p.currency,
+    moneda_extranjera: p.foreignCurrency,
+    saldo_extranjero: p.foreignBalance,
+    centro_costo: p.costCenter,
+    estado: accountPayableState(p, ctx.today),
+    ultima_lectura: ctx.today,
+  });
+}
+
+export function partyBalanceValues(b: NormalizedPartyBalance): Values {
+  return compact({
+    periodo: b.period,
+    mes: `${b.period}-01`,
+    cuenta: b.account,
+    nombre_cuenta: b.accountName,
+    nit_tercero: b.partyTaxId,
+    tercero: b.partyName,
+    saldo_inicial: b.initial,
+    debito: b.debit,
+    credito: b.credit,
+    saldo_final: b.final,
+    en_curso: b.inProgress ? 'Sí' : 'No',
+  });
+}
+
+export function productPriceValues(p: NormalizedProductPrice): Values {
+  return compact({
+    producto: p.productName,
+    codigo: p.productCode,
+    lista: p.listName ?? `Lista ${p.listPosition}`,
+    posicion: p.listPosition,
+    moneda: p.currency,
+    precio: p.price,
   });
 }
 
@@ -678,6 +833,17 @@ export function valuesFor(
       return statementValues(record as NormalizedStatementLine);
     case 'payroll_costs':
       return payrollCostValues(record as NormalizedPayrollCost);
+    case 'accounts_payable':
+      return accountPayableValues(record as NormalizedAccountPayable, ctx);
+    case 'party_balances':
+      return partyBalanceValues(record as NormalizedPartyBalance);
+    case 'product_prices':
+      return productPriceValues(record as NormalizedProductPrice);
+    case 'fixed_assets':
+    case 'price_lists':
+    case 'account_groups':
+    case 'expense_concepts':
+    case 'cities':
     case 'cost_centers':
     case 'taxes':
     case 'payment_methods':

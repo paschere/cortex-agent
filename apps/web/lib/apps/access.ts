@@ -194,7 +194,12 @@ export function formGate(
       { error: 'Ese formulario no está en esta pantalla.' },
       { status: 404 },
     );
-  if (!canCreateIn(opened.access.role, block.tracker))
+  // Un formulario que completa un registro existente (cerrar la atención) lo usa quien EDITA la
+  // tabla aunque no pueda crear en ella: dictar es llenar, no guardar.
+  const mayFill =
+    canCreateIn(opened.access.role, block.tracker) ||
+    (block.onRecord === true && editAccessFor(opened.access.role, block.tracker) !== 'none');
+  if (!mayFill)
     return NextResponse.json(
       { error: 'Tu rol en esta aplicación no registra en esta tabla.' },
       { status: 403 },

@@ -70,6 +70,10 @@ export interface RunCounts extends Partial<Record<AccountingEntity, EntityCounts
   payments_created?: number;
   /** Peticiones al programa en la corrida. */
   requests?: number;
+  /** 0235: cosas opcionales que el programa no entrega por API (no es una falla). */
+  notes?: string[];
+  /** 0235: vencimientos que dejaron de salir en el reporte de cuentas por pagar (saldados). */
+  payables_retired?: number;
   /** 0183: productos creados o actualizados en el catálogo de inventario. */
   inventory_products?: number;
   /** 0234: compras nuevas en cuentas por pagar y las que quedaron pagadas por el programa. */
@@ -128,8 +132,10 @@ export function cleanEntities(
   provider: AccountingProvider,
   raw: readonly string[] | undefined,
 ): AccountingSelection[] {
-  // 0234: sin elegir nada se trae TODO lo que el programa sabe traer (la nómina por persona es opcional).
-  const wanted = new Set(raw ?? provider.entities);
+  // Sin elegir nada se trae TODO lo que el programa sabe traer, también la
+  // nómina por persona (0235): es confidencial, pero la protege quién la ve
+  // (administradores y dueños, con cada lectura auditada), no apagarla.
+  const wanted = new Set<string>(raw ?? [...provider.entities, ...(provider.options ?? [])]);
   const entities: AccountingSelection[] = ACCOUNTING_ENTITIES.filter(
     (e) => wanted.has(e) && provider.entities.includes(e),
   );

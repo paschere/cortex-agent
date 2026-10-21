@@ -35,21 +35,42 @@ export const ENTITY_LABELS: Record<AccountingSelection, string> = {
   warehouses: 'Bodegas',
   document_types: 'Tipos de documento',
   sellers: 'Vendedores',
+  // 0235: lo que faltaba de la API de Siigo.
+  accounts_payable: 'Cuentas por pagar (reporte oficial)',
+  party_balances: 'Saldos por tercero mes a mes',
+  product_prices: 'Precios por lista',
+  fixed_assets: 'Activos fijos',
+  price_lists: 'Listas de precios',
+  account_groups: 'Grupos de inventario',
+  expense_concepts: 'Conceptos de descuento',
+  cities: 'Ciudades (DANE)',
   // 0217: Siigo no tiene API de nómina; se leen los comprobantes contables.
-  payroll: 'Nómina (desde los comprobantes contables)',
+  payroll: 'Nómina por persona (confidencial: sólo administradores)',
 };
 
 /** Cómo se agrupan en «Qué traer»: lo que se trae por defecto está todo marcado. */
 export const ENTITY_GROUPS: Array<{ title: string; entities: AccountingSelection[] }> = [
   { title: 'Ventas', entities: ['customers', 'invoices', 'payments', 'credit_notes', 'quotations'] },
-  { title: 'Compras y pagos', entities: ['purchases', 'supplier_payments'] },
-  { title: 'Inventario', entities: ['products', 'stock'] },
-  { title: 'Contabilidad', entities: ['journal_lines', 'statements', 'payroll_costs'] },
+  { title: 'Compras y pagos', entities: ['purchases', 'supplier_payments', 'accounts_payable'] },
+  { title: 'Inventario', entities: ['products', 'stock', 'product_prices', 'price_lists', 'account_groups'] },
+  {
+    title: 'Contabilidad',
+    entities: ['journal_lines', 'statements', 'party_balances', 'payroll_costs', 'fixed_assets'],
+  },
   {
     title: 'Catálogos',
-    entities: ['cost_centers', 'taxes', 'payment_methods', 'warehouses', 'document_types', 'sellers'],
+    entities: [
+      'cost_centers',
+      'taxes',
+      'payment_methods',
+      'warehouses',
+      'document_types',
+      'sellers',
+      'expense_concepts',
+      'cities',
+    ],
   },
-  { title: 'Opcional', entities: ['payroll'] },
+  { title: 'Nómina (confidencial)', entities: ['payroll'] },
 ];
 
 export const INTERVAL_OPTIONS = [
@@ -125,7 +146,7 @@ export function buildAccountingCards(
         provider,
         connected: false,
         accountLabel: null,
-        entities: [...provider.entities],
+        entities: [...provider.entities, ...provider.options],
         intervalMinutes: 60,
         notify: true,
         enabled: true,

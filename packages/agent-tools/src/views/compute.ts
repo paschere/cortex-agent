@@ -8,7 +8,15 @@ import {
   formatMoney,
   formatNumber,
 } from '../format/display';
-import { type TrackerField, displayTrackerValue, parseLocation } from '../trackers/schema';
+import { type MatchTable, matchSourcesOf, toMatchTable } from '../trackers/match-shape';
+import { referenceList } from '../reference-lists';
+import {
+  type TrackerField,
+  displayTrackerValue,
+  parseLocation,
+  parseRelationValue,
+} from '../trackers/schema';
+import { formLineSections } from './form-lines';
 import { computeCards } from './cards';
 import { type BlockDesign, hasDesign } from './design-shape';
 import { type EmbedProvider, embedSrc, httpsUrl, safeHref } from './embeds';
@@ -224,17 +232,32 @@ export type ComputedBlock =
       /** Después de enviar, abrir otra pantalla de la app con valores prellenados. */
       afterSubmit?: ThenNav;
       /** Lista de ítems con cantidad (se guarda como filas de una tabla hija); ver form-lines.ts. */
-      lines?: {
-        title: string;
-        itemLabel: string;
-        qtyLabel: string;
-        min?: number;
-        max?: number;
-        decimals?: boolean;
-      } | null;
+      lines?: ComputedLines | null;
+      /** Más secciones de líneas (otra tabla hija cada una). */
+      moreLines?: ComputedLines[];
+      /** Este formulario completa un registro existente (se muestra dentro de su detalle). */
+      onRecord?: boolean;
+      /** Sólo en un formulario `onRecord` cuyo registro está abierto: lo que ya tiene guardado. */
+      record?: {
+        rowId: string;
+        label: string;
+        /** Valores actuales de los campos que el formulario pide (texto, como el input). */
+        values: Record<string, string>;
+        /** Las líneas ya guardadas por sección (`__lines`, `__lines2`…). */
+        lines: Record<
+          string,
+          Array<{
+            item: { id: string; label: string };
+            qty: number;
+            pick?: Record<string, string | number>;
+          }>
+        >;
+      };
       /** true/false si el spec lo fija; ausente = automático (ver `documentScan` del spec). */
       documentScan?: boolean;
       fields: ComputedFormField[];
+      /** Listas de «Buscar en una lista» por fuente (sólo las columnas usadas). */
+      matchTables?: Record<string, MatchTable>;
     })
   | (BlockBase & {
       type: 'gallery';
@@ -478,6 +501,8 @@ export interface ComputedRecordDetail {
   timeline: ComputedTimelineEntry[] | null;
   /** El flujo por estados de la tabla (avance, botones según el rol, historia de saltos). */
   flow?: (ComputedFlow & { history: FlowHistoryEntry[] }) | null;
+  /** El id del formulario (`onRecord`) que completa este registro, mostrado debajo de la ficha. */
+  completeWith?: string;
 }
 
 export type GoalStatus = 'good' | 'warn' | 'bad';
@@ -689,7 +714,28 @@ export type ComputedFormField = Pick<
   | 'percent'
   | 'lookup'
   | 'autofill'
+  | 'match'
 > & { required: boolean; options: string[] };
+
+/** Una sección de líneas de un formulario, lista para el navegador. */
+export interface ComputedLines {
+  title: string;
+  itemLabel: string;
+  qtyLabel: string;
+  min?: number;
+  max?: number;
+  decimals?: boolean;
+  /** Con monto por línea: el campo calculado de la tabla hija y cómo calcularlo en el navegador. */
+  amount?: {
+    key: string;
+    label: string;
+    qtyKey: string;
+    itemKey: string;
+    /** Los campos de la tabla hija (para correr sus fórmulas y lookups al instante). */
+    fields: ComputedFormField[];
+    format: 'money' | 'number';
+  };
+}
 
 export interface ComputedView {
   blocks: ComputedBlock[];
@@ -2028,25 +2074,120 @@ function computeBlockBody(
         voice: formVoiceOf(block),
         ...(block.afterSubmit ? { afterSubmit: block.afterSubmit } : {}),
         ...(block.documentScan !== undefined ? { documentScan: block.documentScan } : {}),
-        lines: block.lines
-          ? {
-              title: block.lines.title,
-              itemLabel: block.lines.itemLabel,
-              qtyLabel: block.lines.qtyLabel,
-              ...(block.lines.min !== undefined ? { min: block.lines.min } : {}),
-              ...(block.lines.max !== undefined ? { max: block.lines.max } : {}),
-              ...(block.lines.decimals ? { decimals: true } : {}),
-            }
-          : null,
+        lines: block.lines ? linesOut(block.lines, sources) : null,
+        ...(block.moreLines?.length
+          ? { moreLines: block.moreLines.map((l) => linesOut(l, sources)) }
+          : {}),
+        ...(block.onRecord ? { onRecord: true, ...recordOut(block, tracker, keys, sources, opts) } : {}),
         // El campo de estado de la aprobación lo pone el servidor: no se pide.
         fields: keys
           .filter((key) => key !== block.approval?.field)
           .map((key) => tracker.fields.find((f) => f.key === key))
           .filter((f): f is TrackerField => Boolean(f))
           .map(formField),
+        // Las listas de «Buscar en una lista»: viajan con el bloque (y con la caché de pantallas).
+        ...matchTablesFor(keys, tracker, sources),
       };
     }
   }
+}
+
+/** Una sección de líneas para el navegador, con el monto por línea si el spec lo pide. */
+function linesOut(cfg: NonNullable<Extract<ViewBlock, { type: 'form' }>['lines']>, sources: Map<string, ViewSource>): ComputedLines {
+  const out: ComputedLines = {
+    title: cfg.title,
+    itemLabel: cfg.itemLabel,
+    qtyLabel: cfg.qtyLabel,
+    ...(cfg.min !== undefined ? { min: cfg.min } : {}),
+    ...(cfg.max !== undefined ? { max: cfg.max } : {}),
+    ...(cfg.decimals ? { decimals: true } : {}),
+  };
+  const child = sources.get(cfg.tracker)?.tracker;
+  const amount = cfg.amount ? child?.fields.find((f) => f.key === cfg.amount) : undefined;
+  if (child && amount && cfg.amount)
+    out.amount = {
+      key: cfg.amount,
+      label: cfg.amountLabel ?? amount.label,
+      qtyKey: cfg.qty,
+      itemKey: cfg.item,
+      fields: child.fields.map(formField),
+      format: amount.type === 'money' ? 'money' : 'number',
+    };
+  return out;
+}
+
+/** Los valores y las líneas del registro abierto para un formulario `onRecord`. */
+function recordOut(
+  block: Extract<ViewBlock, { type: 'form' }>,
+  tracker: CatalogTracker,
+  keys: string[],
+  sources: Map<string, ViewSource>,
+  options: ComputeOptions,
+): { record?: NonNullable<Extract<ComputedBlock, { type: 'form' }>['record']> } {
+  const id = options.record?.rowId;
+  const row = id ? sources.get(block.tracker)?.rows.find((r) => r.id === id) : undefined;
+  if (!id || !row) return {};
+  const values: Record<string, string> = {};
+  for (const k of keys) {
+    const v = row.values[k];
+    if (v !== undefined && v !== null && v !== '') values[k] = String(v);
+  }
+  const lines: NonNullable<
+    NonNullable<Extract<ComputedBlock, { type: 'form' }>['record']>['lines']
+  > = {};
+  for (const { key, cfg } of formLineSections(block)) {
+    const kids = sources.get(cfg.tracker)?.rows ?? [];
+    const lookups = (sources.get(cfg.tracker)?.tracker.fields ?? []).filter(
+      (f) => f.lookup?.via === cfg.item,
+    );
+    lines[key] = kids.flatMap((r) => {
+      const parent = parseRelationValue(r.values[cfg.parent]);
+      const item = parseRelationValue(r.values[cfg.item]);
+      const qty = Number(r.values[cfg.qty]);
+      if (parent?.id !== id || !item || !Number.isFinite(qty)) return [];
+      const pick: Record<string, string | number> = {};
+      for (const f of lookups) {
+        const v = r.values[f.key];
+        if (v !== undefined && v !== null && v !== '') pick[f.key] = v;
+      }
+      return [
+        {
+          item: { id: item.id, label: item.label },
+          qty,
+          ...(Object.keys(pick).length ? { pick } : {}),
+        },
+      ];
+    });
+  }
+  return { record: { rowId: id, label: row.label, values, lines } };
+}
+
+/** Las filas de referencia de los campos con `match` del formulario, sólo con las columnas usadas. */
+function matchTablesFor(
+  keys: string[],
+  tracker: CatalogTracker,
+  sources: Map<string, ViewSource>,
+): { matchTables?: Record<string, MatchTable> } {
+  const used = tracker.fields.filter((f) => keys.includes(f.key) && f.match);
+  if (!used.length) return {};
+  const out: Record<string, MatchTable> = {};
+  for (const { source, columns } of matchSourcesOf(used)) {
+    const key = used.find((f) => f.match?.source === source)?.match?.key;
+    if (!key) continue;
+    const list = source.startsWith('cortex.') ? referenceList(source) : null;
+    if (list) {
+      out[source] = toMatchTable(list.rows, key, columns);
+      continue;
+    }
+    const src = sources.get(source);
+    if (!src || src.blocked) continue;
+    out[source] = toMatchTable(
+      src.rows.map((r) => r.values as Record<string, unknown>),
+      key,
+      columns,
+    );
+  }
+  return Object.keys(out).length ? { matchTables: out } : {};
 }
 
 /** Sólo las opciones que están puestas: el JSON del bloque no carga `undefined`. */
@@ -2087,6 +2228,7 @@ const FORM_FIELD_EXTRAS = [
   'percent',
   'lookup',
   'autofill',
+  'match',
 ] as const;
 
 // ---------------------------------------------------------------------------

@@ -458,6 +458,12 @@ export const formLinesSchema = z.object({
   min: z.number().int().min(0).max(50).optional(),
   max: z.number().int().min(1).max(50).optional(),
   decimals: z.boolean().optional(),
+  /**
+   * Un campo de la tabla hija que se calcula solo (fórmula, p. ej. costo = cantidad × tarifa)
+   * y se muestra en cada línea y sumado al final, al instante, mientras se arma la lista.
+   */
+  amount: fieldRef.optional(),
+  amountLabel: z.string().trim().min(1).max(40).optional(),
 });
 export type FormLines = z.infer<typeof formLinesSchema>;
 
@@ -503,6 +509,14 @@ export const formBlockSchema = z.object({
   afterSubmit: thenSchema.optional(),
   /** Lista de ítems con cantidad que se guarda como filas de una tabla hija. */
   lines: formLinesSchema.optional(),
+  /** Más secciones de líneas (otra tabla hija): materiales además de equipos. Máx. 2 más. */
+  moreLines: z.array(formLinesSchema).max(2).optional(),
+  /**
+   * El formulario completa un registro que YA existe (comenzar una atención y luego
+   * cerrarla): se muestra dentro del detalle que lo nombra en `completeWith` y
+   * guarda sobre ese registro, con sus pasos y sus líneas (agregar, quitar, cambiar).
+   */
+  onRecord: z.boolean().optional(),
   /**
    * «Tomar foto del documento»: Cortex lee una guía, manifiesto o factura y
    * propone valores para los campos. Sin valor, se ofrece solo si el formulario
@@ -684,6 +698,8 @@ export const detailBlockSchema = z.object({
   related: z.array(relatedSchema).max(4).default([]),
   actions: z.array(rowActionSchema).max(4).default([]),
   timeline: timelineSchema.optional(),
+  /** El id de un formulario `onRecord` de la misma tabla que se muestra aquí para completar el registro. */
+  completeWith: z.string().trim().min(1).max(40).optional(),
 });
 export type DetailBlock = z.infer<typeof detailBlockSchema>;
 
@@ -1186,14 +1202,12 @@ export function approvalFor(
 
 /** Las líneas apuntan a una tabla hija con relación al padre, relación a ítems y cantidad numérica. */
 function checkFormLines(
-  block: FormBlock,
+  l: FormLines,
   tracker: CatalogTracker,
   bySlug: ReadonlyMap<string, CatalogTracker>,
   problems: string[],
   where: string,
 ): void {
-  const l = block.lines;
-  if (!l) return;
   const child = bySlug.get(l.tracker);
   if (!child) {
     problems.push(`${where}: la tabla de las líneas «${l.tracker}» no existe.`);
@@ -1213,6 +1227,17 @@ function checkFormLines(
   const qty = child.fields.find((f) => f.key === l.qty);
   if (!qty || qty.type !== 'number')
     problems.push(`${where}: «${l.qty}» de «${child.name}» tiene que ser un campo numérico.`);
+  if (l.amount) {
+    const amount = child.fields.find((f) => f.key === l.amount);
+    if (!amount || !['number', 'money'].includes(amount.type))
+      problems.push(
+        `${where}: «${l.amount}» de «${child.name}» (el monto de cada línea) tiene que ser un campo numérico o de dinero.`,
+      );
+    else if (!amount.formula && !amount.lookup)
+      problems.push(
+        `${where}: «${l.amount}» de «${child.name}» tiene que calcularse solo (fórmula): el monto se muestra al instante en cada línea.`,
+      );
+  }
   for (const f of child.fields)
     if (
       f.required &&
@@ -1239,7 +1264,15 @@ export function checkFormExtras(
   bySlug?: ReadonlyMap<string, CatalogTracker>,
 ): void {
   if (tracker.opaque) return;
-  if (block.lines && bySlug) checkFormLines(block, tracker, bySlug, problems, where);
+  if (bySlug) {
+    for (const l of [...(block.lines ? [block.lines] : []), ...(block.moreLines ?? [])])
+      checkFormLines(l, tracker, bySlug, problems, where);
+    if (block.moreLines?.length && !block.lines)
+      problems.push(`${where}: «moreLines» necesita también «lines» (la primera sección).`);
+    const tables = [block.lines, ...(block.moreLines ?? [])].flatMap((x) => (x ? [x.tracker] : []));
+    if (new Set(tables).size < tables.length)
+      problems.push(`${where}: cada sección de líneas va en su propia tabla hija.`);
+  }
   const a = block.approval;
   if (a) {
     const f = tracker.fields.find((x) => x.key === a.field);
@@ -1515,6 +1548,17 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         for (const k of block.gallery)
           needType(k, 'galería', (t) => t === 'file', 'un campo de archivos o fotos');
         checkWrites(recordEditable, block.actions);
+        if (block.completeWith) {
+          const f = spec.blocks.find((b) => b.id === block.completeWith);
+          if (!f || f.type !== 'form' || !f.onRecord)
+            problems.push(
+              `${where}: «completeWith» ${block.completeWith} tiene que ser un formulario de esta pantalla con onRecord: true.`,
+            );
+          else if (f.tracker !== block.tracker)
+            problems.push(
+              `${where}: el formulario «${f.id}» es de «${f.tracker}», no de «${block.tracker}»: tienen que ser la misma tabla.`,
+            );
+        }
         for (const rel of block.related) {
           const rw = `${where}, relacionados «${rel.title}»`;
           const other = bySlug.get(rel.tracker);
@@ -1652,6 +1696,13 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
           else need(c, 'formulario');
         }
         checkFormExtras(block, tracker, problems, where, bySlug);
+        if (
+          block.onRecord &&
+          !spec.blocks.some((b) => b.type === 'detail' && b.completeWith === block.id)
+        )
+          problems.push(
+            `${where}: un formulario con onRecord se muestra dentro de un detalle; pon el id «${block.id}» en el «completeWith» de un bloque detail de la misma tabla.`,
+          );
         break;
     }
   }
@@ -1730,6 +1781,15 @@ export function trackersOf(spec: ViewSpec): string[] {
       ...spec.blocks.flatMap((b) => ('tracker' in b ? [b.tracker] : [])),
       // Las listas relacionadas de un detalle también se leen (y llevan scope).
       ...spec.blocks.flatMap((b) => (b.type === 'detail' ? b.related.map((r) => r.tracker) : [])),
+      // Las tablas hijas de las líneas con monto (para correr sus fórmulas en el navegador) y las de un
+      // formulario que completa un registro (para mostrar las ya guardadas).
+      ...spec.blocks.flatMap((b) =>
+        b.type === 'form'
+          ? [b.lines, ...(b.moreLines ?? [])].flatMap((l) =>
+              l && (b.onRecord || l.amount) ? [l.tracker] : [],
+            )
+          : [],
+      ),
       ...spec.alerts.map((a) => a.source),
     ]),
   ];

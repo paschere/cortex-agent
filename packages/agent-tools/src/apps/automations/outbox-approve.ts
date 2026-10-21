@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ensureSyncedCities } from '../../accounting/outbound/cities';
 import { z } from 'zod';
 import {
   type CreditNotePayload,
@@ -288,6 +289,7 @@ export async function updateOutboxPayload(db: SupabaseClient, id: string, raw: u
   if (current.kind === 'invoice') throw new ValidationError('Las prefacturas se editan con sus líneas.');
   if (current.status !== 'pending' && current.status !== 'error')
     throw new ValidationError('Ese borrador ya no se edita.');
+  if (current.kind === 'customer') await ensureSyncedCities(db);
   const { payload } = applyPayloadEdit(current.kind, current.payload, edit);
   const patch: Record<string, unknown> = { payload, updated_at: new Date().toISOString() };
   const p = payload as { amount?: number; taxId?: string; customerTaxId?: string; name?: string };

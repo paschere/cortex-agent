@@ -111,7 +111,8 @@ function EntityPicker({
         <p className="mt-1.5 text-xs leading-snug text-ink-muted">
           Nómina: {card.provider.name} no tiene API de nómina; se leen los comprobantes contables de
           nómina (cuentas 5105, 2505, 2370…). Es confidencial: el detalle por persona lo ve sólo
-          quien administra la empresa, el resto ve totales. Está apagada hasta que la actives.
+          quien administra la empresa (cada lectura queda en la auditoría), el resto ve totales.
+          Viene activada como todo lo demás; apágala aquí si no la quieres traer.
         </p>
       ) : null}
     </fieldset>

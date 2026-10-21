@@ -24,6 +24,7 @@ import { generateConversationTitle } from '@/lib/conversation-title-gen';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { querySheet, tableQuerySchema } from '@/lib/feed/table-query';
 import { enqueueJobs } from '@/lib/jobs';
+import { loadHaikuHistory } from '@/lib/model-experiment-store';
 import { clipFragment, ragQueryFor } from '@/lib/rag-query';
 import {
   POINT_AT_DESCRIPTION,
@@ -79,7 +80,14 @@ import {
   isInterruptedContent,
   withoutNotes,
 } from '@/lib/turn-transcript';
-import { chatModel } from '@cortex/agent-tools';
+import {
+  FALLBACK_MODEL,
+  type ModelObserver,
+  chatModel,
+  decideTurnModel,
+  needsHistory,
+  parseHaikuShare,
+} from '@cortex/agent-tools';
 import {
   type AnyTool,
   CUSTOM_TOOL_FAMILY,
@@ -413,6 +421,27 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
     });
   }
 
+  // EL EXPERIMENTO DE MODELOS (0236). Una fracción estable de las conversaciones
+  // (CHAT_HAIKU_SHARE, 15 % por defecto) corre en Haiku 5.5 y el resto en
+  // Sonnet 5.5; el brazo se decide por el id de la conversación, no por turno,
+  // porque el caché de prompts es por modelo. Una conversación de Haiku que ya
+  // falló dos herramientas o recibió un refusal sigue en Sonnet 5.5. Sólo las
+  // conversaciones de Haiku pagan la consulta del historial.
+  const haikuShare = parseHaikuShare(process.env.CHAT_HAIKU_SHARE);
+  const experimentInput = {
+    conversationId,
+    configuredModel: agent.defaultModel,
+    haikuShare,
+  };
+  const turnModel = decideTurnModel({
+    ...experimentInput,
+    history: needsHistory(experimentInput) ? await loadHaikuHistory(db, conversationId) : null,
+  });
+  // El modelo con el que corre el turno; cambia una sola vez, a Sonnet, si
+  // Haiku se niega a mitad (ver la reserva más abajo).
+  let turnModelId = turnModel.model;
+  let refusalSeen = false;
+
   // What this turn handed the model, written down as it is assembled and saved
   // once the answer has already been delivered. Accumulating is pure assignment
   // — no I/O, nothing awaited — so nothing here is on the path of the reply.
@@ -422,7 +451,7 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
     conversationId,
     userId: user.id,
     agentId: agent.id,
-    model: agent.defaultModel,
+    model: turnModel.model,
     logger,
   });
   // How long this turn takes, and where the time goes. Same contract as the
@@ -435,11 +464,12 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
     conversationId,
     userId: user.id,
     agentId: agent.id,
-    model: agent.defaultModel,
+    model: turnModel.model,
     surface: 'web',
     startedAt: started,
     logger,
   });
+  clock.setExperiment(turnModel.arm, turnModel.fellBack);
   // Session, plan check, agent row, conversation row, the user's message. All
   // of it before a single decision about the answer has been made.
   clock.setup();
@@ -1519,9 +1549,28 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
   const maxSteps = maxStepsFor(turnLimit);
   const CHAT_MAX_OUTPUT_TOKENS = 16_000;
 
+  // Lo que la red le cuenta al turno: un refusal (Haiku 5.5 no trae reserva del
+  // lado del servidor) y los reintentos internos. Sólo cuentan; la decisión es
+  // de la ruta.
+  const observeModel: ModelObserver = (event) => {
+    if (event.type === 'refusal') {
+      refusalSeen = true;
+      clock.noteRefusal();
+    } else {
+      clock.noteRetry();
+    }
+  };
+
+  // Cada reparación de argumentos de una herramienta es un reintento del turno.
+  const countRepairs = <F extends (...args: never[]) => unknown>(repair: F): F =>
+    ((...args: Parameters<F>) => {
+      clock.noteRetry();
+      return repair(...args);
+    }) as F;
+
   const runModel = (messagesForRun: CoreMessage[], stepsForRun: number) =>
     streamText({
-      model: chatModel(agent.defaultModel),
+      model: chatModel(turnModelId, observeModel),
       system,
       messages: messagesForRun,
       tools: aiTools,
@@ -1535,8 +1584,10 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
       // corte duro del presupuesto, antes de que Vercel mate la función.
       abortSignal: budget.signal,
       // Argumentos rotos de una herramienta no tumban el turno: ver lib/tool-call-repair.ts.
-      experimental_repairToolCall: withInvalidArgsRedirect(
-        withNoSuchToolRedirect(createToolCallRepair({ signal: budget.signal, surface: 'chat' })),
+      experimental_repairToolCall: countRepairs(
+        withInvalidArgsRedirect(
+          withNoSuchToolRedirect(createToolCallRepair({ signal: budget.signal, surface: 'chat' })),
+        ),
       ),
       // The one measurement that has to happen mid-stream, because it is the only
       // moment that matters and it is over before `onFinish` runs. Reasoning
@@ -1550,8 +1601,14 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
       // One round-trip finished. Recorded per step and not per turn because the
       // prompt cache works per request. Y es el punto de control: un paso que
       // ejecutó herramientas queda guardado antes de seguir.
-      onStepFinish: ({ usage, providerMetadata, finishReason, text, toolCalls }) => {
+      onStepFinish: ({ usage, providerMetadata, finishReason, text, toolCalls, toolResults }) => {
         clock.modelStep(usage, providerMetadata);
+        // Herramientas que devolvieron `__error` (ver `execRegistry`): el dato que
+        // decide si una conversación de Haiku sigue ahí.
+        const failed = (toolResults ?? []).filter(
+          (r) => (r as { result?: { __error?: unknown } } | undefined)?.result?.__error === true,
+        ).length;
+        if (failed > 0) clock.noteToolError(failed);
         stepsUsed++;
         lastFinishReason = finishReason;
         lastStepHadTools = toolCalls.length > 0;
@@ -1710,7 +1767,7 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
           status: outcome === 'complete' ? 'ok' : 'error',
           latency_ms: Math.round(performance.now() - started),
           metadata: {
-            model: agent.defaultModel,
+            model: turnModelId,
             tokensIn: usageTotal.promptTokens,
             tokensOut: usageTotal.completionTokens,
             firstVisibleMs: clock.snapshot().firstVisibleMs,
@@ -1790,8 +1847,12 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
             );
           }),
         );
+        // RESERVA DE HAIKU 5.5. No tiene reserva del lado del servidor: ante un
+        // refusal, el resto del turno (y de la conversación) va en Sonnet 5.5.
+        const refusalRetry =
+          refusalSeen && turnModelId !== FALLBACK_MODEL && !errored && !budget.reason();
         const kind =
-          finished && !errored && !budget.reason()
+          !refusalRetry && finished && !errored && !budget.reason()
             ? shouldContinue({
                 turnHadNoText,
                 awaitingPerson,
@@ -1804,7 +1865,29 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
                 alreadyContinued: false,
               })
             : null;
-        if (kind) {
+        if (refusalRetry) {
+          const response = await first.response;
+          logger.warn(
+            { conversationId, from: turnModelId },
+            'chat: model refused, retrying on fallback',
+          );
+          turnModelId = FALLBACK_MODEL;
+          clock.setModel(FALLBACK_MODEL);
+          clock.noteRetry();
+          finished = false;
+          const carried = sanitizeHistory([
+            ...coreMessages,
+            ...(response.messages as CoreMessage[]),
+            { role: 'user', content: continuationNudge('steps', lastStepText) },
+          ]);
+          const hasWork = (response.messages as CoreMessage[]).length > 0;
+          const retry = runModel(
+            hasWork ? carried : coreMessages,
+            Math.max(maxSteps - stepsUsed, 4),
+          );
+          retry.mergeIntoDataStream(target as never, mergeOptions);
+          await retry.consumeStream();
+        } else if (kind) {
           const response = await first.response;
           logger.info('chat: auto-continuing turn', { conversationId, kind, stepsUsed });
           finished = false;

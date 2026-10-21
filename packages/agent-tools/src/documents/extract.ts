@@ -1,5 +1,5 @@
 import { generateText } from 'ai';
-import { UTILITY_MODEL, utilityModel } from '../model';
+import { FAST_MODEL, simpleModel } from '../model';
 import { DOCUMENT_TYPES, type DocumentTypeSpec, documentType } from './types';
 import {
   type ClassificationOutcome,
@@ -86,7 +86,7 @@ export async function classifyDocument(chunks: DocumentChunk[]): Promise<Classif
     return { docType: null, reason: 'el documento todavía no tiene texto indexado' };
   }
   const result = await generateText({
-    model: utilityModel(),
+    model: simpleModel(),
     system: classificationPrompt(),
     prompt: documentText(chunks),
     maxTokens: 400,
@@ -190,7 +190,7 @@ export async function readDocument(
   forcedType?: string | null,
 ): Promise<ExtractionReading> {
   const base = {
-    modelId: UTILITY_MODEL,
+    modelId: FAST_MODEL,
     extractorVersion: EXTRACTOR_VERSION,
     fields: [] as VerifiedField[],
     rejected: [] as RejectedField[],
@@ -230,7 +230,7 @@ export async function readDocument(
 
   const spec = documentType(typeId) as DocumentTypeSpec;
   const result = await generateText({
-    model: utilityModel(),
+    model: simpleModel(),
     system: extractionPrompt(spec),
     prompt: documentText(chunks),
     maxTokens: 2000,

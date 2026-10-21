@@ -107,6 +107,15 @@ export interface ProviderReports {
    * de un rango de meses. Sólo Siigo lo entrega así.
    */
   trialBalance?(from: string, to: string): Promise<TrialBalanceRow[]>;
+  /**
+   * 0235: balance de prueba POR TERCERO de un mes (cuenta × tercero con saldo
+   * inicial, débito, crédito y saldo final). Sólo Siigo; lanza si el archivo
+   * no tiene la forma esperada.
+   */
+  trialBalanceByParty?(
+    year: number,
+    month: number,
+  ): Promise<import('./siigo-more').PartyBalanceRow[]>;
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;

@@ -31,6 +31,16 @@ export interface UsageRow {
   output: number;
   /** ISO. */
   at: string;
+  /** Pasos (peticiones al modelo) del turno; parte el tramo largo de Haiku 5.5. */
+  steps?: number;
+  /** Fila del mensaje (para cruzar con 👍/👎). */
+  messageId?: string | null;
+  /** Experimento de modelos (0236). */
+  arm?: 'haiku' | 'sonnet' | null;
+  toolErrors?: number;
+  retries?: number;
+  refusals?: number;
+  fellBack?: boolean;
 }
 
 export function rowTokens(r: Pick<UsageRow, 'input' | 'cacheRead' | 'cacheWrite' | 'output'>) {
@@ -41,12 +51,11 @@ export function rowTokens(r: Pick<UsageRow, 'input' | 'cacheRead' | 'cacheWrite'
 export function rowCostUsd(r: UsageRow): number | null {
   const rate = rateFor(r.model, r.at);
   if (!rate) return null;
-  return stepCostUsd(rate, {
-    input: r.input,
-    cacheRead: r.cacheRead,
-    cacheWrite: r.cacheWrite,
-    output: r.output,
-  });
+  return stepCostUsd(
+    rate,
+    { input: r.input, cacheRead: r.cacheRead, cacheWrite: r.cacheWrite, output: r.output },
+    r.steps ?? 1,
+  );
 }
 
 export interface CostTotals {

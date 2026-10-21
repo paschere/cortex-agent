@@ -73,8 +73,17 @@ function cleanContent(m: CoreMessage): CoreMessage | null {
     return m.content.trim() || m.role === 'system' ? m : null;
   }
   if (!Array.isArray(m.content)) return m;
-  const parts = (m.content as Array<{ type: string; text?: string }>).filter(
-    (p) => !((p.type === 'text' || p.type === 'reasoning') && !(p.text ?? '').trim()),
+  // Un bloque de pensamiento con firma se conserva aunque su texto esté vacío
+  // (pantalla `omitted`, o un pensamiento sin resumen): la API pide devolverlo
+  // intacto, y quitarlo del medio de un turno rompe la cadena de bloques
+  // posteriores («preserved thinking», Sonnet 5.5 / Opus 5.5 / Haiku 5.5).
+  const parts = (m.content as Array<{ type: string; text?: string; signature?: string }>).filter(
+    (p) =>
+      !(
+        (p.type === 'text' || p.type === 'reasoning') &&
+        !(p.text ?? '').trim() &&
+        !(p.type === 'reasoning' && p.signature)
+      ),
   );
   return parts.length > 0 ? ({ ...m, content: parts } as CoreMessage) : null;
 }

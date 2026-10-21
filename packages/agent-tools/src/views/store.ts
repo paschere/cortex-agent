@@ -43,6 +43,9 @@ import {
   type FormLine,
   LINES_KEY,
   checkLines,
+  formLineSections,
+  isLinesKey,
+  linesIndexOf,
   normalizeLines,
   parseLinesValue,
 } from './form-lines';
@@ -57,6 +60,7 @@ import {
   APPROVE_ACTION_ID,
   type CatalogTracker,
   type FormBlock,
+  type FormLines,
   REJECT_ACTION_ID,
   type ViewSpec,
   approvalFor,
@@ -413,15 +417,39 @@ export interface LoadViewSourcesOptions {
   ensureRowId?: string;
 }
 
+/** Tablas del espacio que los campos con `match` de los formularios del spec usan como lista. */
+async function matchSourceRefs(db: SupabaseClient, spec: ViewSpec): Promise<string[]> {
+  const formSlugs = [
+    ...new Set(
+      spec.blocks.flatMap((b) =>
+        b.type === 'form' && !isReadOnlySource(b.tracker) ? [b.tracker] : [],
+      ),
+    ),
+  ];
+  if (!formSlugs.length) return [];
+  const { data } = await db.from('trackers').select('fields').in('slug', formSlugs);
+  const out = new Set<string>();
+  for (const row of (data ?? []) as Array<{ fields: unknown }>)
+    if (Array.isArray(row.fields))
+      for (const f of row.fields as Array<{ match?: { source?: unknown } }>) {
+        const source = f?.match?.source;
+        if (typeof source === 'string' && !source.startsWith('cortex.')) out.add(source);
+      }
+  return [...out];
+}
+
 /** Lee las tablas y fuentes que el spec nombra y sus filas, hasta el tope. */
 export async function loadViewSources(
   db: SupabaseClient,
   spec: ViewSpec,
   options: LoadViewSourcesOptions = {},
 ): Promise<Map<string, ViewSource>> {
-  const refs = trackersOf(spec);
+  const refs = [...trackersOf(spec)];
   const sources = new Map<string, ViewSource>();
   if (!refs.length) return sources;
+  // Las tablas de referencia de «Buscar en una lista» se leen como cualquier fuente del formulario.
+  for (const extra of await matchSourceRefs(db, spec))
+    if (!refs.includes(extra)) refs.push(extra);
   const slugs = refs.filter((r) => !isReadOnlySource(r));
   const platform = refs.filter(isPlatformSourceId);
   const feed = refs.filter(isFeedSourceId);
@@ -1263,6 +1291,29 @@ export async function previewViewForm(
 }
 
 /**
+ * Las líneas de cada sección del formulario, leídas del envío, ordenadas y
+ * juzgadas (topes y cantidades). Lanza `ValidationError` con la frase de la sección.
+ */
+function readLineSections(
+  block: FormBlock,
+  values: Record<string, unknown>,
+): Array<{ key: string; cfg: FormLines; lines: FormLine[] }> {
+  return formLineSections<FormLines>(block).map(({ key, cfg }) => {
+    const parsed = parseLinesValue(values[key]);
+    if (!parsed) throw new ValidationError('La lista de ítems no se entiende. Vuelve a armarla.');
+    const lines = normalizeLines(parsed);
+    const problem = checkLines(lines, {
+      min: cfg.min,
+      max: cfg.max,
+      decimals: cfg.decimals,
+      title: cfg.title,
+    });
+    if (problem) throw new ValidationError(problem);
+    return { key, cfg, lines };
+  });
+}
+
+/**
  * Escribe la fila que un bloque de formulario envió. Sólo acepta los campos
  * que el bloque pide — un formulario de «novedades» no puede escribir el
  * campo «valor» de la misma tabla aunque alguien lo mande a mano.
@@ -1310,20 +1361,8 @@ export async function submitViewForm(
       'Este formulario apunta a una fuente de sólo lectura; no recibe filas.',
     );
 
-  // Las líneas (ítems con cantidad) viajan aparte de los campos de la tabla.
-  let lines: FormLine[] = [];
-  if (block.lines) {
-    const parsed = parseLinesValue(input.values[LINES_KEY]);
-    if (!parsed) throw new ValidationError('La lista de ítems no se entiende. Vuelve a armarla.');
-    lines = normalizeLines(parsed);
-    const problem = checkLines(lines, {
-      min: block.lines.min,
-      max: block.lines.max,
-      decimals: block.lines.decimals,
-      title: block.lines.title,
-    });
-    if (problem) throw new ValidationError(problem);
-  }
+  // Las líneas (ítems con cantidad) viajan aparte de los campos de la tabla, una llave por sección.
+  const sections = readLineSections(block, input.values);
 
   const clientId = input.clientId?.trim().slice(0, 64) || null;
   const replay = async (): Promise<SubmitOutcome | null> => {
@@ -1401,30 +1440,35 @@ export async function submitViewForm(
   if (error) throw error;
   const rowId = String((row as { id: string }).id);
 
-  // Las líneas: una fila hija por ítem, todas en UN insert. Si algo falla, la fila
-  // del formulario no se queda sola: se borra y el error le llega a la persona.
-  let childIds: string[] = [];
-  let childTrackerId: string | null = null;
-  let childRows: Array<{ id: string; label: string; values: Record<string, unknown> }> = [];
-  if (block.lines && lines.length) {
-    try {
-      const made = await insertLineRows(db, {
+  // Las líneas: una fila hija por ítem, un insert por sección. Si algo falla, la fila
+  // del formulario no se queda sola: se borra (con lo ya creado) y el error le llega a la persona.
+  const made: Array<{
+    cfg: FormLines;
+    ids: string[];
+    trackerId: string;
+    rows: Array<{ id: string; label: string; values: Record<string, unknown> }>;
+  }> = [];
+  try {
+    for (const sec of sections) {
+      if (!sec.lines.length) continue;
+      const got = await insertLineRows(db, {
         view,
         block,
+        cfg: sec.cfg,
         parent: { id: rowId, label: rowLabel(tracker.fields, values), tracker },
-        lines,
+        lines: sec.lines,
         submittedBy: input.submittedBy,
         byApp,
         viewer: input.viewer,
         restrictRelations: !(input.submittedBy && input.submittedByKind !== 'app_user'),
       });
-      childIds = made.ids;
-      childTrackerId = made.trackerId;
-      childRows = made.rows;
-    } catch (err) {
-      await db.from('tracker_rows').delete().eq('id', rowId).eq('tracker_id', tracker.id);
-      throw err;
+      made.push({ cfg: sec.cfg, ...got });
     }
+  } catch (err) {
+    for (const m of made)
+      await db.from('tracker_rows').delete().in('id', m.ids).eq('tracker_id', m.trackerId);
+    await db.from('tracker_rows').delete().eq('id', rowId).eq('tracker_id', tracker.id);
+    throw err;
   }
 
   const editToken = editWindowOf(block) > 0 ? randomBytes(18).toString('base64url') : null;
@@ -1444,8 +1488,8 @@ export async function submitViewForm(
     // Dos reintentos a la vez del mismo envío: gana el primero; esta fila sobra.
     if ((subError as { code?: string }).code === '23505' && clientId) {
       await db.from('tracker_rows').delete().eq('id', rowId).eq('tracker_id', tracker.id);
-      if (childTrackerId && childIds.length)
-        await db.from('tracker_rows').delete().in('id', childIds).eq('tracker_id', childTrackerId);
+      for (const m of made)
+        await db.from('tracker_rows').delete().in('id', m.ids).eq('tracker_id', m.trackerId);
       const first = await replay();
       if (first) return first;
     }
@@ -1490,21 +1534,17 @@ export async function submitViewForm(
   // Las filas hijas de las líneas también son filas nuevas: una regla que mire
   // esa tabla («al crear un equipo usado, suma el costo en la atención») tiene
   // que enterarse, igual que si se hubieran escrito una por una.
-  if (
-    block.lines &&
-    childTrackerId &&
-    childRows.length &&
-    (await watchesTracker(db, childTrackerId))
-  ) {
+  for (const m of made) {
+    if (!m.rows.length || !(await watchesTracker(db, m.trackerId))) continue;
     const actor = {
       kind: byApp ? ('app_user' as const) : ('member' as const),
       id: input.submittedBy,
     };
-    for (const child of childRows)
+    for (const child of m.rows)
       await emitAutomationEvent(db, {
         kind: 'row_created',
-        trackerId: childTrackerId,
-        trackerSlug: block.lines.tracker,
+        trackerId: m.trackerId,
+        trackerSlug: m.cfg.tracker,
         rowId: child.id,
         after: child.values as Record<string, string | number>,
         label: child.label,
@@ -1538,6 +1578,7 @@ async function insertLineRows(
   input: {
     view: CustomViewRow;
     block: Extract<CustomViewRow['spec']['blocks'][number], { type: 'form' }>;
+    cfg: FormLines;
     parent: { id: string; label: string; tracker: TrackerRow };
     lines: FormLine[];
     submittedBy: string | null;
@@ -1550,8 +1591,7 @@ async function insertLineRows(
   trackerId: string;
   rows: Array<{ id: string; label: string; values: Record<string, unknown> }>;
 }> {
-  const cfg = input.block.lines;
-  if (!cfg) return { ids: [], trackerId: '', rows: [] };
+  const cfg = input.cfg;
   const child = await trackerForBlock(db, cfg.tracker);
   const itemField = child.fields.find((f) => f.key === cfg.item);
   const allowed = input.restrictRelations
@@ -1589,6 +1629,218 @@ async function insertLineRows(
       values: (rows[i]?.values ?? {}) as Record<string, unknown>,
     })),
   };
+}
+
+async function labelOfRow(db: SupabaseClient, trackerId: string, rowId: string): Promise<string> {
+  const { data } = await db
+    .from('tracker_rows')
+    .select('label')
+    .eq('id', rowId)
+    .eq('tracker_id', trackerId)
+    .maybeSingle();
+  return String((data as { label?: string } | null)?.label ?? '');
+}
+
+/** El id de la fila relacionada que guarda un valor de relación (JSON `{id,label}` o el id suelto). */
+function relationRowId(v: unknown): string | null {
+  const s = String(v ?? '').trim();
+  if (/^[0-9a-f-]{36}$/i.test(s)) return s.toLowerCase();
+  try {
+    const o = JSON.parse(s) as { id?: unknown };
+    return typeof o.id === 'string' ? o.id.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Deja las líneas de UNA sección tal como la persona las armó: agrega las que
+ * faltan, cambia la cantidad de las que cambiaron y quita las que ya no están.
+ * Cada fila hija pasa por `prepareValues` (fórmulas y lookups de la tabla hija se
+ * recalculan), y las reglas que miran esa tabla se enteran de lo creado y lo cambiado.
+ * Sirve tanto para corregir un envío como para completar un registro existente.
+ */
+async function syncLineRows(
+  db: SupabaseClient,
+  input: {
+    view: CustomViewRow;
+    block: FormBlock;
+    cfg: FormLines;
+    parent: { id: string; label: string; tracker: TrackerRow };
+    lines: FormLine[];
+    actor: string | null;
+    actorKind?: ActorKind;
+    viewer?: string | null;
+  },
+): Promise<{ added: number; changed: number; removed: number }> {
+  const { cfg } = input;
+  const child = await trackerForBlock(db, cfg.tracker);
+  const byApp = input.actorKind === 'app_user';
+  const { data, error } = await db
+    .from('tracker_rows')
+    .select('id, label, values')
+    .eq('tracker_id', child.id)
+    .ilike(`values->>${cfg.parent}`, `%${input.parent.id}%`)
+    .limit(500);
+  if (error) throw error;
+  const existing = ((data ?? []) as Array<{
+    id: string;
+    label: string;
+    values: Record<string, unknown>;
+  }>).filter((r) => relationRowId(r.values?.[cfg.parent]) === input.parent.id.toLowerCase());
+  const wanted = new Map(input.lines.map((l) => [l.item.id.toLowerCase(), l] as const));
+  const keep = new Map<string, (typeof existing)[number]>();
+  const drop: string[] = [];
+  for (const row of existing) {
+    const item = relationRowId(row.values?.[cfg.item]);
+    if (item && wanted.has(item) && !keep.has(item)) keep.set(item, row);
+    else drop.push(row.id);
+  }
+  const allowed = !(input.actor && !byApp)
+    ? new Set([...trackersOf(input.view.spec), input.parent.tracker.slug])
+    : undefined;
+  let changed = 0;
+  for (const [itemId, row] of keep) {
+    const line = wanted.get(itemId);
+    if (!line || Number(row.values?.[cfg.qty]) === line.qty) continue;
+    const known = Object.fromEntries(
+      Object.entries(row.values ?? {}).filter(([k]) => child.fields.some((f) => f.key === k)),
+    );
+    const values = await prepareValues(
+      db,
+      child,
+      { ...known, [cfg.qty]: line.qty },
+      { selfId: row.id, only: new Set([cfg.qty]), allowedRelationTrackers: allowed },
+    );
+    const label = rowLabel(child.fields, values);
+    const { error: upError } = await db
+      .from('tracker_rows')
+      .update({ values, label, updated_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .eq('tracker_id', child.id);
+    if (upError) throw upError;
+    changed += 1;
+    if (await watchesTracker(db, child.id))
+      await emitAutomationEvent(db, {
+        kind: 'row_updated',
+        trackerId: child.id,
+        trackerSlug: child.slug,
+        rowId: row.id,
+        before: row.values as Record<string, string | number>,
+        after: values as Record<string, string | number>,
+        label,
+        version: new Date().toISOString(),
+        actor: { kind: input.actorKind ?? ('member' as const), id: input.actor },
+        viewId: input.view.id,
+        blockId: input.block.id,
+      });
+  }
+  const fresh = input.lines.filter((l) => !keep.has(l.item.id.toLowerCase()));
+  let added = 0;
+  if (fresh.length) {
+    const made = await insertLineRows(db, {
+      view: input.view,
+      block: input.block,
+      cfg,
+      parent: input.parent,
+      lines: fresh,
+      submittedBy: input.actor,
+      byApp,
+      viewer: input.viewer,
+      restrictRelations: !(input.actor && !byApp),
+    });
+    added = made.ids.length;
+    if (made.rows.length && (await watchesTracker(db, made.trackerId)))
+      for (const c of made.rows)
+        await emitAutomationEvent(db, {
+          kind: 'row_created',
+          trackerId: made.trackerId,
+          trackerSlug: cfg.tracker,
+          rowId: c.id,
+          after: c.values as Record<string, string | number>,
+          label: c.label,
+          version: new Date().toISOString(),
+          actor: { kind: input.actorKind ?? ('member' as const), id: input.actor },
+          viewId: input.view.id,
+          blockId: input.block.id,
+        });
+  }
+  if (drop.length)
+    await db.from('tracker_rows').delete().in('id', drop).eq('tracker_id', child.id);
+  return { added, changed, removed: drop.length };
+}
+
+/**
+ * Completar un registro que ya existe con un formulario `onRecord` (comenzar una
+ * atención y, al cerrarla, llenar el resto y los equipos usados): escribe los
+ * campos que el formulario pide sobre ESA fila (por `patchRow`, con todas sus
+ * reglas) y deja sus líneas como quedaron. Lo que el formulario no pide no se toca.
+ */
+export async function saveFormRecord(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: {
+    blockId: string;
+    rowId: string;
+    values: Record<string, unknown>;
+    actor: string | null;
+    actorKind?: ActorKind;
+    viewer?: string | null;
+  },
+): Promise<{ label: string; duplicate: string | null; lines: { added: number; changed: number; removed: number } }> {
+  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (!block || block.type !== 'form' || !block.onRecord)
+    throw new NotFoundError('Ese formulario no completa un registro.');
+  const tracker = await trackerForBlock(db, block.tracker);
+  const sections = readLineSections(block, input.values);
+  const allowed = new Set(
+    (block.fields.length ? block.fields : tracker.fields.map((f) => f.key)).filter(
+      (k) => k !== block.approval?.field,
+    ),
+  );
+  const patch: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input.values))
+    if (allowed.has(k)) {
+      const f = tracker.fields.find((x) => x.key === k);
+      if (f?.formula || (f?.lookup && !f.lookup.editable)) continue;
+      patch[k] = v;
+    }
+  let label = '';
+  let duplicate: string | null = null;
+  if (Object.keys(patch).length) {
+    const r = await patchRow(db, view, {
+      blockId: block.id,
+      tracker,
+      rowId: input.rowId,
+      patch,
+      allowed,
+      kind: 'edit',
+      actor: input.actor,
+      actorKind: input.actorKind,
+    });
+    label = r.label;
+    duplicate = r.duplicate;
+  }
+  const total = { added: 0, changed: 0, removed: 0 };
+  if (!label && sections.some((sec) => sec.key in input.values))
+    label = await labelOfRow(db, tracker.id, input.rowId);
+  for (const sec of sections) {
+    if (!(sec.key in input.values)) continue;
+    const r = await syncLineRows(db, {
+      view,
+      block,
+      cfg: sec.cfg,
+      parent: { id: input.rowId, label, tracker },
+      lines: sec.lines,
+      actor: input.actor,
+      actorKind: input.actorKind,
+      viewer: input.viewer,
+    });
+    total.added += r.added;
+    total.changed += r.changed;
+    total.removed += r.removed;
+  }
+  return { label, duplicate, lines: total };
 }
 
 /**
@@ -1656,16 +1908,36 @@ export async function editViewSubmission(
   );
   const patch: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input.values)) if (allowed.has(k)) patch[k] = v;
-  const { label, duplicate } = await patchRow(db, view, {
-    blockId: block.id,
-    tracker,
-    rowId: input.rowId,
-    patch,
-    allowed,
-    kind: 'edit',
-    actor: input.actor,
-    actorKind: input.actorKind,
-  });
+  // Las líneas también se corrigen: si vienen (aunque sea vacías), la lista queda como se armó.
+  const sections = readLineSections(block, input.values).filter((sec) => sec.key in input.values);
+  let label = '';
+  let duplicate: string | null = null;
+  if (Object.keys(patch).length || !sections.length) {
+    const r = await patchRow(db, view, {
+      blockId: block.id,
+      tracker,
+      rowId: input.rowId,
+      patch,
+      allowed,
+      kind: 'edit',
+      actor: input.actor,
+      actorKind: input.actorKind,
+    });
+    label = r.label;
+    duplicate = r.duplicate;
+  }
+  if (sections.length && !label) label = await labelOfRow(db, tracker.id, input.rowId);
+  for (const sec of sections) {
+    await syncLineRows(db, {
+      view,
+      block,
+      cfg: sec.cfg,
+      parent: { id: input.rowId, label, tracker },
+      lines: sec.lines,
+      actor: input.actor,
+      actorKind: input.actorKind,
+    });
+  }
   return { label, duplicate };
 }
 
@@ -1704,24 +1976,28 @@ export async function searchRelationOptions(
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
-  // `__lines`: los ítems que se pueden elegir en las líneas del formulario (el
-  // campo `item` de la tabla hija). Se trata como una relación más.
-  const forLines = input.field === LINES_KEY;
-  if (forLines && !block.lines) throw new NotFoundError('Este formulario no tiene lista de ítems.');
-  const source = await trackerForBlock(
-    db,
-    forLines && block.lines ? block.lines.tracker : block.tracker,
-  );
+  // `__lines`, `__lines2`…: los ítems que se pueden elegir en las líneas del formulario
+  // (el campo `item` de la tabla hija de esa sección). Se trata como una relación más.
+  const forLines = isLinesKey(input.field);
+  const section = forLines
+    ? formLineSections<FormLines>(block).find((x) => x.key === input.field)?.cfg
+    : undefined;
+  if (forLines && !section)
+    throw new NotFoundError('Este formulario no tiene lista de ítems.');
+  const source = await trackerForBlock(db, section ? section.tracker : block.tracker);
+  // En las líneas se piden además los campos que la tabla hija trae de la fila elegida
+  // (la tarifa de un equipo): así el monto de cada línea se calcula al instante.
   const asked = new Set(
-    forLines && block.lines
-      ? [block.lines.item]
+    section
+      ? [
+          section.item,
+          ...source.fields.filter((f) => f.lookup?.via === section.item).map((f) => f.key),
+        ]
       : block.fields.length
         ? block.fields
         : source.fields.map((f) => f.key),
   );
-  const field = source.fields.find(
-    (f) => f.key === (forLines && block.lines ? block.lines.item : input.field),
-  );
+  const field = source.fields.find((f) => f.key === (section ? section.item : input.field));
   if (!field || field.type !== 'relation' || !field.tracker || !asked.has(field.key))
     throw new NotFoundError('Ese campo no es una relación de este formulario.');
   if (
@@ -1815,13 +2091,14 @@ export async function createRelationRow(
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
-  const forLines = input.field === LINES_KEY;
-  if (forLines && !block.lines) throw new NotFoundError('Este formulario no tiene lista de ítems.');
-  const source = await trackerForBlock(
-    db,
-    forLines && block.lines ? block.lines.tracker : block.tracker,
-  );
-  const key = forLines && block.lines ? block.lines.item : input.field;
+  const forLines = isLinesKey(input.field);
+  const section = forLines
+    ? formLineSections<FormLines>(block).find((x) => x.key === input.field)?.cfg
+    : undefined;
+  if (forLines && !section)
+    throw new NotFoundError('Este formulario no tiene lista de ítems.');
+  const source = await trackerForBlock(db, section ? section.tracker : block.tracker);
+  const key = section ? section.item : input.field;
   const field = source.fields.find((f) => f.key === key);
   if (!field || field.type !== 'relation' || !field.tracker)
     throw new NotFoundError('Ese campo no es una relación de este formulario.');

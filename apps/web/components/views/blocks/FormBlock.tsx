@@ -17,7 +17,12 @@ import {
 } from '@cortex/agent-tools/src/trackers/validation';
 import { scannableFields } from '@cortex/agent-tools/src/trackers/scan-shape';
 import { stepErrors, stepFields, visibleSteps } from '@cortex/agent-tools/src/views/form-extras';
-import { LINES_KEY, checkLines, parseLinesValue } from '@cortex/agent-tools/src/views/form-lines';
+import {
+  checkLines,
+  formLineSections,
+  parseLinesValue,
+  serializeLines,
+} from '@cortex/agent-tools/src/views/form-lines';
 import { clsx } from 'clsx';
 import {
   AlertCircle,
@@ -42,10 +47,10 @@ import type { SubmitTarget } from '../ViewCanvas';
 import { VoiceFormAssistant } from '../VoiceFormAssistant';
 import { ConnectionPill } from './ConnectionPill';
 import { FileInput, LocationInput, RelationInput, ScanInput } from './FieldInputs';
-import { LinesInput } from './LinesInput';
+import { type LinesConfig, LinesInput } from './LinesInput';
 import { NumberInput } from './NumberInput';
 import { ScanDocument, attachedImages, useDocumentScan } from './ScanDocument';
-import { type SubmitFn, correctorFor, uploaderFor } from './form-transport';
+import { type SubmitFn, correctorFor, recordSaverFor, uploaderFor } from './form-transport';
 import { type VoiceSendOutcome, useFormVoiceStore } from './form-voice-bridge';
 import { Card, useViewTheme } from './theme';
 import { useAutofill } from './useAutofill';
@@ -119,8 +124,21 @@ export function FormBlock({
 }) {
   const fields = block.fields as unknown as TrackerField[];
   const baseId = useId().replace(/:/g, '');
-  const initialValues = () =>
-    Object.fromEntries(Object.entries(defaultValues(fields)).map(([k, v]) => [k, String(v)]));
+  // Las secciones de líneas (equipos usados, materiales…), cada una con la llave en que viaja.
+  const sections = formLineSections(block as { lines?: LinesConfig | null; moreLines?: LinesConfig[] });
+  const initialValues = () => {
+    const base: Record<string, string> = Object.fromEntries(
+      Object.entries(defaultValues(fields)).map(([k, v]) => [k, String(v)]),
+    );
+    // Un formulario que completa un registro existente arranca con lo que ya tiene.
+    const rec = block.record;
+    if (rec) {
+      Object.assign(base, rec.values);
+      for (const [key, lines] of Object.entries(rec.lines))
+        if (lines.length) base[key] = serializeLines(lines);
+    }
+    return base;
+  };
   const [values, setValues] = useState<Record<string, string>>(initialValues);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState<Done | null>(null);
@@ -151,6 +169,7 @@ export function FormBlock({
   const visible = visibleKeys(fields, effective);
   const editWindow = block.editWindowMinutes ?? 10;
   const corrector = correctorFor(target);
+  const recordSaver = block.record ? recordSaverFor(target) : undefined;
 
   const summarize = (v: Record<string, string>) => {
     const parts = fields
@@ -198,14 +217,14 @@ export function FormBlock({
       ),
     );
     // Las líneas (ítems con cantidad) no son un campo de la tabla: se juzgan aparte.
-    if (block.lines) {
-      const problem = checkLines(parseLinesValue(values[LINES_KEY]) ?? [], {
-        min: block.lines.min,
-        max: block.lines.max,
-        decimals: block.lines.decimals,
-        title: block.lines.title,
+    for (const { key, cfg } of sections) {
+      const problem = checkLines(parseLinesValue(values[key]) ?? [], {
+        min: cfg.min,
+        max: cfg.max,
+        decimals: cfg.decimals,
+        title: cfg.title,
       });
-      if (problem) found[LINES_KEY] = problem;
+      if (problem) found[key] = problem;
     }
     return found;
   };
@@ -247,6 +266,7 @@ export function FormBlock({
     setValues: patchValues,
     url: autofillUrl,
     enabled: !disabled && !correcting,
+    matchTables: (block as { matchTables?: Record<string, import('@cortex/agent-tools/src/trackers/match-shape').MatchTable> }).matchTables,
   });
   // «Parece que ya existe»: aviso previo (sólo dentro de una app); nunca bloquea.
   const recordNav = useRecordNav();
@@ -256,7 +276,7 @@ export function FormBlock({
     url: dupUrl,
     blockId: block.id,
     values: effective,
-    enabled: !disabled && !correcting && !done,
+    enabled: !disabled && !correcting && !done && !block.record,
   });
   const dupRef = useRef<HTMLDivElement>(null);
   // Un solo envío a la vez: dos toques seguidos no mandan dos filas.
@@ -355,8 +375,12 @@ export function FormBlock({
       if (all) payload[f.key] = visible.has(f.key) ? (v ?? '') : '';
       else if (visible.has(f.key) && v !== undefined && v !== '') payload[f.key] = v;
     }
-    // Las líneas viajan con el registro nuevo (al corregir no se tocan: ya son filas hijas).
-    if (!all && block.lines && values[LINES_KEY]) payload[LINES_KEY] = values[LINES_KEY];
+    // Las líneas viajan con el registro nuevo; al corregir o completar viajan SIEMPRE (aunque
+    // queden vacías) para que agregar, quitar o cambiar una línea también se guarde.
+    for (const { key } of sections) {
+      if (all) payload[key] = values[key] || '[]';
+      else if (values[key]) payload[key] = values[key];
+    }
     return payload;
   };
 
@@ -365,12 +389,16 @@ export function FormBlock({
     const first = fields.find((f) => found[f.key]);
     if (!first) {
       // Sólo falla la lista de ítems: va en el último paso.
-      if (found[LINES_KEY]) {
+      const badKey = sections.find((x) => found[x.key])?.key;
+      if (badKey) {
         if (steps) {
           setStep(steps.length - 1);
           setReviewing(false);
         }
-        setTimeout(() => document.getElementById(`${baseId}-lines`)?.scrollIntoView({ block: 'center' }), 50);
+        setTimeout(
+          () => document.getElementById(`${baseId}-${badKey}`)?.scrollIntoView({ block: 'center' }),
+          50,
+        );
       }
       return;
     }
@@ -396,6 +424,33 @@ export function FormBlock({
     setAttempted(true);
     const found = check();
     if (Object.keys(found).length) return goToFirstError(found);
+
+    // Completar un registro que ya existe (cerrar la atención): se guarda sobre ESA fila.
+    if (block.record) {
+      if (!recordSaver) return;
+      if (sendingRef.current) return;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setError('Sin señal: guarda cuando vuelva la conexión (nada se pierde, sigue aquí).');
+        return;
+      }
+      sendingRef.current = true;
+      const payload = buildPayload(true);
+      const rowId = block.record.rowId;
+      start(async () => {
+        const res = await recordSaver(block.id, rowId, payload, null).finally(() => {
+          sendingRef.current = false;
+        });
+        if (res.ok)
+          finish({
+            message: res.message,
+            duplicate: res.duplicate ?? null,
+            offline: false,
+            rowId,
+          });
+        else setError(res.error);
+      });
+      return;
+    }
 
     if (correcting) {
       if (!corrector) return;
@@ -598,13 +653,26 @@ export function FormBlock({
               {done.duplicate}
             </p>
           )}
-          {!done.offline && (
+          {!done.offline && !block.record && (
             <p className="max-w-xs text-xs leading-relaxed text-ink-muted">
               Lo enviado ya está en «{block.title}».
             </p>
           )}
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
-            {lastSent && canCorrect(lastSent, now) && corrector && (
+            {block.record && (
+              <button
+                type="button"
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-pill border border-border-strong px-4 font-semibold text-ink transition-colors hover:bg-surface-2',
+                  operator ? 'h-12 text-base' : 'py-1.5 text-xs',
+                )}
+                onClick={() => setDone(null)}
+              >
+                <Pencil className="h-4 w-4" aria-hidden />
+                Seguir editando
+              </button>
+            )}
+            {!block.record && lastSent && canCorrect(lastSent, now) && corrector && (
               <button
                 type="button"
                 className={clsx(
@@ -617,16 +685,18 @@ export function FormBlock({
                 Corregir ({minutesLeft(lastSent, now)} min)
               </button>
             )}
-            <button
-              type="button"
-              className={clsx(
-                'rounded-pill border border-border px-4 font-semibold text-ink transition-colors hover:bg-surface-2',
-                operator ? 'h-12 text-base' : 'py-1.5 text-xs',
-              )}
-              onClick={reset}
-            >
-              Registrar otro
-            </button>
+            {!block.record && (
+              <button
+                type="button"
+                className={clsx(
+                  'rounded-pill border border-border px-4 font-semibold text-ink transition-colors hover:bg-surface-2',
+                  operator ? 'h-12 text-base' : 'py-1.5 text-xs',
+                )}
+                onClick={reset}
+              >
+                Registrar otro
+              </button>
+            )}
           </div>
         </output>
         {operator && (
@@ -849,7 +919,9 @@ export function FormBlock({
             <Sparkles className="h-3 w-3 shrink-0" aria-hidden />
             {sugg.source === 'documento'
               ? 'Leído de la foto del documento — revísalo'
-              : 'Sugerido por Cortex — corrígelo si hace falta'}
+              : sugg.source?.startsWith('lista:')
+                ? 'Puesto desde la lista — corrígelo si hace falta'
+                : 'Sugerido por Cortex — corrígelo si hace falta'}
             {sugg.source && /^https?:\/\//.test(sugg.source) && (
               <a
                 href={sugg.source}
@@ -917,7 +989,7 @@ export function FormBlock({
     if (!current) return;
     const all = check();
     const found = stepErrors(current, visible, all);
-    if (lastStep && all[LINES_KEY]) found[LINES_KEY] = all[LINES_KEY];
+    if (lastStep) for (const { key } of sections) if (all[key]) found[key] = all[key] as string;
     if (Object.keys(found).length) {
       setErrors((e) => ({ ...e, ...found }));
       setTimeout(() => focusField(Object.keys(found)[0]), 50);
@@ -1140,13 +1212,13 @@ export function FormBlock({
                   </dd>
                 </div>
               ))}
-              {block.lines && (
-                <div className="rounded-sm border border-border p-3">
+              {sections.map(({ key, cfg }) => (
+                <div key={key} className="rounded-sm border border-border p-3">
                   <dt className="mb-2 text-xs font-bold uppercase tracking-field text-ink-faint">
-                    {block.lines.title}
+                    {cfg.title}
                   </dt>
                   <dd className="space-y-1.5">
-                    {(parseLinesValue(values[LINES_KEY]) ?? []).map((l) => (
+                    {(parseLinesValue(values[key]) ?? []).map((l) => (
                       <div
                         key={l.item.id}
                         className={clsx('flex justify-between gap-3', operator ? 'text-base' : 'text-sm')}
@@ -1155,56 +1227,56 @@ export function FormBlock({
                         <span className="shrink-0 font-semibold tabular text-ink">× {l.qty}</span>
                       </div>
                     ))}
-                    {!values[LINES_KEY] && <span className="text-ink-faint">—</span>}
+                    {!values[key] && <span className="text-ink-faint">—</span>}
                   </dd>
                 </div>
-              )}
+              ))}
             </dl>
           ) : (
             shownFields.map(renderField)
           )}
-          {block.lines && !correcting && !reviewing && (!steps || lastStep) && (
-            <div className="block min-w-0 sm:col-span-2">
-              <p
-                className={clsx(
-                  'flex items-baseline justify-between gap-2 font-semibold text-ink',
-                  operator ? 'mb-2 text-base' : 'mb-1.5 text-xs',
-                )}
-              >
-                <span id={`${baseId}-lines-label`}>
-                  {block.lines.title}
-                  {block.lines.min ? (
-                    <span className="text-rose" aria-hidden>
-                      {' '}
-                      *
-                    </span>
-                  ) : null}
-                </span>
-                {!block.lines.min && (
-                  <span className="text-micro font-normal text-ink-faint">Opcional</span>
-                )}
-              </p>
-              <LinesInput
-                id={`${baseId}-lines`}
-                config={block.lines}
-                value={values[LINES_KEY] ?? ''}
-                onChange={(next) => {
-                  dirty.current.add(LINES_KEY);
-                  setValues((v) => ({ ...v, [LINES_KEY]: next }));
-                  setErrors((e) => {
-                    if (!(LINES_KEY in e)) return e;
-                    const { [LINES_KEY]: _gone, ...rest } = e;
-                    return rest;
-                  });
-                }}
-                target={target}
-                blockId={block.id}
-                fieldKey={LINES_KEY}
-                error={errors[LINES_KEY]}
-                large={operator}
-              />
-            </div>
-          )}
+          {!reviewing &&
+            (!steps || lastStep) &&
+            sections.map(({ key, cfg }) => (
+              <div key={key} className="block min-w-0 sm:col-span-2">
+                <p
+                  className={clsx(
+                    'flex items-baseline justify-between gap-2 font-semibold text-ink',
+                    operator ? 'mb-2 text-base' : 'mb-1.5 text-xs',
+                  )}
+                >
+                  <span id={`${baseId}-${key}-label`}>
+                    {cfg.title}
+                    {cfg.min ? (
+                      <span className="text-rose" aria-hidden>
+                        {' '}
+                        *
+                      </span>
+                    ) : null}
+                  </span>
+                  {!cfg.min && <span className="text-micro font-normal text-ink-faint">Opcional</span>}
+                </p>
+                <LinesInput
+                  id={`${baseId}-${key}`}
+                  config={cfg}
+                  value={values[key] ?? ''}
+                  onChange={(next) => {
+                    dirty.current.add(key);
+                    setValues((v) => ({ ...v, [key]: next }));
+                    setErrors((e) => {
+                      if (!(key in e)) return e;
+                      const { [key]: _gone, ...rest } = e;
+                      return rest;
+                    });
+                  }}
+                  target={target}
+                  blockId={block.id}
+                  fieldKey={key}
+                  error={errors[key]}
+                  large={operator}
+                />
+              </div>
+            ))}
           {dup.pending && (
             <div
               ref={dupRef}
@@ -1295,7 +1367,7 @@ export function FormBlock({
                 ) : (
                   <Send className="h-5 w-5" />
                 )}
-                {correcting ? 'Guardar corrección' : block.submitLabel}
+                {block.record ? 'Guardar' : correcting ? 'Guardar corrección' : block.submitLabel}
               </button>
             )}
             {target.kind === 'preview' && (

@@ -32,6 +32,18 @@ export interface ModelUsageInput {
   cacheWriteTokens?: number;
   outputTokens: number;
   occurredAt?: string;
+  /**
+   * El experimento de modelos (0236). `arm` es el brazo asignado a la
+   * conversación ('haiku' | 'sonnet'; null fuera del experimento); los
+   * contadores son de ESTE turno.
+   */
+  experiment?: {
+    arm: 'haiku' | 'sonnet' | null;
+    toolErrors: number;
+    retries: number;
+    refusals: number;
+    fellBack: boolean;
+  };
 }
 
 const clampInt = (n: number | undefined): number =>
@@ -88,8 +100,25 @@ export async function recordModelUsage(
     };
     if (row.input_tokens + row.cache_read_tokens + row.cache_write_tokens + row.output_tokens === 0)
       return;
-    const { error } = await db.from('model_usage').insert(row);
-    if (error) logger?.warn({ err: error }, 'model_usage insert failed');
+    const e = input.experiment;
+    const extras = e
+      ? {
+          experiment_arm: e.arm,
+          tool_errors: clampInt(e.toolErrors),
+          retries: clampInt(e.retries),
+          refusals: clampInt(e.refusals),
+          fell_back: e.fellBack,
+        }
+      : null;
+    const { error } = await db.from('model_usage').insert(extras ? { ...row, ...extras } : row);
+    if (error && extras) {
+      // Migración 0236 sin aplicar: el consumo (lo que cuesta) no se pierde por
+      // las columnas del experimento.
+      const retry = await db.from('model_usage').insert(row);
+      if (retry.error) logger?.warn({ err: retry.error }, 'model_usage insert failed');
+    } else if (error) {
+      logger?.warn({ err: error }, 'model_usage insert failed');
+    }
   } catch (err) {
     logger?.warn({ err }, 'model_usage capture threw');
   }

@@ -1,5 +1,5 @@
 import 'server-only';
-import { COMPANY_SECTIONS, listClients, utilityModel } from '@cortex/agent-tools';
+import { COMPANY_SECTIONS, listClients, simpleModel } from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { generateText } from 'ai';
 import { pickIdentity } from './extract';
@@ -109,7 +109,7 @@ export async function readCompanyDocument(input: ReadDocumentInput): Promise<Gat
   let rejectedCount = 0;
   try {
     const result = await generateText({
-      model: utilityModel(),
+      model: simpleModel(),
       system: buildPrompt(),
       prompt: input.text.slice(0, MAX_PROMPT_CHARS),
       maxTokens: 1500,

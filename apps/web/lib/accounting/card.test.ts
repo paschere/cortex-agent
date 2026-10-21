@@ -91,9 +91,9 @@ describe('la tarjeta de un programa contable', () => {
     expect(soon).toMatchObject({ connected: false, status: 'Próximamente.', tone: 'idle' });
   });
 
-  it('la nómina es opcional, no lleva enlace a una tabla y no se activa sola', () => {
+  it('la nómina viene activada como todo lo demás (0235), pero no lleva enlace a una tabla', () => {
     const [off] = buildAccountingCards([siigo], [], slug, NOW);
-    expect(off?.entities).not.toContain('payroll');
+    expect(off?.entities).toContain('payroll');
     const [on] = buildAccountingCards(
       [siigo],
       [

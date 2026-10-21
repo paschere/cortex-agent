@@ -13,6 +13,7 @@ import {
   duplicateRuleSchema,
   editViewRow,
   editViewSubmission,
+  saveFormRecord,
   getTrackerBySlug,
   mustGetView,
   restoreView,
@@ -340,6 +341,33 @@ export async function editViewSubmissionAction(
     return { ok: true, message: 'Corregido.', duplicate: res.duplicate };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo corregir el envío.') };
+  }
+}
+
+/** Completar un registro que ya existe con un formulario `onRecord` de una vista. */
+export async function saveViewFormRecordAction(
+  viewId: string,
+  blockId: string,
+  rowId: string,
+  values: Record<string, string>,
+): Promise<
+  { ok: true; message: string; duplicate?: string | null } | { ok: false; error: string }
+> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId);
+    const res = await saveFormRecord(db, view, {
+      blockId,
+      rowId,
+      values,
+      actor: user.id,
+      viewer: user.name,
+    });
+    revalidatePath(`/views/${view.slug}`);
+    return { ok: true, message: 'Guardado.', duplicate: res.duplicate };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar el registro.') };
   }
 }
 

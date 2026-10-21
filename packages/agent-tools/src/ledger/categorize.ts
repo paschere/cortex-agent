@@ -1,6 +1,6 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { utilityModel } from '../model';
+import { simpleModel } from '../model';
 import { repairStructured } from '../structured';
 import { normalizeText } from './shape';
 import {
@@ -406,7 +406,7 @@ export const modelClassifier: LedgerClassifier = async (items) => {
     }),
   );
   const { object } = await generateObject({
-    model: utilityModel(),
+    model: simpleModel(),
     schema: classificationSchema,
     system: SYSTEM,
     prompt: `Movimientos:\n${lines.join('\n')}`,

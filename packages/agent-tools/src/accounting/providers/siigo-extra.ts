@@ -175,6 +175,14 @@ export const CATALOG_PATH: Record<CatalogEntity, string> = {
   warehouses: '/v1/warehouses',
   document_types: '/v1/document-types',
   sellers: '/v1/users',
+  // 0235 (siigoapi.docs.apiary.io › Catálogos)
+  price_lists: '/v1/price-lists',
+  account_groups: '/v1/account-groups',
+  fixed_assets: '/v1/fixed-assets',
+  // «Descuentos en recibos de caja»: lo único que la API llama «expense».
+  expense_concepts: '/v1/expense',
+  // NO documentada: se prueba y, si Siigo responde 404/400, se usa la lista de respaldo.
+  cities: '/v1/cities',
 };
 
 /** Una fila de catálogo de Siigo; `null` si no trae id o nombre. */
@@ -183,7 +191,7 @@ export function normalizeSiigoCatalogItem(
   r: Raw,
   kindHint?: string,
 ): NormalizedCatalogItem | null {
-  const id = clip(r.id, 60) ?? clip(r.code, 60);
+  const id = clip(r.id, 60) ?? clip(r.code, 60) ?? clip(r.city_code, 60);
   if (!id) return null;
   const active = r.active === false ? false : true;
   switch (catalog) {
@@ -229,6 +237,42 @@ export function normalizeSiigoCatalogItem(
         name,
         code: clip(r.code, 40),
         kind: kindHint ?? clip(r.type, 20),
+        active,
+      };
+    }
+    case 'price_lists': {
+      const name = clip(r.name, 160);
+      if (!name) return null;
+      const position = amount(r.position);
+      return {
+        externalId: id,
+        catalog,
+        name,
+        code: position === undefined ? undefined : String(position),
+        kind: position === undefined ? undefined : String(position),
+        active,
+      };
+    }
+    case 'account_groups':
+    case 'expense_concepts': {
+      const name = clip(r.name, 160);
+      return name ? { externalId: id, catalog, name, active } : null;
+    }
+    case 'fixed_assets': {
+      const name = clip(r.name, 160);
+      return name ? { externalId: id, catalog, name, kind: clip(r.group, 100), active } : null;
+    }
+    case 'cities': {
+      // Forma no documentada: se aceptan los nombres que usa Siigo en `address.city`.
+      const code = clip(r.city_code ?? r.code ?? r.id, 10);
+      const name = clip(r.city_name ?? r.name, 160);
+      if (!code || !name) return null;
+      return {
+        externalId: code,
+        catalog,
+        name,
+        code,
+        kind: clip(r.state_name ?? r.department ?? r.state, 100),
         active,
       };
     }

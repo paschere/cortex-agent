@@ -7,6 +7,7 @@ import {
   type PayrollGroup,
   classifyPayrollAccount,
 } from './payroll';
+import type { PartyBalanceRow } from './providers/siigo-more';
 import type {
   PersonnelAccount,
   ProviderBalance,
@@ -48,8 +49,11 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const DERIVED_FROM_PRODUCTS: AccountingEntity = 'stock';
 
+/** El balance de prueba por tercero pesa mucho: un año de historia basta para cuadrar. */
+export const PARTY_HISTORY_MONTHS = 12;
+
 export function isMonthlyDerived(entity: AccountingEntity): boolean {
-  return entity === 'statements' || entity === 'payroll_costs';
+  return entity === 'statements' || entity === 'payroll_costs' || entity === 'party_balances';
 }
 
 /** AAAA-MM del mes de un día. */
@@ -370,6 +374,59 @@ export function recordsForMonth(
   if (entity === 'payroll_costs' && reading.pnl)
     return payrollCostLines(month, reading.pnl.personnel ?? [], reading.inProgress);
   return [];
+}
+
+// ---------------------------------------------------------------------------
+// Balance de prueba por tercero, mes a mes (0235)
+// ---------------------------------------------------------------------------
+
+/**
+ * Los saldos por tercero de un mes, de la copia guardada o del programa. Un mes
+ * cerrado se pide una sola vez (después de cerrar); el mes en curso, cada seis
+ * horas como mucho —y la sincronización sólo lo revisa una vez al día—.
+ */
+export async function readPartyBalanceMonth(
+  db: SupabaseClient,
+  input: {
+    provider: string;
+    reports: ProviderReports;
+    month: string;
+    today: string;
+    userId: string | null;
+    nowMs?: () => number;
+  },
+): Promise<{ rows: PartyBalanceRow[]; fetched: number; inProgress: boolean }> {
+  const nowMs = input.nowMs ?? Date.now;
+  if (!input.reports.trialBalanceByParty)
+    throw new Error('Este programa no entrega el balance de prueba por tercero.');
+  const year = Number(input.month.slice(0, 4));
+  const m = Number(input.month.slice(5, 7));
+  const end = monthEnd(year, m);
+  const inProgress = end >= input.today;
+  const { data } = await db
+    .from('accounting_report_snapshots')
+    .select('payload, fetched_at')
+    .eq('provider', input.provider)
+    .eq('kind', 'party')
+    .eq('period_key', input.month)
+    .maybeSingle();
+  const saved = data as { payload?: { rows?: PartyBalanceRow[] }; fetched_at: string } | null;
+  if (saved?.payload?.rows && snapshotUsable(saved.fetched_at, end, input.today, nowMs()))
+    return { rows: saved.payload.rows, fetched: 0, inProgress };
+  const rows = await input.reports.trialBalanceByParty(year, m);
+  const { error } = await db.from('accounting_report_snapshots').upsert(
+    {
+      provider: input.provider,
+      kind: 'party',
+      period_key: input.month,
+      payload: { rows },
+      fetched_at: new Date(nowMs()).toISOString(),
+      fetched_by: input.userId,
+    },
+    { onConflict: 'organization_id,provider,kind,period_key' },
+  );
+  if (error) logger.warn({ error, month: input.month }, 'derived: no pude guardar la copia por tercero');
+  return { rows, fetched: 1, inProgress };
 }
 
 /** Hoy en Bogotá (para el mes en curso). */

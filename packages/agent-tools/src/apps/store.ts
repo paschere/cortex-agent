@@ -8,7 +8,7 @@ import { findLikelyDuplicates } from '../trackers/duplicate-check';
 import { withFlowActor } from '../trackers/flow-guard';
 import { TRACKER_COLUMNS, type TrackerRow } from '../trackers/store';
 import { type ComputedView, type ViewSource, computeView } from '../views/compute';
-import { LINES_KEY } from '../views/form-lines';
+import { formLineSections, isLinesKey } from '../views/form-lines';
 import { loadRecordContext } from '../views/record-history';
 import { internalShareRefusal, internalSourcesOf } from '../views/sources';
 import {
@@ -29,6 +29,7 @@ import {
   createViewTask,
   editViewRow,
   editViewSubmission,
+  saveFormRecord,
   loadViewSources,
   previewViewForm,
   restoreView,
@@ -1222,14 +1223,19 @@ export async function submitAppForm(
   assertFields(
     access,
     slug,
-    Object.keys(values).filter((k) => k !== LINES_KEY && values[k] !== undefined && values[k] !== ''),
+    Object.keys(values).filter((k) => !isLinesKey(k) && values[k] !== undefined && values[k] !== ''),
   );
   // Las líneas del formulario se guardan en otra tabla: el rol tiene que poder crear ahí también.
   const linesBlock = view.spec.blocks.find((b) => b.id === input.blockId);
-  if (linesBlock?.type === 'form' && linesBlock.lines && values[LINES_KEY]) {
-    if (!canCreateIn(access.role, linesBlock.lines.tracker))
-      throw new ValidationError('Tu rol en esta aplicación no registra los ítems de esta lista.');
-  } else delete values[LINES_KEY];
+  const sections =
+    linesBlock?.type === 'form' ? formLineSections<{ tracker: string }>(linesBlock) : [];
+  for (const key of Object.keys(values).filter(isLinesKey)) {
+    const sec = sections.find((x) => x.key === key);
+    if (sec && values[key]) {
+      if (!canCreateIn(access.role, sec.cfg.tracker))
+        throw new ValidationError('Tu rol en esta aplicación no registra los ítems de esta lista.');
+    } else delete values[key];
+  }
   // Quien ve «las filas donde Cliente = su cliente» sólo crea filas de SU
   // cliente: el campo del scope lo pone el servidor, no el formulario.
   const scope = rowAccessFor(access.role, access.user, slug);
@@ -1351,13 +1357,65 @@ export async function editAppSubmission(
   if (!canCreateIn(access.role, slug) && editAccessFor(access.role, slug) === 'none')
     throw new ValidationError('Tu rol en esta aplicación no corrige en esta tabla.');
   await assertRowVisible(db, access, slug, input.rowId);
-  assertFields(access, slug, Object.keys(input.values));
+  assertFields(
+    access,
+    slug,
+    Object.keys(input.values).filter((k) => !isLinesKey(k)),
+  );
+  assertLinesRole(access, view, input.blockId, input.values);
   await assertExternalBudget(db, access, 'write');
   return withFlowActor(flowActorOf(access), () =>
     editViewSubmission(db, view, {
       ...input,
       actor: access.user.id,
       actorKind: actorKindOf(access),
+    }),
+  );
+}
+
+/** Las líneas se guardan en otra tabla: quien las corrige tiene que poder escribir ahí. */
+function assertLinesRole(
+  access: AppAccess,
+  view: CustomViewRow,
+  blockId: string,
+  values: Record<string, unknown>,
+) {
+  const block = view.spec.blocks.find((b) => b.id === blockId);
+  if (block?.type !== 'form') return;
+  for (const { key, cfg } of formLineSections<{ tracker: string }>(block))
+    if (key in values && !canCreateIn(access.role, cfg.tracker) && editAccessFor(access.role, cfg.tracker) === 'none')
+      throw new ValidationError('Tu rol en esta aplicación no cambia los ítems de esta lista.');
+}
+
+/**
+ * Completar un registro que ya existe con un formulario `onRecord` (cerrar una
+ * atención: cantidades, equipos usados, novedades). Mismo cuidado que corregir:
+ * el rol tiene que poder escribir en la tabla, ver ESA fila, y sólo escribe los
+ * campos que su rol deja. Las reglas de campos y de flujo corren como siempre.
+ */
+export async function saveAppFormRecord(
+  db: SupabaseClient,
+  access: AppAccess,
+  view: CustomViewRow,
+  input: { blockId: string; rowId: string; values: Record<string, string> },
+) {
+  const slug = trackerOfBlock(view, input.blockId);
+  if (!canCreateIn(access.role, slug) && editAccessFor(access.role, slug) === 'none')
+    throw new ValidationError('Tu rol en esta aplicación no cambia registros de esta tabla.');
+  await assertRowVisible(db, access, slug, input.rowId);
+  assertFields(
+    access,
+    slug,
+    Object.keys(input.values).filter((k) => !isLinesKey(k) && input.values[k] !== ''),
+  );
+  assertLinesRole(access, view, input.blockId, input.values);
+  await assertExternalBudget(db, access, 'write');
+  return withFlowActor(flowActorOf(access), () =>
+    saveFormRecord(db, view, {
+      ...input,
+      actor: access.user.id,
+      actorKind: actorKindOf(access),
+      viewer: access.user.name,
     }),
   );
 }

@@ -6,6 +6,12 @@ import {
   mergeSuggestions,
   triggerSignature,
 } from '@cortex/agent-tools/src/trackers/autofill-shape';
+import {
+  type MatchConfig,
+  type MatchTable,
+  cortexTargetsAfterMatch,
+  runMatch,
+} from '@cortex/agent-tools/src/trackers/match-shape';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
@@ -23,7 +29,9 @@ export interface AutofillField {
   label: string;
   type: string;
   options?: string[];
-  autofill?: AutofillConfig;
+  autofill?: AutofillConfig & { when?: 'no_match' | 'rest' };
+  /** «Buscar en una lista»: sin IA, al instante. */
+  match?: MatchConfig;
 }
 
 export type AutofillPhase = 'idle' | 'loading' | 'done' | 'error';
@@ -48,8 +56,10 @@ export function useAutofill(opts: {
   /** null = este formulario no puede pedirle nada a Cortex. */
   url: string | null;
   enabled: boolean;
+  /** Las listas de «Buscar en una lista» que trae el bloque, por fuente. */
+  matchTables?: Record<string, MatchTable>;
 }) {
-  const { blockId, fields, values, setValues, url, enabled } = opts;
+  const { blockId, fields, values, setValues, url, enabled, matchTables } = opts;
   const [status, setStatus] = useState<Record<string, AutofillStatus>>({});
   const [suggested, setSuggested] = useState<Record<string, { source?: string }>>({});
   const valuesRef = useRef(values);
@@ -59,6 +69,24 @@ export function useAutofill(opts: {
   const inflight = useRef<AbortController | null>(null);
 
   const configs = fields.flatMap((f) => (f.autofill ? [{ field: f, config: f.autofill }] : []));
+  const matchFields = fields.filter((f) => f.match);
+
+  /**
+   * Los destinos que Cortex todavía debe llenar para este campo: todos si no hay
+   * lista; con lista, sólo si no hubo coincidencia (o los que la lista no llenó).
+   */
+  const cortexFills = useCallback(
+    (f: AutofillField, cur: Record<string, string>): string[] => {
+      if (!f.autofill) return [];
+      if (!f.match) return f.autofill.fills;
+      const out = runMatch(f.match, matchTables?.[f.match.source], cur);
+      return cortexTargetsAfterMatch(f.autofill.fills, f.autofill.when, {
+        hit: out.hit,
+        matched: Object.keys(out.suggestions),
+      });
+    },
+    [matchTables],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: configs se deriva de fields.
   const run = useCallback(
@@ -66,6 +94,10 @@ export function useAutofill(opts: {
       const entry = configs.find((c) => c.field.key === fieldKey);
       if (!entry || !url || !enabled) return;
       const cur = valuesRef.current;
+      // Cascada: con lista, Cortex sólo llena lo que la lista no resolvió.
+      const todo = cortexFills(entry.field, cur);
+      if (!todo.length) return;
+      const effectiveConfig = { ...entry.config, fills: todo };
       if (!autofillReady(entry.config, cur)) {
         if (manual)
           setStatus((s) => ({
@@ -118,7 +150,7 @@ export function useAutofill(opts: {
       }
       const merged = mergeSuggestions(
         fields,
-        entry.config,
+        effectiveConfig,
         valuesRef.current,
         answer.suggestions,
         applied.current,
@@ -147,13 +179,15 @@ export function useAutofill(opts: {
         },
       }));
     },
-    [blockId, enabled, fields, setValues, url],
+    [blockId, enabled, fields, setValues, url, cortexFills],
   );
 
   // Automático: cuando los disparadores se completan o cambian, con una pausa.
   const sigNow = configs
     .map((c) =>
-      autofillReady(c.config, values) ? `${c.field.key}:${triggerSignature(c.config, values)}` : '',
+      autofillReady(c.config, values)
+        ? `${c.field.key}:${triggerSignature(c.config, values)}:${cortexFills(c.field, values).join(',')}`
+        : '',
     )
     .join('~');
   // biome-ignore lint/correctness/useExhaustiveDependencies: sólo reacciona a la huella.
@@ -162,6 +196,7 @@ export function useAutofill(opts: {
     const timers: number[] = [];
     for (const c of configs) {
       if (!autofillReady(c.config, valuesRef.current)) continue;
+      if (!cortexFills(c.field, valuesRef.current).length) continue;
       const sig = triggerSignature(c.config, valuesRef.current);
       if (lastSig.current[c.field.key] === sig) continue;
       timers.push(window.setTimeout(() => void run(c.field.key, false), DEBOUNCE_MS));
@@ -170,6 +205,43 @@ export function useAutofill(opts: {
       for (const t of timers) window.clearTimeout(t);
     };
   }, [sigNow, enabled, url]);
+
+  // «Buscar en una lista»: instantáneo, sin pausa ni red; mismo merge que no pisa lo escrito.
+  const matchSig = matchFields
+    .map(
+      (f) =>
+        `${f.key}:${JSON.stringify(runMatch(f.match as MatchConfig, matchTables?.[f.match?.source ?? ''], values).suggestions)}`,
+    )
+    .join('~');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo reacciona a lo que la lista propone.
+  useEffect(() => {
+    for (const f of matchFields) {
+      const m = f.match as MatchConfig;
+      const out = runMatch(m, matchTables?.[m.source], valuesRef.current);
+      if (!out.hit) continue;
+      const merged = mergeSuggestions(
+        fields,
+        { fills: Object.keys(m.fills) },
+        valuesRef.current,
+        out.suggestions,
+        applied.current,
+      );
+      if (Object.keys(merged.applied).length) {
+        setValues(merged.applied);
+        Object.assign(applied.current, merged.applied);
+        setSuggested((s) => ({
+          ...s,
+          ...Object.fromEntries(
+            Object.keys(merged.applied).map((k) => [k, { source: `lista:${m.source}` }]),
+          ),
+        }));
+        setStatus((s) => ({
+          ...s,
+          [f.key]: { phase: 'done', message: 'Encontrado en la lista.' },
+        }));
+      }
+    }
+  }, [matchSig]);
 
   useEffect(() => () => inflight.current?.abort(), []);
 

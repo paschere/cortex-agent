@@ -153,6 +153,7 @@ export function normalizeFieldInput<T>(raw: T): T {
     del('scan');
     del('scanMode');
     del('autofill');
+    del('match');
   }
   const type = f.type;
   if (type !== 'number') del('percent');
@@ -259,6 +260,36 @@ export const trackerFieldSchema = z
         instruction: z.string().trim().min(5).max(600),
         from: z.array(z.string().regex(FIELD_KEY_RE)).min(1).max(4),
         fills: z.array(z.string().regex(FIELD_KEY_RE)).min(1).max(8),
+        /**
+         * Con un `match` en el mismo campo: «no_match» (por omisión) = Cortex sólo
+         * si la lista no encontró; «rest» = Cortex llena los destinos que la lista no llenó.
+         */
+        when: z.enum(['no_match', 'rest']).optional(),
+      })
+      .optional(),
+    /**
+     * Buscar en una lista, SIN IA (ver `match-shape.ts`): al llenarse el campo
+     * `from`, se normaliza, se extrae la clave y se busca en `source` (una
+     * lista de la plataforma `cortex.aerolineas` o una tabla del espacio) por la
+     * columna `key`; si está, se llenan los campos de `fills` (destino → columna).
+     */
+    match: z
+      .object({
+        from: z.string().regex(FIELD_KEY_RE),
+        extract: z
+          .discriminatedUnion('mode', [
+            z.object({ mode: z.literal('full') }),
+            z.object({ mode: z.literal('prefix'), length: z.number().int().min(1).max(8) }),
+            z.object({ mode: z.literal('regex'), pattern: z.string().min(1).max(PATTERN_MAX) }),
+          ])
+          .optional(),
+        source: z.string().regex(/^(cortex\.)?[a-z][a-z0-9_]{1,47}$/),
+        key: z.string().regex(FIELD_KEY_RE),
+        fills: z
+          .record(z.string().regex(FIELD_KEY_RE), z.string().regex(FIELD_KEY_RE))
+          .refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 8, {
+            message: 'Entre 1 y 8 campos destino.',
+          }),
       })
       .optional(),
   })
@@ -306,6 +337,11 @@ export const trackerFieldSchema = z
     }
     if (field.showIf && field.showIf.field === field.key)
       bad('Un campo no puede depender de sí mismo.', 'showIf');
+    if (field.match?.extract?.mode === 'regex') {
+      const pattern = field.match.extract.pattern;
+      if (!isSafePattern(pattern) || !compilePattern(pattern))
+        bad('El patrón de «match» no es válido o es peligroso.', 'match');
+    }
     if (field.percent && field.type !== 'number')
       bad('`percent` sólo va en un campo de tipo number.', 'percent');
   });
@@ -396,6 +432,16 @@ export const trackerFieldsSchema = z
       }
     }
   });
+
+/**
+ * Los campos que llegan en una redefinición: cada uno válido por sí solo, sin
+ * mirar a los demás (los que no vienen se conservan; la coherencia de la
+ * definición completa se valida sobre la fusión).
+ */
+export const trackerFieldsPartialSchema = z
+  .array(z.preprocess(normalizeFieldInput, trackerFieldSchema))
+  .min(1)
+  .max(20);
 
 export const trackerSlugSchema = z
   .string()

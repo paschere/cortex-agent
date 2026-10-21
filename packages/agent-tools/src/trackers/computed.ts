@@ -28,6 +28,9 @@ import {
  * instante en el formulario, sin el barril de @cortex/agent-tools.
  */
 
+import { referenceList } from '../reference-lists';
+import type { MatchConfig } from './match-shape';
+
 /** Lo mínimo que se necesita de un campo; `TrackerField` lo cumple. */
 export interface ComputedFieldLike {
   key: string;
@@ -38,7 +41,8 @@ export interface ComputedFieldLike {
   options?: string[];
   tracker?: string;
   lookup?: { via: string; field: string; editable?: boolean };
-  autofill?: { instruction: string; from: string[]; fills: string[] };
+  autofill?: { instruction: string; from: string[]; fills: string[]; when?: 'no_match' | 'rest' };
+  match?: MatchConfig;
 }
 
 /** Los tipos que una fórmula puede devolver. */
@@ -195,7 +199,7 @@ export function fromFVal(field: ComputedFieldLike, v: FVal): FromFVal {
 export interface ComputedProblem {
   key: string;
   /** Qué propiedad del campo falla: `formula`, `lookup`, `autofill`. */
-  path: 'formula' | 'lookup' | 'autofill';
+  path: 'formula' | 'lookup' | 'autofill' | 'match';
   message: string;
 }
 
@@ -272,6 +276,40 @@ export function computedProblems(fields: readonly ComputedFieldLike[]): Computed
         add(f.key, 'lookup', `Lookup de «${f.label}»: no puede apuntar a sí mismo.`);
       if (f.type === 'relation' || f.type === 'file')
         add(f.key, 'lookup', `«${f.label}» (${f.type}) no puede traer un valor de otra tabla.`);
+    }
+    if (f.match) {
+      const m = f.match;
+      const own = f.key;
+      if (!byKey.has(m.from))
+        add(own, 'match', `Buscar en lista de «${f.label}»: no existe el campo disparador «${m.from}».`);
+      for (const target of Object.keys(m.fills)) {
+        const t = byKey.get(target);
+        if (!t) {
+          add(own, 'match', `Buscar en lista de «${f.label}»: no existe el campo destino «${target}».`);
+          continue;
+        }
+        if (target === m.from)
+          add(own, 'match', `Buscar en lista de «${f.label}»: «${target}» no puede ser disparador y destino.`);
+        if (t.formula || (t.lookup && !t.lookup.editable))
+          add(own, 'match', `Buscar en lista de «${f.label}»: «${t.label}» ya se calcula solo.`);
+        if (['file', 'relation', 'location'].includes(t.type))
+          add(own, 'match', `Buscar en lista de «${f.label}»: «${t.label}» (${t.type}) no se puede llenar con texto.`);
+      }
+      const ref = m.source.startsWith('cortex.') ? referenceList(m.source) : null;
+      if (m.source.startsWith('cortex.')) {
+        if (!ref)
+          add(own, 'match', `Buscar en lista de «${f.label}»: la lista «${m.source}» no existe.`);
+        else {
+          const cols = new Set(ref.columns.map((c) => c.key));
+          for (const c of [m.key, ...Object.values(m.fills)])
+            if (!cols.has(c))
+              add(
+                own,
+                'match',
+                `Buscar en lista de «${f.label}»: «${m.source}» no tiene la columna «${c}». Tiene: ${[...cols].join(', ')}.`,
+              );
+        }
+      }
     }
     if (f.autofill) {
       const a = f.autofill;

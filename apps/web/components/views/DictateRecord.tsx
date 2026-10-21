@@ -88,6 +88,7 @@ export function DictateRecord({
   className?: string;
 }) {
   const [mode, setMode] = useState<Mode>(null);
+  const [probed, setProbed] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
   const [live, setLive] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
@@ -98,6 +99,7 @@ export function DictateRecord({
 
   useEffect(() => {
     setMode(recognitionCtor() ? 'speech' : canRecord() ? 'record' : null);
+    setProbed(true);
     return () => {
       recognitionRef.current?.abort();
       for (const t of recorderRef.current?.stream.getTracks() ?? []) t.stop();
@@ -113,7 +115,20 @@ export function DictateRecord({
         : target.kind === 'public'
           ? '/api/views/public/dictate'
           : null;
-  if (!endpoint || !mode) return null;
+  if (!endpoint) return null;
+  // Sin reconocimiento de voz ni micrófono (una página sin https, un navegador viejo) el botón
+  // no puede funcionar: se dice por qué en vez de desaparecer sin explicación.
+  // Mientras el navegador no se ha probado se reserva el lugar del botón: que aparezca después de
+  // pintar la página no puede correr el formulario hacia abajo en el momento de tocarlo.
+  if (!probed)
+    return <div aria-hidden className={clsx('min-h-14 w-full rounded-xl bg-primary/5', className)} />;
+  if (!mode)
+    return probed ? (
+      <p className={clsx('rounded-sm bg-surface-2 px-3 py-2 text-xs text-ink-muted', className)}>
+        Este navegador no deja dictar aquí (hace falta el micrófono y una conexión segura). Abre la
+        app en Chrome o Safari actualizados, o escribe el registro.
+      </p>
+    ) : null;
 
   async function send(payload: { text: string } | { audio: Blob }) {
     if (!endpoint) return;

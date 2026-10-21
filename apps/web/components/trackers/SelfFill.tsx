@@ -4,8 +4,10 @@ import { formatCompactMoney, formatNumber, formatPercent } from '@/lib/datagrid/
 import type { TrackerField } from '@/lib/trackers/schema-editor';
 import { FORMULA_RESULT_TYPES, applyComputed } from '@cortex/agent-tools/src/trackers/computed';
 import { FORMULA_FUNCTIONS, parseFormula } from '@cortex/agent-tools/src/trackers/formula';
+import { REFERENCE_LISTS } from '@cortex/agent-tools/src/reference-lists';
+import Link from 'next/link';
 import { clsx } from 'clsx';
-import { Calculator, Link2, Sparkles } from 'lucide-react';
+import { Calculator, Link2, SearchCheck, Sparkles, Workflow } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Field, INPUT, Toggle } from '../views/editor/controls';
 
@@ -19,7 +21,8 @@ import { Field, INPUT, Toggle } from '../views/editor/controls';
 const NATIVE = 'rounded-sm border border-border-strong bg-surface px-2 py-1.5 text-sm text-ink';
 
 type AutoCfg = NonNullable<TrackerField['autofill']>;
-type Mode = 'manual' | 'formula' | 'lookup';
+type MatchCfg = NonNullable<TrackerField['match']>;
+type Mode = 'manual' | 'match' | 'formula' | 'lookup' | 'rule' | 'cortex';
 type Other = {
   slug: string;
   name: string;
@@ -42,26 +45,62 @@ export function SelfFill({
   onChange: (next: TrackerField) => void;
 }) {
   const set = (patch: Partial<TrackerField>) => onChange({ ...field, ...patch });
-  const mode: Mode = field.formula !== undefined ? 'formula' : field.lookup ? 'lookup' : 'manual';
+  const [ruleHint, setRuleHint] = useState(false);
+  const mode: Mode = ruleHint
+    ? 'rule'
+    : field.formula !== undefined
+      ? 'formula'
+      : field.lookup
+        ? 'lookup'
+        : field.match
+          ? 'match'
+          : field.autofill
+            ? 'cortex'
+            : 'manual';
   const relations = fields.filter((f) => f.type === 'relation' && f.key !== field.key);
   const others = fields.filter((f) => f.key !== field.key);
 
   const setMode = (next: Mode) => {
     if (next === mode) return;
-    if (next === 'manual') set({ formula: undefined, lookup: undefined });
+    setRuleHint(next === 'rule');
+    if (next === 'rule') return;
+    if (next === 'manual')
+      set({ formula: undefined, lookup: undefined, match: undefined, autofill: undefined });
     else if (next === 'formula')
       set({
         formula: '',
         lookup: undefined,
         autofill: undefined,
+        match: undefined,
         required: false,
         ...(FORMULA_RESULT_TYPES.includes(field.type as never) ? {} : { type: 'number' }),
+      });
+    else if (next === 'lookup')
+      set({
+        formula: undefined,
+        match: undefined,
+        autofill: undefined,
+        lookup: { via: relations[0]?.key ?? '', field: '', editable: false },
+        required: false,
+      });
+    else if (next === 'match')
+      set({
+        formula: undefined,
+        lookup: undefined,
+        match: {
+          from: field.key,
+          extract: { mode: 'full' },
+          source: [...REFERENCE_LISTS.keys()][0] ?? 'cortex.aerolineas',
+          key: 'codigo',
+          fills: {},
+        },
       });
     else
       set({
         formula: undefined,
-        lookup: { via: relations[0]?.key ?? '', field: '', editable: false },
-        required: false,
+        lookup: undefined,
+        match: undefined,
+        autofill: { instruction: '', from: [field.key], fills: [] },
       });
   };
 
@@ -69,7 +108,7 @@ export function SelfFill({
     <div className="space-y-3 rounded-sm border border-border bg-surface-2/50 p-3">
       <Field
         label="¿Cómo se llena?"
-        hint="A mano, calculado de otros campos, traído de otra tabla, o con ayuda de Cortex."
+        hint="De lo más rápido y seguro a lo más flexible: lista, fórmula, otra tabla, regla o Cortex (IA)."
       >
         <select
           aria-label="Cómo se llena este campo"
@@ -78,11 +117,18 @@ export function SelfFill({
           onChange={(e) => setMode(e.target.value as Mode)}
           className={clsx(NATIVE, 'w-full')}
         >
-          <option value="manual">Lo escribe la persona</option>
-          <option value="formula">Se calcula con una fórmula</option>
+          <option value="manual">A mano — lo escribe la persona</option>
+          <option value="match" disabled={others.length === 0}>
+            Buscar en una lista — sin IA, al instante
+          </option>
+          <option value="formula">Fórmula — se calcula de otros campos</option>
           <option value="lookup" disabled={relations.length === 0}>
-            Se trae de otra tabla
+            Traer de otra tabla
             {relations.length === 0 ? ' (primero agrega un campo Relación)' : ''}
+          </option>
+          <option value="rule">Regla — la pone una automatización</option>
+          <option value="cortex" disabled={others.length === 0}>
+            Con Cortex (IA) — busca y propone
           </option>
         </select>
       </Field>
@@ -107,69 +153,316 @@ export function SelfFill({
         />
       )}
 
-      {mode !== 'formula' && (
+      {mode === 'match' && field.match && (
+        <MatchEditor
+          field={field}
+          others={others}
+          otherTrackers={otherTrackers}
+          readOnly={readOnly}
+          set={set}
+        />
+      )}
+
+      {mode === 'rule' && (
+        <p className="flex items-start gap-1.5 text-xs text-ink-muted">
+          <Workflow className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            Una automatización de la aplicación puede escribir este campo cuando pasa algo («al
+            crear un vuelo, poner…»). Se arma en la pestaña Automatizaciones de la app, o pídeselo a
+            Cortex en el chat.{' '}
+            <Link href="/apps" className="font-semibold text-primary hover:underline">
+              Ir a mis aplicaciones
+            </Link>
+          </span>
+        </p>
+      )}
+
+      {(mode === 'cortex' || (mode === 'match' && field.match)) && (
+        <CortexEditor field={field} others={others} readOnly={readOnly} set={set} withList={mode === 'match'} />
+      )}
+    </div>
+  );
+}
+
+/** «Cortex propone valores»: solo (modo Cortex) o como respaldo de la lista. */
+function CortexEditor({
+  field,
+  others,
+  readOnly,
+  set,
+  withList,
+}: {
+  field: TrackerField;
+  others: TrackerField[];
+  readOnly: boolean;
+  set: (patch: Partial<TrackerField>) => void;
+  withList: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      {withList ? (
+        <Toggle
+          label="Si no la encuentra, que Cortex la busque"
+          hint="Respaldo con IA (web y otras tablas): sólo corre cuando la lista no tiene el dato."
+          checked={Boolean(field.autofill)}
+          disabled={readOnly || others.length === 0}
+          onChange={(on) =>
+            set({
+              autofill: on
+                ? {
+                    instruction: '',
+                    from: [field.key],
+                    fills: Object.keys(field.match?.fills ?? {}),
+                  }
+                : undefined,
+            })
+          }
+        />
+      ) : (
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          Al llenar este campo, Cortex busca y propone los demás
+        </p>
+      )}
+      {field.autofill && (
         <div className="space-y-2">
-          <Toggle
-            label="Cortex propone valores para otros campos"
-            hint="Al llenar este campo, Cortex busca y propone los demás. Tú decides: nada pisa lo que ya escribiste."
-            checked={Boolean(field.autofill)}
-            disabled={readOnly || others.length === 0}
-            onChange={(on) =>
-              set({
-                autofill: on
-                  ? {
-                      instruction: '',
-                      from: [field.key],
-                      fills: [],
-                    }
-                  : undefined,
-              })
+          <Field
+            label="¿Qué debe hacer Cortex?"
+            hint="Ej.: «Con el número de vuelo identifica la aerolínea y el próximo arribo». Si el dato es una equivalencia fija (código → nombre), usa «Buscar en una lista»: es más rápido y barato."
+          >
+            <textarea
+              rows={2}
+              maxLength={600}
+              value={field.autofill.instruction}
+              disabled={readOnly}
+              onChange={(e) =>
+                set({ autofill: { ...(field.autofill as AutoCfg), instruction: e.target.value } })
+              }
+              className={clsx(INPUT, 'h-auto py-2')}
+            />
+          </Field>
+          <FieldPicker
+            label="Cortex empieza cuando estén llenos (además de este)"
+            options={others}
+            value={field.autofill.from.filter((k) => k !== field.key)}
+            disabled={readOnly}
+            onChange={(from) =>
+              set({ autofill: { ...(field.autofill as AutoCfg), from: [field.key, ...from] } })
             }
           />
-          {field.autofill && (
-            <div className="space-y-2">
-              <Field
-                label="¿Qué debe hacer Cortex?"
-                hint="Ej.: «Con el número de vuelo identifica la aerolínea y el próximo arribo»."
-              >
-                <textarea
-                  rows={2}
-                  maxLength={600}
-                  value={field.autofill.instruction}
-                  disabled={readOnly}
-                  onChange={(e) =>
-                    set({
-                      autofill: { ...(field.autofill as AutoCfg), instruction: e.target.value },
-                    })
-                  }
-                  className={clsx(INPUT, 'h-auto py-2')}
-                />
-              </Field>
-              <FieldPicker
-                label="Cortex empieza cuando estén llenos (además de este)"
-                options={others}
-                value={field.autofill.from.filter((k) => k !== field.key)}
+          <FieldPicker
+            label="Campos que Cortex propone"
+            options={others.filter(
+              (f) =>
+                !f.formula &&
+                !(f.lookup && !f.lookup.editable) &&
+                !['file', 'relation', 'location'].includes(f.type) &&
+                !field.autofill?.from.includes(f.key),
+            )}
+            value={field.autofill.fills}
+            disabled={readOnly}
+            onChange={(fills) => set({ autofill: { ...(field.autofill as AutoCfg), fills } })}
+          />
+          {withList && (
+            <Field label="Cuando la lista sí encuentra">
+              <select
+                aria-label="Qué hace Cortex si la lista encuentra"
+                value={field.autofill.when ?? 'no_match'}
                 disabled={readOnly}
-                onChange={(from) =>
-                  set({ autofill: { ...(field.autofill as AutoCfg), from: [field.key, ...from] } })
+                onChange={(e) =>
+                  set({
+                    autofill: {
+                      ...(field.autofill as AutoCfg),
+                      when: e.target.value === 'rest' ? 'rest' : undefined,
+                    },
+                  })
                 }
-              />
-              <FieldPicker
-                label="Campos que Cortex propone"
-                options={others.filter(
-                  (f) =>
-                    !f.formula &&
-                    !(f.lookup && !f.lookup.editable) &&
-                    !['file', 'relation', 'location'].includes(f.type) &&
-                    !field.autofill?.from.includes(f.key),
-                )}
-                value={field.autofill.fills}
-                disabled={readOnly}
-                onChange={(fills) => set({ autofill: { ...(field.autofill as AutoCfg), fills } })}
-              />
-            </div>
+                className={clsx(NATIVE, 'w-full')}
+              >
+                <option value="no_match">Cortex no hace nada</option>
+                <option value="rest">Cortex completa los campos que la lista no llenó</option>
+              </select>
+            </Field>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** «Buscar en una lista»: fuente, columna clave, cómo sacar la clave y qué campos llena. */
+function MatchEditor({
+  field,
+  others,
+  otherTrackers,
+  readOnly,
+  set,
+}: {
+  field: TrackerField;
+  others: TrackerField[];
+  otherTrackers: Other[];
+  readOnly: boolean;
+  set: (patch: Partial<TrackerField>) => void;
+}) {
+  const match = field.match as MatchCfg;
+  const update = (patch: Partial<MatchCfg>) => set({ match: { ...match, ...patch } });
+  const list = REFERENCE_LISTS.get(match.source);
+  const tracker = otherTrackers.find((t) => t.slug === match.source);
+  const columns: Array<{ key: string; label: string }> = list
+    ? list.columns
+    : (tracker?.fields ?? []).map((f) => ({ key: f.key, label: f.label }));
+  const extract = match.extract ?? { mode: 'full' as const };
+  const fillable = others.filter(
+    (f) =>
+      !f.formula &&
+      !(f.lookup && !f.lookup.editable) &&
+      !['file', 'relation', 'location'].includes(f.type),
+  );
+  const setSource = (source: string) => {
+    const l = REFERENCE_LISTS.get(source);
+    update({ source, key: l?.keyColumn ?? '', fills: {} });
+  };
+  return (
+    <div className="space-y-2">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+        <SearchCheck className="h-3.5 w-3.5" aria-hidden />
+        Al llenar «{field.label}», buscarlo en una lista y llenar otros campos
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Lista donde se busca">
+          <select
+            aria-label="Lista de referencia"
+            value={match.source}
+            disabled={readOnly}
+            onChange={(e) => setSource(e.target.value)}
+            className={clsx(NATIVE, 'w-full')}
+          >
+            <optgroup label="Listas de Cortex">
+              {[...REFERENCE_LISTS.values()].map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </optgroup>
+            {otherTrackers.length > 0 && (
+              <optgroup label="Tablas de este espacio">
+                {otherTrackers.map((t) => (
+                  <option key={t.slug} value={t.slug}>
+                    {t.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </Field>
+        <Field label="Se busca por la columna">
+          <select
+            aria-label="Columna clave"
+            value={match.key}
+            disabled={readOnly}
+            onChange={(e) => update({ key: e.target.value })}
+            className={clsx(NATIVE, 'w-full')}
+          >
+            <option value="">Elige…</option>
+            {columns.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field
+          label="Cómo sacar la clave"
+          hint="Se normaliza antes: mayúsculas, sin espacios, guiones ni tildes."
+        >
+          <select
+            aria-label="Cómo sacar la clave"
+            value={extract.mode}
+            disabled={readOnly}
+            onChange={(e) => {
+              const m = e.target.value;
+              update({
+                extract:
+                  m === 'prefix'
+                    ? { mode: 'prefix', length: 2 }
+                    : m === 'regex'
+                      ? { mode: 'regex', pattern: '^([A-Z0-9]{2})' }
+                      : { mode: 'full' },
+              });
+            }}
+            className={clsx(NATIVE, 'w-full')}
+          >
+            <option value="full">El valor completo</option>
+            <option value="prefix">Las primeras N letras (ej. «AV123» → AV)</option>
+            <option value="regex">Un patrón con grupo (avanzado)</option>
+          </select>
+        </Field>
+        {extract.mode === 'prefix' && (
+          <Field label="Cuántas letras">
+            <input
+              type="number"
+              min={1}
+              max={8}
+              value={extract.length}
+              disabled={readOnly}
+              onChange={(e) =>
+                update({
+                  extract: {
+                    mode: 'prefix',
+                    length: Math.min(8, Math.max(1, Number(e.target.value) || 1)),
+                  },
+                })
+              }
+              className={INPUT}
+            />
+          </Field>
+        )}
+        {extract.mode === 'regex' && (
+          <Field label="Patrón (el primer grupo es la clave)">
+            <input
+              value={extract.pattern}
+              maxLength={200}
+              disabled={readOnly}
+              onChange={(e) => update({ extract: { mode: 'regex', pattern: e.target.value } })}
+              className={clsx(INPUT, 'font-mono text-xs')}
+            />
+          </Field>
+        )}
+      </div>
+      <fieldset className="space-y-1.5">
+        <legend className="text-xs font-semibold text-ink">Campos que se llenan</legend>
+        {fillable.length === 0 && (
+          <p className="text-xs text-ink-faint">Agrega otros campos para poder llenarlos.</p>
+        )}
+        {fillable.map((f) => (
+          <div key={f.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
+            <span className="truncate text-xs text-ink">{f.label}</span>
+            <select
+              aria-label={`Columna para ${f.label}`}
+              value={match.fills[f.key] ?? ''}
+              disabled={readOnly}
+              onChange={(e) => {
+                const { [f.key]: _drop, ...rest } = match.fills;
+                update({ fills: e.target.value ? { ...rest, [f.key]: e.target.value } : rest });
+              }}
+              className={clsx(NATIVE, 'w-full')}
+            >
+              <option value="">No llenar</option>
+              {columns.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </fieldset>
+      {Object.keys(match.fills).length === 0 && (
+        <p role="alert" className="text-xs font-semibold text-amber">
+          Elige al menos un campo para llenar.
+        </p>
       )}
     </div>
   );

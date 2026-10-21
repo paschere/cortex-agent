@@ -1,5 +1,5 @@
 import { generateText } from 'ai';
-import { utilityModel } from '../model';
+import { simpleModel } from '../model';
 import { type CallEvent, clockAt } from './timeline';
 
 /**
@@ -45,7 +45,7 @@ export async function captionCallFrames(frames: CaptionableFrame[]): Promise<str
   }
 
   const { text } = await generateText({
-    model: utilityModel(),
+    model: simpleModel(),
     messages: [{ role: 'user', content }],
     maxTokens: 700,
   });
@@ -57,7 +57,11 @@ export async function captionCallFrames(frames: CaptionableFrame[]): Promise<str
   return frames.map((_, i) => (lines[i] ?? '').slice(0, 280));
 }
 
-export function applyCaptions(events: CallEvent[], frames: CaptionableFrame[], captions: string[]): CallEvent[] {
+export function applyCaptions(
+  events: CallEvent[],
+  frames: CaptionableFrame[],
+  captions: string[],
+): CallEvent[] {
   const byAt = new Map<number, string>();
   frames.forEach((f, i) => {
     const c = captions[i]?.trim();

@@ -1,6 +1,7 @@
 'use server';
 
 import { openApp } from '@/lib/apps/access';
+import { buildReportNotice } from '@/lib/block-fix';
 import { bellForSubmission, notifyViewActivity } from '@/lib/views/activity';
 import {
   RowConflictError,
@@ -8,6 +9,7 @@ import {
   editAppRow,
   editAppSubmission,
   runAppAction,
+  saveAppFormRecord,
   screenFor,
   screenView,
   submitAppForm,
@@ -93,6 +95,23 @@ export async function editAppSubmissionAction(
   }
 }
 
+/** Completar un registro que ya existe con el formulario de su ficha (cerrar una atención). */
+export async function saveAppFormRecordAction(
+  appRef: string,
+  screenRef: string,
+  blockId: string,
+  rowId: string,
+  values: Record<string, string>,
+): Promise<Result<{ message: string; duplicate?: string | null }>> {
+  try {
+    const { db, access, view } = await open(appRef, screenRef);
+    const res = await saveAppFormRecord(db, access, view, { blockId, rowId, values });
+    return { ok: true, message: 'Guardado.', duplicate: res.duplicate };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar el registro.') };
+  }
+}
+
 export async function editAppRowAction(
   appRef: string,
   screenRef: string,
@@ -140,5 +159,61 @@ export async function runAppActionAction(
     return { ok: true, message: res.message };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo ejecutar el botón.') };
+  }
+}
+
+/**
+ * «Avisar al administrador»: quien NO puede editar la app ve un bloque roto y
+ * toca el botón; a quienes administran les llega un aviso con dónde y qué. No
+ * escribe nada más. El mismo aviso no se repite (dedupeKey) y el texto lo arma
+ * el servidor, no el navegador.
+ */
+export async function reportAppProblemAction(
+  appRef: string,
+  screenRef: string | null,
+  blockId: string | null,
+  message: string,
+): Promise<Result<{ message: string }>> {
+  try {
+    const opened = await openApp(z.string().trim().min(1).max(80).parse(appRef));
+    if (!opened) throw new NotFoundError('Esa aplicación no existe.');
+    const screen = screenRef ? screenFor(opened.access, screenRef) : null;
+    const view = screen ? await screenView(opened.db, screen) : null;
+    const block = view?.spec.blocks.find((b) => b.id === blockId);
+    const notice = buildReportNotice(
+      {
+        appName: opened.access.app.name,
+        appRef: opened.access.app.slug,
+        screenTitle: screen?.title ?? null,
+        screenSlug: screen?.slug ?? null,
+        blockId: blockId ?? null,
+        blockTitle: block && 'title' in block && typeof block.title === 'string' ? block.title : null,
+        message: z.string().trim().min(1).max(600).parse(message),
+      },
+      opened.access.user.name,
+    );
+    const anchor = view ?? {
+      id: opened.access.app.id,
+      slug: opened.access.app.slug,
+      name: opened.access.app.name,
+      created_by: opened.access.app.created_by,
+    };
+    await notifyViewActivity(opened.db, anchor, {
+      ...notice,
+      href: `/apps/${opened.access.app.slug}/edit`,
+    });
+    return { ok: true, message: 'Listo: le avisé al administrador.' };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo avisar. Díselo en persona.') };
+  }
+}
+
+/** ¿Quien mira puede arreglar la app (editarla)? Para decidir entre «Arreglar con Cortex» y «Avisar». */
+export async function appCanFixAction(appRef: string): Promise<boolean> {
+  try {
+    const opened = await openApp(z.string().trim().min(1).max(80).parse(appRef));
+    return Boolean(opened?.viewer.companyAdmin) && !opened?.readOnly;
+  } catch {
+    return false;
   }
 }

@@ -8,7 +8,12 @@ vi.mock('ai', () => ({
     return { text: model.reply };
   }),
 }));
-vi.mock('../../model', () => ({ UTILITY_MODEL: 'fake-utility', utilityModel: () => ({}) }));
+vi.mock('../../model', () => ({
+  UTILITY_MODEL: 'fake-utility',
+  FAST_MODEL: 'fake-fast',
+  utilityModel: () => ({}),
+  simpleModel: () => ({}),
+}));
 
 import { type SnapshotExpiration, collectDocumentExpirations } from '../autopilot';
 import { backfillDocumentExpirations, detectDocumentExpiration } from '../ingest';

@@ -31,7 +31,32 @@ export const CACHE_WRITE_MULTIPLIER = 1.25;
 export interface ModelRate {
   inputPerMTok: number;
   outputPerMTok: number;
+  /**
+   * Lectura de caché como fracción de la entrada, si no es la de siempre (0,1×).
+   * Opus 5.5 lee a $0,20 sobre una entrada de $4: 0,05×.
+   */
+  cacheReadMultiplier?: number;
+  /**
+   * Segunda tarifa para prompts largos (Haiku 5.5: más de 100K tokens de
+   * prompt, que es entrada + lectura + escritura de ESA petición). La tarifa la
+   * elige el tamaño del prompt de cada petición, no el del turno.
+   */
+  longPrompt?: { aboveTokens: number; inputPerMTok: number; outputPerMTok: number };
 }
+
+/**
+ * La generación 5.5 (2026-10): ids exactos, sin sufijo de fecha. Sus tarifas son
+ * planas en el tiempo — no tienen ventana de lanzamiento — y por eso se miran
+ * ANTES que el prefijo «claude-sonnet-5» / «claude-opus», que también las
+ * contendría.
+ */
+const SONNET_5_5: ModelRate = { inputPerMTok: 2, outputPerMTok: 10 };
+const OPUS_5_5: ModelRate = { inputPerMTok: 4, outputPerMTok: 20, cacheReadMultiplier: 0.05 };
+const HAIKU_5_5: ModelRate = {
+  inputPerMTok: 0.1,
+  outputPerMTok: 0.5,
+  longPrompt: { aboveTokens: 100_000, inputPerMTok: 0.5, outputPerMTok: 2.5 },
+};
 
 const SONNET_5_INTRO_UNTIL = '2026-08-31';
 
@@ -45,6 +70,12 @@ export function rateFor(model: string, isoDate: string): ModelRate | null {
   const day = isoDate.slice(0, 10);
   // El id puede venir cualificado («anthropic/claude-sonnet-5») o pelado.
   const bare = model.includes('/') ? model.slice(model.lastIndexOf('/') + 1) : model;
+  // Los históricos NO se borran: las filas viejas de `model_usage` se cobran a la
+  // tarifa con la que corrieron (Sonnet 5 con su ventana intro, Opus 5 a $5/$25,
+  // Haiku 4.5 a $1/$5).
+  if (bare.startsWith('claude-sonnet-5-5')) return SONNET_5_5;
+  if (bare.startsWith('claude-opus-5-5')) return OPUS_5_5;
+  if (bare.startsWith('claude-haiku-5-5')) return HAIKU_5_5;
   if (bare.startsWith('claude-sonnet-5')) {
     return day <= SONNET_5_INTRO_UNTIL
       ? { inputPerMTok: 2, outputPerMTok: 10 }
@@ -64,13 +95,27 @@ export function rateFor(model: string, isoDate: string): ModelRate | null {
 export function stepCostUsd(
   rate: ModelRate,
   tokens: { input: number; cacheRead: number; cacheWrite: number; output: number },
+  /**
+   * Tamaño del prompt de UNA petición, si se conoce. Para el tramo largo de
+   * Haiku 5.5 el costo se parte por petición; con filas agregadas por turno se
+   * usa el promedio por paso (`steps`) para no cobrar todo el turno como largo
+   * por haber sumado varios pasos cortos.
+   */
+  steps = 1,
 ): number {
-  const inRate = rate.inputPerMTok / 1_000_000;
+  const perStep = Math.max(1, steps);
+  const promptPerStep =
+    (Math.max(0, tokens.input) + Math.max(0, tokens.cacheRead) + Math.max(0, tokens.cacheWrite)) /
+    perStep;
+  const tier =
+    rate.longPrompt && promptPerStep > rate.longPrompt.aboveTokens ? rate.longPrompt : rate;
+  const inRate = tier.inputPerMTok / 1_000_000;
+  const readMultiplier = rate.cacheReadMultiplier ?? CACHE_READ_MULTIPLIER;
   return (
     Math.max(0, tokens.input) * inRate +
-    Math.max(0, tokens.cacheRead) * inRate * CACHE_READ_MULTIPLIER +
+    Math.max(0, tokens.cacheRead) * inRate * readMultiplier +
     Math.max(0, tokens.cacheWrite) * inRate * CACHE_WRITE_MULTIPLIER +
-    (Math.max(0, tokens.output) * rate.outputPerMTok) / 1_000_000
+    (Math.max(0, tokens.output) * tier.outputPerMTok) / 1_000_000
   );
 }
 
@@ -80,7 +125,8 @@ export function stepCostUsd(
  * 0.1× sobre cada token leído.
  */
 export function cacheSavingsUsd(rate: ModelRate, cacheReadTokens: number): number {
-  return (Math.max(0, cacheReadTokens) * rate.inputPerMTok * (1 - CACHE_READ_MULTIPLIER)) / 1_000_000;
+  const readMultiplier = rate.cacheReadMultiplier ?? CACHE_READ_MULTIPLIER;
+  return (Math.max(0, cacheReadTokens) * rate.inputPerMTok * (1 - readMultiplier)) / 1_000_000;
 }
 
 /** «$4.83» o «$0.0042» — con los decimales que el tamaño del número pida. */

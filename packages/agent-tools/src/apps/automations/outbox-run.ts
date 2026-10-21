@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ensureSyncedCities } from '../../accounting/outbound/cities';
 import { accountingTableSlug } from '../../accounting/tables';
 import { listAccountingConnections } from '../../accounting/store';
 import { type OpenInvoice, type OutboxKind, OUTBOX_KIND_LABEL, formatNitDigits } from '../../accounting/outbound/shape';
@@ -151,6 +152,7 @@ export async function buildOutbox(
   today: string,
 ): Promise<BuiltOutbox | { skip: string }> {
   const kind = OUTBOX_ACTION_KIND[action.type];
+  if (kind === 'customer') await ensureSyncedCities(db);
   const picked = await pickOutboundProvider(db, kind);
   if ('error' in picked) throw new Error(picked.error);
   let payload: Record<string, unknown>;

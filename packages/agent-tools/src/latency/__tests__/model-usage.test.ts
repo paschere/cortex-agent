@@ -54,6 +54,52 @@ describe('consumo del modelo (0228)', () => {
     );
   });
 
+  it('guarda lo del experimento de modelos (0236) y, sin la migración, no pierde el consumo', async () => {
+    const experiment = {
+      arm: 'haiku' as const,
+      toolErrors: 2,
+      retries: 1,
+      refusals: 0,
+      fellBack: false,
+    };
+    const ok = vi.fn().mockResolvedValue({ error: null });
+    await recordModelUsage({ from: () => ({ insert: ok }) } as never, {
+      userId: 'u',
+      model: 'claude-haiku-5-5',
+      inputTokens: 10,
+      outputTokens: 5,
+      experiment,
+    });
+    expect(ok).toHaveBeenCalledWith(
+      expect.objectContaining({
+        experiment_arm: 'haiku',
+        tool_errors: 2,
+        retries: 1,
+        refusals: 0,
+        fell_back: false,
+      }),
+    );
+
+    // Columnas inexistentes: el primer insert falla y el segundo, sin ellas, entra.
+    const insert = vi
+      .fn()
+      .mockResolvedValueOnce({ error: { message: 'column "experiment_arm" does not exist' } })
+      .mockResolvedValueOnce({ error: null });
+    await recordModelUsage({ from: () => ({ insert }) } as never, {
+      userId: 'u',
+      model: 'claude-haiku-5-5',
+      inputTokens: 10,
+      outputTokens: 5,
+      experiment,
+    });
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert.mock.calls[1]?.[0]).not.toHaveProperty('experiment_arm');
+    expect(insert.mock.calls[1]?.[0]).toMatchObject({
+      model: 'claude-haiku-5-5',
+      input_tokens: 10,
+    });
+  });
+
   it('no escribe filas vacías y nunca lanza (tabla ausente, red caída)', async () => {
     const insert = vi.fn();
     const db = { from: vi.fn(() => ({ insert })) };

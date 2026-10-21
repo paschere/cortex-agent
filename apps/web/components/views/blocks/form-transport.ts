@@ -1,6 +1,14 @@
 import { dryRunAppFormAction } from '@/lib/apps/dry-run-actions';
-import { editAppSubmissionAction, submitAppFormAction } from '@/lib/apps/write-actions';
-import { editViewSubmissionAction, submitViewFormAction } from '@/lib/views/actions';
+import {
+  editAppSubmissionAction,
+  saveAppFormRecordAction,
+  submitAppFormAction,
+} from '@/lib/apps/write-actions';
+import {
+  editViewSubmissionAction,
+  saveViewFormRecordAction,
+  submitViewFormAction,
+} from '@/lib/views/actions';
 import { isOfflineFailure } from '@/lib/views/offline-queue';
 import type { UploadedFile } from '@/lib/views/upload-rules';
 import type { SubmitTarget } from '../ViewCanvas';
@@ -168,6 +176,32 @@ export function correctorFor(target: SubmitTarget): CorrectFn | undefined {
     return async () => {
       await new Promise((r) => setTimeout(r, 400));
       return { ok: true, message: 'Corregido (de mentira).' };
+    };
+  return undefined;
+}
+
+/** Guardar sobre un registro que ya existe (formulario `onRecord`). Sólo con sesión (equipo o usuario de la app). */
+export function recordSaverFor(target: SubmitTarget): CorrectFn | undefined {
+  if (target.kind === 'app')
+    return async (blockId, rowId, values) => {
+      try {
+        return await saveViewFormRecordAction(target.viewId, blockId, rowId, values);
+      } catch {
+        return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
+      }
+    };
+  if (target.kind === 'custom_app')
+    return async (blockId, rowId, values) => {
+      try {
+        return await saveAppFormRecordAction(target.appId, target.screen, blockId, rowId, values);
+      } catch {
+        return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
+      }
+    };
+  if (target.kind === 'demo')
+    return async () => {
+      await new Promise((r) => setTimeout(r, 400));
+      return { ok: true, message: 'Guardado (de mentira).' };
     };
   return undefined;
 }

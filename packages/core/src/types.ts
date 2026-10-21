@@ -1,10 +1,10 @@
 export type UUID = string;
 
-export type Role = "member" | "team_admin" | "org_admin";
-export type CollectionScope = "global" | "team" | "user" | "conversation";
-export type Surface = "web" | "desktop" | "mcp";
-export type IntegrationProvider = "google" | "hubspot" | "github" | "linear" | "microsoft";
-export type DocumentStatus = "pending" | "ingesting" | "ready" | "failed";
+export type Role = 'member' | 'team_admin' | 'org_admin';
+export type CollectionScope = 'global' | 'team' | 'user' | 'conversation';
+export type Surface = 'web' | 'desktop' | 'mcp';
+export type IntegrationProvider = 'google' | 'hubspot' | 'github' | 'linear' | 'microsoft';
+export type DocumentStatus = 'pending' | 'ingesting' | 'ready' | 'failed';
 
 export interface User {
   id: UUID;
@@ -25,7 +25,15 @@ export interface Team {
  * Voyage (Anthropic has no embedding endpoint) — see
  * packages/agent-tools/src/kb/embedder.ts.
  */
-export type ModelId = "claude-opus-5" | "claude-sonnet-5";
+export type ModelId =
+  | 'claude-opus-5-5'
+  | 'claude-sonnet-5-5'
+  | 'claude-haiku-5-5'
+  // Históricos: filas de agentes anteriores a 2026-10. Se resuelven al modelo
+  // vigente (resolveModelId, en agent-tools) y las tarifas viejas siguen en
+  // apps/web/lib/model-pricing.ts para el consumo ya registrado.
+  | 'claude-opus-5'
+  | 'claude-sonnet-5';
 
 export interface AgentDefinition {
   id: string;
