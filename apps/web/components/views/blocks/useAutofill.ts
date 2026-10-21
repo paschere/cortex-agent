@@ -76,14 +76,19 @@ export function useAutofill(opts: {
    * lista; con lista, sólo si no hubo coincidencia (o los que la lista no llenó).
    */
   const cortexFills = useCallback(
-    (f: AutofillField, cur: Record<string, string>): string[] => {
+    (f: AutofillField, cur: Record<string, string>, manual = false): string[] => {
       if (!f.autofill) return [];
-      if (!f.match) return f.autofill.fills;
+      // Lo que ya tiene valor (escrito, de la lista o de una sugerencia anterior)
+      // no se le pide a Cortex: sin esto, una aerolínea ya puesta desde la lista
+      // volvía a encender «Cortex está llenando…» (2026-10-21).
+      const empty = (k: string) => !String(cur[k] ?? '').trim();
+      if (manual) return f.autofill.fills.filter(empty);
+      if (!f.match) return f.autofill.fills.filter(empty);
       const out = runMatch(f.match, matchTables?.[f.match.source], cur);
       return cortexTargetsAfterMatch(f.autofill.fills, f.autofill.when, {
         hit: out.hit,
         matched: Object.keys(out.suggestions),
-      });
+      }).filter(empty);
     },
     [matchTables],
   );
@@ -95,7 +100,7 @@ export function useAutofill(opts: {
       if (!entry || !url || !enabled) return;
       const cur = valuesRef.current;
       // Cascada: con lista, Cortex sólo llena lo que la lista no resolvió.
-      const todo = cortexFills(entry.field, cur);
+      const todo = cortexFills(entry.field, cur, manual);
       if (!todo.length) return;
       const effectiveConfig = { ...entry.config, fills: todo };
       if (!autofillReady(entry.config, cur)) {
