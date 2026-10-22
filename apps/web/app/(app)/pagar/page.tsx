@@ -1,4 +1,5 @@
 import { PayablesScreen } from '@/components/payables/PayablesScreen';
+import { SheetPayablesPanel } from '@/components/payables/SheetPayablesPanel';
 import { PageHeader } from '@/components/ui/page-header';
 import { loadTeam } from '@/lib/clients/read';
 import { type InvoiceView, invoiceView, supplierViews } from '@/lib/payables/view';
@@ -13,6 +14,7 @@ import {
   importConfirmedDocuments,
   listSuppliers,
   loadPayPlan,
+  readSheetPayables,
   syncPaidFromLedger,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -66,7 +68,7 @@ export default async function PagarPage({
     .then(() => syncPaidFromLedger(db))
     .catch((err) => logger.warn({ err }, 'payables refresh failed'));
 
-  const [rowsRead, suppliers, team, planRead] = await Promise.all([
+  const [rowsRead, suppliers, team, planRead, sheets] = await Promise.all([
     db
       .from('payable_invoices')
       .select(PAYABLE_COLUMNS)
@@ -80,6 +82,7 @@ export default async function PagarPage({
         plan: null,
         error: err instanceof Error ? err.message : 'No pude proyectar la caja.',
       })),
+    readSheetPayables(db, today),
   ]);
   if (rowsRead.error) throw rowsRead.error;
   const rows = (rowsRead.data ?? []) as PayableInvoiceRow[];
@@ -95,6 +98,7 @@ export default async function PagarPage({
         subtitle="Las facturas de tus proveedores, de que llegan a que se pagan: Cortex las revisa, tú apruebas, la caja sugiere el día. Cortex nunca paga."
         icon={<HandCoins className="h-5 w-5" aria-hidden />}
       />
+      {sheets ? <SheetPayablesPanel data={sheets} /> : null}
       <PayablesScreen
         tab={tab}
         data={{

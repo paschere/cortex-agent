@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { sheetReceivables } from './sheet-receivables';
 import { nitDv, normalizeNit } from '../clients/shape';
 import { findClientByNit } from '../clients/store';
 import { bogotaToday } from '../commitments/shape';
@@ -817,6 +818,12 @@ export interface ReceivablesResult {
   accountingInvoices: number;
   /** De qué programas ('siigo'). */
   accountingSystems: string[];
+  /** Facturas abiertas de hojas o tablas declaradas como fuente contable (0239), sin repetir las que ya estaban. */
+  sheetInvoices: number;
+  /** Cuáles hojas («Hoja: Ventas Medellín»). */
+  sheetOrigins: string[];
+  /** Facturas que valen distinto en una hoja y en el programa/documento: se avisa, no se suma dos veces. */
+  sheetDifferences: number;
   /** Facturas leídas que nadie ha revisado. NO están en la cifra. */
   pendingExcluded: number;
   /** Confirmadas pero sin moneda escrita: no se pueden restar contra nada. */
@@ -1265,7 +1272,48 @@ export async function receivables(
   const appliedKeys = new Set<string>();
   let withoutCurrency = 0;
 
+  // Las facturas de un programa contable conectado (0165), con SU saldo: el
+  // programa ya descontó sus recibos, así que aquí no se les resta nada. Las
+  // que también están como documento confirmado cuentan una vez, la del
+  // documento. Sólo las abiertas: la cartera es lo que falta por cobrar.
+  const accounting = await openAccountingInvoices(db, { clientId: opts.clientId });
+  const confirmedRefs: ConfirmedRef[] = invoices
+    .map((i) => ({
+      key: docNumberKey(i.doc_number),
+      clientId: i.client_id,
+      nit: i.counterparty_nit ? normalizeNit(i.counterparty_nit) : null,
+    }))
+    .filter((r) => r.key);
+  const keptAccounting = dedupeAccountingInvoices(accounting, confirmedRefs);
+
+  // Hojas o tablas declaradas como fuente de ventas (0239): lo que no está ya en
+  // otro lado se suma; lo que está no se repite. Si una fuente manda sobre el
+  // programa, la factura del programa/documento se salta aquí abajo.
+  const sheets = await sheetReceivables(db, {
+    today,
+    clientId: opts.clientId,
+    documents: invoices.map((i) => ({
+      id: i.id,
+      number: i.doc_number ?? '',
+      nit: i.counterparty_nit ?? null,
+      total: num(i.total_amount),
+      paid: i.currency
+        ? (appliedTo.get(`${i.id}\u0000${currencyBucket('pago', i.currency)}`) ?? 0)
+        : 0,
+      currency: i.currency,
+      issuedOn: i.issued_on,
+      dueOn: i.due_on,
+    })),
+    accounting: keptAccounting,
+  });
+
   for (const invoice of invoices) {
+    if (sheets.dropIds.has(invoice.id)) {
+      // Una fuente manda sobre este documento: sus pagos enlazados ya están en el saldo de la fuente.
+      if (invoice.currency)
+        appliedKeys.add(`${invoice.id}\u0000${currencyBucket('pago', invoice.currency)}`);
+      continue;
+    }
     const total = num(invoice.total_amount);
     if (total == null) continue;
     if (!invoice.currency) {
@@ -1311,21 +1359,10 @@ export async function receivables(
     buckets.set(key, bucket);
   }
 
-  // Las facturas de un programa contable conectado (0165), con SU saldo: el
-  // programa ya descontó sus recibos, así que aquí no se les resta nada. Las
-  // que también están como documento confirmado cuentan una vez, la del
-  // documento. Sólo las abiertas: la cartera es lo que falta por cobrar.
-  const accounting = await openAccountingInvoices(db, { clientId: opts.clientId });
-  const confirmedRefs: ConfirmedRef[] = invoices
-    .map((i) => ({
-      key: docNumberKey(i.doc_number),
-      clientId: i.client_id,
-      nit: i.counterparty_nit ? normalizeNit(i.counterparty_nit) : null,
-    }))
-    .filter((r) => r.key);
   let accountingInvoices = 0;
   const accountingSystems = new Set<string>();
-  for (const inv of dedupeAccountingInvoices(accounting, confirmedRefs)) {
+  for (const inv of keptAccounting) {
+    if (sheets.dropIds.has(inv.id)) continue;
     const total = num(inv.total);
     const balance = num(inv.balance);
     if (total == null || balance == null || balance <= 0.005) continue;
@@ -1358,6 +1395,35 @@ export async function receivables(
     accountingSystems.add(inv.source_system);
   }
 
+  for (const rec of sheets.invoices) {
+    const key = currencyBucket('cartera', rec.currency);
+    const bucket = buckets.get(key) ?? {
+      currency: rec.currency,
+      openInvoices: 0,
+      invoiced: 0,
+      paid: 0,
+      outstanding: 0,
+      ageDays: null,
+      overdue: 0,
+      overdueInvoices: 0,
+      creditInvoices: 0,
+      creditBalance: 0,
+      ages: [],
+    };
+    const balance = rec.balance ?? rec.total;
+    bucket.invoiced += rec.total;
+    bucket.paid += Math.max(rec.total - balance, 0);
+    bucket.openInvoices += 1;
+    bucket.outstanding += balance;
+    bucket.ages.push({ balance, since: rec.date });
+    const days = rec.due ? daysBetween(rec.due, today) : null;
+    if (days != null && days > 0) {
+      bucket.overdue += balance;
+      bucket.overdueInvoices += 1;
+    }
+    buckets.set(key, bucket);
+  }
+
   // A link to a missing invoice, or to the right invoice in the wrong
   // currency, is evidence we cannot apply. Keep it in the explicit exclusion
   // count instead of silently losing it or crossing currencies.
@@ -1387,6 +1453,9 @@ export async function receivables(
     confirmedInvoices: invoices.length,
     accountingInvoices,
     accountingSystems: [...accountingSystems].sort(),
+    sheetInvoices: sheets.invoices.length,
+    sheetOrigins: sheets.origins,
+    sheetDifferences: sheets.differences,
     pendingExcluded,
     withoutCurrency,
     disputedPayments: disputed.length,
@@ -1404,6 +1473,9 @@ export async function receivables(
       confirmedInvoices: invoices.length,
       accountingInvoices,
       accountingSystems: [...accountingSystems].sort(),
+      sheetInvoices: sheets.invoices.length,
+      sheetOrigins: sheets.origins,
+      sheetDifferences: sheets.differences,
       pendingExcluded,
       withoutCurrency,
       disputedPayments: disputed.length,
@@ -1426,6 +1498,9 @@ export function describeReceivables(input: {
   confirmedInvoices: number;
   accountingInvoices?: number;
   accountingSystems?: string[];
+  sheetInvoices?: number;
+  sheetOrigins?: string[];
+  sheetDifferences?: number;
   pendingExcluded: number;
   withoutCurrency: number;
   disputedPayments: number;
@@ -1453,8 +1528,17 @@ export function describeReceivables(input: {
         ? `sobre ${input.confirmedInvoices} factura(s) confirmada(s) y ${fromSystems} abierta(s) traída(s) de ${systems} con el saldo que dice ${systems}`
         : `sobre ${fromSystems} factura(s) abierta(s) traída(s) de ${systems}, con el saldo que dice ${systems}`
       : `sobre ${input.confirmedInvoices} factura(s) confirmada(s)`;
-  const lines = [`Cartera ${parts.join('; ')}, ${base}.`];
+  const sheetN = input.sheetInvoices ?? 0;
+  const withSheets =
+    sheetN > 0
+      ? `${base} y ${sheetN} abierta(s) de ${(input.sheetOrigins ?? []).join(', ') || 'hojas declaradas como fuente'}`
+      : base;
+  const lines = [`Cartera ${parts.join('; ')}, ${withSheets}.`];
   const caveats: string[] = [];
+  if ((input.sheetDifferences ?? 0) > 0)
+    caveats.push(
+      `${input.sheetDifferences} factura(s) valen distinto en una hoja y en el programa o documento: en la cifra entra el de la fuente que manda y no se suman dos veces (el detalle está en las fuentes contables)`,
+    );
   if (input.pendingExcluded > 0) {
     caveats.push(`hay ${input.pendingExcluded} factura(s) sin revisar que no entran en la cifra`);
   }

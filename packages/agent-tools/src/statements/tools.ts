@@ -146,7 +146,7 @@ export const statementsGet = registerTool({
       .enum(['todo', 'resultados', 'balance', 'indicadores', 'mensual'])
       .default('todo')
       .describe(
-        '«mensual» = estado de resultados contable MES A MES (ventas, costo, utilidad bruta, gastos operacionales, no operacionales, utilidad operacional y neta de cada mes del rango), del programa contable, con la caja al lado. Úsala siempre que pidan los resultados «mes a mes», «por mes» o «cada mes».',
+        '«mensual» (si hay hojas o tablas declaradas como fuente contable, añade una tabla APARTE, rotulada como de las hojas y NO contable, con ventas y compras/gastos por mes: sin programa contable es la única cifra; di siempre de qué hojas sale y que no es contabilidad) = estado de resultados contable MES A MES (ventas, costo, utilidad bruta, gastos operacionales, no operacionales, utilidad operacional y neta de cada mes del rango), del programa contable, con la caja al lado. Úsala siempre que pidan los resultados «mes a mes», «por mes» o «cada mes».',
       ),
     fromMonth: z
       .number()

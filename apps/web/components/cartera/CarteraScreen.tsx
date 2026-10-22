@@ -9,6 +9,7 @@ import {
   deltaRatio,
   formatCompact,
 } from '@/components/charts';
+import { FuentesStrip } from '@/components/finance/FuentesStrip';
 import { Panel } from '@/components/ui/panel';
 import { chipClass } from '@/lib/status-chip';
 import {
@@ -114,6 +115,7 @@ export function CarteraScreen({
   const money = (n: number) => formatMoney(n, m.currency);
   const [bucket, setBucket] = useState<CarteraBucketKey | null>(null);
   const [clientKey, setClientKey] = useState<string | null>(null);
+  const [origin, setOrigin] = useState<string | null>(null);
 
   const empty = m.invoices.length === 0 && m.payments.length === 0;
   if (empty) return <EmptyCartera askHref={askHref} />;
@@ -121,6 +123,25 @@ export function CarteraScreen({
   return (
     <div className="space-y-6">
       <Kpis model={m} money={money} />
+      <FuentesStrip
+        title="Por cobrar sale de"
+        items={m.byOrigin.map((o) => ({ origin: o.origin, amount: o.open, count: o.count }))}
+        currency={m.currency}
+        differences={m.sources?.differences}
+        differenceCount={m.sources?.differenceCount}
+        issues={m.sources?.issues}
+        issueCount={m.sources?.issueCount}
+        rejectedCount={m.sources?.rejectedCount}
+        manageHref="/integrations"
+        active={origin}
+        onSelect={(o) => {
+          setOrigin(o);
+          if (o)
+            document
+              .getElementById('facturas-abiertas')
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }}
+      />
       <TermNotice
         model={m}
         plazo={plazo}
@@ -169,8 +190,10 @@ export function CarteraScreen({
         money={money}
         bucket={bucket}
         clientKey={clientKey}
+        origin={origin}
         onBucket={setBucket}
         onClient={setClientKey}
+        onOrigin={setOrigin}
       />
       <PaymentsPanel model={m} money={money} actions={actions} />
       <HowItAdds model={m} money={money} sentence={sentence} />
@@ -944,15 +967,19 @@ function InvoicesPanel({
   money,
   bucket,
   clientKey,
+  origin,
   onBucket,
   onClient,
+  onOrigin,
 }: {
   model: CarteraModel;
   money: (n: number) => string;
   bucket: CarteraBucketKey | null;
   clientKey: string | null;
+  origin: string | null;
   onBucket: (b: CarteraBucketKey | null) => void;
   onClient: (k: string | null) => void;
+  onOrigin: (o: string | null) => void;
 }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('due');
@@ -964,6 +991,7 @@ function InvoicesPanel({
       (i) =>
         (!bucket || i.bucket === bucket) &&
         (!clientKey || i.clientKey === clientKey) &&
+        (!origin || i.origin === origin) &&
         (!q || i.docNumber.toLowerCase().includes(q) || i.clientName.toLowerCase().includes(q)),
     );
     const cmp: Record<SortKey, (a: CarteraInvoice, b: CarteraInvoice) => number> = {
@@ -974,10 +1002,11 @@ function InvoicesPanel({
       client: (a, b) => a.clientName.localeCompare(b.clientName, 'es') || b.balance - a.balance,
     };
     return [...list].sort(cmp[sort]);
-  }, [m.invoices, bucket, clientKey, query, sort]);
+  }, [m.invoices, bucket, clientKey, origin, query, sort]);
 
   const total = rows.reduce((s, i) => s + i.balance, 0);
-  const filtered = Boolean(bucket || clientKey || query);
+  const filtered = Boolean(bucket || clientKey || origin || query);
+  const manyOrigins = m.byOrigin.length > 1;
   const clientName = clientKey ? m.clients.find((c) => c.key === clientKey)?.name : null;
 
   return (
@@ -1013,6 +1042,7 @@ function InvoicesPanel({
             <FilterChip label={BUCKET_LABEL[bucket]} onClear={() => onBucket(null)} />
           ) : null}
           {clientName ? <FilterChip label={clientName} onClear={() => onClient(null)} /> : null}
+          {origin ? <FilterChip label={origin} onClear={() => onOrigin(null)} /> : null}
         </div>
       </div>
 
@@ -1032,6 +1062,9 @@ function InvoicesPanel({
                   <p className="flex flex-wrap items-baseline gap-x-2">
                     <span className="tabular text-xs font-semibold text-ink">{i.docNumber}</span>
                     <span className="min-w-0 truncate text-xs text-ink-muted">{i.clientName}</span>
+                    {manyOrigins ? (
+                      <span className="text-micro text-ink-faint">· {i.origin}</span>
+                    ) : null}
                   </p>
                   <p className="mt-0.5 text-micro text-ink-faint">
                     Expedida {formatDay(i.issuedOn)}
@@ -1195,7 +1228,10 @@ function PaymentRow({
   actions: CarteraActions;
 }) {
   const options = useMemo(
-    () => (p.clientKey ? m.invoices.filter((i) => i.clientKey === p.clientKey).slice(0, 40) : []),
+    () =>
+      p.clientKey && !p.origin
+        ? m.invoices.filter((i) => i.clientKey === p.clientKey && i.kind !== 'sheet').slice(0, 40)
+        : [],
     [m.invoices, p.clientKey],
   );
   const [choice, setChoice] = useState(p.suggestion?.invoiceId ?? options[0]?.id ?? '');
@@ -1214,10 +1250,11 @@ function PaymentRow({
 
   function pair() {
     const inv = options.find((o) => o.id === choice);
-    if (!inv) return;
+    if (!inv || inv.kind === 'sheet') return;
+    const kind = inv.kind;
     setResult(null);
     start(async () => {
-      const r = await actions.match({ paymentId: p.id, kind: inv.kind, invoiceId: inv.id });
+      const r = await actions.match({ paymentId: p.id, kind, invoiceId: inv.id });
       setResult({
         ok: r.ok,
         text: r.ok ? (r.note ?? 'Emparejado.') : (r.error ?? 'No se pudo emparejar.'),
@@ -1238,6 +1275,7 @@ function PaymentRow({
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <span className={chipClass(tone)}>{roleText(p)}</span>
+        {p.origin ? <span className={chipClass('neutral')}>{p.origin}</span> : null}
       </div>
       {p.role === 'unmatched' && options.length > 0 && !result?.ok ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">

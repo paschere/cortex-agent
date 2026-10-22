@@ -14,6 +14,7 @@ import {
 } from '@cortex/agent-tools';
 import { Calculator } from 'lucide-react';
 import { AccountingProviderCard } from './AccountingProviderCard';
+import { AccountingSourcesSection } from './AccountingSourcesSection';
 
 /**
  * PROGRAMAS CONTABLES (migración 0165): una tarjeta por programa, dentro del
@@ -71,7 +72,12 @@ export async function AccountingSection({
       ).slug,
   );
 
-  return <AccountingCardsGrid cards={cards} readError={readError} />;
+  return (
+    <>
+      <AccountingCardsGrid cards={cards} readError={readError} />
+      <AccountingSourcesSection organizationId={organizationId} />
+    </>
+  );
 }
 
 /**

@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { combineKind, baseRecord, BASE_SOURCE_ID, originName } from '../accounting/sources/read';
+import type { AccRecord } from '../accounting/sources/shape';
 import { normalizeNit } from '../clients/shape';
 import { bogotaToday } from '../commitments/shape';
 import {
@@ -6,6 +8,7 @@ import {
   type CarteraInvoiceIn,
   type CarteraModel,
   type CarteraPaymentIn,
+  type CarteraSourcesInfo,
   buildCartera,
   carteraNameKey,
   docKey,
@@ -220,6 +223,7 @@ export async function readCartera(
   }
 
   const invoices: CarteraInvoiceIn[] = [];
+  const baseVentas: AccRecord[] = [];
   const termDays: Record<string, number> = {};
   const nitToKey = new Map<string, string>();
   for (const a of kept) {
@@ -227,9 +231,24 @@ export async function readCartera(
     const key = resolve({ id: a.client_id, nit: a.client_nit, name: a.counterparty_name });
     if (!key) continue;
     if (a.client_nit) nitToKey.set(normalizeNit(a.client_nit), key);
+    baseVentas.push(
+      baseRecord('ventas', {
+        rowId: a.id,
+        origin: originName(a.source_system),
+        number: a.doc_number,
+        date: a.issued_on,
+        due: a.due_on,
+        nit: a.client_nit,
+        party: a.counterparty_name,
+        total: a.total,
+        balance: a.balance,
+        currency: a.currency,
+      }),
+    );
     invoices.push({
       id: a.id,
       kind: 'accounting',
+      origin: originName(a.source_system),
       docNumber: a.doc_number,
       clientKey: key,
       clientId: byId.has(key) ? key : null,
@@ -253,9 +272,24 @@ export async function readCartera(
       name: d.counterparty_name as string | null,
     });
     if (!key) continue;
+    baseVentas.push(
+      baseRecord('ventas', {
+        rowId: str(d.id),
+        origin: 'Documento leído',
+        number: str(d.doc_number),
+        date: issuedOn,
+        due: (d.due_on as string | null) ?? null,
+        nit: (d.counterparty_nit as string | null) ?? null,
+        party: str(d.counterparty_name),
+        total,
+        balance: Math.max(total - (appliedToDocument.get(str(d.id)) ?? 0), 0),
+        currency,
+      }),
+    );
     invoices.push({
       id: str(d.id),
       kind: 'document',
+      origin: 'Documento leído',
       docNumber: str(d.doc_number) || 'Sin número',
       clientKey: key,
       clientId: byId.has(key) ? key : null,
@@ -300,6 +334,114 @@ export async function readCartera(
         clientName: key ? nameOf(key, str(n.cliente)) : null,
       };
     });
+
+  // --- fuentes contables combinadas (0239): hojas o tablas declaradas ---------
+  let sources: CarteraSourcesInfo | null = null;
+  try {
+    const basePays = payments.map((p) =>
+      baseRecord('pagos_recibidos', {
+        rowId: p.id,
+        origin: 'Cortex',
+        number: p.reference ?? '',
+        date: p.paidOn,
+        party: p.clientName,
+        total: p.kind === 'reversal' ? -p.amount : p.amount,
+        currency: p.currency,
+        invoiceRef: p.invoiceNumber,
+      }),
+    );
+    const pays = await combineKind(db, 'pagos_recibidos', basePays);
+    const sheetPayments = pays.batches.flatMap((b) => b.records);
+    const ventas = await combineKind(db, 'ventas', baseVentas, { sheetPayments });
+    const keepInvoices = new Set(
+      ventas.result.records.filter((r) => r.sourceId === BASE_SOURCE_ID).map((r) => r.rowId),
+    );
+    const noClient: string[] = [];
+    for (let i = invoices.length - 1; i >= 0; i--)
+      if (!keepInvoices.has((invoices[i] as CarteraInvoiceIn).id)) invoices.splice(i, 1);
+    for (const rec of ventas.result.records) {
+      if (rec.sourceId === BASE_SOURCE_ID) continue;
+      const key = resolve({ nit: rec.nit, name: rec.party });
+      if (!key) {
+        noClient.push(rec.number);
+        continue;
+      }
+      if (rec.creditNote) {
+        creditNotes.push({
+          number: rec.number,
+          invoiceNumber: rec.invoiceRef,
+          amount: Math.abs(rec.total),
+          date: rec.date,
+          clientKey: key,
+          clientName: nameOf(key, rec.party),
+        });
+        continue;
+      }
+      invoices.push({
+        id: rec.rowId,
+        kind: 'sheet',
+        origin: rec.origin,
+        docNumber: rec.number,
+        clientKey: key,
+        clientId: byId.has(key) ? key : null,
+        clientName: nameOf(key, rec.party),
+        currency: rec.currency,
+        total: rec.total,
+        balance: Math.max(rec.balance ?? rec.total, 0),
+        issuedOn: rec.date,
+        dueOn: rec.due,
+      });
+    }
+    const keepPayments = new Set(
+      pays.result.records.filter((r) => r.sourceId === BASE_SOURCE_ID).map((r) => r.rowId),
+    );
+    for (let i = payments.length - 1; i >= 0; i--)
+      if (!keepPayments.has((payments[i] as CarteraPaymentIn).id)) payments.splice(i, 1);
+    for (const rec of pays.result.records) {
+      if (rec.sourceId === BASE_SOURCE_ID) continue;
+      const key = resolve({ nit: rec.nit, name: rec.party });
+      payments.push({
+        id: rec.rowId,
+        kind: rec.total < 0 ? 'reversal' : 'payment',
+        amount: Math.abs(rec.total),
+        currency: rec.currency,
+        paidOn: rec.date,
+        clientKey: key,
+        clientName: key ? nameOf(key, rec.party) : null,
+        invoiceNumber: rec.invoiceRef,
+        reference: rec.number || null,
+        state: 'confirmed',
+        origin: rec.origin,
+      });
+    }
+    if (ventas.batches.length || pays.batches.length) {
+      const all = [...ventas.result.issues, ...pays.result.issues];
+      if (noClient.length)
+        all.push({
+          rowId: null,
+          code: 'sin_tercero',
+          severity: 'rechazada',
+          message: `${noClient.length} factura(s) de hojas no traen NIT ni nombre del cliente y no entran a la cartera (${noClient.slice(0, 3).join(', ')}${noClient.length > 3 ? '…' : ''}).`,
+        });
+      sources = {
+        differences: ventas.result.differences
+          .slice(0, 12)
+          .map((d) => ({ message: d.message, number: d.number })),
+        differenceCount: ventas.summary.differenceCount,
+        issues: all.slice(0, 12).map((i) => ({
+          message: i.message,
+          severity: i.severity,
+          source: i.sourceLabel ?? null,
+        })),
+        issueCount: all.length,
+        rejectedCount: all.filter((i) => i.severity === 'rechazada').length,
+        sheetCount: new Set([...ventas.batches, ...pays.batches].map((b) => b.sourceId)).size,
+        overlaps: ventas.result.overlaps + pays.result.overlaps,
+      };
+    }
+  } catch {
+    // Las hojas son un complemento: si fallan, la cartera de siempre sigue.
+  }
 
   const receipts = (await trackerValues(db, 'siigo_pagos')) ?? [];
   const advanceReceipts = receipts
@@ -351,7 +493,7 @@ export async function readCartera(
     }
   }
 
-  return buildCartera({
+  const model = buildCartera({
     today,
     invoices,
     payments,
@@ -366,4 +508,5 @@ export async function readCartera(
       balancePeriod,
     },
   });
+  return { ...model, sources };
 }

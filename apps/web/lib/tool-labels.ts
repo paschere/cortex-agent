@@ -492,6 +492,11 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   accounting_payroll_movements: { label: 'Ver los movimientos de nómina por persona (confidencial)', icon: 'Wallet' },
   accounting_query: { label: 'Consultar el programa contable en vivo', icon: 'Calculator' },
   accounting_sync_now: { label: 'Traer ya los datos del programa contable', icon: 'RefreshCw' },
+  // Fuentes contables combinadas (0239): hojas o tablas que alimentan las mismas cifras.
+  accounting_sources_propose: { label: 'Proponer cómo una hoja alimenta la contabilidad', icon: 'Table2' },
+  accounting_sources_define: { label: 'Declarar una tabla como fuente contable', icon: 'Calculator' },
+  accounting_sources_list: { label: 'Ver las fuentes contables y sus diferencias', icon: 'Calculator' },
+  accounting_sources_remove: { label: 'Quitar una fuente contable', icon: 'Calculator' },
   trackers_define: { label: 'Crear o cambiar una tabla', icon: 'Table2' },
   trackers_list: { label: 'Ver las tablas inventadas', icon: 'Table2' },
   trackers_query: { label: 'Consultar la tabla', icon: 'Table2' },

@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { BASE_SOURCE_ID, baseRecord, combineKind } from '../accounting/sources/read';
+import type { AccRecord } from '../accounting/sources/shape';
 import { loadClientList } from '../clients/hub-read';
 import {
   CLIENT_SOURCE_LABEL,
@@ -268,13 +270,13 @@ const COP = 'COP';
  * factura y en SU moneda — la misma disciplina que la cartera: un pago sin
  * factura no se reparte entre las abiertas.
  */
-const VENTA_ESTADOS = ['Por cobrar', 'Vencida', 'Pagada'];
+const VENTA_ESTADOS = ['Por cobrar', 'Vencida', 'Pagada', 'Nota crédito'];
 
 const ventas: PlatformSource = {
   id: 'cortex.ventas',
   name: 'Ventas (facturas emitidas)',
   description:
-    'Facturas de venta: las leídas de documentos y confirmadas, MÁS las que trae el programa contable conectado (Siigo, Alegra, QuickBooks), sin repetir las que están en los dos. Con lo cobrado, el saldo y si están vencidas; «Origen» dice de dónde viene cada una. Es la base de la cartera. Si hay programa contable, es la fuente para «ventas por mes / por cliente».',
+    'Facturas de venta: las leídas de documentos y confirmadas, MÁS las que trae el programa contable conectado (Siigo, Alegra, QuickBooks), MÁS las de las hojas o tablas declaradas como fuente contable de ventas (accounting.sources_define), sin repetir las que están en varios lados (mismo número y NIT; manda el programa salvo que la fuente diga lo contrario). Con lo cobrado, el saldo y si están vencidas; «Origen» dice de dónde viene cada una («Siigo», «Hoja: Ventas Medellín», «Documento leído») y sirve para filtrar. Es la base de la cartera. Es la fuente para «ventas por mes / por cliente»: di de qué orígenes salen las cifras.',
   sensitivity: 'shareable',
   fields: [
     field('numero', 'Número', 'text'),
@@ -388,6 +390,23 @@ const ventas: PlatformSource = {
       );
     });
     for (const r of rows) put(r.values, 'origen', 'Documento leído');
+    const baseRecs: AccRecord[] = invoices.map((inv) => {
+      const total = num(inv.total_amount);
+      const cobrado = inv.currency ? (paid.get(`${inv.id}\u0000${inv.currency}`) ?? 0) : 0;
+      return baseRecord('ventas', {
+        rowId: inv.id,
+        origin: 'Documento leído',
+        number: inv.doc_number ?? '',
+        date: inv.issued_on,
+        due: inv.due_on,
+        nit: inv.counterparty_nit,
+        party: inv.counterparty_name,
+        total: total ?? 0,
+        balance: total === null ? null : total - cobrado,
+        tax: num(inv.tax_amount),
+        currency: inv.currency ?? 'COP',
+      });
+    });
 
     // Las facturas del programa contable conectado (accounting_invoices): la
     // misma venta, con el saldo que dice el programa. Una que ya está arriba
@@ -455,10 +474,66 @@ const ventas: PlatformSource = {
       if (late !== null && late > 0) put(values, 'dias_mora', late);
       put(values, 'origen', providerLabel(inv.source_system));
       rows.push(row(inv.id, inv.doc_number, values, inv.created_at, inv.updated_at));
+      baseRecs.push(
+        baseRecord('ventas', {
+          rowId: inv.id,
+          origin: providerLabel(inv.source_system),
+          number: inv.doc_number,
+          date: inv.issued_on,
+          due: inv.due_on,
+          nit: inv.client_nit,
+          party: inv.counterparty_name,
+          total: total ?? 0,
+          balance: saldo,
+          currency: inv.currency,
+        }),
+      );
     }
-    return { rows, truncated: all.length > cap || accAll.length > cap };
+
+    // Las hojas o tablas declaradas como fuente de ventas: lo que no está ya en otro lado se
+    // suma; lo que está, no se repite (y si el valor difiere, se avisa en la cartera y el chat).
+    const combined = await combineKind(db, 'ventas', baseRecs);
+    const keep = new Set(
+      combined.result.records.filter((r) => r.sourceId === BASE_SOURCE_ID).map((r) => r.rowId),
+    );
+    const merged = rows.filter((r) => keep.has(r.id));
+    for (const rec of combined.result.records)
+      if (rec.sourceId !== BASE_SOURCE_ID) merged.push(ventaRowFromRecord(rec, today));
+    const over = merged.length > cap;
+    return {
+      rows: over ? merged.slice(0, cap) : merged,
+      truncated: over || all.length > cap || accAll.length > cap,
+    };
   },
 };
+
+/** Una factura de una hoja o tabla declarada como fuente, con la misma forma que las demás filas de ventas. */
+function ventaRowFromRecord(rec: AccRecord, today: string): ViewRow {
+  const values: Values = {};
+  const saldo = rec.balance ?? rec.total;
+  const open = saldo > 0.005 && !rec.creditNote;
+  const late = open && rec.due ? daysBetween(rec.due, today) : null;
+  put(values, 'numero', rec.number);
+  put(values, 'cliente', rec.party || null);
+  put(values, 'nit', rec.nit || null);
+  put(values, 'emitida', rec.date);
+  put(values, 'vence', rec.due);
+  put(values, 'moneda', rec.currency);
+  if (rec.currency === COP) {
+    put(values, 'total', rec.total);
+    put(values, 'iva', rec.tax);
+    put(values, 'pagado', rec.creditNote ? 0 : Math.max(rec.total - saldo, 0));
+    put(values, 'saldo', rec.creditNote ? rec.total : saldo);
+  } else put(values, 'total_otra_moneda', rec.total);
+  put(
+    values,
+    'estado',
+    rec.creditNote ? 'Nota crédito' : !open ? 'Pagada' : late !== null && late > 0 ? 'Vencida' : 'Por cobrar',
+  );
+  if (late !== null && late > 0) put(values, 'dias_mora', late);
+  put(values, 'origen', rec.origin);
+  return row(rec.rowId, rec.number, values, null);
+}
 
 function normDoc(n: string | null | undefined): string {
   return (n ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -485,7 +560,7 @@ const pagos: PlatformSource = {
   id: 'cortex.pagos',
   name: 'Pagos recibidos',
   description:
-    'Abonos, anulaciones y ajustes que cuentan (reportados o confirmados), incluidos los recibos de caja que trae el programa contable conectado, cada uno con su factura. Los pagos en disputa o descartados no están, igual que en la cartera.',
+    'Abonos, anulaciones y ajustes que cuentan (reportados o confirmados), incluidos los recibos de caja que trae el programa contable conectado y los de las hojas o tablas declaradas como fuente de pagos recibidos (accounting.sources_define), cada uno con su factura y su «Origen» (Cortex, «Hoja: …»). Un pago que ya está en otro lado (misma factura, día y valor) no se cuenta dos veces. Los pagos en disputa o descartados no están, igual que en la cartera.',
   sensitivity: 'shareable',
   fields: [
     field('fecha', 'Fecha de pago', 'date'),
@@ -507,6 +582,7 @@ const pagos: PlatformSource = {
     field('moneda', 'Moneda', 'text'),
     field('valor_otra_moneda', 'Valor en otra moneda', 'number'),
     field('fuentes', 'Fuentes que lo confirman', 'number'),
+    field('origen', 'Origen', 'text'),
   ],
   async read(db, cap) {
     const limit = Math.min(cap, PAYMENTS_CAP);
@@ -537,8 +613,39 @@ const pagos: PlatformSource = {
         p.updated_at,
       );
     });
+    for (const r of rows) put(r.values, 'origen', 'Cortex');
+    const baseRecs = list.map((p) =>
+      baseRecord('pagos_recibidos', {
+        rowId: p.id,
+        origin: 'Cortex',
+        number: '',
+        date: p.paid_on,
+        party: p.client_id ? (names.get(p.client_id) ?? null) : null,
+        total: signedAmount(p.kind, num(p.amount) ?? 0),
+        currency: p.currency,
+        invoiceRef: p.invoice_number,
+      }),
+    );
+    const combined = await combineKind(db, 'pagos_recibidos', baseRecs);
+    const keep = new Set(
+      combined.result.records.filter((r) => r.sourceId === BASE_SOURCE_ID).map((r) => r.rowId),
+    );
+    const merged = rows.filter((r) => keep.has(r.id));
+    for (const rec of combined.result.records) {
+      if (rec.sourceId === BASE_SOURCE_ID) continue;
+      const values: Values = {};
+      put(values, 'fecha', rec.date);
+      put(values, 'cliente', rec.party || null);
+      put(values, 'factura', rec.invoiceRef);
+      put(values, 'tipo', rec.total < 0 ? PAYMENT_KIND_LABEL.reversal : PAYMENT_KIND_LABEL.payment);
+      put(values, 'moneda', rec.currency);
+      if (rec.currency === COP) put(values, 'valor', rec.total);
+      else put(values, 'valor_otra_moneda', rec.total);
+      put(values, 'origen', rec.origin);
+      merged.push(row(rec.rowId, rec.party || rec.invoiceRef || 'Pago de una hoja', values, null));
+    }
     // Mil filas exactas puede ser «justo mil» o «mil y más»: se dice parcial.
-    return { rows, truncated: list.length >= limit };
+    return { rows: merged, truncated: list.length >= limit };
   },
 };
 

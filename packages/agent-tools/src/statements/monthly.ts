@@ -1,6 +1,8 @@
 import { logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PersonnelAccount, ProviderPnl } from '../accounting/providers/reports';
+import { type SheetMonthly, monthlyFromRecords } from '../accounting/sources/monthly';
+import { combineKind, loadBaseRecords } from '../accounting/sources/read';
 import { listAccountingConnections, openAccountingSession } from '../accounting/store';
 import { monthlyPnl } from '../ledger/plans';
 import { canSeePayrollDetail } from '../ledger/privacy';
@@ -131,6 +133,18 @@ export interface MonthlyResult {
   failed?: string[];
   fetchedMonths: number;
   cachedMonths: number;
+  /**
+   * Ventas y compras/gastos de las hojas o tablas declaradas como fuente contable
+   * (0239), mes a mes. NO es contabilidad: es el complemento (o, sin programa
+   * contable, la única cifra) y siempre se rotula así.
+   */
+  sheets?: SheetComplement | null;
+}
+
+export interface SheetComplement extends SheetMonthly {
+  /** Fuentes de ventas y de compras que alimentan, con lo que no entró por dato sucio. */
+  rejected: number;
+  differences: number;
 }
 
 export function monthlyMarkdown(r: MonthlyResult): string {
@@ -138,7 +152,7 @@ export function monthlyMarkdown(r: MonthlyResult): string {
   const name = r.provider ? providerName(r.provider) : 'el programa contable';
   const money = (n: number) => moneyText(n, 'COP');
   if (!r.rows.length) {
-    out.push(`No pude armar el estado de resultados mes a mes de ${name}.`);
+    if (!r.sheets) out.push(`No pude armar el estado de resultados mes a mes de ${name}.`);
   } else {
     const first = r.rows[0]?.month ?? '';
     const last = r.rows[r.rows.length - 1]?.month ?? '';
@@ -163,6 +177,7 @@ export function monthlyMarkdown(r: MonthlyResult): string {
       `De dónde sale: movimientos de cada mes en el balance de prueba de ${name} (ventas = clase 4 operacional; costo = clases 6 y 7; gastos operacionales = grupos 51 y 52; no operacional = otros ingresos − otros gastos). Base causación, no caja.${withCash ? ' La columna de caja es el libro de plata (lo que de verdad entró y salió); no tiene por qué coincidir.' : ''}`,
     );
   }
+  if (r.sheets) out.push(...sheetsMarkdown(r.sheets, r.rows.length > 0));
   const failed = new Set(r.failed ?? []);
   const pending = r.missing.filter((m) => !failed.has(m));
   const broken = r.missing.filter((m) => failed.has(m));
@@ -176,6 +191,67 @@ export function monthlyMarkdown(r: MonthlyResult): string {
     );
   for (const e of r.errors) out.push(e);
   return out.join('\n');
+}
+
+/** Las hojas declaradas, como cifra mensual. null si no hay ninguna. Nunca lanza. */
+export async function readSheetComplement(
+  db: SupabaseClient,
+  range: { from: string; to: string },
+): Promise<SheetComplement | null> {
+  try {
+    const [vBase, cBase] = await Promise.all([
+      loadBaseRecords(db, 'ventas'),
+      loadBaseRecords(db, 'compras'),
+    ]);
+    const [v, c] = await Promise.all([
+      combineKind(db, 'ventas', vBase),
+      combineKind(db, 'compras', cBase),
+    ]);
+    if (!v.batches.length && !c.batches.length) return null;
+    const sheetOnly = (r: typeof v) => r.result.records.filter((x) => x.sourceId !== 'base');
+    const monthly = monthlyFromRecords(sheetOnly(v), sheetOnly(c), range);
+    return {
+      ...monthly,
+      rejected: v.summary.rejectedCount + c.summary.rejectedCount,
+      differences: v.summary.differenceCount + c.summary.differenceCount,
+    };
+  } catch (err) {
+    logger.warn({ err }, 'mensual: no pude leer las hojas declaradas como fuente');
+    return null;
+  }
+}
+
+function sheetsMarkdown(sh: SheetComplement, withProgram: boolean): string[] {
+  const money = (n: number) => moneyText(n, 'COP');
+  const out: string[] = [];
+  out.push(
+    withProgram
+      ? '### Complemento de las hojas (NO contable: no está en el estado de resultados de arriba)'
+      : '### Ventas y gastos de las hojas declaradas como fuente (NO es un estado de resultados contable)',
+  );
+  if (!sh.months.length) {
+    out.push('Las hojas declaradas no traen movimientos en este rango.');
+    return out;
+  }
+  out.push('| Mes | Ventas | Compras y gastos | Resultado |', '|---|---:|---:|---:|');
+  for (const m of sh.months)
+    out.push(
+      `| ${monthLabel(m.month)} | ${money(m.sales)} | ${money(m.purchases)} | ${money(m.result)} |`,
+    );
+  out.push(
+    `Salen de: ventas — ${sh.origins.sales.join(', ') || 'ninguna hoja'}; compras y gastos — ${sh.origins.purchases.join(', ') || 'ninguna hoja'}. Sólo lo que NO está ya en el programa contable ni en documentos confirmados (sin contarlo dos veces).${sh.taxUnknown.sales || sh.taxUnknown.purchases ? ' Donde la hoja no trae IVA, el valor incluye IVA.' : ''}`,
+  );
+  if (sh.skippedForeign)
+    out.push(`${sh.skippedForeign} registro(s) en otra moneda sin TRM no entran en esta tabla.`);
+  if (sh.rejected)
+    out.push(
+      `${sh.rejected} fila(s) de las hojas se descartaron por no tener número, fecha o valor.`,
+    );
+  if (sh.differences)
+    out.push(
+      `${sh.differences} factura(s) valen distinto en la hoja y en el programa (revísalas con accounting.sources_list).`,
+    );
+  return out;
 }
 
 interface Snapshot {
@@ -194,6 +270,8 @@ export async function readMonthlyPnl(
     refresh?: boolean;
     /** Sólo sirven las copias que traen el gasto de personal por cuenta. */
     requirePersonnel?: boolean;
+    /** false = no leer las hojas declaradas como fuente (quien sólo necesita la nómina). */
+    sheets?: boolean;
     open?: typeof openAccountingSession;
     nowMs?: () => number;
   },
@@ -211,9 +289,16 @@ export async function readMonthlyPnl(
     fetchedMonths: 0,
     cachedMonths: 0,
   };
+  const sheetRange = {
+    from: `${opts.year}-${String(opts.fromMonth).padStart(2, '0')}-01`,
+    to: monthEnd(opts.year, opts.throughMonth),
+  };
   if (!conn) {
+    result.sheets = opts.sheets === false ? null : await readSheetComplement(db, sheetRange);
     result.errors.push(
-      'No hay programa contable conectado: sin él no hay estado de resultados contable por mes. Un administrador lo conecta en Integraciones.',
+      result.sheets
+        ? 'No hay programa contable conectado: no hay estado de resultados contable por mes. Lo que sigue son las ventas y gastos de las hojas declaradas como fuente (no es contabilidad).'
+        : 'No hay programa contable conectado: sin él no hay estado de resultados contable por mes. Un administrador lo conecta en Integraciones, o declara una hoja como fuente contable (accounting.sources_define).',
     );
     return result;
   }
@@ -342,5 +427,6 @@ export async function readMonthlyPnl(
       }),
     );
   }
+  result.sheets = opts.sheets === false ? null : await readSheetComplement(db, sheetRange);
   return result;
 }

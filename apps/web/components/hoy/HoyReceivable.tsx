@@ -33,6 +33,19 @@ export function HoyReceivable({ data }: { data: ReceivableView }) {
         hrefLabel="Abrir la cartera"
       />
 
+      {data.sources.length > 1 || data.differenceCount > 0 || data.rejectedCount > 0 ? (
+        <p className="text-micro leading-relaxed text-ink-muted">
+          <span className="font-semibold text-ink">Sale de:</span>{' '}
+          {data.sources.map((s) => `${s.origin} ${money(s.amount)}`).join(' · ')}
+          {data.differenceCount > 0
+            ? ` · ${data.differenceCount} ${data.differenceCount === 1 ? 'factura vale distinto' : 'facturas valen distinto'} en el programa y en una hoja`
+            : ''}
+          {data.rejectedCount > 0
+            ? ` · ${data.rejectedCount} ${data.rejectedCount === 1 ? 'fila' : 'filas'} de hojas sin entrar por datos incompletos`
+            : ''}
+        </p>
+      ) : null}
+
       <dl className="grid grid-cols-2 gap-2">
         <Tile
           label="Te deben"

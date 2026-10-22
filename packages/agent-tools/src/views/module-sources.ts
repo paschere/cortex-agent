@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { BASE_SOURCE_ID, baseRecord, combineKind } from '../accounting/sources/read';
+import type { AccRecord } from '../accounting/sources/shape';
 import { daysBetween } from '../commitments/shape';
 import { businessDaysLeft } from '../compliance/pqrs';
 import {
@@ -235,6 +237,7 @@ type PayableLite = Pick<
   | 'id'
   | 'supplier_name'
   | 'doc_number'
+  | 'supplier_nit'
   | 'currency'
   | 'issue_date'
   | 'due_date'
@@ -250,7 +253,7 @@ type PayableLite = Pick<
 >;
 
 const PAYABLE_LITE =
-  'id, supplier_name, doc_number, currency, issue_date, due_date, total, net_amount, status, checks, scheduled_pay_date, paid_at, source, created_at, updated_at';
+  'id, supplier_name, supplier_nit, doc_number, currency, issue_date, due_date, total, net_amount, status, checks, scheduled_pay_date, paid_at, source, created_at, updated_at';
 
 const PAYABLE_CLOSED: PayableStatus[] = PAYABLE_STATUSES.filter((s) => !OPEN_STATUSES.includes(s));
 
@@ -265,7 +268,7 @@ export const porPagarSource: PlatformSource = {
   id: 'cortex.por_pagar',
   name: 'Cuentas por pagar',
   description:
-    'Facturas de proveedores: proveedor, número, total y neto de retenciones, cuándo vence, cuándo se programó pagar, estado (por revisar, por aprobar, aprobada, programada, pagada, rechazada) y las alertas de la revisión automática. Lo abierto primero, por vencimiento. Interno: no se comparte por enlace.',
+    'Facturas de proveedores: proveedor, número, total y neto de retenciones, cuándo vence, cuándo se programó pagar, estado (por revisar, por aprobar, aprobada, programada, pagada, rechazada) y las alertas de la revisión automática. Incluye las facturas de compras y gastos de las hojas o tablas declaradas como fuente contable (accounting.sources_define), sin repetir las que ya están (mismo número y NIT); esas filas traen «Saldo» y su «Fuente» («Hoja: Compras») y no pasan por aprobación. Lo abierto primero, por vencimiento. Interno: no se comparte por enlace.',
   sensitivity: 'internal',
   fields: [
     field('proveedor', 'Proveedor', 'text'),
@@ -283,6 +286,8 @@ export const porPagarSource: PlatformSource = {
     field('alertas', 'Alertas', 'number'),
     field('revision', 'Qué dice la revisión', 'text'),
     field('origen', 'De dónde llegó', 'select', Object.values(PAYABLE_SOURCE_LABEL)),
+    field('fuente', 'Fuente', 'text'),
+    field('saldo', 'Saldo (COP)', 'money'),
   ],
   async read(db, cap, today) {
     const query = async (statuses: PayableStatus[], limit: number, open: boolean) => {
@@ -322,11 +327,58 @@ export const porPagarSource: PlatformSource = {
           ?.message?.slice(0, 200),
       );
       put(v, 'origen', PAYABLE_SOURCE_LABEL[p.source] ?? p.source);
+      put(v, 'fuente', 'Cortex');
       return row(p.id, `${p.supplier_name} · ${p.doc_number}`, v, p.created_at, p.updated_at);
     });
-    return { rows, truncated };
+
+    // Compras y gastos de hojas o tablas declaradas como fuente: lo que ya está en el libro de
+    // pagos no se repite; lo demás se suma con su fuente y su saldo.
+    const baseRecs = list.map((p) =>
+      baseRecord('compras', {
+        rowId: p.id,
+        origin: 'Cortex',
+        number: p.doc_number,
+        date: p.issue_date,
+        due: p.due_date,
+        nit: p.supplier_nit,
+        party: p.supplier_name,
+        total: num(p.total) ?? 0,
+        balance: open_(p.status) ? (num(p.total) ?? 0) : 0,
+        currency: p.currency,
+      }),
+    );
+    const combined = await combineKind(db, 'compras', baseRecs);
+    const keep = new Set(
+      combined.result.records.filter((r) => r.sourceId === BASE_SOURCE_ID).map((r) => r.rowId),
+    );
+    const merged = rows.filter((r) => keep.has(r.id));
+    for (const rec of combined.result.records)
+      if (rec.sourceId !== BASE_SOURCE_ID) merged.push(compraRowFromRecord(rec, today));
+    return { rows: merged.slice(0, cap), truncated: truncated || merged.length > cap };
   },
 };
+
+const open_ = (status: string) => (OPEN_STATUSES as readonly string[]).includes(status);
+
+/** Una factura de proveedor (o gasto) de una hoja o tabla declarada como fuente contable. */
+function compraRowFromRecord(rec: AccRecord, today: string): ViewRow {
+  const v: Values = {};
+  const saldo = rec.balance ?? rec.total;
+  const open = saldo > 0.005 && !rec.creditNote;
+  put(v, 'proveedor', rec.party || 'Sin proveedor');
+  put(v, 'numero', rec.number);
+  put(v, 'emision', rec.date);
+  put(v, 'vence', rec.due);
+  if (open && rec.due) put(v, 'dias', daysBetween(today, rec.due));
+  putMoney(v, 'total', 'total_otra_moneda', rec.currency, rec.total);
+  if (isCop(rec.currency)) {
+    put(v, 'neto', rec.total);
+    put(v, 'saldo', saldo);
+  }
+  put(v, 'alertas', 0);
+  put(v, 'fuente', rec.origin);
+  return row(rec.rowId, `${rec.party || 'Proveedor'} · ${rec.number}`, v, null);
+}
 
 // ---------------------------------------------------------------------------
 // Inventario y órdenes de compra

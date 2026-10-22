@@ -515,6 +515,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // otra empresa en el tablero que se le manda a un cliente.
   company_branding: tenant(),
   finance_settings: tenant(),
+  // 0239: tablas declaradas como fuente contable (ventas, compras, pagos…) con su mapeo.
+  // Tenant: un filtro que faltara mezclaría las hojas de una empresa en las cifras de otra.
+  accounting_sources: tenant(),
 
   // --- Tablas inventadas (migración 0115) ----------------------------------
   // El esquema de una tabla que este espacio se inventó, y sus filas. Tenant

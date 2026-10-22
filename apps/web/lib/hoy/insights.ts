@@ -576,6 +576,11 @@ export interface ReceivableView {
   /** El cliente con más plata vencida (para la frase de arriba). */
   topOverdue: string | null;
   noTerm: { count: number; amount: number };
+  /** De qué orígenes sale lo que te deben (Siigo, «Hoja: …», «Documento leído»). */
+  sources: Array<{ origin: string; amount: number; count: number }>;
+  /** Facturas que valen distinto en el programa y en una hoja, y filas de hojas que no entraron. */
+  differenceCount: number;
+  rejectedCount: number;
   href: string;
 }
 
@@ -627,6 +632,13 @@ export function buildReceivable(cartera: CarteraModel, limit = 6): ReceivableVie
       count: cartera.projection.noTermCount,
       amount: Math.round(cartera.projection.noTerm),
     },
+    sources: cartera.byOrigin.map((o) => ({
+      origin: o.origin,
+      amount: Math.round(o.open),
+      count: o.count,
+    })),
+    differenceCount: cartera.sources?.differenceCount ?? 0,
+    rejectedCount: cartera.sources?.rejectedCount ?? 0,
     href: '/payments',
   };
 }

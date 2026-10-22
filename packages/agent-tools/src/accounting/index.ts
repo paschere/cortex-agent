@@ -5,6 +5,34 @@
 
 import './tools';
 import './live/tools';
+import './sources/tools';
+
+export {
+  accountingSourcesDefine,
+  accountingSourcesList,
+  accountingSourcesPropose,
+  accountingSourcesRemove,
+} from './sources/tools';
+export { readSheetPayables } from './sources/payables-read';
+export {
+  listAccountingSources,
+  removeAccountingSource,
+  saveAccountingSource,
+  setAccountingSourceEnabled,
+} from './sources/store';
+export type { AccountingSource } from './sources/store';
+export { buildSourcePreview, previewGrid } from './sources/preview';
+export {
+  SOURCE_KINDS as ACCOUNTING_SOURCE_KINDS,
+  SOURCE_KIND_LABEL as ACCOUNTING_SOURCE_KIND_LABEL,
+} from './sources/shape';
+export type {
+  Mapping as AccountingSourceMapping,
+  SourceKind as AccountingSourceKind,
+} from './sources/shape';
+export type { SheetPayableItem, SheetPayables } from './sources/payables-read';
+export { combineKind, loadBaseRecords, summarize as summarizeCombined } from './sources/read';
+export type { CombinedSummary } from './sources/read';
 
 export { accountingQuery } from './live/tools';
 export {

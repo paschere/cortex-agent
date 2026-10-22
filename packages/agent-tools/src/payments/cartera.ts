@@ -63,7 +63,10 @@ export const BUCKET_LABEL: Record<CarteraBucketKey, string> = {
 
 export interface CarteraInvoiceIn {
   id: string;
-  kind: 'accounting' | 'document';
+  /** `sheet`: una hoja o tabla declarada como fuente contable (0239). */
+  kind: 'accounting' | 'document' | 'sheet';
+  /** De dónde viene: «Siigo», «Hoja: Ventas Medellín». Sin él se deduce del tipo. */
+  origin?: string | null;
   docNumber: string;
   /** Llave canónica del cliente (id, o NIT, o nombre): la pone quien lee. */
   clientKey: string;
@@ -92,6 +95,8 @@ export interface CarteraPaymentIn {
   /** El número del recibo («RC-1-4»). */
   reference: string | null;
   state?: string;
+  /** Una hoja o tabla declarada como fuente («Hoja: Pagos»): no es un pago de Cortex y no se empareja. */
+  origin?: string | null;
 }
 
 export interface CarteraCreditNoteIn {
@@ -137,7 +142,9 @@ export type DueBasis = 'siigo' | 'plazo_cliente' | 'plazo_supuesto' | 'sin_plazo
 
 export interface CarteraInvoice {
   id: string;
-  kind: 'accounting' | 'document';
+  kind: 'accounting' | 'document' | 'sheet';
+  /** De dónde viene la factura («Siigo», «Hoja: Ventas Medellín», «Documento leído»). */
+  origin: string;
   docNumber: string;
   clientKey: string;
   clientName: string;
@@ -165,6 +172,8 @@ export interface CarteraPayment {
   clientKey: string | null;
   clientName: string | null;
   role: CarteraPaymentRole;
+  /** De una hoja o tabla declarada como fuente (0239); null = de Cortex o del programa contable. */
+  origin: string | null;
   /** La factura a la que se atribuye (sólo `invoice`). */
   invoiceNumber: string | null;
   advanceStatus: AdvanceStatus | null;
@@ -259,6 +268,23 @@ export interface CarteraModel {
   noTermInvoices: number;
   termBasis: { siigo: number; plazo_cliente: number; plazo_supuesto: number; sin_plazo: number };
   otherCurrencies: Array<{ currency: string; open: number; count: number }>;
+  /** De qué orígenes sale lo que se debe (facturas abiertas, en la moneda de la cifra). */
+  byOrigin: Array<{ origin: string; open: number; count: number; overdue: number }>;
+  /** Fuentes contables combinadas (0239): la mezcla, las diferencias y lo que no entró. */
+  sources?: CarteraSourcesInfo | null;
+}
+
+/** Lo que la pantalla muestra de las fuentes combinadas. Sólo datos simples. */
+export interface CarteraSourcesInfo {
+  differences: Array<{ message: string; number: string }>;
+  differenceCount: number;
+  issues: Array<{ message: string; severity: 'rechazada' | 'aviso'; source: string | null }>;
+  issueCount: number;
+  rejectedCount: number;
+  /** Hojas o tablas declaradas que aportan a la cartera. */
+  sheetCount: number;
+  /** Registros de hojas que ya estaban en otro lado y no se sumaron. */
+  overlaps: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +373,24 @@ function sum<T>(items: T[], f: (t: T) => number): number {
 // La construcción
 // ---------------------------------------------------------------------------
 
+function byOriginOf(open: CarteraInvoice[]): CarteraModel['byOrigin'] {
+  const map = new Map<string, { origin: string; open: number; count: number; overdue: number }>();
+  for (const i of open) {
+    const o = map.get(i.origin) ?? { origin: i.origin, open: 0, count: 0, overdue: 0 };
+    o.open += i.balance;
+    o.count += 1;
+    if (i.bucket !== 'current' && i.bucket !== 'no_term') o.overdue += i.balance;
+    map.set(i.origin, o);
+  }
+  return [...map.values()].sort((a, b) => b.open - a.open);
+}
+
+const DEFAULT_ORIGIN: Record<CarteraInvoiceIn['kind'], string> = {
+  accounting: 'Programa contable',
+  document: 'Documento leído',
+  sheet: 'Hoja de cálculo',
+};
+
 export function buildCartera(input: CarteraInput): CarteraModel {
   const today = input.today;
   const currency = input.currency ?? pickCurrency(input.invoices);
@@ -372,6 +416,7 @@ export function buildCartera(input: CarteraInput): CarteraModel {
     open.push({
       id: i.id,
       kind: i.kind,
+      origin: i.origin || DEFAULT_ORIGIN[i.kind],
       docNumber: i.docNumber,
       clientKey: i.clientKey,
       clientName: i.clientName,
@@ -458,6 +503,7 @@ export function buildCartera(input: CarteraInput): CarteraModel {
       clientKey: p.clientKey,
       clientName: p.clientName,
       role,
+      origin: p.origin ?? null,
       invoiceNumber,
       advanceStatus,
       suggestion,
@@ -741,6 +787,7 @@ export function buildCartera(input: CarteraInput): CarteraModel {
     noTermInvoices: termBasis.sin_plazo,
     termBasis,
     otherCurrencies: [...otherMap.entries()].map(([c, v]) => ({ currency: c, ...v })),
+    byOrigin: byOriginOf(open),
   };
 }
 

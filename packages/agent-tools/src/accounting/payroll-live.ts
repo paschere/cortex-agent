@@ -154,6 +154,7 @@ export async function readLivePayroll(
       today: opts.today,
       viewerId: opts.viewerId,
       requirePersonnel: true,
+      sheets: false,
     });
     out.provider = out.provider ?? res.provider;
     for (const row of res.rows)

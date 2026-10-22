@@ -169,6 +169,24 @@ describe('cartera → tarjetas y bloque', () => {
     expect(r?.aging.reduce((s, a) => s + a.amount, 0)).toBe(1900);
     expect(r?.href).toBe('/payments');
   });
+  it('buildReceivable dice de qué orígenes sale lo que te deben y lo que no cuadra', () => {
+    const r = buildReceivable({
+      ...cartera,
+      sources: {
+        differences: [{ message: 'FV-1 vale distinto', number: 'FV-1' }],
+        differenceCount: 2,
+        issues: [],
+        issueCount: 3,
+        rejectedCount: 3,
+        sheetCount: 1,
+        overlaps: 4,
+      },
+    });
+    expect(r?.sources.reduce((s, o) => s + o.amount, 0)).toBe(1900);
+    expect(r?.differenceCount).toBe(2);
+    expect(r?.rejectedCount).toBe(3);
+    expect(JSON.parse(JSON.stringify(r))).toEqual(r);
+  });
   it('sin deuda no hay bloque', () => {
     expect(buildReceivable(buildCartera({ today: TODAY, invoices: [], payments: [] }))).toBeNull();
   });
