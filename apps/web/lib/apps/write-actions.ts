@@ -140,6 +140,53 @@ export async function editAppRowAction(
   }
 }
 
+/**
+ * Un lote de ediciones de celdas (rellenar, cambiar un campo en varias filas,
+ * deshacer). Cada fila pasa por `editAppRow` con el rol de quien pide, así que
+ * «sólo lo mío», los campos del rol y el conflicto con un cambio ajeno
+ * (`expect`) valen igual que en una edición suelta; una fila que falla no frena a las demás.
+ */
+export async function editAppRowsAction(
+  appRef: string,
+  screenRef: string,
+  blockId: string,
+  items: Array<{ rowId: string; patch: Record<string, string>; expect?: Record<string, string> }>,
+): Promise<
+  | { ok: true; done: number; failed: Array<{ rowId: string; error: string }> }
+  | { ok: false; error: string }
+> {
+  try {
+    const { db, access, view } = await open(appRef, screenRef);
+    const list = z
+      .array(
+        z.object({
+          rowId: z.string().uuid(),
+          patch: z.record(z.string(), z.string().max(2000)),
+          expect: z.record(z.string(), z.string().max(2000)).optional(),
+        }),
+      )
+      .min(1)
+      .max(200)
+      .parse(items);
+    const failed: Array<{ rowId: string; error: string }> = [];
+    let done = 0;
+    for (const it of list) {
+      try {
+        await editAppRow(db, access, view, { blockId, rowId: it.rowId, patch: it.patch, expect: it.expect });
+        done += 1;
+      } catch (err) {
+        failed.push({
+          rowId: it.rowId,
+          error: err instanceof RowConflictError ? err.message : describe(err, 'No se pudo guardar el cambio.'),
+        });
+      }
+    }
+    return { ok: true, done, failed };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar el lote.') };
+  }
+}
+
 /** Pegar filas de Excel / Sheets en una hoja de la pantalla; el rol decide qué se puede. */
 export async function pasteAppRowsAction(
   appRef: string,
@@ -147,6 +194,7 @@ export async function pasteAppRowsAction(
   blockId: string,
   rows: Array<Record<string, string>>,
   apply: boolean,
+  fresh?: boolean,
 ): Promise<{ ok: true; result: SheetPasteResult } | { ok: false; error: string }> {
   try {
     const { db, access, view } = await open(appRef, screenRef);
@@ -154,6 +202,7 @@ export async function pasteAppRowsAction(
       blockId,
       rows: z.array(z.record(z.string(), z.string().max(2000))).max(500).parse(rows),
       apply,
+      fresh: fresh === true,
     });
     return { ok: true, result };
   } catch (err) {

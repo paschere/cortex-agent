@@ -393,12 +393,51 @@ export async function editViewRowAction(
   }
 }
 
+/**
+ * Un lote de ediciones de celdas de una hoja (rellenar hacia abajo, cambiar un
+ * campo en varias filas, deshacer): cada fila pasa por `editViewRow`, así que
+ * las reglas son las de una edición suelta; una que falla no frena a las demás.
+ */
+export async function editViewRowsAction(
+  viewId: string,
+  blockId: string,
+  items: Array<{ rowId: string; patch: Record<string, string> }>,
+): Promise<
+  | { ok: true; done: number; failed: Array<{ rowId: string; error: string }> }
+  | { ok: false; error: string }
+> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId);
+    const list = z
+      .array(z.object({ rowId: z.string().uuid(), patch: z.record(z.string(), z.string().max(2000)) }))
+      .min(1)
+      .max(200)
+      .parse(items);
+    const failed: Array<{ rowId: string; error: string }> = [];
+    let done = 0;
+    for (const it of list) {
+      try {
+        await editViewRow(db, view, { blockId, rowId: it.rowId, patch: it.patch, actor: user.id });
+        done += 1;
+      } catch (err) {
+        failed.push({ rowId: it.rowId, error: describe(err, 'No se pudo guardar el cambio.') });
+      }
+    }
+    return { ok: true, done, failed };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar el lote.') };
+  }
+}
+
 /** Pegar filas de Excel / Sheets en una hoja: `apply: false` sólo valida y muestra qué haría. */
 export async function pasteViewRowsAction(
   viewId: string,
   blockId: string,
   rows: Array<Record<string, string>>,
   apply: boolean,
+  fresh?: boolean,
 ): Promise<{ ok: true; result: SheetPasteResult } | { ok: false; error: string }> {
   try {
     const user = await requireSession();
@@ -408,6 +447,7 @@ export async function pasteViewRowsAction(
       blockId,
       rows: z.array(z.record(z.string(), z.string().max(2000))).max(500).parse(rows),
       apply,
+      fresh: fresh === true,
       actor: user.id,
       create: true,
       update: true,

@@ -1,11 +1,19 @@
 'use client';
 
 import { clsx } from 'clsx';
-import { Check, Loader2, WifiOff, X } from 'lucide-react';
+import { Check, Loader2, Plus, WifiOff, X } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SubmitTarget } from '../ViewCanvas';
-import { type RelationOption, parseRelation, useRelationSource } from './RelationPicker';
+import { type RelationOption, parseRelation, rememberChosen, useRelationSource } from './RelationPicker';
+
+const fold = (t: string) =>
+  t
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 
 /**
  * ELEGIR UNA FILA DE OTRA TABLA DENTRO DE UNA CELDA DE LA HOJA.
@@ -16,6 +24,10 @@ import { type RelationOption, parseRelation, useRelationSource } from './Relatio
  * Flechas para moverse, Enter elige, Esc cancela. En una celda la lista flota
  * fija bajo la celda (no la recorta el desplazamiento de la hoja); en la hoja
  * de edición del teléfono y en «Nueva fila» va en línea.
+ *
+ * «+ Crear «texto»»: si lo escrito no existe y el rol puede agregar filas en la
+ * tabla destino, se crea ahí mismo (con el mismo camino de «+ Agregar» de los
+ * formularios: idempotente, sin duplicar por nombre ni NIT) y queda elegida.
  */
 
 export const relationValue = (o: { id: string; label: string }) =>
@@ -69,6 +81,18 @@ export function RelationCombo({
   // El índice 0 es «Vaciar» cuando se puede y no se está buscando.
   const clearRow = canClear && !q.trim();
   const rows: Array<RelationOption | null> = clearRow ? [null, ...options] : options;
+  const typed = q.replace(/\s+/g, ' ').trim();
+  const showCreate =
+    source.canCreate &&
+    !offline &&
+    state === 'idle' &&
+    typed.length >= 2 &&
+    !options.some((o) => fold(o.label) === fold(typed));
+  const createIndex = showCreate ? rows.length : -1;
+  const total = rows.length + (showCreate ? 1 : 0);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const creatingRef = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -133,9 +157,29 @@ export function RelationCombo({
     document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' });
   }, [active, listId]);
 
+  const create = async () => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const made = await source.create(typed);
+      rememberChosen(made);
+      onPick(made);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'No se pudo agregar ahora.');
+    } finally {
+      creatingRef.current = false;
+      setCreating(false);
+    }
+  };
+
   const choose = (i: number) => {
+    if (i === createIndex) return void create();
     if (i < 0 || i >= rows.length) return;
-    onPick(rows[i] ?? null);
+    const o = rows[i] ?? null;
+    if (o) rememberChosen(o);
+    onPick(o);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -145,7 +189,7 @@ export function RelationCombo({
       onCancel();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((a) => Math.min(rows.length - 1, a + 1));
+      setActive((a) => Math.min(total - 1, a + 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActive((a) => Math.max(0, a - 1));
@@ -155,7 +199,7 @@ export function RelationCombo({
       choose(active);
     } else if (e.key === 'Tab') {
       // Con algo escrito, Tab elige lo marcado; si no, sólo sale.
-      if (q.trim() && rows[active]) {
+      if (q.trim() && (rows[active] || active === createIndex)) {
         e.preventDefault();
         choose(active);
       } else onCancel();
@@ -192,7 +236,7 @@ export function RelationCombo({
         </li>
       )}
       {state === 'error' && <li className="px-3 py-2 text-rose">No se pudo buscar. Inténtalo otra vez.</li>}
-      {state === 'idle' && rows.length === 0 && (
+      {state === 'idle' && rows.length === 0 && !showCreate && (
         <li className="px-3 py-2 text-ink-faint">{q.trim() ? `Nada con «${q.trim()}».` : 'No hay filas para elegir.'}</li>
       )}
       {offline && (
@@ -228,6 +272,23 @@ export function RelationCombo({
           )}
         </li>
       ))}
+      {showCreate && (
+        <li
+          id={`${listId}-${createIndex}`}
+          role="option"
+          aria-selected={false}
+          onMouseEnter={() => setActive(createIndex)}
+          onClick={() => void create()}
+          className={clsx(
+            'flex cursor-pointer items-center gap-2 border-t border-border/60 px-3 py-1.5 font-semibold text-primary',
+            active === createIndex ? 'bg-primary-soft' : '',
+          )}
+        >
+          {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
+          <span className="min-w-0 flex-1 truncate">Crear «{typed}»</span>
+        </li>
+      )}
+      {createError && <li className="px-3 py-1.5 text-micro text-rose">{createError}</li>}
     </ul>
   );
 
@@ -240,7 +301,7 @@ export function RelationCombo({
         aria-expanded
         aria-controls={listId}
         aria-autocomplete="list"
-        aria-activedescendant={rows.length ? `${listId}-${active}` : undefined}
+        aria-activedescendant={total ? `${listId}-${active}` : undefined}
         aria-label={`Elegir ${label}`}
         value={q}
         placeholder={inline ? `Buscar ${label.toLowerCase()}` : parseRelation(current ?? '')?.label || 'Buscar…'}

@@ -18,6 +18,7 @@ import { notFoundWithHints } from '../not-found-hints';
 import { appBaseUrl } from '../reports/store';
 import { adaptLookupValue, lookupSources } from '../trackers/computed';
 import { applyDuplicateRule, duplicateMessage, getDuplicateRule } from '../trackers/duplicates';
+import { matchExistingRelation, nitKeys } from './sheet-edit';
 import { flowOf } from '../trackers/flow';
 import {
   ANONYMOUS_ACTOR,
@@ -2120,6 +2121,7 @@ export async function createRelationRow(
   },
 ): Promise<{ id: string; label: string; created: boolean }> {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (block?.type === 'sheet') return createRelationRowForSheet(db, block, input);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
   const forLines = isLinesKey(input.field);
@@ -2136,6 +2138,58 @@ export async function createRelationRow(
   if (!forLines && block.fields.length && !block.fields.includes(field.key))
     throw new NotFoundError('Ese campo no está en el formulario.');
   const target = await trackerForBlock(db, field.tracker);
+  return createRowInTarget(db, target, input);
+}
+
+/**
+ * «+ Crear «texto»» desde una celda de relación de la hoja: la misma creación
+ * que en un formulario, pero el campo sale de las columnas que la hoja deja
+ * editar (nunca de una que el spec no ofrece).
+ */
+async function createRelationRowForSheet(
+  db: SupabaseClient,
+  block: Extract<ViewSpec['blocks'][number], { type: 'sheet' }>,
+  input: Parameters<typeof createRelationRow>[2],
+): Promise<{ id: string; label: string; created: boolean }> {
+  if (!block.editable.includes(input.field))
+    throw new NotFoundError('Ese campo no se edita en esta hoja.');
+  const source = await trackerForBlock(db, block.tracker);
+  const field = source.fields.find((f) => f.key === input.field);
+  if (!field || field.type !== 'relation' || !field.tracker)
+    throw new NotFoundError('Ese campo no es una relación de esta hoja.');
+  const target = await trackerForBlock(db, field.tracker);
+  return createRowInTarget(db, target, input);
+}
+
+/** Las filas de la tabla destino con las que se compara lo escrito (nombre y NIT). */
+async function findExistingRelationRow(
+  db: SupabaseClient,
+  target: TrackerRow,
+  label: string,
+): Promise<{ id: string; label: string } | null> {
+  const { data, error } = await db
+    .from('tracker_rows')
+    .select('id, label, values')
+    .eq('tracker_id', target.id)
+    .order('updated_at', { ascending: false })
+    .limit(2000);
+  if (error) throw error;
+  const hit = matchExistingRelation(
+    ((data ?? []) as Array<{ id: string; label: string; values?: Record<string, unknown> | null }>).map((r) => ({
+      id: String(r.id),
+      label: String(r.label),
+      values: r.values ?? null,
+    })),
+    label,
+  );
+  return hit ? { id: hit.id, label: hit.label } : null;
+}
+
+async function createRowInTarget(
+  db: SupabaseClient,
+  target: TrackerRow,
+  input: { label: string; createdBy: string | null; createdByApp?: boolean; mayCreate?: (slug: string) => boolean },
+): Promise<{ id: string; label: string; created: boolean }> {
   assertRowWriteAllowed(target, { creating: true, after: {} });
   if (input.mayCreate && !input.mayCreate(target.slug))
     throw new ValidationError(`Tu rol no agrega filas en «${target.name}».`);
@@ -2160,22 +2214,8 @@ export async function createRelationRow(
     throw new ValidationError(
       `«${target.name}» pide más datos (${others.map((f) => f.label).join(', ')}): agrégalo desde su tabla.`,
     );
-  const fold = (t: string) =>
-    t
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .toLowerCase();
-  const { data: existing, error: existingError } = await db
-    .from('tracker_rows')
-    .select('id, label')
-    .eq('tracker_id', target.id)
-    .order('updated_at', { ascending: false })
-    .limit(400);
-  if (existingError) throw existingError;
-  const same = ((existing ?? []) as Array<{ id: string; label: string }>).find(
-    (r) => fold(String(r.label)) === fold(label),
-  );
-  if (same) return { id: String(same.id), label: String(same.label), created: false };
+  const same = await findExistingRelationRow(db, target, label);
+  if (same) return { id: same.id, label: same.label, created: false };
   const values = await prepareValues(db, target, { [main.key]: label }, { applyDefaults: true });
   const { data: row, error } = await db
     .from('tracker_rows')
@@ -2467,20 +2507,8 @@ export async function editViewRow(
 
 export const SHEET_PASTE_MAX_ROWS = 500;
 
-/**
- * Las claves con que se compara un NIT: sólo dígitos, con y sin dígito de
- * verificación («900.123.456-7» → «9001234567» y «900123456»). Un texto con
- * letras (un nombre) no es un NIT. Exportada para probarla.
- */
-export function nitKeys(raw: unknown): string[] {
-  const t = String(raw ?? '').trim();
-  if (!t || /\p{L}/u.test(t)) return [];
-  const m = /^(\d[\d.\s]*)(?:-\s*(\d))?$/.exec(t);
-  if (!m) return [];
-  const body = (m[1] as string).replace(/\D/g, '');
-  if (body.length < 5) return [];
-  return m[2] ? [body, `${body}${m[2]}`] : [body];
-}
+/** Las claves con que se compara un NIT (ver `sheet-edit.ts`); exportada para probarla. */
+export { nitKeys };
 
 export interface SheetPasteLine {
   /** Posición (1-based) en lo pegado. */
@@ -2532,6 +2560,8 @@ export async function pasteViewRows(
     create: boolean;
     update: boolean;
     forced?: Record<string, string>;
+    /** Duplicar o escribir en la fila fantasma: una fila igual a otra SÍ se crea (sin clave no se compara). */
+    fresh?: boolean;
   },
 ): Promise<SheetPasteResult> {
   if (!canWriteView(view, input.actor ? 'member' : 'public'))
@@ -2714,7 +2744,7 @@ export async function pasteViewRows(
       );
       Object.assign(values, guardFlowWrite(tracker, null, values, actor));
       // Sin clave: una fila idéntica a una que ya existe no se duplica.
-      if (!keyField) {
+      if (!keyField && !input.fresh) {
         const dup = existing.find((r) =>
           keys.every((k) => String(r.values[k] ?? '') === String(values[k] ?? '')),
         );

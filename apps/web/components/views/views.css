@@ -713,3 +713,37 @@ html:root
   white-space: nowrap;
   border: 0;
 }
+
+/* --- La hoja: rayado suave, animación de cifras y vista previa del relleno. --- */
+.sheet-grid .sheet-band {
+  background-color: color-mix(in srgb, rgb(var(--surface-2)) 55%, rgb(var(--surface)));
+}
+.sheet-grid .sheet-ghost td:not(:first-child) {
+  background-color: color-mix(in srgb, rgb(var(--primary-soft)) 18%, rgb(var(--surface)));
+  border-bottom-style: dashed;
+}
+.sheet-grid .sheet-fill-preview {
+  background-color: rgb(var(--primary-soft)) !important;
+  box-shadow: inset 0 0 0 1px rgb(var(--primary) / 0.45);
+}
+@keyframes sheet-bump {
+  0% {
+    transform: translateY(-3px);
+    color: rgb(var(--primary));
+  }
+  100% {
+    transform: none;
+  }
+}
+.sheet-bump {
+  display: inline-block;
+  animation: sheet-bump 0.6s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-bump {
+    animation: none;
+  }
+  .sheet-grid [role="progressbar"] > span {
+    transition: none !important;
+  }
+}

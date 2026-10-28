@@ -4,8 +4,18 @@ import { useAppNav } from '@/components/apps/AppNav';
 import { activeOutbox } from '@/lib/apps/app-outbox';
 import { assignRowAction, assignablePeopleAction } from '@/lib/apps/location-actions';
 import { undoRowChangeAction } from '@/lib/apps/history-actions';
-import { editAppRowAction, pasteAppRowsAction, runAppActionAction } from '@/lib/apps/write-actions';
-import { editViewRowAction, pasteViewRowsAction, runViewActionAction } from '@/lib/views/actions';
+import {
+  editAppRowAction,
+  editAppRowsAction,
+  pasteAppRowsAction,
+  runAppActionAction,
+} from '@/lib/apps/write-actions';
+import {
+  editViewRowAction,
+  editViewRowsAction,
+  pasteViewRowsAction,
+  runViewActionAction,
+} from '@/lib/views/actions';
 import { hasPending, resolvePending } from '@/lib/views/offline-files';
 import type {
   AssignablePerson,
@@ -62,7 +72,20 @@ export interface ViewWriter {
     blockId: string,
     rows: Array<Record<string, string>>,
     apply: boolean,
+    /** Duplicar / fila fantasma: una fila igual a otra sí se crea. */
+    fresh?: boolean,
   ): Promise<{ ok: true; result: SheetPasteResult } | { ok: false; error: string }>;
+  /**
+   * Un lote de ediciones en una sola ida (rellenar hacia abajo, cambiar un campo
+   * en varias filas, deshacer). Cada fila la valida el servidor como una edición suelta.
+   */
+  editMany?(
+    blockId: string,
+    items: Array<{ rowId: string; patch: Record<string, string>; expect?: Record<string, string> }>,
+  ): Promise<
+    | { ok: true; done: number; failed: Array<{ rowId: string; error: string }> }
+    | { ok: false; error: string }
+  >;
   /**
    * «Deshacer este cambio» del historial de un registro (sólo dentro de una
    * aplicación): el servidor decide si este rol puede y si el campo no cambió después.
@@ -148,9 +171,18 @@ export function ViewWriterProvider({
   let writer: ViewWriter | null = null;
   if (target.kind === 'app') {
     writer = {
-      async paste(blockId, rows, apply) {
-        const res = await pasteViewRowsAction(target.viewId, blockId, rows, apply);
+      async paste(blockId, rows, apply, fresh) {
+        const res = await pasteViewRowsAction(target.viewId, blockId, rows, apply, fresh);
         if (res.ok && apply) onChanged?.();
+        return res;
+      },
+      async editMany(blockId, items) {
+        const res = await editViewRowsAction(
+          target.viewId,
+          blockId,
+          items.map(({ rowId, patch }) => ({ rowId, patch })),
+        );
+        if (res.ok) onChanged?.();
         return res;
       },
       async edit(blockId, rowId, patch) {
@@ -170,9 +202,18 @@ export function ViewWriterProvider({
     };
   } else if (target.kind === 'custom_app') {
     writer = {
-      async paste(blockId, rows, apply) {
+      async editMany(blockId, items) {
         try {
-          const res = await pasteAppRowsAction(target.appId, target.screen, blockId, rows, apply);
+          const res = await editAppRowsAction(target.appId, target.screen, blockId, items);
+          if (res.ok) onChanged?.();
+          return res;
+        } catch {
+          return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
+        }
+      },
+      async paste(blockId, rows, apply, fresh) {
+        try {
+          const res = await pasteAppRowsAction(target.appId, target.screen, blockId, rows, apply, fresh);
           if (res.ok && apply) onChanged?.();
           return res;
         } catch {
@@ -312,6 +353,10 @@ export function ViewWriterProvider({
     writer = {
       edit: fake,
       act: fake,
+      async editMany(_blockId, items) {
+        await new Promise((r) => setTimeout(r, 300));
+        return { ok: true as const, done: items.length, failed: [] };
+      },
       async paste(_blockId, rows, apply) {
         await new Promise((r) => setTimeout(r, 300));
         return {

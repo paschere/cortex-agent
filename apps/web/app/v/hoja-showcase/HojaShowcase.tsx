@@ -37,6 +37,17 @@ export function HojaShowcase({
           await new Promise((r) => setTimeout(r, 80));
           return (options[field] ?? []).filter((o) => !needle || fold(`${o.label} ${o.detail ?? ''}`).includes(needle));
         },
+        // «+ Crear «texto»»: igual que en producción, no duplica por nombre.
+        create: async (field: string, label: string) => {
+          await new Promise((r) => setTimeout(r, 120));
+          const list = (options[field] ??= []);
+          const fold = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+          const same = list.find((o) => fold(o.label) === fold(label));
+          if (same) return same;
+          const made = { id: `00000000-0000-4000-8000-${String(900 + list.length).padStart(12, '0')}`, label };
+          list.push(made);
+          return made;
+        },
       },
     }),
     [options],

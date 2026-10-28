@@ -1,7 +1,18 @@
 'use client';
 
-import type { ComputedBlock } from '@cortex/agent-tools';
 import { sheetCsv, sheetMatrix } from '@cortex/agent-tools/src/views/sheet-export';
+import {
+  type EditChange,
+  EditHistory,
+  duplicateValues,
+  ghostValues,
+  groupByRow,
+  groupProgress,
+  looksLikeStatusColumn,
+  planFill,
+  rangeStats,
+  statusTone as finalTone,
+} from '@cortex/agent-tools/src/views/sheet-edit';
 import { sheetTotalDisplay } from '@cortex/agent-tools/src/views/sheet-math';
 import {
   PASTE_MAX_ROWS,
@@ -10,61 +21,90 @@ import {
   mapPasteColumns,
   normalizePasteCell,
   parseClipboard,
+  toClipboard,
 } from '@cortex/agent-tools/src/views/sheet-paste';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import {
   ArrowDown,
   ArrowUp,
+  Check,
   ChevronDown,
   ChevronRight,
   ClipboardPaste,
+  Copy,
   Download,
   Filter,
   Loader2,
   Maximize2,
   Minimize2,
+  MoreHorizontal,
   PanelRightOpen,
   Plus,
   Search,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import type { SubmitTarget } from '../ViewCanvas';
-import { RowActions, checkCell, useViewWriter } from '../view-writes';
 import { useFlashClass } from '../flash-context';
+import { RowActions, checkCell, useViewWriter } from '../view-writes';
+import { parseRelation } from './RelationPicker';
 import { useRecordOpener } from './RecordDrawer';
 import { RelationCombo, RelationField, relationLabel, relationValue } from './SheetRelation';
-import { parseRelation } from './RelationPicker';
+import {
+  BatchBar,
+  BatchFieldDialog,
+  BumpText,
+  ColIcon,
+  FloatingMenu,
+  MenuItem,
+  SaveBadge,
+  type SaveState,
+  type SheetBlockData,
+  type SheetCol,
+  type SheetRow,
+  StatusPicker,
+  SummaryStrip,
+  UndoRedoButtons,
+} from './SheetParts';
 import { useVariant } from './design';
-import { TONE_SOFT, Card } from './theme';
+import { Card, StatusChip, TONE_SOFT, statusTone as themeTone } from './theme';
 
 /**
  * LA HOJA: una tabla que se trabaja como una hoja de cálculo.
  *
- * Teclado: flechas mueven la celda activa; Enter o F2 (o escribir) la edita;
- * Enter guarda y baja, Tab guarda y avanza, Esc descarta; Ctrl/Cmd+V pega
- * varias filas y columnas desde Excel o Sheets (con vista previa); Espacio
- * cambia un sí/no. El servidor decide qué celdas se pueden escribir (el spec,
- * el rol y los campos con origen): aquí sólo se pide. Totales y subtotales se
- * calculan sobre las filas que el filtro deja ver, con las mismas funciones que
- * usa la exportación. Teléfono: la hoja se desplaza de lado con las columnas
- * fijas y tocar una celda editable abre una hoja de edición; el número de fila
- * abre la ficha.
+ * Teclado: flechas mueven la celda activa (Mayús+flecha extiende el rango);
+ * Enter o F2 (o escribir) la edita; Enter guarda y baja, Tab guarda y avanza,
+ * Esc descarta; Ctrl/Cmd+V pega varias filas y columnas desde Excel o Sheets
+ * (escribe directo; sólo abre la vista previa si hay problemas); Espacio
+ * cambia un sí/no; Ctrl/Cmd+Z y Ctrl/Cmd+Mayús+Z (o Ctrl+Y) deshacen y rehacen
+ * lo editado en esta sesión; Ctrl/Cmd+D duplica la fila. El servidor decide qué
+ * celdas se pueden escribir (el spec, el rol y los campos con origen): aquí sólo
+ * se pide. Totales y subtotales se calculan sobre las filas que el filtro deja
+ * ver, con las mismas funciones que usa la exportación.
+ *
+ * CREAR DESDE LA CELDA. Cada grupo (y la hoja) termina con una fila fantasma:
+ * escribir en ella arma la fila —hereda el grupo— y se crea sola cuando están
+ * los campos obligatorios, sin diálogo. En una relación, «+ Crear «texto»». El
+ * controlador de relleno (esquina de la celda activa) copia o continúa una
+ * serie hacia abajo en una sola escritura.
+ *
+ * Teléfono: la hoja se desplaza de lado con las columnas fijas y tocar una
+ * celda editable abre una hoja de edición; el número de fila abre la ficha.
  */
 
-type Sheet = Extract<ComputedBlock, { type: 'sheet' }>;
-type Row = Sheet['rows'][number];
-type Col = Sheet['columns'][number];
+type Sheet = SheetBlockData;
+type Row = SheetRow;
+type Col = SheetCol;
 
 const WIDTH_REM: Record<string, number> = { number: 7.5, date: 6.5, text: 10 };
-const GUTTER_REM = 2.75;
 const REM = 16;
 
 function widthOf(c: Col, i: number, narrow: boolean): number {
   if (i === 0) return narrow ? 9 : 13;
   if (c.type === 'checkbox') return 5.5;
-  if (c.type === 'select') return 8.5;
+  if (c.type === 'select') return 9.5;
   if (c.type === 'longtext') return 14;
   return WIDTH_REM[c.kind] ?? 10;
 }
@@ -95,6 +135,22 @@ function rawText(v: string | number | null | undefined): string {
   return v === null || v === undefined ? '' : String(v);
 }
 
+const GROUP_BG: Record<string, string> = {
+  emerald: 'bg-emerald-soft/70',
+  rose: 'bg-rose-soft/70',
+  amber: 'bg-amber-soft/70',
+  sky: 'bg-sky-soft/70',
+  primary: 'bg-primary-soft/60',
+};
+
+type ToneName = 'emerald' | 'rose' | 'amber' | 'sky';
+const toneOfStatus = (v: string): ToneName | null => {
+  const t = finalTone(v) ?? themeTone(v);
+  return t === 'emerald' || t === 'rose' || t === 'amber' || t === 'sky' ? t : null;
+};
+
+type Pos = { r: number; c: number };
+
 export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTarget }) {
   const writer = useViewWriter();
   const flash = useFlashClass();
@@ -109,13 +165,33 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   const [collapsed, setCollapsed] = useState<Set<number>>(
     () => new Set((block.groups ?? []).flatMap((g, i) => (g.collapsed ? [i] : []))),
   );
-  const [active, setActive] = useState<{ r: number; c: number } | null>(null);
+  const [active, setActive] = useState<Pos | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<Pos | null>(null);
   const [editing, setEditing] = useState<{ draft: string } | null>(null);
   const [pending, setPending] = useState<Record<string, string>>({});
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [newRow, setNewRow] = useState<{ group?: string } | null>(null);
   const [pasteState, setPasteState] = useState<PasteDraft | null>(null);
   const cancelled = useRef(false);
+  // Selección de varias filas, filas recién creadas (hasta que el servidor las devuelva),
+  // borradores de la fila fantasma y el estado del guardado.
+  const [selRows, setSelRows] = useState<Set<string>>(new Set());
+  const lastPicked = useRef<number | null>(null);
+  const [local, setLocal] = useState<Row[]>([]);
+  const [ghostDraft, setGhostDraft] = useState<Record<string, Record<string, string>>>({});
+  const [creating, setCreating] = useState<Set<string>>(new Set());
+  const [save, setSave] = useState<SaveState>({ state: 'idle', at: 0 });
+  const inflight = useRef(0);
+  const retryRef = useRef<(() => void) | null>(null);
+  const history = useRef(new EditHistory());
+  const [, setHistTick] = useState(0);
+  const dragging = useRef(false);
+  const [fillTo, setFillTo] = useState<number | null>(null);
+  const fillToRef = useRef<number | null>(null);
+  const [batchDialog, setBatchDialog] = useState<{ key?: string; title: string } | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [rowMenu, setRowMenu] = useState<{ id: string; el: HTMLElement } | null>(null);
+  const focusGhost = useRef<{ id: string; c: number } | null>(null);
   // Pantalla completa: el mismo bloque (mismo estado: filtros, orden, celda activa,
   // grupos plegados) pasa a ocupar la ventana. Con la API Fullscreen del navegador
   // sobre el documento (así los diálogos y listas que flotan siguen viéndose); sin
@@ -181,15 +257,49 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     setViewW(el.clientWidth);
     return () => ro.disconnect();
   }, []);
+  // El arrastre de un rango termina al soltar el botón en cualquier parte.
+  useEffect(() => {
+    const up = () => {
+      dragging.current = false;
+    };
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  }, []);
 
   // El servidor ya trajo lo nuevo: lo optimista sobra.
   // biome-ignore lint/correctness/useExhaustiveDependencies: sólo cuando cambia el bloque
-  useEffect(() => setPending({}), [block]);
+  useEffect(() => {
+    setPending({});
+    setLocal([]);
+  }, [block]);
 
   const say = (ok: boolean, text: string) => {
     setNote({ ok, text });
     setTimeout(() => setNote((n) => (n?.text === text ? null : n)), 5000);
   };
+
+  const pasteFields: PasteField[] = block.write?.fields ?? [];
+  const canAdd = Boolean(block.write?.add && writer?.paste);
+  const groupField = block.write?.groupField ?? null;
+  const colIndex = useMemo(() => new Map(block.columns.map((c, i) => [c.key, i])), [block.columns]);
+  const fieldsByCol = useMemo(
+    () => block.columns.map((c) => pasteFields.find((f) => f.key === c.key) ?? null),
+    [block.columns, pasteFields],
+  );
+  const firstEditable = block.columns.findIndex((c) => editableCol(c));
+
+  /** El valor con que una fila nueva entra a un grupo (nunca el de «Sin …»). */
+  const groupKeyOf = useCallback(
+    (gi: number): string | null => {
+      if (!groupField || gi < 0) return null;
+      const key = block.groups?.[gi]?.key ?? '';
+      if (!key) return null;
+      const f = pasteFields.find((x) => x.key === groupField);
+      if (!f) return null;
+      return f.type === 'relation' && !/^[0-9a-f-]{36}$/i.test(key) ? null : key;
+    },
+    [block.groups, groupField, pasteFields],
+  );
 
   // --- Filas visibles: búsqueda, filtros por columna, orden dentro de cada grupo ---
   const visible = useMemo(() => {
@@ -219,45 +329,310 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     return list;
   }, [block, query, filters, sort]);
 
+  const ghostRow = useCallback(
+    (gi: number): Row => ({
+      id: `ghost:${gi}`,
+      cells: block.columns.map(() => ''),
+      sort: block.columns.map(() => null),
+      group: gi,
+      tones: block.columns.map(() => null),
+      ghost: true,
+    }),
+    [block.columns],
+  );
+
   const lines = useMemo(() => {
     const out: Array<{ kind: 'group'; gi: number; count: number } | { kind: 'row'; row: Row }> = [];
+    const rows: Row[] = [...visible, ...local];
     if (!block.groups) {
-      for (const row of visible) out.push({ kind: 'row', row });
+      for (const row of rows) out.push({ kind: 'row', row });
+      if (canAdd) out.push({ kind: 'row', row: ghostRow(-1) });
       return out;
     }
-    const seen = new Set<number>();
-    for (const row of visible) {
-      if (!seen.has(row.group)) {
-        seen.add(row.group);
-        out.push({
-          kind: 'group',
-          gi: row.group,
-          count: visible.filter((r) => r.group === row.group).length,
-        });
+    const order: number[] = [];
+    const byGroup = new Map<number, Row[]>();
+    for (const row of rows) {
+      if (!byGroup.has(row.group)) {
+        byGroup.set(row.group, []);
+        order.push(row.group);
       }
-      if (!collapsed.has(row.group)) out.push({ kind: 'row', row });
+      byGroup.get(row.group)?.push(row);
+    }
+    for (const gi of order) {
+      const rs = byGroup.get(gi) ?? [];
+      out.push({ kind: 'group', gi, count: rs.length });
+      if (collapsed.has(gi)) continue;
+      for (const row of rs) out.push({ kind: 'row', row });
+      if (canAdd) out.push({ kind: 'row', row: ghostRow(gi) });
     }
     return out;
-  }, [block.groups, visible, collapsed]);
+  }, [block.groups, visible, local, collapsed, canAdd, ghostRow]);
 
   const navRows = useMemo(
     () => lines.flatMap((l) => (l.kind === 'row' ? [l.row] : [])),
     [lines],
   );
+  const realRows = useMemo(() => navRows.filter((r) => !r.ghost && !r.fresh), [navRows]);
+  // El número que se ve: las filas fantasma no cuentan.
+  const numberOf = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of navRows) if (!r.ghost) m.set(r.id, m.size + 1);
+    return m;
+  }, [navRows]);
+
+  // Tras crear una fila desde la fantasma, el cursor vuelve a ella para seguir escribiendo.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo cuando cambian las filas
+  useEffect(() => {
+    const f = focusGhost.current;
+    if (!f) return;
+    const r = navRows.findIndex((x) => x.id === f.id);
+    if (r >= 0) {
+      focusGhost.current = null;
+      setActive({ r, c: f.c });
+      setRangeEnd(null);
+    }
+  }, [navRows]);
 
   // --- Anchos y columnas congeladas ---
   const widths = block.columns.map((c, i) => widthOf(c, i, compact) * REM);
-  const gutter = GUTTER_REM * REM;
+  const gutter = (compact ? 4 : 5.75) * REM;
   // En el teléfono sólo la primera columna queda fija: dos se comen toda la pantalla.
   const frozen = compact ? Math.min(block.frozen, 1) : block.frozen;
   const leftOf = (i: number) => gutter + widths.slice(0, i).reduce((a, b) => a + b, 0);
   const tableWidth = gutter + widths.reduce((a, b) => a + b, 0);
+
+  // --- Estados: la columna de avance de los grupos ---
+  const statusCol = useMemo(
+    () =>
+      block.columns.findIndex(
+        (c, i) =>
+          c.type === 'select' &&
+          looksLikeStatusColumn([...new Set(block.rows.map((r) => r.cells[i] ?? '').filter(Boolean))]),
+      ),
+    [block.columns, block.rows],
+  );
+
+  // --- Guardado: una sola puerta para que el indicador diga la verdad ---
+  async function track<T extends { ok: boolean; error?: string }>(thunk: () => Promise<T>): Promise<T> {
+    inflight.current += 1;
+    setSave((s) => ({ ...s, state: 'saving' }));
+    let res: T;
+    try {
+      res = await thunk();
+    } catch {
+      res = { ok: false, error: 'Sin conexión. Inténtalo otra vez.' } as T;
+    }
+    inflight.current -= 1;
+    if (!res.ok) {
+      retryRef.current = () => void track(thunk);
+      setSave({ state: 'error', at: Date.now(), error: res.error });
+    } else if (inflight.current === 0) {
+      retryRef.current = null;
+      setSave({ state: 'saved', at: Date.now() });
+    }
+    return res;
+  }
+
+  const currentRaw = (r: Row, ci: number) => rawText(pending[`${r.id}:${ci}`] ?? r.sort[ci]);
+
+  /**
+   * Escribe un lote de cambios de celdas (uno o muchos) con lo que se vio
+   * antes (`expect`: un cambio ajeno no se pisa), muestra el valor al instante
+   * y, si salió bien, lo anota para deshacer.
+   */
+  async function writeChanges(changes: EditChange[], label: string, record = true): Promise<boolean> {
+    if (!writer || !changes.length) return false;
+    const keyOf = (c: EditChange) => {
+      const ci = colIndex.get(c.key);
+      return ci === undefined ? null : `${c.rowId}:${ci}`;
+    };
+    setPending((p) => {
+      const next = { ...p };
+      for (const c of changes) {
+        const k = keyOf(c);
+        if (k) next[k] = c.after;
+      }
+      return next;
+    });
+    const items = groupByRow(changes);
+    const thunk = async (): Promise<{ ok: boolean; error?: string; failed: string[]; message?: string }> => {
+      const only = changes[0];
+      if (changes.length === 1 && only) {
+        const res = await writer.edit(
+          block.id,
+          only.rowId,
+          { [only.key]: only.after },
+          { expect: { [only.key]: only.before }, label },
+        );
+        return res.ok
+          ? { ok: true, failed: [], message: res.message }
+          : { ok: false, error: res.error, failed: [only.rowId] };
+      }
+      if (writer.editMany) {
+        const res = await writer.editMany(block.id, items);
+        if (!res.ok) return { ok: false, error: res.error, failed: items.map((i) => i.rowId) };
+        return {
+          ok: res.failed.length === 0,
+          error: res.failed[0]?.error,
+          failed: res.failed.map((f) => f.rowId),
+        };
+      }
+      const failed: string[] = [];
+      let error: string | undefined;
+      for (const it of items) {
+        const res = await writer.edit(block.id, it.rowId, it.patch, { expect: it.expect, label });
+        if (!res.ok) {
+          failed.push(it.rowId);
+          error ??= res.error;
+        }
+      }
+      return { ok: failed.length === 0, error, failed };
+    };
+    const out = await track(thunk);
+    const failedIds = new Set(out.failed);
+    if (failedIds.size) {
+      setPending((p) => {
+        const next = { ...p };
+        for (const c of changes) {
+          const k = keyOf(c);
+          if (k && failedIds.has(c.rowId)) delete next[k];
+        }
+        return next;
+      });
+    }
+    const done = changes.filter((c) => !failedIds.has(c.rowId));
+    if (record && done.length) {
+      history.current.push({ label, changes: done });
+      setHistTick((n) => n + 1);
+    }
+    if (!out.ok) say(false, out.error ?? 'No se pudo guardar.');
+    else if (changes.length === 1 && out.message) say(true, out.message);
+    return out.ok;
+  }
+
+  async function undoRedo(kind: 'undo' | 'redo') {
+    const h = history.current;
+    const took = kind === 'undo' ? h.takeUndo() : h.takeRedo();
+    if (!took) return;
+    setHistTick((n) => n + 1);
+    const ok = await writeChanges(took.write, `${kind === 'undo' ? 'Deshacer' : 'Rehacer'}: ${took.entry.label}`, false);
+    if (ok) {
+      if (kind === 'undo') h.confirmUndo(took.entry);
+      else h.confirmRedo(took.entry);
+      say(true, `${kind === 'undo' ? 'Deshecho' : 'Rehecho'}: ${took.entry.label}`);
+    } else if (kind === 'undo') h.restoreUndo(took.entry);
+    else h.restoreRedo(took.entry);
+    setHistTick((n) => n + 1);
+  }
+
+  // --- Crear filas (fila fantasma, duplicar, pegar de más) ---
+  function localRowFrom(values: Record<string, string>, gi: number): Row {
+    const display = (c: Col): string => {
+      const v = values[c.key];
+      if (v === undefined || v === '') return '';
+      if (c.type === 'relation') return relationLabel(v) || v;
+      if (c.type === 'checkbox') return v === '1' ? 'Sí' : 'No';
+      return v;
+    };
+    return {
+      id: `new:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 7)}`,
+      cells: block.columns.map(display),
+      sort: block.columns.map((c) => values[c.key] ?? null),
+      group: gi,
+      tones: block.columns.map(() => null),
+      fresh: true,
+    };
+  }
+
+  async function createRows(
+    list: Array<{ values: Record<string, string>; gi: number }>,
+  ): Promise<{ ok: boolean; error?: string; result?: import('@cortex/agent-tools').SheetPasteResult }> {
+    if (!writer?.paste || !list.length) return { ok: false, error: 'Aquí no se agregan filas.' };
+    const paste = writer.paste;
+    const out = await track(async () => {
+      const res = await paste(block.id, list.map((l) => l.values), true, true);
+      if (!res.ok) return { ok: false, error: res.error };
+      const bad = res.result.lines.find((l) => l.action === 'error');
+      if (bad || res.result.errors > 0)
+        return { ok: false, error: bad?.error ?? 'No se pudo guardar.', result: res.result };
+      return { ok: true, result: res.result };
+    });
+    if (out.ok) setLocal((cur) => [...cur, ...list.map((l) => localRowFrom(l.values, l.gi))]);
+    return out;
+  }
+
+  /** Escribir en la fila fantasma: guarda en el borrador; con lo obligatorio completo, crea la fila. */
+  function ghostSet(r: Row, ci: number, value: string, move?: 'down' | 'right' | 'left') {
+    const col = block.columns[ci];
+    if (!col) return;
+    const nextDraft = { ...(ghostDraft[r.id] ?? {}) };
+    if (value === '') delete nextDraft[col.key];
+    else nextDraft[col.key] = value;
+    setGhostDraft((d) => ({ ...d, [r.id]: nextDraft }));
+    const inherited = groupKeyOf(r.group) ? groupField : null;
+    const missing = block.columns.filter(
+      (c) => c.edit?.required && c.key !== inherited && !(c.key in nextDraft),
+    );
+    if (value !== '' && missing.length === 0) void createFromDraft(r, nextDraft);
+    else {
+      advance(move === 'down' ? 'right' : move);
+      if (value !== '' && missing.length)
+        say(true, `Falta ${missing.map((m) => `«${m.label}»`).join(', ')} para crear la fila.`);
+    }
+  }
+
+  async function createFromDraft(r: Row, draft: Record<string, string>) {
+    if (creating.has(r.id) || !Object.keys(draft).length) return;
+    const values = ghostValues({ draft, groupField, groupKey: groupKeyOf(r.group) });
+    setCreating((s) => new Set(s).add(r.id));
+    const out = await createRows([{ values, gi: r.group }]);
+    setCreating((s) => {
+      const n = new Set(s);
+      n.delete(r.id);
+      return n;
+    });
+    if (!out.ok) return say(false, out.error ?? 'No se pudo crear la fila.');
+    setGhostDraft((d) => {
+      const { [r.id]: _gone, ...rest } = d;
+      return rest;
+    });
+    focusGhost.current = { id: r.id, c: Math.max(0, firstEditable) };
+    say(true, 'Fila agregada.');
+  }
+
+  /** Duplicar filas (la clave de pegado queda marcada «(copia)»). */
+  async function duplicateRows(ids: string[]) {
+    if (!block.write?.add || !writer?.paste) return say(false, 'Aquí no se agregan filas.');
+    const rows = ids.flatMap((id) => {
+      const r = realRows.find((x) => x.id === id);
+      return r ? [r] : [];
+    });
+    if (!rows.length) return;
+    const list = rows.map((r) => {
+      const raw: Record<string, string | number | null> = {};
+      block.columns.forEach((c, i) => {
+        raw[c.key] = r.sort[i] ?? null;
+      });
+      const values = duplicateValues(pasteFields, raw, block.write?.pasteKey ?? null);
+      const gk = groupKeyOf(r.group);
+      if (groupField && gk && !values[groupField]) values[groupField] = gk;
+      return { values, gi: r.group };
+    });
+    const out = await createRows(list);
+    if (!out.ok) return say(false, out.error ?? 'No se pudo duplicar.');
+    const keyLabel = pasteFields.find((f) => f.key === block.write?.pasteKey)?.label;
+    say(
+      true,
+      `${rows.length === 1 ? 'Fila duplicada' : `${rows.length} filas duplicadas`}${keyLabel ? `: cambia «${keyLabel}» en la copia` : ''}.`,
+    );
+  }
 
   // --- Escribir una celda ---
   async function commit(r: Row, ci: number, next: string, move?: 'down' | 'right' | 'left') {
     const col = block.columns[ci];
     if (!col?.edit || !writer) return;
     setEditing(null);
+    if (r.fresh) return say(false, 'Esa fila se está guardando; en un instante se puede editar.');
     let value = next.trim();
     if (col.type === 'number' || col.type === 'money') {
       const n = normalizePasteCell(
@@ -271,32 +646,30 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
       if (!n.ok) return say(false, n.error);
       value = n.value;
     }
-    const before = rawText(r.sort[ci]);
     const isRel = col.edit.type === 'relation';
+    if (r.ghost) {
+      if (!isRel) {
+        const problem = value === '' ? null : checkCell(col.edit, col.label, value);
+        if (problem) return say(false, problem);
+      }
+      return ghostSet(r, ci, value, move);
+    }
+    const before = rawText(r.sort[ci]);
     if (isRel ? parseRelation(value)?.id === parseRelation(before)?.id : value === before)
       return advance(move);
     // Una relación la valida el servidor (la fila tiene que existir y el rol poder verla).
     const problem = isRel ? (value === '' && col.edit.required ? `«${col.label}» es obligatorio.` : null) : checkCell(col.edit, col.label, value);
     if (problem) return say(false, problem);
-    setPending((p) => ({ ...p, [`${r.id}:${ci}`]: value }));
     advance(move);
-    const res = await writer.edit(
-      block.id,
-      r.id,
-      { [col.key]: value },
-      { expect: { [col.key]: before }, label: `${col.label} → ${isRel ? relationLabel(value) || 'vacío' : value}` },
+    await writeChanges(
+      [{ rowId: r.id, key: col.key, before, after: value }],
+      `${col.label} → ${isRel ? relationLabel(value) || 'vacío' : value || 'vacío'}`,
     );
-    if (!res.ok) {
-      setPending((p) => {
-        const { [`${r.id}:${ci}`]: _gone, ...rest } = p;
-        return rest;
-      });
-      say(false, res.error);
-    } else say(true, res.message);
   }
 
   function advance(move?: 'down' | 'right' | 'left') {
     if (!move) return;
+    setRangeEnd(null);
     setActive((a) => {
       if (!a) return a;
       if (move === 'down') return { r: Math.min(navRows.length - 1, a.r + 1), c: a.c };
@@ -305,19 +678,184 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     });
   }
 
-  function startEdit(initial?: string) {
-    if (!active) return;
-    const col = block.columns[active.c];
-    const row = navRows[active.r];
+  function startEdit(initial?: string, at?: Pos) {
+    const pos = at ?? active;
+    if (!pos) return;
+    const col = block.columns[pos.c];
+    const row = navRows[pos.r];
     if (!col || !row || !editableCol(col)) return;
     if (col.type === 'checkbox') {
-      void commit(row, active.c, rawText(row.sort[active.c]) === '1' ? '0' : '1');
+      void commit(row, pos.c, rawText(row.sort[pos.c]) === '1' || ghostDraft[row.id]?.[col.key] === '1' ? '0' : '1');
       return;
     }
     cancelled.current = false;
-    // La relación arranca con el buscador vacío (o con lo que se escribió).
-    if (isRelationCol(col)) return setEditing({ draft: initial ?? '' });
-    setEditing({ draft: initial ?? rawText(pending[`${row.id}:${active.c}`] ?? row.sort[active.c]) });
+    // La relación y el estado arrancan con la lista abierta (o con lo que se escribió).
+    if (isRelationCol(col) || col.edit?.type === 'select') return setEditing({ draft: initial ?? '' });
+    setEditing({ draft: initial ?? (row.ghost ? '' : rawText(pending[`${row.id}:${pos.c}`] ?? row.sort[pos.c])) });
+  }
+
+  // --- Rango seleccionado ---
+  const rect = useMemo(() => {
+    if (!active) return null;
+    const e = rangeEnd ?? active;
+    return {
+      r0: Math.min(active.r, e.r),
+      r1: Math.max(active.r, e.r),
+      c0: Math.min(active.c, e.c),
+      c1: Math.max(active.c, e.c),
+    };
+  }, [active, rangeEnd]);
+  const inRange = (ri: number, ci: number) =>
+    Boolean(rect && (rect.r0 !== rect.r1 || rect.c0 !== rect.c1) && ri >= rect.r0 && ri <= rect.r1 && ci >= rect.c0 && ci <= rect.c1);
+
+  const rangeInfo = useMemo(() => {
+    if (!rect || (rect.r0 === rect.r1 && rect.c0 === rect.c1)) return null;
+    const vals: Array<string | number | null> = [];
+    let numericCol: Col | null = null;
+    for (let r = rect.r0; r <= rect.r1; r++) {
+      const row = navRows[r];
+      if (!row || row.ghost) continue;
+      for (let c = rect.c0; c <= rect.c1; c++) {
+        const col = block.columns[c];
+        if (!col) continue;
+        const raw = pending[`${row.id}:${c}`] ?? row.sort[c];
+        vals.push(col.kind === 'number' ? (raw as string | number | null) : raw === null || raw === undefined || raw === '' ? null : 'x');
+        if (col.kind === 'number') numericCol ??= col;
+      }
+    }
+    // El texto cuenta como «con valor» pero no suma: rangeStats sólo suma lo numérico.
+    const stats = rangeStats(vals);
+    return { stats, col: numericCol, cells: (rect.r1 - rect.r0 + 1) * (rect.c1 - rect.c0 + 1) };
+  }, [rect, navRows, block.columns, pending]);
+
+  // --- Rellenar hacia abajo ---
+  async function applyFill(box: { r0: number; r1: number; c0: number; c1: number }, to: number) {
+    const targets: number[] = [];
+    for (let i = box.r1 + 1; i <= to; i++) {
+      const row = navRows[i];
+      if (row && !row.ghost && !row.fresh) targets.push(i);
+    }
+    if (!targets.length) return;
+    const changes: EditChange[] = [];
+    for (let c = box.c0; c <= box.c1; c++) {
+      const col = block.columns[c];
+      if (!col?.edit || col.edit.type === 'file' || col.readonly) continue;
+      const src: string[] = [];
+      for (let r = box.r0; r <= box.r1; r++) {
+        const row = navRows[r];
+        if (row && !row.ghost) src.push(currentRaw(row, c));
+      }
+      if (!src.length) continue;
+      const series = !['relation', 'select', 'checkbox'].includes(col.type);
+      const plan = planFill(
+        col.key,
+        src,
+        targets.map((i) => ({ id: (navRows[i] as Row).id, before: currentRaw(navRows[i] as Row, c) })),
+        series,
+      );
+      if (col.edit.type !== 'relation') {
+        for (const p of plan) {
+          const problem = p.after === '' ? null : checkCell(col.edit, col.label, p.after);
+          if (problem) return say(false, `Relleno cancelado: ${problem}`);
+        }
+      }
+      changes.push(...plan);
+    }
+    if (!changes.length) return say(true, 'Nada que cambiar: ya tenían ese valor.');
+    setActive({ r: box.r0, c: box.c0 });
+    setRangeEnd({ r: to, c: box.c1 });
+    await writeChanges(changes, `Relleno de ${changes.length} ${changes.length === 1 ? 'celda' : 'celdas'}`);
+  }
+
+  function startFill(e: React.PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!rect) return;
+    const box = rect;
+    fillToRef.current = box.r1;
+    setFillTo(box.r1);
+    const move = (ev: PointerEvent) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-cell]');
+      if (!el) return;
+      const r = Number((el.getAttribute('data-cell') ?? '').split(':')[0]);
+      if (!Number.isFinite(r)) return;
+      const to = Math.max(box.r1, r);
+      fillToRef.current = to;
+      setFillTo(to);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      const to = fillToRef.current ?? box.r1;
+      fillToRef.current = null;
+      setFillTo(null);
+      if (to > box.r1) void applyFill(box, to);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
+  // --- Selección de varias filas ---
+  const selectedIds = [...selRows].filter((id) => realRows.some((r) => r.id === id));
+  function pickRow(row: Row, e: { shiftKey: boolean }) {
+    const idx = realRows.findIndex((x) => x.id === row.id);
+    setSelRows((cur) => {
+      const next = new Set(cur);
+      if (e.shiftKey && lastPicked.current !== null) {
+        const [a, b] = [Math.min(lastPicked.current, idx), Math.max(lastPicked.current, idx)];
+        for (let i = a; i <= b; i++) next.add((realRows[i] as Row).id);
+      } else if (next.has(row.id)) next.delete(row.id);
+      else next.add(row.id);
+      return next;
+    });
+    lastPicked.current = idx;
+  }
+  const allPicked = realRows.length > 0 && realRows.every((r) => selRows.has(r.id));
+
+  async function runBatchAction(a: Sheet['actions'][number]) {
+    if (!writer) return;
+    const ids = selectedIds.filter((id) => !a.rowIds || a.rowIds.includes(id));
+    if (!ids.length) return say(false, `«${a.label}» no aplica a las filas elegidas.`);
+    if (
+      a.confirm &&
+      !(await confirmDialog({
+        title: `¿${a.label} en ${ids.length} ${ids.length === 1 ? 'fila' : 'filas'}?`,
+        confirmLabel: a.label,
+      }))
+    )
+      return;
+    setBatchBusy(true);
+    const out = await track(async () => {
+      let okN = 0;
+      let error: string | undefined;
+      for (const id of ids) {
+        const row = realRows.find((r) => r.id === id);
+        const res = await writer.act(block.id, { ...a, confirm: false }, id, row?.cells[0] ?? '');
+        if (res.ok) okN += 1;
+        else error ??= res.error;
+      }
+      return { ok: okN === ids.length, error, okN };
+    });
+    setBatchBusy(false);
+    if (out.ok) {
+      say(true, `${a.label}: ${out.okN} ${out.okN === 1 ? 'fila' : 'filas'}.`);
+      setSelRows(new Set());
+    } else say(false, `${a.label}: ${out.okN} de ${ids.length}. ${out.error ?? ''}`);
+  }
+
+  async function applyBatchField(key: string, value: string): Promise<string | null> {
+    const ci = colIndex.get(key);
+    const changes: EditChange[] = selectedIds.flatMap((id) => {
+      const row = realRows.find((r) => r.id === id);
+      if (!row) return [];
+      const before = ci === undefined ? '' : currentRaw(row, ci);
+      return before === value ? [] : [{ rowId: id, key, before, after: value }];
+    });
+    if (!changes.length) return 'Todas ya tenían ese valor.';
+    const label = pasteFields.find((f) => f.key === key)?.label ?? key;
+    // Un campo que no está entre las columnas (p. ej. el grupo) no tiene «antes» a la vista: sin `expect`.
+    const ok = await writeChanges(changes, `${label} en ${changes.length} filas`);
+    return ok ? null : 'No se pudo guardar en todas; revisa el aviso.';
   }
 
   // --- Teclado de la rejilla ---
@@ -331,6 +869,16 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
       else enterFull();
       return;
     }
+    if (meta && !e.altKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      void undoRedo(e.shiftKey ? 'redo' : 'undo');
+      return;
+    }
+    if (meta && !e.altKey && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      void undoRedo('redo');
+      return;
+    }
     if (!active) {
       if (NAV_KEYS.has(e.key) && navRows.length) {
         setActive({ r: 0, c: 0 });
@@ -341,32 +889,62 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     const maxR = navRows.length - 1;
     const maxC = block.columns.length - 1;
     if (meta && e.key.toLowerCase() === 'c') {
-      const v = navRows[active.r]?.cells[active.c];
-      if (v !== undefined) void navigator.clipboard?.writeText(v);
+      if (rect) {
+        const m: string[][] = [];
+        for (let r = rect.r0; r <= rect.r1; r++) {
+          const row = navRows[r];
+          if (!row || row.ghost) continue;
+          m.push(row.cells.slice(rect.c0, rect.c1 + 1));
+        }
+        if (m.length) void navigator.clipboard?.writeText(toClipboard(m));
+      }
+      return;
+    }
+    if (meta && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      const ids = selectedIds.length ? selectedIds : navRows[active.r] && !navRows[active.r]?.ghost ? [(navRows[active.r] as Row).id] : [];
+      if (ids.length) void duplicateRows(ids);
       return;
     }
     if (meta) return;
+    const to = rangeEnd ?? active;
+    const step = (dr: number, dc: number) => {
+      if (e.shiftKey) setRangeEnd({ r: Math.max(0, Math.min(maxR, to.r + dr)), c: Math.max(0, Math.min(maxC, to.c + dc)) });
+      else {
+        setRangeEnd(null);
+        setActive({ r: Math.max(0, Math.min(maxR, active.r + dr)), c: Math.max(0, Math.min(maxC, active.c + dc)) });
+      }
+    };
     switch (e.key) {
       case 'ArrowDown':
-        setActive({ r: Math.min(maxR, active.r + 1), c: active.c });
+        step(1, 0);
         break;
       case 'ArrowUp':
-        setActive({ r: Math.max(0, active.r - 1), c: active.c });
+        step(-1, 0);
         break;
       case 'ArrowRight':
-        setActive({ r: active.r, c: Math.min(maxC, active.c + 1) });
+        step(0, 1);
         break;
       case 'ArrowLeft':
-        setActive({ r: active.r, c: Math.max(0, active.c - 1) });
+        step(0, -1);
         break;
       case 'Tab':
+        setRangeEnd(null);
         setActive({ r: active.r, c: Math.max(0, Math.min(maxC, active.c + (e.shiftKey ? -1 : 1))) });
         break;
       case 'Home':
+        setRangeEnd(null);
         setActive({ r: active.r, c: 0 });
         break;
       case 'End':
+        setRangeEnd(null);
         setActive({ r: active.r, c: maxC });
+        break;
+      case 'Escape':
+        if (rangeEnd || selRows.size) {
+          setRangeEnd(null);
+          setSelRows(new Set());
+        } else return;
         break;
       case 'Enter':
       case 'F2':
@@ -374,15 +952,27 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         break;
       case ' ': {
         const col = block.columns[active.c];
-        if (col?.type === 'checkbox') startEdit();
+        const row = navRows[active.r];
+        if (e.shiftKey && row && !row.ghost && !row.fresh) pickRow(row, { shiftKey: false });
+        else if (col?.type === 'checkbox') startEdit();
         else return;
         break;
       }
       case 'Delete':
       case 'Backspace': {
-        const col = block.columns[active.c];
-        const row = navRows[active.r];
-        if (col && row && editableCol(col) && !col.edit?.required) void commit(row, active.c, '');
+        if (!rect) break;
+        const changes: EditChange[] = [];
+        for (let r = rect.r0; r <= rect.r1; r++) {
+          const row = navRows[r];
+          if (!row || row.ghost || row.fresh) continue;
+          for (let c = rect.c0; c <= rect.c1; c++) {
+            const col = block.columns[c];
+            if (!col || !editableCol(col) || col.edit?.required || col.type === 'checkbox') continue;
+            const before = currentRaw(row, c);
+            if (before !== '') changes.push({ rowId: row.id, key: col.key, before, after: '' });
+          }
+        }
+        if (changes.length) void writeChanges(changes, changes.length === 1 ? 'Vaciar celda' : `Vaciar ${changes.length} celdas`);
         break;
       }
       default:
@@ -404,36 +994,84 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   }, [active]);
 
   // --- Pegar ---
-  const pasteFields: PasteField[] = block.write?.fields ?? [];
   async function startPaste(text: string) {
-    if (!block.write?.paste || !writer?.paste) return;
+    if (!block.write || !writer) return;
     const matrix = parseClipboard(text);
     if (!matrix.length) return;
-    const startCol = active
-      ? Math.max(
-          0,
-          pasteFields.findIndex((f) => f.key === block.columns[active.c]?.key),
-        )
-      : 0;
-    const mapped = mapPasteColumns(matrix, pasteFields, startCol);
-    if (matrix.length === 1 && matrix[0]?.length === 1 && active) {
+    const cur = active ? navRows[active.r] : undefined;
+    if (matrix.length === 1 && matrix[0]?.length === 1 && active && cur) {
       // Una sola celda sobre una celda: es editar.
-      const row = navRows[active.r];
-      const col = block.columns[active.c];
-      if (row && col?.edit) return void commit(row, active.c, matrix[0]?.[0] ?? '');
+      if (block.columns[active.c]?.edit) return void commit(cur, active.c, matrix[0]?.[0] ?? '');
+      return;
     }
-    const rows = buildPasteRows(mapped.body, mapped.targets);
-    if (rows.length === 0 || mapped.targets.every((t) => !t))
+    if (!block.write.paste || !writer.paste) return say(false, 'Aquí no se pegan varias filas.');
+    const detected = mapPasteColumns(matrix, pasteFields, 0);
+    const width = Math.max(0, ...matrix.map((r) => r.length));
+    // Sin encabezados, se pega desde la celda activa hacia la derecha, en el orden en que se ven las columnas.
+    const targets = detected.header
+      ? detected.targets
+      : Array.from({ length: width }, (_, i) => fieldsByCol[(active?.c ?? 0) + i] ?? null);
+    const body = detected.header ? detected.body : matrix;
+    const rows = buildPasteRows(body, targets);
+    if (rows.length === 0 || targets.every((t) => !t))
       return say(false, 'No encontré columnas que se puedan pegar aquí.');
-    if (mapped.body.length > PASTE_MAX_ROWS) say(false, `Se pegan las primeras ${PASTE_MAX_ROWS} filas.`);
-    setPasteState({ rows, header: mapped.header, targets: mapped.targets, busy: true, server: null, error: null });
-    const clean = rows.filter((r) => !r.errors.length);
-    if (clean.length === rows.length) {
-      const res = await writer.paste(block.id, rows.map((r) => r.values), false);
-      setPasteState((s) =>
-        s ? { ...s, busy: false, server: res.ok ? res.result : null, error: res.ok ? null : res.error } : s,
-      );
-    } else setPasteState((s) => (s ? { ...s, busy: false } : s));
+    if (body.length > PASTE_MAX_ROWS) say(false, `Se pegan las primeras ${PASTE_MAX_ROWS} filas.`);
+    const hasErrors = rows.some((r) => r.errors.length);
+    if (hasErrors) {
+      setPasteState({ rows, header: detected.header, targets, busy: false, server: null, error: null });
+      return;
+    }
+    const pasteKey = block.write.pasteKey;
+    const keyIncluded = Boolean(pasteKey && targets.some((t) => t?.key === pasteKey));
+    const lastRow = navRows[navRows.length - 1];
+    const gk = (row: Row | undefined) => (row ? groupKeyOf(row.group) : null);
+
+    // A) Sin clave en lo pegado y sobre filas que existen: se escribe celda por celda, como en una hoja.
+    if (!detected.header && !keyIncluded && active && cur && !cur.ghost && !cur.fresh) {
+      const changes: EditChange[] = [];
+      const extra: Array<{ values: Record<string, string>; gi: number }> = [];
+      rows.forEach((pr, i) => {
+        const row = navRows[active.r + i];
+        if (row && !row.ghost && !row.fresh) {
+          for (const [key, val] of Object.entries(pr.values)) {
+            const ci = colIndex.get(key);
+            if (ci === undefined) continue;
+            const before = currentRaw(row, ci);
+            if (before !== val) changes.push({ rowId: row.id, key, before, after: val });
+          }
+        } else {
+          const base = row ?? lastRow;
+          const values = { ...pr.values };
+          const g = gk(base);
+          if (groupField && g && !(groupField in values)) values[groupField] = g;
+          extra.push({ values, gi: base?.group ?? -1 });
+        }
+      });
+      let ok = true;
+      if (changes.length) ok = await writeChanges(changes, `Pegado en ${changes.length} ${changes.length === 1 ? 'celda' : 'celdas'}`);
+      if (extra.length) {
+        const out = await createRows(extra);
+        if (!out.ok) return say(false, out.error ?? 'No se pudieron agregar las filas que sobraban.');
+      }
+      if (ok && !changes.length && !extra.length) say(true, 'Nada que cambiar: ya tenían esos valores.');
+      else if (ok) say(true, `Pegado: ${changes.length} celdas${extra.length ? ` y ${extra.length} filas nuevas` : ''}.`);
+      return;
+    }
+
+    // B) Con clave (o con encabezados, o sobre la fila fantasma): se crea o actualiza por clave, directo.
+    const values = rows.map((r) => ({ ...r.values }));
+    if (cur?.ghost && groupField && gk(cur) && !targets.some((t) => t?.key === groupField))
+      for (const v of values) v[groupField] = gk(cur) as string;
+    const paste = writer.paste;
+    const res = await track(async () => {
+      const r = await paste(block.id, values, true);
+      return r.ok ? { ok: true as const, result: r.result } : { ok: false as const, error: r.error };
+    });
+    if (!res.ok || !('result' in res)) return say(false, res.error ?? 'No se pudo pegar.');
+    const r = res.result;
+    if (r.errors > 0)
+      setPasteState({ rows, header: detected.header, targets, busy: false, server: r, error: null });
+    else say(true, `Pegado: ${r.created} nuevas, ${r.updated} actualizadas, ${r.same} sin cambios.`);
   }
 
   async function applyPaste() {
@@ -474,15 +1112,20 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   const filtered = Object.values(filters).some((s) => s.size) || query.trim() !== '';
   const dense = block.density === 'compact' && variant !== 'airy';
   const rowH = dense ? 'h-8' : 'h-10';
-  const cellBase = clsx('truncate px-2 text-xs', rowH);
+  const cellBase = clsx('px-2 text-xs', rowH);
+  const h = history.current;
+  const batchActions = block.actions.filter((a) => a.kind !== 'assign' && !a.askReason);
+  const batchFields = pasteFields.filter((f) => f.type !== 'file');
+  const canMove = Boolean(groupField && pasteFields.some((f) => f.key === groupField));
+  const fillBox = !compact && rect && writer && !editing ? rect : null;
 
   // Esc fuera de una edición sale de la pantalla completa; Tab no se escapa del velo.
   const onWrapKeyDown = (e: React.KeyboardEvent) => {
     if (!full) return;
     const wrap = wrapRef.current;
     if (!wrap || !(e.target instanceof Node) || !wrap.contains(e.target)) return;
-    const busy = Boolean(editing) || newRow || pasteState || filterOpen !== null;
-    if (e.key === 'Escape' && !busy && !e.defaultPrevented) {
+    const busy = Boolean(editing) || newRow || pasteState || filterOpen !== null || rowMenu || batchDialog;
+    if (e.key === 'Escape' && !busy && !e.defaultPrevented && !rangeEnd && !selRows.size) {
       e.preventDefault();
       exitFull();
       return;
@@ -505,6 +1148,9 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
       }
     }
   };
+
+  const cellAnchor = (): HTMLElement | null =>
+    active ? (rootRef.current?.querySelector(`[data-cell="${active.r}:${active.c}"]`) as HTMLElement | null) : null;
 
   return (
     <div className="h-full" style={full && holdHeight ? { height: holdHeight } : undefined}>
@@ -548,6 +1194,16 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
           {filtered ? `${visible.length} de ${block.rows.length}` : ''}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {writer && (
+            <UndoRedoButtons
+              canUndo={h.canUndo}
+              canRedo={h.canRedo}
+              undoLabel={h.nextUndo?.label}
+              redoLabel={h.nextRedo?.label}
+              onUndo={() => void undoRedo('undo')}
+              onRedo={() => void undoRedo('redo')}
+            />
+          )}
           {block.groups && (
             <button
               type="button"
@@ -616,6 +1272,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         aria-label={block.title}
         aria-rowcount={navRows.length}
         aria-colcount={block.columns.length}
+        aria-multiselectable
         // biome-ignore lint/a11y/noNoninteractiveTabindex: la rejilla es el control; las flechas mueven la celda activa.
         tabIndex={0}
         onKeyDown={onKeyDown}
@@ -629,7 +1286,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
           }
         }}
         className={clsx(
-          'view-table-scroll scroll-slim overflow-auto border-y border-border outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+          'sheet-grid view-table-scroll scroll-slim overflow-auto border-y border-border outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
           full ? 'min-h-0 flex-1 -mx-3 sm:-mx-4' : '-mx-4 max-h-[70vh] sm:-mx-6',
         )}
       >
@@ -649,9 +1306,19 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
               <th
                 scope="col"
                 className="sticky left-0 top-0 z-30 border-b border-r border-border bg-surface-2 text-micro text-ink-faint"
-                style={{ height: 32 }}
+                style={{ height: 34 }}
               >
-                <span className="sr-only">Fila</span>
+                {writer && realRows.length > 0 ? (
+                  <input
+                    type="checkbox"
+                    checked={allPicked}
+                    onChange={() => setSelRows(allPicked ? new Set() : new Set(realRows.map((r) => r.id)))}
+                    aria-label="Elegir todas las filas"
+                    className="h-4 w-4 cursor-pointer accent-[rgb(var(--primary))]"
+                  />
+                ) : (
+                  <span className="sr-only">Fila</span>
+                )}
               </th>
               {block.columns.map((c, i) => (
                 <th
@@ -659,14 +1326,15 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                   scope="col"
                   aria-sort={sort?.col === i ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined}
                   className={clsx(
-                    'top-0 border-b border-border bg-surface-2 px-2 text-left text-micro font-semibold uppercase tracking-field text-ink-faint',
+                    'top-0 border-b border-border bg-surface-2 px-2 text-left text-micro font-semibold tracking-field text-ink-muted',
                     i < frozen ? 'sticky z-20' : 'sticky z-10',
                     i === frozen - 1 && 'border-r',
                     c.kind === 'number' && 'text-right',
                   )}
-                  style={{ ...(i < frozen ? { left: leftOf(i) } : {}), height: 32 }}
+                  style={{ ...(i < frozen ? { left: leftOf(i) } : {}), height: 34 }}
                 >
-                  <div className={clsx('flex items-center gap-1', c.kind === 'number' && 'justify-end')}>
+                  <div className={clsx('flex items-center gap-1.5', c.kind === 'number' && 'justify-end')}>
+                    <ColIcon col={c} />
                     <button
                       type="button"
                       onClick={() =>
@@ -705,77 +1373,107 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                 if (!g) return null;
                 const isClosed = collapsed.has(line.gi);
                 const members = visible.filter((r) => r.group === line.gi);
+                const all = block.rows.filter((r) => r.group === line.gi);
+                const progress =
+                  statusCol >= 0
+                    ? groupProgress(all.map((r) => rawText(pending[`${r.id}:${statusCol}`]) || (r.cells[statusCol] ?? '')))
+                    : null;
+                const estado = g.fields.find((f) => /^(estado|status)$/i.test(f.label));
+                const tone: ToneName | null =
+                  (estado ? toneOfStatus(estado.value) : null) ??
+                  (progress
+                    ? progress.rejected > 0
+                      ? 'rose'
+                      : progress.total > 0 && progress.done === progress.total
+                        ? 'emerald'
+                        : null
+                    : null);
+                const pct = progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
                 return (
                   <tr key={`g${line.gi}`}>
-                    <td
-                      colSpan={1 + block.columns.length}
-                      className="border-b border-border bg-primary-soft/60 p-0"
-                    >
-                      <div className="sticky left-0 flex w-[var(--sheet-view,72rem)] flex-wrap items-center gap-x-5 gap-y-1 px-2 py-1.5">
-                        <button
-                          type="button"
-                          aria-expanded={!isClosed}
-                          onClick={() =>
-                            setCollapsed((c) => {
-                              const n = new Set(c);
-                              if (n.has(line.gi)) n.delete(line.gi);
-                              else n.add(line.gi);
-                              return n;
-                            })
-                          }
-                          className="inline-flex items-center gap-1 text-sm font-semibold text-ink"
-                        >
-                          {isClosed ? (
-                            <ChevronRight className="h-4 w-4" aria-hidden />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" aria-hidden />
+                    <td colSpan={1 + block.columns.length} className="border-b border-border p-0">
+                      <div className="sticky left-0 w-[var(--sheet-view,72rem)] max-w-full px-2 py-2">
+                        <div
+                          className={clsx(
+                            'flex flex-wrap items-center gap-x-5 gap-y-2 rounded-sm border border-border/70 border-l-4 px-3 py-2 shadow-card',
+                            GROUP_BG[tone ?? 'primary'],
                           )}
-                          {g.label}
-                          <span className="tabular font-mono text-micro font-normal text-ink-faint">
-                            {line.count}
-                          </span>
-                        </button>
-                        {g.fields.map((f) => (
-                          <span key={f.label} className="text-xs text-ink-muted">
-                            <span className="text-micro uppercase tracking-field text-ink-faint">
-                              {f.label}
-                            </span>{' '}
-                            <span className="font-semibold text-ink">{f.value}</span>
-                          </span>
-                        ))}
-                        <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-0.5">
-                          {g.subtotals.map((ci) => {
-                            const c = block.columns[ci];
-                            if (!c) return null;
-                            const op = block.totals.find((t) => t.col === ci)?.op ?? 'sum';
-                            return (
-                              <span key={c.key} className="text-xs text-ink-muted">
-                                <span className="text-micro uppercase tracking-field text-ink-faint">
-                                  {c.label}
-                                </span>{' '}
-                                <span className="tabular font-mono font-semibold text-ink">
-                                  {sheetTotalDisplay(
-                                    members.map((r) => r.sort[ci]),
-                                    op,
-                                    c.fmt,
-                                  )}
-                                </span>
-                              </span>
-                            );
-                          })}
-                          {block.write?.add &&
-                            block.write.groupField &&
-                            writer?.paste &&
-                            /^[0-9a-f-]{36}$/i.test(g.key) && (
-                              <button
-                                type="button"
-                                onClick={() => setNewRow({ group: g.key })}
-                                className="inline-flex items-center gap-1 text-micro font-semibold text-primary hover:underline"
-                              >
-                                <Plus className="h-3 w-3" aria-hidden /> Fila aquí
-                              </button>
+                          style={tone ? undefined : { borderLeftColor: 'rgb(var(--primary) / 0.5)' }}
+                        >
+                          <button
+                            type="button"
+                            aria-expanded={!isClosed}
+                            onClick={() =>
+                              setCollapsed((c) => {
+                                const n = new Set(c);
+                                if (n.has(line.gi)) n.delete(line.gi);
+                                else n.add(line.gi);
+                                return n;
+                              })
+                            }
+                            className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink"
+                          >
+                            {isClosed ? (
+                              <ChevronRight className="h-4 w-4" aria-hidden />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" aria-hidden />
                             )}
-                        </span>
+                            {g.label}
+                            <span className="tabular rounded-pill bg-surface/70 px-1.5 font-mono text-micro font-normal text-ink-muted">
+                              {line.count}
+                            </span>
+                          </button>
+                          {g.fields.map((f) => (
+                            <span key={f.label} className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
+                              <span className="text-micro text-ink-faint">{f.label}</span>
+                              {f === estado && f.value ? (
+                                <StatusChip value={f.value} tone={toneOfStatus(f.value)} />
+                              ) : (
+                                <span className="tabular font-mono font-semibold text-ink">{f.value}</span>
+                              )}
+                            </span>
+                          ))}
+                          {progress && progress.total > 0 && (
+                            <span className="inline-flex items-center gap-2 text-micro text-ink-muted">
+                              <span
+                                role="progressbar"
+                                aria-label={`Avance de ${g.label}`}
+                                aria-valuemin={0}
+                                aria-valuemax={progress.total}
+                                aria-valuenow={progress.done}
+                                className="relative h-1.5 w-20 overflow-hidden rounded-pill bg-surface/80"
+                              >
+                                <span
+                                  className={clsx('absolute inset-y-0 left-0 rounded-pill', progress.rejected ? 'bg-rose' : 'bg-emerald')}
+                                  style={{ width: `${pct}%`, transition: 'width .3s ease' }}
+                                />
+                              </span>
+                              <span className="tabular font-mono">
+                                {progress.done}/{progress.total}
+                              </span>
+                            </span>
+                          )}
+                          <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-0.5">
+                            {g.subtotals.map((ci) => {
+                              const c = block.columns[ci];
+                              if (!c) return null;
+                              const op = block.totals.find((t) => t.col === ci)?.op ?? 'sum';
+                              return (
+                                <span key={c.key} className="inline-flex items-baseline gap-1.5 text-xs text-ink-muted">
+                                  <span className="text-micro text-ink-faint">{c.label}</span>
+                                  <BumpText
+                                    className="tabular font-mono text-sm font-semibold text-ink"
+                                    text={sheetTotalDisplay(
+                                      members.map((r) => r.sort[ci]),
+                                      op,
+                                      c.fmt,
+                                    )}
+                                  />
+                                </span>
+                              );
+                            })}
+                          </span>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -783,13 +1481,23 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
               }
               const r = line.row;
               const ri = navRows.indexOf(r);
+              const picked = selRows.has(r.id);
+              const no = numberOf.get(r.id) ?? 0;
+              const band = r.rowTone ? TONE_SOFT[r.rowTone] : ri % 2 === 1 ? 'sheet-band' : 'bg-surface';
+              const draft = r.ghost ? (ghostDraft[r.id] ?? {}) : null;
+              const draftCount = draft ? Object.keys(draft).length : 0;
               return (
                 <tr
                   key={r.id}
+                  aria-selected={picked || undefined}
                   className={clsx(
                     flash(block.id, r.id),
                     'group/row',
-                    r.rowTone ? TONE_SOFT[r.rowTone] : r.alert ? 'bg-rose-soft' : 'hover:bg-surface-2/60',
+                    r.ghost && 'sheet-ghost',
+                    r.fresh && 'opacity-80',
+                    r.rowTone ? TONE_SOFT[r.rowTone] : r.alert ? 'bg-rose-soft' : ri % 2 === 1 ? 'sheet-band' : '',
+                    !r.rowTone && !r.alert && 'hover:bg-surface-2/70',
+                    picked && '!bg-primary-soft/60',
                   )}
                 >
                   <td
@@ -798,53 +1506,136 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                       rowH,
                     )}
                   >
-                    {open && !full ? (
-                      <button
-                        type="button"
-                        onClick={() => open(r.id)}
-                        aria-label={`Abrir la ficha de ${r.cells[0]}`}
-                        className="inline-flex h-full w-full items-center justify-center hover:text-primary"
-                      >
-                        <span className="tabular font-mono group-hover/row:hidden max-sm:hidden">{ri + 1}</span>
-                        <PanelRightOpen className="hidden h-3.5 w-3.5 group-hover/row:block max-sm:block" aria-hidden />
-                      </button>
+                    {r.ghost ? (
+                      <div className="flex h-full items-center justify-center gap-1 px-1">
+                        {creating.has(r.id) ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                        ) : draftCount > 0 ? (
+                          <>
+                            <button
+                              type="button"
+                              title="Crear la fila ahora"
+                              aria-label="Crear la fila ahora"
+                              onClick={() => void createFromDraft(r, draft ?? {})}
+                              className="rounded-sm p-1 text-primary hover:bg-primary-soft"
+                            >
+                              <Check className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                            <button
+                              type="button"
+                              title="Descartar lo escrito"
+                              aria-label="Descartar lo escrito"
+                              onClick={() =>
+                                setGhostDraft((d) => {
+                                  const { [r.id]: _gone, ...rest } = d;
+                                  return rest;
+                                })
+                              }
+                              className="rounded-sm p-1 hover:bg-surface"
+                            >
+                              <X className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                          </>
+                        ) : (
+                          <Plus className="h-3.5 w-3.5 text-primary/70" aria-hidden />
+                        )}
+                      </div>
                     ) : (
-                      <span className="tabular font-mono">{ri + 1}</span>
+                      <div className="flex h-full items-center justify-center gap-1 px-1">
+                        {writer && !r.fresh && (
+                          <input
+                            type="checkbox"
+                            checked={picked}
+                            onChange={() => undefined}
+                            onClick={(e) => pickRow(r, e)}
+                            aria-label={`Elegir la fila ${no}`}
+                            className={clsx(
+                              'h-4 w-4 shrink-0 cursor-pointer accent-[rgb(var(--primary))] focus-visible:opacity-100',
+                              compact || picked || selRows.size ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100',
+                            )}
+                          />
+                        )}
+                        {open && !full && !r.fresh ? (
+                          <button
+                            type="button"
+                            onClick={() => open(r.id)}
+                            aria-label={`Abrir la ficha de ${r.cells[0]}`}
+                            className="inline-flex h-full min-w-[1.25rem] items-center justify-center hover:text-primary"
+                          >
+                            <span className="tabular font-mono group-hover/row:hidden max-sm:hidden">{no}</span>
+                            <PanelRightOpen className="hidden h-3.5 w-3.5 group-hover/row:block max-sm:block" aria-hidden />
+                          </button>
+                        ) : (
+                          <span className="tabular min-w-[1.25rem] font-mono">{no}</span>
+                        )}
+                        {!compact && writer && !r.fresh && (
+                          <button
+                            type="button"
+                            aria-label={`Más acciones de la fila ${no}`}
+                            aria-haspopup="menu"
+                            onClick={(e) => setRowMenu((m) => (m?.id === r.id ? null : { id: r.id, el: e.currentTarget }))}
+                            className="rounded-sm p-0.5 opacity-0 hover:bg-surface hover:text-ink focus-visible:opacity-100 group-hover/row:opacity-100"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </td>
                   {block.columns.map((c, ci) => {
                     const isActive = active?.r === ri && active.c === ci;
                     const key = `${r.id}:${ci}`;
                     const tone = r.tones[ci];
-                    const shown = pending[key];
+                    const shown = r.ghost ? draft?.[c.key] : pending[key];
                     const isEditing = isActive && editing && !compact;
+                    const inSel = inRange(ri, ci) && !isActive;
+                    const inFill = fillTo !== null && rect && ri > rect.r1 && ri <= fillTo && ci >= rect.c0 && ci <= rect.c1;
+                    const showHandle = Boolean(
+                      fillBox && !r.ghost && !r.fresh && ri === fillBox.r1 && ci === fillBox.c1 && editableCol(c) && !c.readonly,
+                    );
+                    const editable = editableCol(c) && !r.fresh;
+                    const cellText = shown !== undefined ? displayPending(c, shown) : r.cells[ci];
+                    const isSelect = c.type === 'select';
                     return (
                       <td
                         key={c.key}
                         role="gridcell"
                         data-cell={`${ri}:${ci}`}
-                        aria-selected={isActive}
-                        onMouseDown={() => {
+                        aria-selected={isActive || inSel}
+                        aria-readonly={!editable || undefined}
+                        onMouseDown={(e) => {
+                          if (e.button !== 0) return;
+                          if (e.shiftKey && active) {
+                            setRangeEnd({ r: ri, c: ci });
+                            return;
+                          }
+                          dragging.current = !compact;
                           setActive({ r: ri, c: ci });
+                          setRangeEnd(null);
+                        }}
+                        onMouseEnter={() => {
+                          if (dragging.current && active) setRangeEnd({ r: ri, c: ci });
                         }}
                         onClick={() => {
-                          if (compact && editableCol(c)) setActive({ r: ri, c: ci }), startEdit();
+                          if (compact && editable) startEdit(undefined, { r: ri, c: ci });
                         }}
                         onDoubleClick={() => {
-                          if (!compact) startEdit();
+                          if (!compact) startEdit(undefined, { r: ri, c: ci });
                         }}
                         className={clsx(
-                          'border-b border-border/70',
+                          'relative border-b border-border/70',
                           cellBase,
                           ci < frozen && 'sticky z-10',
-                          ci < frozen && (r.rowTone ? '' : 'bg-surface'),
+                          ci < frozen && band,
                           ci === frozen - 1 && 'border-r border-border',
                           c.kind === 'number' ? 'tabular text-right font-mono' : '',
                           ci === 0 ? 'font-semibold text-ink' : 'text-ink-muted',
                           c.kind === 'number' && 'text-ink',
                           tone && TONE_SOFT[tone],
-                          isActive && 'outline outline-2 -outline-offset-2 outline-primary',
-                          editableCol(c) && !isActive && 'cursor-cell',
+                          inSel && '!bg-primary-soft',
+                          inFill && 'sheet-fill-preview',
+                          isActive && 'z-[15] outline outline-2 -outline-offset-2 outline-primary',
+                          editable && !isActive && 'cursor-cell',
                         )}
                         style={ci < frozen ? { left: leftOf(ci) } : undefined}
                       >
@@ -854,7 +1645,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                             blockId={block.id}
                             field={c.key}
                             label={c.label}
-                            current={rawText(pending[key] ?? r.sort[ci])}
+                            current={r.ghost ? (draft?.[c.key] ?? '') : rawText(pending[key] ?? r.sort[ci])}
                             required={c.edit?.required}
                             initialQuery={editing.draft}
                             onPick={(o) => {
@@ -868,6 +1659,28 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                               rootRef.current?.focus();
                             }}
                           />
+                        ) : isEditing && c.edit?.type === 'select' ? (
+                          <>
+                            <span className="block truncate">
+                              {cellText ? <StatusChip value={cellText} tone={toneOfStatus(cellText)} /> : null}
+                            </span>
+                            <StatusPicker
+                              anchor={cellAnchor()}
+                              options={c.edit.options}
+                              current={r.ghost ? (draft?.[c.key] ?? '') : rawText(pending[key] ?? r.sort[ci])}
+                              required={c.edit.required}
+                              toneOf={toneOfStatus}
+                              label={`Elegir ${c.label}`}
+                              onPick={(v) => {
+                                void commit(r, ci, v);
+                                rootRef.current?.focus();
+                              }}
+                              onCancel={() => {
+                                setEditing(null);
+                                rootRef.current?.focus();
+                              }}
+                            />
+                          </>
                         ) : isEditing ? (
                           <CellEditor
                             col={c}
@@ -883,10 +1696,41 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                               rootRef.current?.focus();
                             }}
                           />
-                        ) : (
-                          <span className={clsx('block truncate', shown !== undefined && 'italic')}>
-                            {shown !== undefined ? displayPending(c, shown) : c.type === 'checkbox' ? r.cells[ci] : r.cells[ci]}
+                        ) : isSelect && cellText ? (
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            disabled={!editable}
+                            onClick={(e) => {
+                              if (compact || !editable) return;
+                              e.stopPropagation();
+                              setActive({ r: ri, c: ci });
+                              startEdit(undefined, { r: ri, c: ci });
+                            }}
+                            aria-label={editable ? `${c.label}: ${cellText}. Cambiar` : undefined}
+                            className={clsx('block max-w-full truncate text-left', editable && !compact && 'cursor-pointer')}
+                          >
+                            <StatusChip value={cellText} tone={toneOfStatus(cellText)} />
+                          </button>
+                        ) : r.ghost && !cellText ? (
+                          <span className="block truncate text-ink-faint/70">
+                            {ci === Math.max(0, firstEditable) && draftCount === 0
+                              ? 'Escribe para agregar una fila…'
+                              : ''}
                           </span>
+                        ) : (
+                          <span className={clsx('block truncate', (shown !== undefined || r.fresh) && 'italic')}>
+                            {cellText}
+                          </span>
+                        )}
+                        {showHandle && (
+                          <span
+                            data-fill-handle
+                            role="presentation"
+                            title="Arrastra hacia abajo para rellenar"
+                            onPointerDown={startFill}
+                            className="absolute -bottom-[4px] -right-[4px] z-20 h-2.5 w-2.5 cursor-crosshair rounded-[3px] border-2 border-surface bg-primary"
+                          />
                         )}
                       </td>
                     );
@@ -915,14 +1759,14 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                       ci === frozen - 1 && 'border-r',
                       c.kind === 'number' ? 'tabular text-right font-mono' : '',
                     )}
-                    style={{ ...(ci < frozen ? { left: leftOf(ci) } : {}), height: 36 }}
+                    style={{ ...(ci < frozen ? { left: leftOf(ci) } : {}), height: 38 }}
                   >
                     {ci === 0 && !totalOf(0) ? (
-                      <span className="text-micro uppercase tracking-field text-ink-faint">
+                      <span className="text-micro text-ink-faint">
                         Total · {visible.length} {visible.length === 1 ? 'fila' : 'filas'}
                       </span>
                     ) : (
-                      totalOf(ci)
+                      <BumpText text={totalOf(ci) ?? ''} />
                     )}
                   </td>
                 ))}
@@ -932,18 +1776,44 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         </table>
       </div>
 
-      <p
-        role="status"
-        className={clsx('mt-2 min-h-4 text-micro', full && 'pl-12', note ? (note.ok ? 'text-emerald' : 'text-rose') : 'text-ink-faint')}
-      >
-        {note
-          ? note.text
-          : block.write
-            ? 'Flechas para moverte · Enter o escribir para editar · Ctrl+V pega desde Excel'
-            : 'Sólo lectura'}
-      </p>
+      {rangeInfo && (
+        <div className="view-no-print mt-2">
+          <SummaryStrip stats={rangeInfo.stats} col={rangeInfo.col} cells={rangeInfo.cells} />
+        </div>
+      )}
 
-      {block.actions.length > 0 && active && navRows[active.r] && (
+      {selectedIds.length > 0 && writer && (
+        <BatchBar
+          count={selectedIds.length}
+          busy={batchBusy}
+          actions={batchActions}
+          canDuplicate={Boolean(block.write?.add && writer.paste)}
+          canChange={batchFields.length > 0}
+          canMove={canMove}
+          onAction={(a) => void runBatchAction(a)}
+          onDuplicate={() => void duplicateRows(selectedIds)}
+          onChange={() => setBatchDialog({ title: 'Cambiar un campo en las filas elegidas' })}
+          onMove={() => setBatchDialog({ key: groupField ?? undefined, title: 'Mover las filas elegidas de grupo' })}
+          onClear={() => setSelRows(new Set())}
+        />
+      )}
+
+      <div className={clsx('mt-2 flex min-h-5 flex-wrap items-center justify-between gap-x-4 gap-y-1', full && 'pl-12')}>
+        <p role="status" className={clsx('text-micro', note ? (note.ok ? 'text-emerald' : 'text-rose') : 'text-ink-faint')}>
+          {note
+            ? note.text
+            : fillTo !== null && rect && fillTo > rect.r1
+              ? `Rellenar ${fillTo - rect.r1} ${fillTo - rect.r1 === 1 ? 'fila' : 'filas'} hacia abajo`
+              : block.write
+                ? compact
+                  ? 'Toca una celda para editar'
+                  : 'Flechas para moverte · Enter o escribir para editar · Arrastra la esquina para rellenar · Ctrl+Z deshace'
+                : 'Sólo lectura'}
+        </p>
+        <SaveBadge save={save} onRetry={retryRef.current ? () => retryRef.current?.() : undefined} />
+      </div>
+
+      {block.actions.length > 0 && active && navRows[active.r] && !navRows[active.r]?.ghost && !navRows[active.r]?.fresh && (
         <div className="mt-2 border-t border-border/70 pt-2">
           <RowActions
             blockId={block.id}
@@ -952,6 +1822,59 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
             rowLabel={(navRows[active.r] as Row).cells[0] ?? ''}
           />
         </div>
+      )}
+
+      {rowMenu && (
+        <FloatingMenu anchor={rowMenu.el} onClose={() => setRowMenu(null)} label="Acciones de la fila" minWidth={208} align="left">
+          {open && (
+            <MenuItem
+              icon={<PanelRightOpen className="h-3.5 w-3.5 text-ink-muted" aria-hidden />}
+              onClick={() => {
+                const id = rowMenu.id;
+                setRowMenu(null);
+                open(id);
+              }}
+            >
+              Abrir la ficha
+            </MenuItem>
+          )}
+          {block.write?.add && writer?.paste && (
+            <MenuItem
+              icon={<Copy className="h-3.5 w-3.5 text-ink-muted" aria-hidden />}
+              hint="Ctrl+D"
+              onClick={() => {
+                const id = rowMenu.id;
+                setRowMenu(null);
+                void duplicateRows([id]);
+              }}
+            >
+              Duplicar la fila
+            </MenuItem>
+          )}
+          <MenuItem
+            icon={<Check className="h-3.5 w-3.5 text-ink-muted" aria-hidden />}
+            onClick={() => {
+              const row = realRows.find((x) => x.id === rowMenu.id);
+              setRowMenu(null);
+              if (row) pickRow(row, { shiftKey: false });
+            }}
+          >
+            {selRows.has(rowMenu.id) ? 'Quitar de la selección' : 'Elegir la fila'}
+          </MenuItem>
+        </FloatingMenu>
+      )}
+
+      {batchDialog && (
+        <BatchFieldDialog
+          fields={batchFields}
+          initialKey={batchDialog.key}
+          count={selectedIds.length}
+          blockId={block.id}
+          target={target}
+          title={batchDialog.title}
+          onClose={() => setBatchDialog(null)}
+          onApply={applyBatchField}
+        />
       )}
 
       {/* Teléfono: edición de una celda en una hoja desde abajo. */}
@@ -968,8 +1891,10 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                   target,
                   blockId: block.id,
                   current: rawText(
-                    pending[`${(navRows[active.r] as Row).id}:${active.c}`] ??
-                      (navRows[active.r] as Row).sort[active.c],
+                    (navRows[active.r] as Row).ghost
+                      ? ghostDraft[(navRows[active.r] as Row).id]?.[(block.columns[active.c] as Col).key]
+                      : (pending[`${(navRows[active.r] as Row).id}:${active.c}`] ??
+                          (navRows[active.r] as Row).sort[active.c]),
                   ),
                 }
               : undefined
@@ -1000,7 +1925,10 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
           state={pasteState}
           onClose={() => setPasteState(null)}
           onApply={() => void applyPaste()}
-          onManual={(text) => void startPaste(text)}
+          onManual={(text) => {
+            setPasteState(null);
+            void startPaste(text);
+          }}
         />
       )}
     </Card>

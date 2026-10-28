@@ -1500,7 +1500,7 @@ export async function pasteAppRows(
   db: SupabaseClient,
   access: AppAccess,
   view: CustomViewRow,
-  input: { blockId: string; rows: Array<Record<string, string>>; apply: boolean },
+  input: { blockId: string; rows: Array<Record<string, string>>; apply: boolean; fresh?: boolean },
 ) {
   const slug = trackerOfBlock(view, input.blockId);
   const create = canCreateIn(access.role, slug);

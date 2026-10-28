@@ -28,7 +28,7 @@ const manifiestos: CatalogTracker = {
       label: 'Estado',
       type: 'select',
       required: false,
-      options: ['OK-BBIC', 'Por revisar', 'Rechazado'],
+      options: ['OK', 'Pendiente', 'Rechazado', 'Enviado a Siigo'],
     },
     { key: 'cobro_adicional', label: 'Cobro adicional', type: 'money', required: false },
   ],
@@ -69,6 +69,13 @@ const guias: CatalogTracker = {
       lookup: { via: 'cliente', field: 'tarifa', editable: true },
     },
     { key: 'guia', label: 'Guía', type: 'text', required: true },
+    {
+      key: 'estado',
+      label: 'Estado',
+      type: 'select',
+      required: false,
+      options: ['Pendiente', 'OK', 'Rechazado', 'Enviado a Siigo'],
+    },
     {
       key: 'parcial',
       label: 'Parcial',
@@ -125,23 +132,26 @@ const NOW = new Date('2026-10-27T15:00:00.000Z');
 const at = NOW.toISOString();
 
 const MANIFIESTOS: Array<[string, string, string, string, number]> = [
-  ['FLEX 1', '3478', 'FVA-1203', 'OK-BBIC', 85_000],
-  ['FLEX 2', '3492', 'FVA-1207', 'OK-BBIC', 0],
-  ['FLEX 3', '3511', 'FVA-1212', 'Por revisar', 120_000],
+  ['FLEX 1', '3478', 'FVA-1203', 'Enviado a Siigo', 85_000],
+  ['FLEX 2', '3492', 'FVA-1207', 'OK', 0],
+  ['FLEX 3', '3511', 'FVA-1212', 'Pendiente', 120_000],
+  ['FLEX 4', '3530', 'FVA-1219', 'Rechazado', 0],
 ];
 
-type G = [string, string, string, string, string, string, number, number, number, number];
+type G = [string, string, string, string, string, string, number, number, number, number, string];
 const GUIAS: Array<[number, ...G]> = [
-  [1, 'Aeroexpress SAS', '172-48810231', 'No', 'AV 2134 / Avianca', '2026-10-05', '2026-10-06', 12, 184.5, 0.09, 3433.71],
-  [1, 'Aeroexpress SAS', '172-48810242', 'Sí', 'AV 2134 / Avianca', '2026-10-05', '2026-10-06', 4, 61.2, 0.09, 3433.71],
-  [1, 'Logística Andina', '075-91120087', 'No', 'LA 580 / LATAM', '2026-10-05', '2026-10-07', 30, 512.8, 0.09, 3430.1],
-  [1, 'Logística Andina', '075-91120098', 'Sí', 'LA 580 / LATAM', '2026-10-05', '2026-10-07', 9, 140.0, 0.09, 3430.1],
-  [2, 'Carga del Sur', '134-50081177', 'No', 'CM 232 / Copa', '2026-10-09', '2026-10-10', 22, 330.4, 0.09, 3427.5],
-  [2, 'Carga del Sur', '134-50081188', 'No', 'CM 232 / Copa', '2026-10-09', '2026-10-10', 15, 205.75, 0.09, 3427.5],
-  [2, 'Floralia Export', '045-33210044', 'Sí', 'AA 922 / American', '2026-10-09', '2026-10-12', 6, 98.3, 0.09, 3427.5],
-  [3, 'Aeroexpress SAS', '172-48811300', 'No', 'AV 2134 / Avianca', '2026-10-14', '2026-10-15', 18, 275.0, 0.09, 3433.71],
-  [3, 'Floralia Export', '045-33211012', 'No', 'AA 922 / American', '2026-10-14', '2026-10-15', 40, 802.6, 0.09, 3433.71],
-  [3, 'Floralia Export', '045-33211023', 'Sí', 'AA 922 / American', '2026-10-14', '2026-10-15', 7, 120.9, 0.09, 3433.71],
+  [1, 'Aeroexpress SAS', '172-48810231', 'No', 'AV 2134 / Avianca', '2026-10-05', '2026-10-06', 12, 184.5, 0.09, 3433.71, 'Enviado a Siigo'],
+  [1, 'Aeroexpress SAS', '172-48810242', 'Sí', 'AV 2134 / Avianca', '2026-10-05', '2026-10-06', 4, 61.2, 0.09, 3433.71, 'Enviado a Siigo'],
+  [1, 'Logística Andina', '075-91120087', 'No', 'LA 580 / LATAM', '2026-10-05', '2026-10-07', 30, 512.8, 0.09, 3430.1, 'Enviado a Siigo'],
+  [1, 'Logística Andina', '075-91120098', 'Sí', 'LA 580 / LATAM', '2026-10-05', '2026-10-07', 9, 140.0, 0.09, 3430.1, 'Enviado a Siigo'],
+  [2, 'Carga del Sur', '134-50081177', 'No', 'CM 232 / Copa', '2026-10-09', '2026-10-10', 22, 330.4, 0.09, 3427.5, 'OK'],
+  [2, 'Carga del Sur', '134-50081188', 'No', 'CM 232 / Copa', '2026-10-09', '2026-10-10', 15, 205.75, 0.09, 3427.5, 'Pendiente'],
+  [2, 'Floralia Export', '045-33210044', 'Sí', 'AA 922 / American', '2026-10-09', '2026-10-12', 6, 98.3, 0.09, 3427.5, 'OK'],
+  [3, 'Aeroexpress SAS', '172-48811300', 'No', 'AV 2134 / Avianca', '2026-10-14', '2026-10-15', 18, 275.0, 0.09, 3433.71, 'Pendiente'],
+  [3, 'Floralia Export', '045-33211012', 'No', 'AA 922 / American', '2026-10-14', '2026-10-15', 40, 802.6, 0.09, 3433.71, 'Pendiente'],
+  [3, 'Floralia Export', '045-33211023', 'Sí', 'AA 922 / American', '2026-10-14', '2026-10-15', 7, 120.9, 0.09, 3433.71, 'Rechazado'],
+  [4, 'Carga del Sur', '134-50082001', 'No', 'CM 232 / Copa', '2026-10-21', '2026-10-22', 11, 150.2, 0.09, 3440.2, 'Rechazado'],
+  [4, 'Logística Andina', '075-91121100', 'No', 'LA 580 / LATAM', '2026-10-21', '2026-10-23', 25, 401.0, 0.09, 3440.2, 'Pendiente'],
 ];
 
 function sources(): Map<string, ViewSource> {
@@ -154,7 +164,7 @@ function sources(): Map<string, ViewSource> {
     updated_at: at,
   }));
   const gRows: ViewRow[] = GUIAS.map(
-    ([m, cliente, guia, parcial, vuelo, arribo, traslado, piezas, kilos, _tarifa, trm], i) => {
+    ([m, cliente, guia, parcial, vuelo, arribo, traslado, piezas, kilos, _tarifa, trm, estado], i) => {
       const cli = CLIENTES_DEMO.find((c) => c.nombre === cliente) ?? (CLIENTES_DEMO[0] as (typeof CLIENTES_DEMO)[number]);
       const tar = TARIFAS_DEMO[cli.tarifa] as (typeof TARIFAS_DEMO)[number];
       const totalUsd = Math.round(kilos * tar.tarifa * 100) / 100;
@@ -166,6 +176,7 @@ function sources(): Map<string, ViewSource> {
           cliente: rel(cli.id, cliente),
           tarifa: rel(tar.id, tar.nombre),
           guia,
+          estado,
           parcial,
           vuelo,
           fecha_arribo: arribo,
@@ -225,6 +236,7 @@ export function hojaView(): ComputedView {
         columns: [
           'cliente',
           'guia',
+          'estado',
           'parcial',
           'vuelo',
           'fecha_arribo',
@@ -242,6 +254,7 @@ export function hojaView(): ComputedView {
           'cliente',
           'tarifa',
           'guia',
+          'estado',
           'parcial',
           'vuelo',
           'fecha_arribo',
