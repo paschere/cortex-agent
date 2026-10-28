@@ -2002,14 +2002,15 @@ export async function searchRelationOptions(
   }>
 > {
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
-  if (!block || block.type !== 'form')
+  if (!block || (block.type !== 'form' && block.type !== 'sheet'))
     throw new NotFoundError('Ese formulario no está en esta vista.');
   // `__lines`, `__lines2`…: los ítems que se pueden elegir en las líneas del formulario
   // (el campo `item` de la tabla hija de esa sección). Se trata como una relación más.
-  const forLines = isLinesKey(input.field);
-  const section = forLines
-    ? formLineSections<FormLines>(block).find((x) => x.key === input.field)?.cfg
-    : undefined;
+  const forLines = block.type === 'form' && isLinesKey(input.field);
+  const section =
+    forLines && block.type === 'form'
+      ? formLineSections<FormLines>(block).find((x) => x.key === input.field)?.cfg
+      : undefined;
   if (forLines && !section)
     throw new NotFoundError('Este formulario no tiene lista de ítems.');
   const source = await trackerForBlock(db, section ? section.tracker : block.tracker);
@@ -2021,9 +2022,11 @@ export async function searchRelationOptions(
           section.item,
           ...source.fields.filter((f) => f.lookup?.via === section.item).map((f) => f.key),
         ]
-      : block.fields.length
-        ? block.fields
-        : source.fields.map((f) => f.key),
+      : block.type === 'sheet'
+        ? block.editable
+        : block.fields.length
+          ? block.fields
+          : source.fields.map((f) => f.key),
   );
   const field = source.fields.find((f) => f.key === (section ? section.item : input.field));
   if (!field || field.type !== 'relation' || !field.tracker || !asked.has(field.key))
@@ -2464,6 +2467,21 @@ export async function editViewRow(
 
 export const SHEET_PASTE_MAX_ROWS = 500;
 
+/**
+ * Las claves con que se compara un NIT: sólo dígitos, con y sin dígito de
+ * verificación («900.123.456-7» → «9001234567» y «900123456»). Un texto con
+ * letras (un nombre) no es un NIT. Exportada para probarla.
+ */
+export function nitKeys(raw: unknown): string[] {
+  const t = String(raw ?? '').trim();
+  if (!t || /\p{L}/u.test(t)) return [];
+  const m = /^(\d[\d.\s]*)(?:-\s*(\d))?$/.exec(t);
+  if (!m) return [];
+  const body = (m[1] as string).replace(/\D/g, '');
+  if (body.length < 5) return [];
+  return m[2] ? [body, `${body}${m[2]}`] : [body];
+}
+
 export interface SheetPasteLine {
   /** Posición (1-based) en lo pegado. */
   line: number;
@@ -2555,8 +2573,11 @@ export async function pasteViewRows(
   const byKey = new Map<string, (typeof existing)[number]>();
   if (keyField) for (const r of existing) if (keyOf(r.values)) byKey.set(keyOf(r.values), r);
 
-  // Relaciones por nombre: «Cliente X» → la fila de la tabla relacionada.
+  // Relaciones por nombre: «Cliente X» → la fila de la tabla relacionada. Si la tabla
+  // destino tiene un campo `nit`, el NIT (con o sin puntos y dígito de verificación)
+  // sirve como clave alternativa.
   const relations = new Map<string, Map<string, Array<{ id: string; label: string }>>>();
+  const relationNits = new Map<string, Map<string, Array<{ id: string; label: string }>>>();
   for (const f of tracker.fields) {
     if (f.type !== 'relation' || !f.tracker || !allowed.has(f.key)) continue;
     const touched = input.rows.some((r) => (r[f.key] ?? '') !== '');
@@ -2565,16 +2586,26 @@ export async function pasteViewRows(
     if (!other) continue;
     const { data, error } = await db
       .from('tracker_rows')
-      .select('id, label')
+      .select('id, label, values')
       .eq('tracker_id', other.id)
       .limit(5000);
     if (error) throw error;
     const idx = new Map<string, Array<{ id: string; label: string }>>();
-    for (const r of (data ?? []) as Array<{ id: string; label: string }>) {
+    const nitIdx = new Map<string, Array<{ id: string; label: string }>>();
+    const hasNit = other.fields.some((x) => x.key === 'nit');
+    for (const r of (data ?? []) as Array<{
+      id: string;
+      label: string;
+      values?: Record<string, unknown>;
+    }>) {
       const k = foldKey(r.label);
-      idx.set(k, [...(idx.get(k) ?? []), r]);
+      idx.set(k, [...(idx.get(k) ?? []), { id: r.id, label: r.label }]);
+      if (hasNit)
+        for (const nk of nitKeys(r.values?.nit))
+          nitIdx.set(nk, [...(nitIdx.get(nk) ?? []), { id: r.id, label: r.label }]);
     }
     relations.set(f.key, idx);
+    if (hasNit) relationNits.set(f.key, nitIdx);
   }
 
   const lines: SheetPasteLine[] = [];
@@ -2613,7 +2644,13 @@ export async function pasteViewRows(
       const f = fieldOf(k);
       let v = String(raw[k]);
       if (f?.type === 'relation' && !/^\s*[{[]/.test(v) && !/^[0-9a-f-]{36}$/i.test(v.trim())) {
-        const hits = relations.get(k)?.get(foldKey(v)) ?? [];
+        let hits = relations.get(k)?.get(foldKey(v)) ?? [];
+        if (!hits.length) {
+          const nk = nitKeys(v)[0];
+          const byNit = nk ? (relationNits.get(k)?.get(nk) ?? []) : [];
+          // Varias filas con el mismo NIT son la misma empresa: sólo vale si es una.
+          if (byNit.length) hits = byNit;
+        }
         if (hits.length !== 1) {
           bad = hits.length
             ? `«${f.label}»: «${v}» está más de una vez; escribe el nombre completo.`

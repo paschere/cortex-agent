@@ -116,6 +116,36 @@ describe('sheet: spec', () => {
   });
 });
 
+describe('sheet: relaciones editables en la celda', () => {
+  const relSpec = viewSpecSchema.parse({
+    ...spec,
+    blocks: [
+      {
+        ...(spec.blocks[0] as object),
+        columns: ['guia', 'manifiesto', 'kilos'],
+        editable: ['guia', 'manifiesto', 'kilos'],
+      },
+    ],
+  });
+  const v = computeView(relSpec, sources, new Date(at), { writable: true });
+  const b = v.blocks[0];
+  if (b?.type !== 'sheet') throw new Error('no es una hoja');
+  it('la columna de relación expone edit con tipo y tabla destino', () => {
+    const c = b.columns.find((x) => x.key === 'manifiesto');
+    expect(c?.edit?.type).toBe('relation');
+    expect(c?.edit?.tracker).toBe('manifiestos');
+    expect(b.columns.find((x) => x.key === 'kilos')?.edit?.tracker).toBeUndefined();
+  });
+  it('la fila nueva y el pegado también saben a qué tabla apunta', () => {
+    expect(b.write?.fields.find((f) => f.key === 'manifiesto')?.tracker).toBe('manifiestos');
+  });
+  it('sin permiso de escritura no hay edit', () => {
+    const ro = computeView(relSpec, sources, new Date(at), { writable: false }).blocks[0];
+    if (ro?.type !== 'sheet') throw new Error('no es una hoja');
+    expect(ro.columns.every((c) => !c.edit)).toBe(true);
+  });
+});
+
 describe('sheet: cálculo', () => {
   const sheetSpec = viewSpecSchema.parse({
     ...spec,

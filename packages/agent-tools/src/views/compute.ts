@@ -261,7 +261,14 @@ export type ComputedBlock =
         paste: boolean;
         pasteKey: string | null;
         /** Los campos que una fila nueva o un pegado pueden traer. */
-        fields: Array<{ key: string; label: string; type: string; options: string[] }>;
+        fields: Array<{
+          key: string;
+          label: string;
+          type: string;
+          options: string[];
+          /** Relación: la tabla a la que apunta (para pedir las opciones). */
+          tracker?: string;
+        }>;
         /** El campo de agrupado: una fila nueva dentro de un grupo lo trae. */
         groupField: string | null;
       } | null;
@@ -749,7 +756,12 @@ export interface ComputedAlertFeed {
 export type ComputedEditMeta = Pick<
   TrackerField,
   'type' | 'min' | 'max' | 'minLength' | 'maxLength' | 'format' | 'pattern' | 'message'
-> & { options: string[]; required: boolean };
+> & {
+  options: string[];
+  required: boolean;
+  /** Relación: la tabla a la que apunta, para que el navegador sepa pedir las opciones. */
+  tracker?: string;
+};
 
 /**
  * Un campo del formulario con todo lo que el navegador necesita para validar,
@@ -1311,6 +1323,7 @@ function computeSheet(
               label: f.label,
               type: f.type,
               options: f.options ?? [],
+              ...(f.type === 'relation' && f.tracker ? { tracker: f.tracker } : {}),
             })),
             groupField: g ? g.by : null,
           }
@@ -1477,6 +1490,7 @@ function editMeta(tracker: CatalogTracker, key: string) {
     type: field.type,
     options: field.options ?? [],
     required: field.required,
+    ...(field.type === 'relation' && field.tracker ? { tracker: field.tracker } : {}),
   };
   for (const k of ['min', 'max', 'minLength', 'maxLength', 'format', 'pattern', 'message'] as const)
     if (field[k] !== undefined) (meta as Record<string, unknown>)[k] = field[k];

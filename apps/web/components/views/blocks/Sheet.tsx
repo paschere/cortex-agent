@@ -22,15 +22,20 @@ import {
   Download,
   Filter,
   Loader2,
+  Maximize2,
+  Minimize2,
   PanelRightOpen,
   Plus,
   Search,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { SubmitTarget } from '../ViewCanvas';
 import { RowActions, checkCell, useViewWriter } from '../view-writes';
 import { useFlashClass } from '../flash-context';
 import { useRecordOpener } from './RecordDrawer';
+import { RelationCombo, RelationField, relationLabel, relationValue } from './SheetRelation';
+import { parseRelation } from './RelationPicker';
 import { useVariant } from './design';
 import { TONE_SOFT, Card } from './theme';
 
@@ -80,14 +85,17 @@ function useCompact(): boolean {
 }
 
 function editableCol(c: Col): boolean {
-  return Boolean(c.edit) && c.edit?.type !== 'relation' && c.edit?.type !== 'file';
+  return Boolean(c.edit) && c.edit?.type !== 'file';
 }
+
+/** Una relación se elige de una lista (con búsqueda); nunca se escribe a mano en la celda. */
+const isRelationCol = (c: Col | undefined): boolean => c?.edit?.type === 'relation';
 
 function rawText(v: string | number | null | undefined): string {
   return v === null || v === undefined ? '' : String(v);
 }
 
-export function SheetBlock({ block }: { block: Sheet }) {
+export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTarget }) {
   const writer = useViewWriter();
   const flash = useFlashClass();
   const open = useRecordOpener(block.id, block.record);
@@ -108,6 +116,62 @@ export function SheetBlock({ block }: { block: Sheet }) {
   const [newRow, setNewRow] = useState<{ group?: string } | null>(null);
   const [pasteState, setPasteState] = useState<PasteDraft | null>(null);
   const cancelled = useRef(false);
+  // Pantalla completa: el mismo bloque (mismo estado: filtros, orden, celda activa,
+  // grupos plegados) pasa a ocupar la ventana. Con la API Fullscreen del navegador
+  // sobre el documento (así los diálogos y listas que flotan siguen viéndose); sin
+  // ella —iPhone— queda sólo el velo fijo.
+  const [full, setFull] = useState(false);
+  const nativeFull = useRef(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const fsButtonRef = useRef<HTMLButtonElement>(null);
+  const [holdHeight, setHoldHeight] = useState<number | null>(null);
+  const enterFull = useCallback(() => {
+    setHoldHeight(wrapRef.current?.offsetHeight ?? null);
+    setFull(true);
+    const el = document.documentElement;
+    if (el.requestFullscreen && !document.fullscreenElement) {
+      el.requestFullscreen().then(
+        () => {
+          nativeFull.current = true;
+        },
+        () => {
+          nativeFull.current = false;
+        },
+      );
+    }
+  }, []);
+  const exitFull = useCallback(() => {
+    setFull(false);
+    if (nativeFull.current && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    nativeFull.current = false;
+    queueMicrotask(() => fsButtonRef.current?.focus());
+  }, []);
+  // Salir con Esc del navegador (que no llega a la página) también cierra el velo.
+  useEffect(() => {
+    if (!full) return;
+    const onChange = () => {
+      if (!document.fullscreenElement && nativeFull.current) {
+        nativeFull.current = false;
+        setFull(false);
+        queueMicrotask(() => fsButtonRef.current?.focus());
+      }
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    queueMicrotask(() => rootRef.current?.focus());
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.body.style.overflow = prev;
+    };
+  }, [full]);
+  // Si el bloque se desmonta en pantalla completa, se suelta la del navegador.
+  useEffect(
+    () => () => {
+      if (nativeFull.current && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    },
+    [],
+  );
   const [viewW, setViewW] = useState(0);
   useEffect(() => {
     const el = rootRef.current;
@@ -208,8 +272,11 @@ export function SheetBlock({ block }: { block: Sheet }) {
       value = n.value;
     }
     const before = rawText(r.sort[ci]);
-    if (value === before) return advance(move);
-    const problem = checkCell(col.edit, col.label, value);
+    const isRel = col.edit.type === 'relation';
+    if (isRel ? parseRelation(value)?.id === parseRelation(before)?.id : value === before)
+      return advance(move);
+    // Una relación la valida el servidor (la fila tiene que existir y el rol poder verla).
+    const problem = isRel ? (value === '' && col.edit.required ? `«${col.label}» es obligatorio.` : null) : checkCell(col.edit, col.label, value);
     if (problem) return say(false, problem);
     setPending((p) => ({ ...p, [`${r.id}:${ci}`]: value }));
     advance(move);
@@ -217,7 +284,7 @@ export function SheetBlock({ block }: { block: Sheet }) {
       block.id,
       r.id,
       { [col.key]: value },
-      { expect: { [col.key]: before }, label: `${col.label} → ${value}` },
+      { expect: { [col.key]: before }, label: `${col.label} → ${isRel ? relationLabel(value) || 'vacío' : value}` },
     );
     if (!res.ok) {
       setPending((p) => {
@@ -248,6 +315,8 @@ export function SheetBlock({ block }: { block: Sheet }) {
       return;
     }
     cancelled.current = false;
+    // La relación arranca con el buscador vacío (o con lo que se escribió).
+    if (isRelationCol(col)) return setEditing({ draft: initial ?? '' });
     setEditing({ draft: initial ?? rawText(pending[`${row.id}:${active.c}`] ?? row.sort[active.c]) });
   }
 
@@ -255,6 +324,13 @@ export function SheetBlock({ block }: { block: Sheet }) {
   function onKeyDown(e: React.KeyboardEvent) {
     if (editing) return;
     const meta = e.metaKey || e.ctrlKey;
+    // Ctrl/Cmd+Mayús+F: pantalla completa (no choca con escribir para editar).
+    if (meta && e.shiftKey && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      if (full) exitFull();
+      else enterFull();
+      return;
+    }
     if (!active) {
       if (NAV_KEYS.has(e.key) && navRows.length) {
         setActive({ r: 0, c: 0 });
@@ -400,8 +476,48 @@ export function SheetBlock({ block }: { block: Sheet }) {
   const rowH = dense ? 'h-8' : 'h-10';
   const cellBase = clsx('truncate px-2 text-xs', rowH);
 
+  // Esc fuera de una edición sale de la pantalla completa; Tab no se escapa del velo.
+  const onWrapKeyDown = (e: React.KeyboardEvent) => {
+    if (!full) return;
+    const wrap = wrapRef.current;
+    if (!wrap || !(e.target instanceof Node) || !wrap.contains(e.target)) return;
+    const busy = Boolean(editing) || newRow || pasteState || filterOpen !== null;
+    if (e.key === 'Escape' && !busy && !e.defaultPrevented) {
+      e.preventDefault();
+      exitFull();
+      return;
+    }
+    if (e.key === 'Tab' && !editing) {
+      const items = Array.from(
+        wrap.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex="0"]',
+        ),
+      ).filter((el) => el.offsetParent !== null);
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && e.target === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && e.target === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
   return (
+    <div className="h-full" style={full && holdHeight ? { height: holdHeight } : undefined}>
+    <div
+      ref={wrapRef}
+      role={full ? 'dialog' : undefined}
+      aria-modal={full ? true : undefined}
+      aria-label={full ? `${block.title}, pantalla completa` : undefined}
+      onKeyDown={onWrapKeyDown}
+      className={full ? 'fixed inset-0 z-[60] bg-canvas' : 'h-full'}
+    >
     <Card
+      className={full ? 'sheet-full flex h-full flex-col !rounded-none !border-0 !p-3 sm:!p-4' : undefined}
       title={block.title}
       source={`${block.total} ${block.total === 1 ? 'fila' : 'filas'} · ${block.source}${block.truncated ? ' · hay más de las que se muestran' : ''}`}
     >
@@ -470,6 +586,20 @@ export function SheetBlock({ block }: { block: Sheet }) {
             </button>
           )}
           <button
+            ref={fsButtonRef}
+            type="button"
+            onClick={full ? exitFull : enterFull}
+            aria-pressed={full}
+            title={full ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa (Ctrl/Cmd+Mayús+F)'}
+            className={clsx(
+              'inline-flex h-9 items-center gap-1.5 rounded-pill border px-3 text-xs font-semibold',
+              full ? 'border-primary bg-primary text-white hover:opacity-90' : 'border-border text-ink-muted hover:text-ink',
+            )}
+          >
+            {full ? <Minimize2 className="h-3.5 w-3.5" aria-hidden /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden />}
+            {full ? 'Salir' : 'Pantalla completa'}
+          </button>
+          <button
             type="button"
             onClick={downloadCsv}
             className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted hover:text-ink"
@@ -498,7 +628,10 @@ export function SheetBlock({ block }: { block: Sheet }) {
             void startPaste(text);
           }
         }}
-        className="view-table-scroll scroll-slim -mx-4 max-h-[70vh] overflow-auto border-y border-border outline-none focus-visible:ring-2 focus-visible:ring-primary/30 sm:-mx-6"
+        className={clsx(
+          'view-table-scroll scroll-slim overflow-auto border-y border-border outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+          full ? 'min-h-0 flex-1 -mx-3 sm:-mx-4' : '-mx-4 max-h-[70vh] sm:-mx-6',
+        )}
       >
         <table
           className="border-separate border-spacing-0 text-xs"
@@ -665,7 +798,7 @@ export function SheetBlock({ block }: { block: Sheet }) {
                       rowH,
                     )}
                   >
-                    {open ? (
+                    {open && !full ? (
                       <button
                         type="button"
                         onClick={() => open(r.id)}
@@ -715,7 +848,27 @@ export function SheetBlock({ block }: { block: Sheet }) {
                         )}
                         style={ci < frozen ? { left: leftOf(ci) } : undefined}
                       >
-                        {isEditing ? (
+                        {isEditing && isRelationCol(c) && target ? (
+                          <RelationCombo
+                            target={target}
+                            blockId={block.id}
+                            field={c.key}
+                            label={c.label}
+                            current={rawText(pending[key] ?? r.sort[ci])}
+                            required={c.edit?.required}
+                            initialQuery={editing.draft}
+                            onPick={(o) => {
+                              if (cancelled.current) return;
+                              void commit(r, ci, o ? relationValue(o) : '');
+                              rootRef.current?.focus();
+                            }}
+                            onCancel={() => {
+                              cancelled.current = true;
+                              setEditing(null);
+                              rootRef.current?.focus();
+                            }}
+                          />
+                        ) : isEditing ? (
                           <CellEditor
                             col={c}
                             draft={editing.draft}
@@ -781,7 +934,7 @@ export function SheetBlock({ block }: { block: Sheet }) {
 
       <p
         role="status"
-        className={clsx('mt-2 min-h-4 text-micro', note ? (note.ok ? 'text-emerald' : 'text-rose') : 'text-ink-faint')}
+        className={clsx('mt-2 min-h-4 text-micro', full && 'pl-12', note ? (note.ok ? 'text-emerald' : 'text-rose') : 'text-ink-faint')}
       >
         {note
           ? note.text
@@ -808,13 +961,26 @@ export function SheetBlock({ block }: { block: Sheet }) {
           draft={editing.draft}
           onDraft={(d) => setEditing({ draft: d })}
           onCancel={() => setEditing(null)}
-          onSave={() => void commit(navRows[active.r] as Row, active.c, editing.draft)}
+          onSave={(v) => void commit(navRows[active.r] as Row, active.c, v ?? editing.draft)}
+          relation={
+            isRelationCol(block.columns[active.c]) && target
+              ? {
+                  target,
+                  blockId: block.id,
+                  current: rawText(
+                    pending[`${(navRows[active.r] as Row).id}:${active.c}`] ??
+                      (navRows[active.r] as Row).sort[active.c],
+                  ),
+                }
+              : undefined
+          }
         />
       )}
 
       {newRow && block.write && writer?.paste && (
         <NewRowDialog
           block={block}
+          target={target}
           group={newRow.group}
           onClose={() => setNewRow(null)}
           onSave={async (values) => {
@@ -838,12 +1004,15 @@ export function SheetBlock({ block }: { block: Sheet }) {
         />
       )}
     </Card>
+    </div>
+    </div>
   );
 }
 
 function displayPending(c: Col, v: string): string {
   if (v === '') return '—';
   if (c.type === 'checkbox') return v === '1' ? 'Sí' : 'No';
+  if (c.edit?.type === 'relation') return relationLabel(v) || v;
   return v;
 }
 
@@ -1015,21 +1184,36 @@ function CellSheet({
   onDraft,
   onCancel,
   onSave,
+  relation,
 }: {
   col: Col;
   draft: string;
   onDraft: (d: string) => void;
   onCancel: () => void;
-  onSave: () => void;
+  onSave: (value?: string) => void;
+  /** Relación: el mismo buscador en línea, no texto libre. */
+  relation?: { target: SubmitTarget; blockId: string; current: string };
 }) {
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onCancel()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/40" />
-        <Dialog.Content className="fixed inset-x-0 bottom-0 z-50 rounded-t-card border-t border-border bg-surface p-4 pb-6 shadow-card">
+        <Dialog.Overlay className="fixed inset-0 z-[64] bg-ink/40" />
+        <Dialog.Content className="fixed inset-x-0 bottom-0 z-[65] max-h-[85vh] overflow-auto rounded-t-card border-t border-border bg-surface p-4 pb-6 shadow-card">
           <Dialog.Title className="mb-3 text-sm font-semibold text-ink">{col.label}</Dialog.Title>
           <Dialog.Description className="sr-only">Cambiar el valor de la celda</Dialog.Description>
-          {col.edit?.type === 'select' || col.edit?.type === 'checkbox' ? (
+          {relation ? (
+            <RelationCombo
+              inline
+              target={relation.target}
+              blockId={relation.blockId}
+              field={col.key}
+              label={col.label}
+              current={relation.current}
+              required={col.edit?.required}
+              onPick={(o) => onSave(o ? relationValue(o) : '')}
+              onCancel={() => undefined}
+            />
+          ) : col.edit?.type === 'select' || col.edit?.type === 'checkbox' ? (
             <select
               value={draft}
               onChange={(e) => onDraft(e.target.value)}
@@ -1058,9 +1242,11 @@ function CellSheet({
             <button type="button" onClick={onCancel} className="h-11 flex-1 rounded-pill border border-border text-sm font-semibold text-ink-muted">
               Cancelar
             </button>
-            <button type="button" onClick={onSave} className="h-11 flex-1 rounded-pill bg-primary text-sm font-semibold text-white">
-              Guardar
-            </button>
+            {!relation && (
+              <button type="button" onClick={() => onSave()} className="h-11 flex-1 rounded-pill bg-primary text-sm font-semibold text-white">
+                Guardar
+              </button>
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>
@@ -1075,10 +1261,12 @@ function CellSheet({
 function NewRowDialog({
   block,
   group,
+  target,
   onClose,
   onSave,
 }: {
   block: Sheet;
+  target?: SubmitTarget;
   group?: string;
   onClose: () => void;
   onSave: (values: Record<string, string>) => Promise<string | null>;
@@ -1091,15 +1279,29 @@ function NewRowDialog({
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/40" />
-        <Dialog.Content className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-auto rounded-t-card border-t border-border bg-surface p-4 pb-6 shadow-card sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[34rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-card sm:border">
+        <Dialog.Overlay className="fixed inset-0 z-[64] bg-ink/40" />
+        <Dialog.Content className="fixed inset-x-0 bottom-0 z-[65] max-h-[85vh] overflow-auto rounded-t-card border-t border-border bg-surface p-4 pb-6 shadow-card sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[34rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-card sm:border">
           <Dialog.Title className="mb-1 text-sm font-semibold text-ink">Nueva fila</Dialog.Title>
           <Dialog.Description className="mb-3 text-xs text-ink-muted">
-            {group ? 'Se agrega a este grupo. ' : ''}Las relaciones se escriben con el nombre exacto.
+            {group ? 'Se agrega a este grupo. ' : ''}Las relaciones se eligen de la lista.
           </Dialog.Description>
           <div className="grid gap-3 sm:grid-cols-2">
             {fields.map((f) => {
               const norm = (v: string) => normalizePasteCell(f, v);
+              if (f.type === 'relation' && target)
+                return (
+                  <div key={f.key} className="block text-micro font-semibold uppercase tracking-field text-ink-faint">
+                    <span>{f.label}</span>
+                    <RelationField
+                      target={target}
+                      blockId={block.id}
+                      field={f.key}
+                      label={f.label}
+                      value={values[f.key] ?? ''}
+                      onChange={(v) => setValues((cur) => ({ ...cur, [f.key]: v }))}
+                    />
+                  </div>
+                );
               return (
                 <label key={f.key} className="block text-micro font-semibold uppercase tracking-field text-ink-faint">
                   {f.label}
@@ -1202,8 +1404,8 @@ function PasteDialog({
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/40" />
-        <Dialog.Content className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-auto rounded-t-card border-t border-border bg-surface p-4 pb-6 shadow-card sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[40rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-card sm:border">
+        <Dialog.Overlay className="fixed inset-0 z-[64] bg-ink/40" />
+        <Dialog.Content className="fixed inset-x-0 bottom-0 z-[65] max-h-[85vh] overflow-auto rounded-t-card border-t border-border bg-surface p-4 pb-6 shadow-card sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[40rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-card sm:border">
           <Dialog.Title className="mb-1 text-sm font-semibold text-ink">Pegar de Excel o Sheets</Dialog.Title>
           <Dialog.Description className="mb-3 text-xs text-ink-muted">
             Revisa qué pasaría con cada fila antes de guardar. Pegar dos veces lo mismo no duplica nada.

@@ -34,11 +34,40 @@ const manifiestos: CatalogTracker = {
   ],
 };
 
+const tarifas: CatalogTracker = {
+  slug: 'tarifas',
+  name: 'Tarifas',
+  fields: [
+    { key: 'nombre', label: 'Tarifa', type: 'text', required: true },
+    { key: 'tarifa_usd_kg', label: 'Tarifa USD/kg', type: 'number', required: false },
+    { key: 'notas', label: 'Notas', type: 'text', required: false },
+  ],
+};
+
+const clientes: CatalogTracker = {
+  slug: 'clientes',
+  name: 'Clientes',
+  fields: [
+    { key: 'nombre', label: 'Cliente', type: 'text', required: true },
+    { key: 'nit', label: 'NIT', type: 'text', required: false },
+    // La tarifa por defecto del cliente: la fila la trae si no tiene una elegida.
+    { key: 'tarifa', label: 'Tarifa', type: 'relation', tracker: 'tarifas', required: false },
+  ],
+};
+
 const guias: CatalogTracker = {
   slug: 'guias',
   name: 'Guías',
   fields: [
-    { key: 'cliente', label: 'Cliente', type: 'text', required: true },
+    { key: 'cliente', label: 'Cliente', type: 'relation', tracker: 'clientes', required: true },
+    {
+      key: 'tarifa',
+      label: 'Tarifa',
+      type: 'relation',
+      tracker: 'tarifas',
+      required: false,
+      lookup: { via: 'cliente', field: 'tarifa', editable: true },
+    },
     { key: 'guia', label: 'Guía', type: 'text', required: true },
     {
       key: 'parcial',
@@ -52,7 +81,13 @@ const guias: CatalogTracker = {
     { key: 'fecha_traslado', label: 'Traslado', type: 'date', required: false },
     { key: 'piezas', label: 'Piezas', type: 'number', required: false },
     { key: 'kilos', label: 'Kilos', type: 'number', required: false },
-    { key: 'tarifa_usd', label: 'Tarifa USD/kg', type: 'number', required: false },
+    {
+      key: 'tarifa_usd',
+      label: 'Tarifa USD/kg',
+      type: 'number',
+      required: false,
+      lookup: { via: 'tarifa', field: 'tarifa_usd_kg', editable: true },
+    },
     {
       key: 'total_usd',
       label: 'Total USD',
@@ -74,6 +109,18 @@ const guias: CatalogTracker = {
 };
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const rel = (id: string, label: string) => JSON.stringify({ id, label });
+export const TARIFAS_DEMO: Array<{ id: string; nombre: string; tarifa: number; notas: string }> = [
+  { id: uuid(300), nombre: 'Estándar', tarifa: 0.09, notas: 'Carga general' },
+  { id: uuid(301), nombre: 'Perecederos', tarifa: 0.12, notas: 'Flores y alimentos' },
+  { id: uuid(302), nombre: 'Express', tarifa: 0.15, notas: 'Prioridad 24 h' },
+];
+export const CLIENTES_DEMO: Array<{ id: string; nombre: string; nit: string; tarifa: number }> = [
+  { id: uuid(200), nombre: 'Aeroexpress SAS', nit: '900123456-7', tarifa: 0 },
+  { id: uuid(201), nombre: 'Logística Andina', nit: '830555123-1', tarifa: 0 },
+  { id: uuid(202), nombre: 'Carga del Sur', nit: '901222333-4', tarifa: 0 },
+  { id: uuid(203), nombre: 'Floralia Export', nit: '800765432-9', tarifa: 1 },
+];
 const NOW = new Date('2026-10-27T15:00:00.000Z');
 const at = NOW.toISOString();
 
@@ -107,14 +154,17 @@ function sources(): Map<string, ViewSource> {
     updated_at: at,
   }));
   const gRows: ViewRow[] = GUIAS.map(
-    ([m, cliente, guia, parcial, vuelo, arribo, traslado, piezas, kilos, tarifa, trm], i) => {
-      const totalUsd = Math.round(kilos * tarifa * 100) / 100;
+    ([m, cliente, guia, parcial, vuelo, arribo, traslado, piezas, kilos, _tarifa, trm], i) => {
+      const cli = CLIENTES_DEMO.find((c) => c.nombre === cliente) ?? (CLIENTES_DEMO[0] as (typeof CLIENTES_DEMO)[number]);
+      const tar = TARIFAS_DEMO[cli.tarifa] as (typeof TARIFAS_DEMO)[number];
+      const totalUsd = Math.round(kilos * tar.tarifa * 100) / 100;
       const man = MANIFIESTOS[m - 1] as (typeof MANIFIESTOS)[number];
       return {
         id: uuid(i + 1),
         label: cliente,
         values: {
-          cliente,
+          cliente: rel(cli.id, cliente),
+          tarifa: rel(tar.id, tar.nombre),
           guia,
           parcial,
           vuelo,
@@ -122,8 +172,8 @@ function sources(): Map<string, ViewSource> {
           fecha_traslado: traslado,
           piezas,
           kilos,
-          tarifa_usd: tarifa,
-          total_usd: kilos * tarifa,
+          tarifa_usd: tar.tarifa,
+          total_usd: totalUsd,
           trm,
           total_cop: Math.round(totalUsd * trm),
           manifiesto: JSON.stringify({ id: uuid(99 + m), label: man[0] }),
@@ -134,7 +184,25 @@ function sources(): Map<string, ViewSource> {
       };
     },
   );
+  const tRows: ViewRow[] = TARIFAS_DEMO.map((t) => ({
+    id: t.id,
+    label: t.nombre,
+    values: { nombre: t.nombre, tarifa_usd_kg: t.tarifa, notas: t.notas },
+    created_by: null,
+    created_at: at,
+    updated_at: at,
+  }));
+  const cRows: ViewRow[] = CLIENTES_DEMO.map((c) => ({
+    id: c.id,
+    label: c.nombre,
+    values: { nombre: c.nombre, nit: c.nit, tarifa: rel((TARIFAS_DEMO[c.tarifa] as { id: string }).id, TARIFAS_DEMO[c.tarifa]?.nombre ?? '') },
+    created_by: null,
+    created_at: at,
+    updated_at: at,
+  }));
   return new Map<string, ViewSource>([
+    ['tarifas', { tracker: tarifas, truncated: false, rows: tRows }],
+    ['clientes', { tracker: clientes, truncated: false, rows: cRows }],
     ['manifiestos', { tracker: manifiestos, truncated: false, rows: mRows }],
     ['guias', { tracker: guias, truncated: false, rows: gRows }],
   ]);
@@ -163,6 +231,7 @@ export function hojaView(): ComputedView {
           'fecha_traslado',
           'piezas',
           'kilos',
+          'tarifa',
           'tarifa_usd',
           'total_usd',
           'trm',
@@ -171,6 +240,7 @@ export function hojaView(): ComputedView {
         frozen: 2,
         editable: [
           'cliente',
+          'tarifa',
           'guia',
           'parcial',
           'vuelo',

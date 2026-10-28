@@ -274,8 +274,15 @@ export function computedProblems(fields: readonly ComputedFieldLike[]): Computed
         );
       if (f.lookup.via === f.key)
         add(f.key, 'lookup', `Lookup de «${f.label}»: no puede apuntar a sí mismo.`);
-      if (f.type === 'relation' || f.type === 'file')
+      if (f.type === 'file')
         add(f.key, 'lookup', `«${f.label}» (${f.type}) no puede traer un valor de otra tabla.`);
+      // Lookup de relación: copia OTRA relación de la tabla padre (cliente → su tarifa por defecto).
+      if (f.type === 'relation' && !f.lookup.editable)
+        add(
+          f.key,
+          'lookup',
+          `Lookup de «${f.label}»: una relación que se trae de otra tabla tiene que ser editable (editable: true), para poder elegir otra.`,
+        );
     }
     if (f.match) {
       const m = f.match;
@@ -519,6 +526,11 @@ export function adaptLookupValue(field: ComputedFieldLike, raw: Raw): string | n
       const hit = field.options?.find((o) => fold(o) === fold(String(raw)));
       return hit;
     }
+    case 'relation': {
+      // La relación de la tabla padre se copia tal cual ({id,label}); prepareValues la revalida.
+      const rel = relationParts(raw as Raw);
+      return rel ? JSON.stringify({ id: rel.id, label: rel.label }) : undefined;
+    }
     default:
       return typeof raw === 'number'
         ? raw
@@ -552,6 +564,8 @@ export function fillLookups<V>(
     const current = out[s.field.key];
     if (s.editable && !blank(current) && !options.changedVia?.has(s.via)) continue;
     if (next === undefined) {
+      // Una relación por defecto que el cliente nuevo no trae no borra la elegida.
+      if (s.field.type === 'relation') continue;
       if (!s.editable || options.changedVia?.has(s.via)) delete out[s.field.key];
     } else out[s.field.key] = next;
   }

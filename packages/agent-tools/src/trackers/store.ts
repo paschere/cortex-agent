@@ -439,7 +439,44 @@ export async function prepareValues(
         .map((s) => s.via)
         .filter((via) => options.only?.has(via)),
     );
-    const filled = fillLookups(tracker.fields, values, related, { changedVia });
+    let filled = fillLookups(tracker.fields, values, related, { changedVia });
+    // Lookups ENCADENADOS: una relación que el primer paso acaba de traer del padre
+    // (cliente → su tarifa por defecto) es la vía de otros lookups (tarifa → precio):
+    // se valida que la fila copiada siga existiendo y se hace una segunda pasada.
+    const chained = lookupSources(tracker.fields).filter(
+      (s) => s.field.type === 'relation' && filled[s.field.key] !== values[s.field.key],
+    );
+    if (chained.length > 0) {
+      const next = { ...filled } as Record<string, string | number>;
+      const newVia = new Set<string>();
+      for (const s of chained) {
+        const key = s.field.key;
+        const rel = relationParts(next[key]);
+        const other = s.field.tracker ? await getTrackerBySlug(db, s.field.tracker) : null;
+        let row: { label: unknown } | null = null;
+        if (rel && other) {
+          const { data, error } = await db
+            .from('tracker_rows')
+            .select('label')
+            .eq('id', rel.id)
+            .eq('tracker_id', other.id)
+            .maybeSingle();
+          if (error) throw error;
+          row = data as { label: unknown } | null;
+        }
+        if (rel && row) {
+          next[key] = JSON.stringify({ id: rel.id, label: String(row.label) });
+          newVia.add(key);
+        } else if (values[key] === undefined) delete next[key];
+        else next[key] = values[key] as string | number;
+      }
+      if (newVia.size > 0) {
+        const related2 = await loadRelated(db, tracker.fields, next);
+        filled = fillLookups(tracker.fields, next, related2, {
+          changedVia: new Set([...changedVia, ...newVia]),
+        });
+      } else filled = next;
+    }
     return recompute(tracker.fields, filled as Record<string, string | number>);
   }
   return values;
@@ -511,6 +548,13 @@ async function assertLookupTargets(
       throw new ValidationError(
         `Lookup de «${s.field.label}»: «${other.name}» no tiene un campo «${s.target}». Sus campos: ${other.fields.map((f) => f.key).join(', ')}.`,
       );
+    if (s.field.type === 'relation') {
+      const tf = other.fields.find((f) => f.key === s.target);
+      if (tf && (tf.type !== 'relation' || tf.tracker !== s.field.tracker))
+        throw new ValidationError(
+          `Lookup de «${s.field.label}»: «${tf.label}» de «${other.name}» tiene que ser una relación a «${s.field.tracker}».`,
+        );
+    }
   }
 }
 

@@ -399,7 +399,7 @@ function BlockBody({
     case 'table':
       return <Table block={block} />;
     case 'sheet':
-      return <SheetBlock block={block} />;
+      return <SheetBlock block={block} target={target} />;
     case 'chart':
       return (
         <Card title={block.title} source={block.source}>

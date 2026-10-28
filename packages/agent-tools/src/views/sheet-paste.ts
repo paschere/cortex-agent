@@ -163,6 +163,8 @@ export interface PasteField {
   label: string;
   type: string;
   options: string[];
+  /** Relación: la tabla a la que apunta. */
+  tracker?: string;
 }
 
 export type PasteCell = { ok: true; value: string } | { ok: false; error: string };

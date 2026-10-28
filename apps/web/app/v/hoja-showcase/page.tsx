@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { HojaShowcase } from './HojaShowcase';
-import { HOJA_SUBTITLE, HOJA_TITLE, hojaView } from './fixture';
+import { CLIENTES_DEMO, HOJA_SUBTITLE, HOJA_TITLE, TARIFAS_DEMO, hojaView } from './fixture';
 
 /**
  * EL ESCAPARATE DE LA HOJA. SÓLO EN DESARROLLO.
@@ -27,6 +27,10 @@ export default async function HojaShowcasePage({
       subtitle={HOJA_SUBTITLE}
       dark={one('modo') === 'oscuro'}
       brand={one('marca') ?? 'andina'}
+      options={{
+        cliente: CLIENTES_DEMO.map((c) => ({ id: c.id, label: c.nombre, detail: `NIT ${c.nit}` })),
+        tarifa: TARIFAS_DEMO.map((t) => ({ id: t.id, label: t.nombre, detail: `${t.tarifa} USD/kg · ${t.notas}` })),
+      }}
     />
   );
 }
