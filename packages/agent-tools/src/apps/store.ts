@@ -17,6 +17,7 @@ import {
   type ViewSpec,
   findWriteBlock,
   slugify,
+  viewSpecSchema,
 } from '../views/spec';
 import {
   type ActorKind,
@@ -537,8 +538,19 @@ function adaptView(row: Record<string, unknown>): CustomViewRow {
   return {
     ...(row as unknown as CustomViewRow),
     description: typeof row.description === 'string' ? row.description : '',
-    spec: row.spec as ViewSpec,
+    spec: normalizeSpec(row.spec),
   };
+}
+
+/**
+ * El spec guardado con sus valores por defecto llenos (listas vacías, etc.),
+ * igual que `getView`. Sin esto, una pantalla guardada sin `filters` o
+ * `totals` tumbaba la app entera con «reading 'map'» (2026-10-28). Si no pasa
+ * el contrato se deja como vino: el cálculo lo marca como bloque con problema.
+ */
+export function normalizeSpec(raw: unknown): ViewSpec {
+  const parsed = viewSpecSchema.safeParse(raw);
+  return parsed.success ? parsed.data : (raw as ViewSpec);
 }
 
 /**
@@ -997,7 +1009,7 @@ export async function screenView(db: SupabaseClient, screen: AppScreenRow): Prom
         archived_at: null,
       }),
       name: screen.frozenName || view?.name || screen.title,
-      spec: screen.frozenSpec,
+      spec: normalizeSpec(screen.frozenSpec),
     } as CustomViewRow;
   }
   if (!view) throw new NotFoundError('Esa pantalla ya no existe.');
