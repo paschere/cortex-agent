@@ -1206,7 +1206,7 @@ async function handleChat(req: NextRequest, guard: TurnGuard) {
   if (turnAttachments.some((a) => a.tables?.length)) {
     aiTools.feed_table_query = tool({
       description:
-        'Read or calculate stored rows from a Feed spreadsheet attached to this conversation. A partial capture is not the complete original spreadsheet. Column and row indices start at 1. Verify headers, units and duplicate warnings. Does not save anything to memory.',
+        'Read or calculate stored rows from a spreadsheet (Excel, CSV, Google Sheet) attached to this conversation, one tab at a time (sheet = exact tab name). Operations: rows (paged with offset/limit, optionally between startRow and endRow), count, sum, average, min, max; optional filter (equals, not_equals, contains, gt, gte, lt, lte) and groupBy (a column) to get totals per group. A partial capture is not the complete original spreadsheet. Column and row indices start at 1 (row 1 = header). Verify headers, units and duplicate warnings. Does not save anything to memory.',
       parameters: tableQuerySchema,
       experimental_toToolResultContent: modelToolContent,
       execute: async (input) => {

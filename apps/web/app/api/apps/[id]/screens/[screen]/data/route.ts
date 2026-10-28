@@ -5,6 +5,7 @@ import {
   readScreen,
   readScreenSample,
   screenView,
+  sheetWindowRequestsOf,
 } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -50,6 +51,7 @@ export async function GET(
     readOnly,
     fila: sp.get('fila'),
     detail: sp.get('d'),
+    sheetWindows: sheetWindowRequestsOf(view.spec, sp.get('sw'), sp.get('sq')),
   });
   return NextResponse.json(
     { version: view.version, view: computed },

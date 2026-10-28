@@ -62,7 +62,15 @@ const ACCEPT = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
   'text/plain': ['.txt'],
   'text/markdown': ['.md'],
+  // Excel y CSV se leen en el servidor (todas las pestañas) y se usan sólo en
+  // esta conversación. `.xls` se acepta para poder explicar cómo convertirlo.
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.xlsm'],
+  'application/vnd.ms-excel': ['.xls', '.csv'],
+  'text/csv': ['.csv'],
 } as const;
+
+/** Hojas de cálculo: no tienen la pregunta de la memoria, entran directo a la conversación. */
+const isSheetFile = (name: string) => /\.(xlsx|xlsm|xls|csv)$/i.test(name);
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -78,6 +86,8 @@ interface Attachment {
   error?: string | null;
   alreadyThere?: boolean;
   truncated?: boolean;
+  /** Avisos honestos del servidor (p. ej. «leí 5.065 filas de la pestaña 2026»). */
+  notes?: string[];
 }
 
 const STAGE: Record<Status, { text: string; dot: string; tone: string }> = {
@@ -153,6 +163,10 @@ export function AttachmentTray({
       const file = files[0];
       if (!file) return;
       setError(null);
+      if (isSheetFile(file.name)) {
+        void send('turn', file);
+        return;
+      }
       setPending(file);
     },
     onDropRejected: (rejections) => {
@@ -160,7 +174,7 @@ export function AttachmentTray({
       setError(
         reason === 'file-too-large'
           ? 'El archivo pasa de 10 MB.'
-          : 'Por ahora Cortex lee PDF, DOCX, TXT y MD desde el chat.',
+          : 'Por ahora Cortex lee PDF, DOCX, TXT, MD, Excel (.xlsx) y CSV desde el chat.',
       );
     },
   });
@@ -213,13 +227,14 @@ export function AttachmentTray({
     return () => clearInterval(id);
   }, [attachments, refresh]);
 
-  async function send(disposition: 'memory' | 'turn') {
-    if (!pending) return;
+  async function send(disposition: 'memory' | 'turn', fileOverride?: File) {
+    const file = fileOverride ?? pending;
+    if (!file) return;
     setBusy(true);
     setError(null);
 
     const form = new FormData();
-    form.append('file', pending);
+    form.append('file', file);
     form.append('conversationId', conversationId);
     form.append('disposition', disposition);
     if (disposition === 'memory' && spaceId) form.append('spaceId', spaceId);
@@ -232,7 +247,7 @@ export function AttachmentTray({
         return;
       }
       setAttachments((prev) => [...prev, data.attachment as Attachment]);
-      setPending(null);
+      if (!fileOverride) setPending(null);
     } catch {
       setError('No se pudo adjuntar el archivo.');
     } finally {
@@ -245,6 +260,13 @@ export function AttachmentTray({
       {attachments.map((a) => (
         <AttachmentRow key={a.id} attachment={a} onAsk={onAsk} />
       ))}
+
+      {busy && !pending && (
+        <p className="flex items-center gap-1.5 text-xs text-ink-muted" aria-live="polite">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          Leyendo el archivo…
+        </p>
+      )}
 
       {pending ? (
         <div
@@ -370,7 +392,8 @@ export function AttachmentTray({
           <div>
             <p className="text-sm font-semibold text-primary-ink">Suéltalo aquí</p>
             <p className="mt-0.5 text-micro text-primary-ink/70">
-              Luego decides si entra a la memoria — PDF, DOCX, TXT o MD, hasta 10 MB.
+              PDF, DOCX, TXT o MD (decides si entra a la memoria); Excel y CSV se leen en esta
+              conversación. Hasta 10 MB.
             </p>
           </div>
         </div>
@@ -414,6 +437,10 @@ function AttachmentRow({
             : stage.text}
           {attachment.spaceName && <span className="text-ink-faint">· {attachment.spaceName}</span>}
         </span>
+      )}
+
+      {attachment.notes?.[0] && (
+        <span className="basis-full text-micro leading-snug text-amber">{attachment.notes[0]}</span>
       )}
 
       {attachment.status === 'failed' && attachment.error && (

@@ -414,6 +414,27 @@ export const sheetGroupSchema = z.object({
   sortDir: z.enum(['asc', 'desc']).default('asc'),
 });
 
+/**
+ * LA VENTANA (opcional): la hoja sólo trae lo más reciente y se carga hacia el
+ * pasado con botones. `field` es el campo de fecha que ordena (por omisión la
+ * fecha de creación); el tamaño de cada bloque es `size` (`30d` días, `3m` meses)
+ * o `groups` (cuántos grupos —manifiestos— por bloque, necesita `group`). Sin
+ * `window` la hoja se comporta como siempre. Ver views/sheet-window.ts.
+ */
+export const sheetWindowSchema = z
+  .object({
+    field: fieldRef.optional(),
+    size: z
+      .string()
+      .regex(/^\d{1,3}[dm]$/, 'El tamaño va como «30d» (días) o «3m» (meses).')
+      .optional(),
+    groups: z.number().int().min(1).max(500).optional(),
+  })
+  .refine((w) => !(w.size && w.groups), {
+    message: 'La ventana usa `size` (días o meses) o `groups`, no las dos.',
+  });
+export type SheetWindow = z.infer<typeof sheetWindowSchema>;
+
 export const sheetBlockSchema = z.object({
   ...base,
   ...source,
@@ -428,8 +449,11 @@ export const sheetBlockSchema = z.object({
   /** Columnas que se editan en la celda (sólo tablas propias; las calculadas no). */
   editable: z.array(fieldRef).max(24).default([]),
   sort: z.object({ field: fieldRef, dir: z.enum(['asc', 'desc']).default('desc') }).optional(),
-  limit: z.number().int().min(1).max(2000).default(500),
+  // Con `window` el tope lo pone la ventana (hasta 10.000 filas cuando se elige «Todo»); sin ella, este.
+  limit: z.number().int().min(1).max(10_000).default(500),
   group: sheetGroupSchema.optional(),
+  /** Sólo lo más reciente, y hacia el pasado con botones (tablas grandes). */
+  window: sheetWindowSchema.optional(),
   /** Formato condicional: «parcial = Sí → rose». */
   rules: z.array(sheetRuleSchema).max(8).default([]),
   /** Totales al pie. Vacío = suma de cada columna numérica o de dinero. */
@@ -1771,6 +1795,15 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
             needType(t.field, 'total', (x) => NUMERIC.has(x), 'un campo de número o dinero');
         }
         if (block.pasteKey) need(block.pasteKey, 'clave para pegar');
+        if (block.window) {
+          const wf = block.window.field;
+          if (wf && wf !== 'created_at' && wf !== 'updated_at')
+            needType(wf, 'ventana', isDate, 'un campo de fecha');
+          if (block.window.groups && !block.group)
+            problems.push(
+              `${where}: la ventana por grupos necesita \`group\`; usa \`size\` (p. ej. «30d») o agrupa la hoja.`,
+            );
+        }
         for (const k of block.editable) {
           const f = tracker.fields.find((x) => x.key === k);
           if (f && (f.formula || (f.lookup && !f.lookup.editable)))

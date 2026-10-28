@@ -27,12 +27,20 @@ import type { ComputedView } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { Bell, BellOff, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  encodeSheetWindowParams,
+  mergeSheetBlocks,
+  parseReach,
+  reachIsWider,
+} from '@cortex/agent-tools/src/views/sheet-window';
+import type { SheetWindowRequest } from '@cortex/agent-tools/src/views/sheet-window';
 import { ExportMenu } from './ExportMenu';
 import { type SubmitTarget, ViewCanvas } from './ViewCanvas';
 import { LiveStatus, ViewCover } from './blocks/ViewChrome';
 import { useBrandScope, useViewBrand } from './blocks/brand';
 import type { RecordNav } from './blocks/record-nav';
 import { FlashProvider } from './flash-context';
+import { type SheetWindowControl, SheetWindowContext } from './sheet-window-context';
 
 /**
  * UNA VISTA QUE SE MANTIENE AL DÍA SOLA, Y QUE AVISA.
@@ -78,6 +86,21 @@ interface Toast {
   id: number;
   title: string;
   body: string;
+}
+
+/** La dirección de datos con lo pedido por las hojas (`sw`, `sq`). */
+function withSheetParams(
+  dataUrl: string,
+  reqs: Record<string, SheetWindowRequest>,
+  origin: string,
+): string {
+  const { sw, sq } = encodeSheetWindowParams(reqs);
+  const url = new URL(dataUrl, origin);
+  if (sw) url.searchParams.set('sw', sw);
+  else url.searchParams.delete('sw');
+  if (sq) url.searchParams.set('sq', sq);
+  else url.searchParams.delete('sq');
+  return `${url.pathname}${url.search}`;
 }
 
 function ago(ms: number): string {
@@ -147,6 +170,14 @@ export function LiveViewCanvas({
   const prints = useRef<Map<string, string> | null>(null);
   const flashTimer = useRef<number | undefined>(undefined);
   const inFlight = useRef(false);
+  // La ventana de las hojas: hasta dónde cargó cada una y qué busca; viaja en cada refresco.
+  const sheetReqs = useRef<Record<string, SheetWindowRequest>>({});
+  const [sheetLoading, setSheetLoading] = useState<ReadonlySet<string>>(new Set());
+  const [sheetTick, setSheetTick] = useState(0);
+  // Lo cargado hacia el pasado, por hoja: el sondeo sólo repite la ventana reciente y esto se
+  // une encima, así «Todo» (miles de filas) no se vuelve a leer cada 30 s.
+  const sheetExtra = useRef<Record<string, { extent: string; block: unknown }>>({});
+  const rawView = useRef<ComputedView>(initial);
 
   // La copia para verla sin señal (sólo lo que llegó del servidor; nunca nada fabricado aquí).
   const onViewRef = useRef(onView);
@@ -236,9 +267,13 @@ export function LiveViewCanvas({
       inFlight.current = true;
       const mine = ++seq.current;
       try {
-        const url = withRecordParam(
-          withFilterParam(dataUrl, filterParam.current, window.location.origin),
-          recordRef.current,
+        const url = withSheetParams(
+          withRecordParam(
+            withFilterParam(dataUrl, filterParam.current, window.location.origin),
+            recordRef.current,
+            window.location.origin,
+          ),
+          sheetReqs.current,
           window.location.origin,
         );
         // Una lectura que se cuelga no deja la pantalla esperando: 20 s y se avisa.
@@ -256,12 +291,14 @@ export function LiveViewCanvas({
         }
         if (!body) throw new Error('no-data');
         if (mine !== seq.current) return;
-        setView(body.view);
+        rawView.current = body.view;
+        const shown = withExtras(body.view);
+        setView(shown);
         setUpdatedAt(Date.now());
         setFailing(false);
         failures.current = 0;
-        flashChanges(body.view);
-        announce(body.view);
+        flashChanges(shown);
+        announce(shown);
       } catch {
         if (mine === seq.current) {
           setFailing(true);
@@ -272,11 +309,148 @@ export function LiveViewCanvas({
         if (mine === seq.current) {
           inFlight.current = false;
           setFiltering(false);
+          setSheetLoading((cur) => (cur.size ? new Set() : cur));
         }
       }
     },
     [dataUrl, announce, flashChanges],
   );
+
+  /** La vista fresca con lo cargado hacia el pasado unido a cada hoja (y la ventana fijada). */
+  const withExtras = useCallback((v: ComputedView): ComputedView => {
+    let changed = false;
+    const blocks = v.blocks.map((b) => {
+      if (b.type !== 'sheet' || !b.window) return b;
+      if (!b.window.search && b.window.reach && !sheetReqs.current[b.id]?.reach)
+        sheetReqs.current[b.id] = { ...sheetReqs.current[b.id], reach: b.window.reach };
+      const extra = sheetExtra.current[b.id];
+      if (!extra || b.window.search) return b;
+      changed = true;
+      return mergeSheetBlocks(b, extra.block as typeof b);
+    });
+    return changed ? { ...v, blocks } : v;
+  }, []);
+
+  // La ventana con que llegó la página (p. ej. «Todo») se fija desde el primer momento: el sondeo la repite.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo al montar
+  useEffect(() => {
+    withExtras(initial);
+  }, []);
+
+  const loadExtra = useCallback(
+    async (id: string, reach: string, until: string): Promise<unknown | null> => {
+      if (!dataUrl) return null;
+      try {
+        const url = withSheetParams(
+          withFilterParam(dataUrl, filterParam.current, window.location.origin),
+          { [id]: { reach, until } },
+          window.location.origin,
+        );
+        const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(60_000) });
+        if (!res.ok) return null;
+        const body = (await res.json()) as { view: ComputedView };
+        const b = body.view.blocks.find((x) => x.id === id);
+        return b?.type === 'sheet' ? b : null;
+      } catch {
+        return null;
+      }
+    },
+    [dataUrl],
+  );
+
+  const stopLoading = useCallback(
+    (id: string) =>
+      setSheetLoading((s) => {
+        const n = new Set(s);
+        n.delete(id);
+        return n;
+      }),
+    [],
+  );
+
+  const sheetControl = useMemo<SheetWindowControl>(
+    () => ({
+      more: (id, reach) => {
+        const cur = rawView.current.blocks.find((b) => b.id === id);
+        if (cur?.type !== 'sheet' || !cur.window) return;
+        const base = sheetReqs.current[id]?.reach ?? cur.window.reach;
+        sheetReqs.current = { ...sheetReqs.current, [id]: { ...sheetReqs.current[id], reach: base } };
+        const extent = sheetExtra.current[id]?.extent ?? base;
+        setSheetLoading((s) => new Set(s).add(id));
+        void loadExtra(id, reach, extent).then((block) => {
+          if (block) {
+            const prev = sheetExtra.current[id]?.block;
+            const d = block as { window?: { reach?: string } };
+            sheetExtra.current[id] = {
+              extent: d.window?.reach ?? reach,
+              block: prev ? mergeSheetBlocks(prev as typeof cur, block as typeof cur) : block,
+            };
+            setView(withExtras(rawView.current));
+          }
+          stopLoading(id);
+        });
+      },
+      choose: (id, reach) => {
+        const cur = rawView.current.blocks.find((b) => b.id === id);
+        if (cur?.type !== 'sheet' || !cur.window) return;
+        const today = cur.window.today;
+        const next = parseReach(reach, today);
+        const have = parseReach(
+          sheetExtra.current[id]?.extent ?? sheetReqs.current[id]?.reach ?? cur.window.reach,
+          today,
+        );
+        if (next && have && reachIsWider(next, have)) return sheetControl.more(id, reach);
+        // Estrechar (o repetir): se reinicia la ventana en ese alcance.
+        delete sheetExtra.current[id];
+        sheetReqs.current = { ...sheetReqs.current, [id]: { ...sheetReqs.current[id], reach } };
+        setSheetTick((n) => n + 1);
+        setSheetLoading((s) => new Set(s).add(id));
+        void refresh(true);
+      },
+      request: (id) => sheetReqs.current[id] ?? {},
+      update: (id, patch) => {
+        const cur = sheetReqs.current[id] ?? {};
+        const next = { ...cur, ...patch };
+        if (JSON.stringify(next) === JSON.stringify(cur)) return;
+        sheetReqs.current = { ...sheetReqs.current, [id]: next };
+        setSheetTick((n) => n + 1);
+        setSheetLoading((s) => new Set(s).add(id));
+        void refresh(true);
+      },
+      loading: sheetLoading,
+      fetchAll: async (id) => {
+        if (!dataUrl) return null;
+        try {
+          const url = withSheetParams(
+            withFilterParam(dataUrl, filterParam.current, window.location.origin),
+            { [id]: { reach: 'all' } },
+            window.location.origin,
+          );
+          const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(60_000) });
+          if (!res.ok) return null;
+          const body = (await res.json()) as { view: ComputedView };
+          return body.view.blocks.find((b) => b.id === id) ?? null;
+        } catch {
+          return null;
+        }
+      },
+    }),
+    // biome-ignore lint/correctness/useExhaustiveDependencies: `sheetTick` renueva la identidad cuando cambia lo pedido
+    [refresh, sheetLoading, dataUrl, sheetTick, loadExtra, withExtras, stopLoading],
+  );
+
+  /** Tras escribir: lo cargado hacia el pasado se vuelve a leer (una sola vez, no en cada sondeo). */
+  const refreshExtras = useCallback(async () => {
+    for (const [id, extra] of Object.entries(sheetExtra.current)) {
+      const base = sheetReqs.current[id]?.reach;
+      if (!base) continue;
+      const block = await loadExtra(id, extra.extent, base);
+      if (block && sheetExtra.current[id]) {
+        sheetExtra.current[id] = { extent: extra.extent, block };
+        setView(withExtras(rawView.current));
+      }
+    }
+  }, [loadExtra, withExtras]);
 
   /** Escribe `?f=` / `?p=` sin recargar ni agregar pasos al historial. */
   const writeUrl = useCallback((key: 'f' | 'p', value: string | null) => {
@@ -328,6 +502,8 @@ export function LiveViewCanvas({
       const f = encodeFilterState(next);
       if (f === filterParam.current) return;
       filterParam.current = f;
+      // Lo cargado hacia el pasado se calculó con el filtro anterior: se descarta.
+      sheetExtra.current = {};
       writeUrl('f', f || null);
       setFiltering(true);
       void refresh(true);
@@ -476,6 +652,11 @@ export function LiveViewCanvas({
         filterParam={filterParam.current}
         title={heading?.title ?? 'Vista'}
         excel={canExport}
+        sheetQuery={
+          view.blocks.some((b) => b.type === 'sheet' && b.window)
+            ? encodeSheetWindowParams(sheetReqs.current)
+            : null
+        }
       />
     </>
   );
@@ -500,10 +681,14 @@ export function LiveViewCanvas({
       )}
 
       <FlashProvider value={flashing}>
+        <SheetWindowContext.Provider value={sheetControl}>
         <ViewCanvas
           view={view}
           target={readOnly ? { kind: 'preview' } : target}
-          onChanged={() => void refresh(true)}
+          onChanged={() => {
+            void refresh(true);
+            void refreshExtras();
+          }}
           nav={nav}
           filters={{ state: filters, onChange: changeFilters, pending: filtering }}
           page={{
@@ -514,6 +699,7 @@ export function LiveViewCanvas({
             },
           }}
         />
+        </SheetWindowContext.Provider>
       </FlashProvider>
 
       <div

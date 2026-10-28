@@ -20,9 +20,11 @@ export default async function HojaShowcasePage({
   if (process.env.NODE_ENV === 'production') notFound();
   const q = await searchParams;
   const one = (k: string) => (typeof q[k] === 'string' ? (q[k] as string) : null);
+  const filas = Math.min(20_000, Number(one('filas')) || 0);
   return (
     <HojaShowcase
-      view={hojaView()}
+      view={hojaView(one('alcance') ? { hoja: { reach: one('alcance') as string } } : {}, filas)}
+      dataUrl={filas ? `/v/hoja-showcase/data?filas=${filas}` : '/v/hoja-showcase/data'}
       title={HOJA_TITLE}
       subtitle={HOJA_SUBTITLE}
       dark={one('modo') === 'oscuro'}

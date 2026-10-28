@@ -7,6 +7,7 @@ import {
   getView,
   loadViewSources,
   parseViewFilterParam,
+  sheetWindowRequestsOf,
 } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -32,7 +33,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const spec = specForExport(view.spec);
   const computed = computeView(
     spec,
-    await loadViewSources(db, spec, { viewerId: user.id }),
+    await loadViewSources(db, spec, {
+      viewerId: user.id,
+      // «Lo que ves» (`sw`/`sq`) o «todo» (`todo=1`) en las hojas con ventana.
+      sheetWindows: sheetWindowRequestsOf(
+        spec,
+        req.nextUrl.searchParams.get('sw'),
+        req.nextUrl.searchParams.get('sq'),
+      ),
+      allSheetRows: req.nextUrl.searchParams.get('todo') === '1',
+    }),
     new Date(),
     {
       writable: canWriteView(view, 'member'),

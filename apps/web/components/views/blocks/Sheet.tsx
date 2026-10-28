@@ -24,6 +24,7 @@ import {
   toClipboard,
 } from '@cortex/agent-tools/src/views/sheet-paste';
 import * as Dialog from '@radix-ui/react-dialog';
+import * as ExportMenuUi from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import {
   ArrowDown,
@@ -68,6 +69,8 @@ import {
   SummaryStrip,
   UndoRedoButtons,
 } from './SheetParts';
+import { WindowBar, WindowFooter } from './SheetWindowBar';
+import { useSheetWindow } from '../sheet-window-context';
 import { useVariant } from './design';
 import { Card, StatusChip, TONE_SOFT, statusTone as themeTone } from './theme';
 
@@ -100,6 +103,9 @@ type Col = SheetCol;
 
 const WIDTH_REM: Record<string, number> = { number: 7.5, date: 6.5, text: 10 };
 const REM = 16;
+/** Con más líneas que esto la hoja se virtualiza (sólo se pintan las visibles). */
+const VIRTUAL_MIN = 120;
+const NO_VALUES: string[] = [];
 
 function widthOf(c: Col, i: number, narrow: boolean): number {
   if (i === 0) return narrow ? 9 : 13;
@@ -162,9 +168,21 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const [filters, setFilters] = useState<Record<number, Set<string>>>({});
   const [filterOpen, setFilterOpen] = useState<number | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<number>>(
-    () => new Set((block.groups ?? []).flatMap((g, i) => (g.collapsed ? [i] : []))),
+  // Los grupos plegados se recuerdan por su clave (no por su lugar): cargar más hacia el
+  // pasado o un refresco en vivo reacomoda los grupos sin soltar los que ya se plegaron.
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => new Set((block.groups ?? []).flatMap((g) => (g.collapsed ? [g.key] : []))),
   );
+  const knownGroups = useRef<Set<string>>(new Set((block.groups ?? []).map((g) => g.key)));
+  // Un grupo que llega por primera vez nace plegado si el spec lo pide.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo cuando cambian los grupos
+  useEffect(() => {
+    const fresh = (block.groups ?? []).filter((g) => !knownGroups.current.has(g.key));
+    if (!fresh.length) return;
+    for (const g of fresh) knownGroups.current.add(g.key);
+    const closed = fresh.filter((g) => g.collapsed).map((g) => g.key);
+    if (closed.length) setCollapsed((c) => new Set([...c, ...closed]));
+  }, [block.groups]);
   const [active, setActive] = useState<Pos | null>(null);
   const [rangeEnd, setRangeEnd] = useState<Pos | null>(null);
   const [editing, setEditing] = useState<{ draft: string } | null>(null);
@@ -252,9 +270,13 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   useEffect(() => {
     const el = rootRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => setViewW(el.clientWidth));
+    const ro = new ResizeObserver(() => {
+      setViewW(el.clientWidth);
+      setViewH(el.clientHeight);
+    });
     ro.observe(el);
     setViewW(el.clientWidth);
+    setViewH(el.clientHeight);
     return () => ro.disconnect();
   }, []);
   // El arrastre de un rango termina al soltar el botón en cualquier parte.
@@ -300,6 +322,40 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     },
     [block.groups, groupField, pasteFields],
   );
+
+  // --- La ventana: búsqueda y filtros por columna miran TODO el histórico, en el servidor ---
+  const winCtl = useSheetWindow();
+  const win = block.window;
+  const winLoading = Boolean(winCtl?.loading.has(block.id));
+  const rowsRef = useRef(block.rows);
+  rowsRef.current = block.rows;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `winCtl` cambia de identidad en cada refresco; sólo importa lo escrito
+  useEffect(() => {
+    if (!win || !winCtl) return;
+    const text = query.trim();
+    const cols: Record<string, string[]> = {};
+    for (const [ci, set] of Object.entries(filters)) {
+      const col = block.columns[Number(ci)];
+      if (!set.size || !col) continue;
+      cols[col.key] = [...set].map((shown) => {
+        if (shown === '—') return '';
+        const row = rowsRef.current.find((r) => r.cells[Number(ci)] === shown);
+        const raw = row?.sort[Number(ci)];
+        if (raw === null || raw === undefined) return shown;
+        // Una relación viaja por su id; lo demás por su valor guardado.
+        const id = col.type === 'relation' ? /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(String(raw)) : null;
+        return id ? id[0].toLowerCase() : String(raw);
+      });
+    }
+    const t = setTimeout(
+      () => winCtl.update(block.id, { q: text || undefined, cols: Object.keys(cols).length ? cols : undefined }),
+      text ? 350 : 0,
+    );
+    return () => clearTimeout(t);
+  }, [query, filters, Boolean(win), block.id]);
+
+  // La celda activa sigue a SU fila cuando llegan filas nuevas (arriba, abajo o en medio).
+  const activeRowId = useRef<string | null>(null);
 
   // --- Filas visibles: búsqueda, filtros por columna, orden dentro de cada grupo ---
   const visible = useMemo(() => {
@@ -361,7 +417,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     for (const gi of order) {
       const rs = byGroup.get(gi) ?? [];
       out.push({ kind: 'group', gi, count: rs.length });
-      if (collapsed.has(gi)) continue;
+      if (collapsed.has(block.groups?.[gi]?.key ?? '')) continue;
       for (const row of rs) out.push({ kind: 'row', row });
       if (canAdd) out.push({ kind: 'row', row: ghostRow(gi) });
     }
@@ -373,12 +429,74 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     [lines],
   );
   const realRows = useMemo(() => navRows.filter((r) => !r.ghost && !r.fresh), [navRows]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: recordar la fila de la celda activa sólo cuando el usuario la mueve
+  useEffect(() => {
+    activeRowId.current = active ? (navRows[active.r]?.id ?? null) : null;
+  }, [active]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-anclar sólo cuando cambian las filas
+  useEffect(() => {
+    const id = activeRowId.current;
+    if (!id || !active) return;
+    const r = navRows.findIndex((x) => x.id === id);
+    if (r >= 0 && r !== active.r) {
+      setActive({ r, c: active.c });
+      setRangeEnd(null);
+    }
+  }, [navRows]);
   // El número que se ve: las filas fantasma no cuentan.
   const numberOf = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of navRows) if (!r.ghost) m.set(r.id, m.size + 1);
     return m;
   }, [navRows]);
+
+  // Los valores distintos de una columna sólo se calculan con su filtro abierto (no en cada pintado).
+  const openValues = useMemo(
+    () => (filterOpen === null ? NO_VALUES : block.rows.map((r) => r.cells[filterOpen] ?? '')),
+    [filterOpen, block.rows],
+  );
+  const navIndex = useMemo(() => new Map(navRows.map((r, i) => [r.id, i])), [navRows]);
+
+  // --- Virtualización: con muchas líneas sólo se pintan las visibles + un margen ---
+  // Altura fija por densidad (se mide la real la primera vez); los encabezados de grupo, las
+  // filas fantasma y las filas comunes cuentan como líneas. Las columnas congeladas y el
+  // encabezado pegado siguen siendo `sticky` dentro del mismo contenedor.
+  const baseRowH = block.density === 'compact' && variant !== 'airy' ? 32 : 40;
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewH, setViewH] = useState(600);
+  const [measured, setMeasured] = useState({ row: 0, group: 0, head: 40, foot: 38 });
+  const virtual = lines.length > VIRTUAL_MIN;
+  const rowPx = measured.row || baseRowH;
+  const groupPx = measured.group || 84;
+  const offsets = useMemo(() => {
+    const o = new Float64Array(lines.length + 1);
+    for (let i = 0; i < lines.length; i++) o[i + 1] = (o[i] ?? 0) + (lines[i]?.kind === 'group' ? groupPx : rowPx);
+    return o;
+  }, [lines, rowPx, groupPx]);
+  const lineOfRow = useMemo(() => {
+    const m = new Map<string, number>();
+    lines.forEach((l, i) => {
+      if (l.kind === 'row') m.set(l.row.id, i);
+    });
+    return m;
+  }, [lines]);
+  const span = useMemo(() => {
+    if (!virtual) return { from: 0, to: lines.length };
+    const margin = rowPx * 12;
+    const top = Math.max(0, scrollTop - measured.head - margin);
+    const bottom = scrollTop + viewH + margin;
+    const find = (y: number) => {
+      let lo = 0;
+      let hi = lines.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if ((offsets[mid + 1] ?? 0) <= y) lo = mid + 1;
+        else hi = mid;
+      }
+      return lo;
+    };
+    return { from: find(top), to: Math.min(lines.length, find(bottom) + 1) };
+  }, [virtual, lines.length, offsets, scrollTop, viewH, rowPx, measured.head]);
 
   // Tras crear una fila desde la fantasma, el cursor vuelve a ella para seguir escribiendo.
   // biome-ignore lint/correctness/useExhaustiveDependencies: sólo cuando cambian las filas
@@ -985,13 +1103,58 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     e.preventDefault();
   }
 
-  // Mantener la celda activa a la vista.
+  // Mantener la celda activa a la vista (en una hoja virtualizada la fila puede no estar pintada:
+  // se desplaza por cálculo y luego se ajusta de lado con la celda ya pintada).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sólo cuando se mueve la celda activa
   useEffect(() => {
     if (!active) return;
-    rootRef.current
-      ?.querySelector(`[data-cell="${active.r}:${active.c}"]`)
-      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const root = rootRef.current;
+    if (!root) return;
+    const sel = `[data-cell="${active.r}:${active.c}"]`;
+    if (virtual) {
+      const id = navRows[active.r]?.id;
+      const line = id === undefined ? undefined : lineOfRow.get(id);
+      if (line !== undefined) {
+        const top = (offsets[line] ?? 0) + measured.head;
+        const bottom = top + rowPx;
+        if (top < root.scrollTop + measured.head) root.scrollTop = top - measured.head;
+        else if (bottom > root.scrollTop + root.clientHeight - measured.foot)
+          root.scrollTop = bottom - root.clientHeight + measured.foot;
+      }
+      requestAnimationFrame(() =>
+        root.querySelector(sel)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }),
+      );
+      return;
+    }
+    root.querySelector(sel)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [active]);
+
+  const scrollRaf = useRef(0);
+  function onGridScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    cancelAnimationFrame(scrollRaf.current);
+    scrollRaf.current = requestAnimationFrame(() => setScrollTop(el.scrollTop));
+  }
+  // Mide la altura real de una fila, de un encabezado de grupo, del encabezado y del pie.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: se re-mide al cambiar lo pintado
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !virtual) return;
+    const h = (q: string) => root.querySelector<HTMLElement>(q)?.getBoundingClientRect().height ?? 0;
+    const next = {
+      row: h('tbody tr[data-vk="row"]') || measured.row,
+      group: h('tbody tr[data-vk="group"]') || measured.group,
+      head: h('thead') || measured.head,
+      foot: h('tfoot') || measured.foot,
+    };
+    if (
+      Math.abs(next.row - measured.row) > 0.5 ||
+      Math.abs(next.group - measured.group) > 0.5 ||
+      Math.abs(next.head - measured.head) > 0.5 ||
+      Math.abs(next.foot - measured.foot) > 0.5
+    )
+      setMeasured(next);
+  }, [virtual, span.from, span.to, compact, block.density, viewW]);
 
   // --- Pegar ---
   async function startPaste(text: string) {
@@ -1097,8 +1260,15 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   });
   const totalOf = (col: number) => colTotals.find((t) => t.col === col)?.text;
 
-  const downloadCsv = () => {
-    const m = sheetMatrix(block, new Set(visible.map((r) => r.id)));
+  const downloadAllCsv = async () => {
+    const all = (await winCtl?.fetchAll(block.id)) as Sheet | null | undefined;
+    if (!all || all.type !== 'sheet') return say(false, 'No se pudo leer todo el histórico. Inténtalo otra vez.');
+    downloadCsv(all);
+  };
+
+  const downloadCsv = (source?: Sheet) => {
+    const target = source && 'rows' in source ? source : block;
+    const m = sheetMatrix(target, target === block ? new Set(visible.map((r) => r.id)) : undefined);
     const url = URL.createObjectURL(new Blob([sheetCsv(m)], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url;
@@ -1167,13 +1337,16 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
       title={block.title}
       source={`${block.total} ${block.total === 1 ? 'fila' : 'filas'} · ${block.source}${block.truncated ? ' · hay más de las que se muestran' : ''}`}
     >
+      {win && winCtl && (
+        <WindowBar win={win} loading={winLoading} onReach={(id) => winCtl.choose(block.id, id)} />
+      )}
       <div className="view-no-print mb-3 flex flex-wrap items-center gap-2">
         <label className="flex h-9 min-w-[10rem] flex-1 items-center gap-2 rounded-pill border border-border bg-surface-2/70 px-3 focus-within:border-border-strong focus-within:bg-surface sm:max-w-xs">
           <Search className="h-4 w-4 text-ink-faint" aria-hidden />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar en la hoja"
+            placeholder={win ? 'Buscar en todo el histórico' : 'Buscar en la hoja'}
             aria-label={`Buscar en ${block.title}`}
             className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
@@ -1209,7 +1382,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
               type="button"
               onClick={() =>
                 setCollapsed((c) =>
-                  c.size ? new Set() : new Set((block.groups ?? []).map((_, i) => i)),
+                  c.size ? new Set() : new Set((block.groups ?? []).map((g) => g.key)),
                 )
               }
               className="inline-flex h-9 items-center gap-1 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted hover:text-ink"
@@ -1255,14 +1428,42 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
             {full ? <Minimize2 className="h-3.5 w-3.5" aria-hidden /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden />}
             {full ? 'Salir' : 'Pantalla completa'}
           </button>
+          {win && winCtl && (win.more || win.search) ? (
+            <ExportMenuUi.Root>
+              <ExportMenuUi.Trigger className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted hover:text-ink">
+                <Download className="h-3.5 w-3.5" aria-hidden /> CSV <ChevronDown className="h-3 w-3" aria-hidden />
+              </ExportMenuUi.Trigger>
+              <ExportMenuUi.Portal>
+                <ExportMenuUi.Content
+                  align="end"
+                  sideOffset={6}
+                  className="view-no-print z-[70] min-w-[13rem] rounded-card border border-border bg-surface p-1 text-xs shadow-pop"
+                >
+                  <ExportMenuUi.Item
+                    onSelect={() => downloadCsv()}
+                    className="cursor-pointer rounded-sm px-3 py-2 font-medium text-ink outline-none data-[highlighted]:bg-surface-2"
+                  >
+                    Lo que ves ({visible.length} filas)
+                  </ExportMenuUi.Item>
+                  <ExportMenuUi.Item
+                    onSelect={() => void downloadAllCsv()}
+                    className="cursor-pointer rounded-sm px-3 py-2 font-medium text-ink outline-none data-[highlighted]:bg-surface-2"
+                  >
+                    Todo el histórico
+                  </ExportMenuUi.Item>
+                </ExportMenuUi.Content>
+              </ExportMenuUi.Portal>
+            </ExportMenuUi.Root>
+          ) : (
           <button
             type="button"
-            onClick={downloadCsv}
+            onClick={() => downloadCsv()}
             className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted hover:text-ink"
             title="Descargar lo que se ve como CSV, con grupos y totales"
           >
             <Download className="h-3.5 w-3.5" aria-hidden /> CSV
           </button>
+          )}
         </div>
       </div>
 
@@ -1276,7 +1477,8 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         // biome-ignore lint/a11y/noNoninteractiveTabindex: la rejilla es el control; las flechas mueven la celda activa.
         tabIndex={0}
         onKeyDown={onKeyDown}
-        style={viewW ? ({ '--sheet-view': `${viewW}px` } as React.CSSProperties) : undefined}
+        onScroll={virtual ? onGridScroll : undefined}
+        style={{ ...(viewW ? ({ '--sheet-view': `${viewW}px` } as React.CSSProperties) : {}), overflowAnchor: 'none' }}
         onPaste={(e) => {
           if (editing) return;
           const text = e.clipboardData.getData('text/plain');
@@ -1356,7 +1558,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                       label={c.label}
                       open={filterOpen === i}
                       onToggle={() => setFilterOpen((o) => (o === i ? null : i))}
-                      values={block.rows.map((r) => r.cells[i] ?? '')}
+                      values={filterOpen === i ? openValues : NO_VALUES}
                       selected={filters[i]}
                       onChange={(set) => setFilters((f) => ({ ...f, [i]: set }))}
                       align={i > block.columns.length / 2 ? 'right' : 'left'}
@@ -1367,11 +1569,16 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
             </tr>
           </thead>
           <tbody>
-            {lines.map((line) => {
+            {virtual && span.from > 0 && (
+              <tr aria-hidden style={{ height: offsets[span.from] }}>
+                <td colSpan={1 + block.columns.length} className="p-0" />
+              </tr>
+            )}
+            {(virtual ? lines.slice(span.from, span.to) : lines).map((line) => {
               if (line.kind === 'group') {
                 const g = block.groups?.[line.gi];
                 if (!g) return null;
-                const isClosed = collapsed.has(line.gi);
+                const isClosed = collapsed.has(g.key);
                 const members = visible.filter((r) => r.group === line.gi);
                 const all = block.rows.filter((r) => r.group === line.gi);
                 const progress =
@@ -1390,7 +1597,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                     : null);
                 const pct = progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
                 return (
-                  <tr key={`g${line.gi}`}>
+                  <tr key={`g${line.gi}`} data-vk="group">
                     <td colSpan={1 + block.columns.length} className="border-b border-border p-0">
                       <div className="sticky left-0 w-[var(--sheet-view,72rem)] max-w-full px-2 py-2">
                         <div
@@ -1406,8 +1613,8 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                             onClick={() =>
                               setCollapsed((c) => {
                                 const n = new Set(c);
-                                if (n.has(line.gi)) n.delete(line.gi);
-                                else n.add(line.gi);
+                                if (n.has(g.key)) n.delete(g.key);
+                                else n.add(g.key);
                                 return n;
                               })
                             }
@@ -1480,7 +1687,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                 );
               }
               const r = line.row;
-              const ri = navRows.indexOf(r);
+              const ri = navIndex.get(r.id) ?? -1;
               const picked = selRows.has(r.id);
               const no = numberOf.get(r.id) ?? 0;
               const band = r.rowTone ? TONE_SOFT[r.rowTone] : ri % 2 === 1 ? 'sheet-band' : 'bg-surface';
@@ -1489,6 +1696,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
               return (
                 <tr
                   key={r.id}
+                  data-vk="row"
                   aria-selected={picked || undefined}
                   className={clsx(
                     flash(block.id, r.id),
@@ -1738,6 +1946,11 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                 </tr>
               );
             })}
+            {virtual && span.to < lines.length && (
+              <tr aria-hidden style={{ height: (offsets[lines.length] ?? 0) - (offsets[span.to] ?? 0) }}>
+                <td colSpan={1 + block.columns.length} className="p-0" />
+              </tr>
+            )}
             {lines.length === 0 && (
               <tr>
                 <td colSpan={block.columns.length + 1} className="px-4 py-10 text-center text-sm text-ink-faint">
@@ -1763,7 +1976,8 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                   >
                     {ci === 0 && !totalOf(0) ? (
                       <span className="text-micro text-ink-faint">
-                        Total · {visible.length} {visible.length === 1 ? 'fila' : 'filas'}
+                        {win && (win.more || win.search) ? 'Total del rango cargado' : 'Total'} · {visible.length}{' '}
+                        {visible.length === 1 ? 'fila' : 'filas'}
                       </span>
                     ) : (
                       <BumpText text={totalOf(ci) ?? ''} />
@@ -1775,6 +1989,15 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
           )}
         </table>
       </div>
+
+      {win && winCtl && (
+        <WindowFooter
+          win={win}
+          loading={winLoading}
+          hasTotals={block.totals.length > 0}
+          onMore={() => win.next && winCtl.more(block.id, win.next)}
+        />
+      )}
 
       {rangeInfo && (
         <div className="view-no-print mt-2">

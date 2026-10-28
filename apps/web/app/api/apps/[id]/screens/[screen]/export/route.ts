@@ -1,6 +1,12 @@
 import { openScreenForApi, previewAttributesOf } from '@/lib/apps/access';
 import { specForExport, takeExportSlot, workbookResponse } from '@/lib/views/export-response';
-import { appCanExport, parseViewFilterParam, readScreen, screenView } from '@cortex/agent-tools';
+import {
+  appCanExport,
+  parseViewFilterParam,
+  readScreen,
+  screenView,
+  sheetWindowRequestsOf,
+} from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -36,6 +42,8 @@ export async function GET(
     spec: specForExport(view.spec),
     filters: parseViewFilterParam(view.spec, sp.get('f')),
     readOnly,
+    sheetWindows: sheetWindowRequestsOf(view.spec, sp.get('sw'), sp.get('sq')),
+    allSheetRows: sp.get('todo') === '1',
   });
   return workbookResponse(computed, `${access.app.name} · ${screen.title}`);
 }

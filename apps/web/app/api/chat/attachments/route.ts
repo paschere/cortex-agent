@@ -9,7 +9,13 @@ import {
   putFile,
   removeFiles,
 } from '@cortex/agent-tools';
-import { ForbiddenError, NotFoundError, logger } from '@cortex/core';
+import {
+  chatSpreadsheetMime,
+  isChatSpreadsheetMime,
+  readChatSpreadsheet,
+} from '@cortex/agent-tools/src/attachments/spreadsheet';
+import { registerFeedSourceCapture } from '@cortex/agent-tools/src/table-sync/feed-capture';
+import { ForbiddenError, NotFoundError, ValidationError, logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -152,11 +158,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const mime = baseMime(file.type);
-  if (!TEXT_MIME_TYPES.has(mime)) {
+  // Excel y CSV: manda la extensión (los navegadores informan mal el tipo del CSV).
+  const sheetMime = chatSpreadsheetMime(file.name, file.type);
+  const mime = sheetMime ?? baseMime(file.type);
+  const isSheet = sheetMime !== null && isChatSpreadsheetMime(sheetMime);
+  if (!isSheet && !TEXT_MIME_TYPES.has(mime)) {
     return NextResponse.json(
-      { error: 'Por ahora Cortex sólo lee PDF, DOCX, TXT y MD desde el chat.' },
+      { error: 'Por ahora Cortex lee PDF, DOCX, TXT, MD, Excel (.xlsx) y CSV desde el chat.' },
       { status: 415 },
+    );
+  }
+  if (isSheet && disposition === 'memory') {
+    return NextResponse.json(
+      {
+        error:
+          'Las hojas de cálculo se usan en esta conversación (y puedes pedirle a Cortex que las pase a una tabla). Adjúntalo como «sólo esta conversación».',
+      },
+      { status: 422 },
     );
   }
   if (file.size > MAX_FILE_SIZE) {
@@ -171,10 +189,21 @@ export async function POST(req: NextRequest) {
   // -------------------------------------------------------------------------
   if (disposition === 'turn') {
     let text: string;
+    let sheet: Awaited<ReturnType<typeof readChatSpreadsheet>> | null = null;
     try {
-      const parsed = await parseDocument(buffer, mime);
-      text = parsed.text.slice(0, TURN_TEXT_CHARS);
+      if (isSheet) {
+        // Todas las pestañas con el lector de Excel del repo; el modelo recibe
+        // un resumen (`text`) y las filas completas quedan en feed_tables.
+        sheet = await readChatSpreadsheet(buffer, { name: file.name, mime });
+        text = sheet.summary;
+      } else {
+        const parsed = await parseDocument(buffer, mime);
+        text = parsed.text.slice(0, TURN_TEXT_CHARS);
+      }
     } catch (err) {
+      if (err instanceof ValidationError) {
+        return NextResponse.json({ error: err.message }, { status: 422 });
+      }
       return NextResponse.json(
         {
           error:
@@ -232,6 +261,7 @@ export async function POST(req: NextRequest) {
         extracted_text: text,
         file_path: stored ? filePath : null,
         created_by: user.id,
+        ...(sheet ? { feed_tables: sheet.tables, feed_truncated: sheet.truncated } : {}),
       })
       .select('id, filename, disposition, created_at')
       .single();
@@ -243,12 +273,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No se pudo adjuntar el archivo.' }, { status: 500 });
     }
 
+    // Un Excel adjunto queda también como fuente (tipo archivo) para poder
+    // armar una tabla con trackers.propose_from_source / sync_from_source igual
+    // que desde una hoja de Google. Misma huella = misma fuente (versión nueva).
+    // Si falla, el adjunto sigue sirviendo para consultar en la conversación.
+    let sourceId: string | null = null;
+    if (sheet) {
+      try {
+        sourceId = await registerFeedSourceCapture({
+          db,
+          actorId: user.id,
+          kind: 'file',
+          name: file.name.slice(0, 240),
+          config: { contentHash: sha256 },
+          attachmentId,
+        });
+      } catch (err) {
+        logger.warn('chat spreadsheet source not registered', {
+          attachmentId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return NextResponse.json(
       {
         attachment: {
           ...data,
-          truncated: text.length >= TURN_TEXT_CHARS,
+          truncated: sheet ? sheet.truncated : text.length >= TURN_TEXT_CHARS,
           status: 'ready',
+          ...(sheet ? { notes: sheet.notes, sourceId } : {}),
         },
       },
       { status: 201 },

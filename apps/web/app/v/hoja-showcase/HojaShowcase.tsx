@@ -1,6 +1,6 @@
 'use client';
 
-import { ViewCanvas } from '@/components/views/ViewCanvas';
+import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import { ViewBrandProvider } from '@/components/views/blocks/brand';
 import { FormDataSourceProvider, type RelationOption } from '@/components/views/blocks/form-data-source';
 import type { ViewBrand } from '@/lib/branding/shape';
@@ -19,6 +19,7 @@ export function HojaShowcase({
   dark,
   brand,
   options,
+  dataUrl,
 }: {
   view: ComputedView;
   title: string;
@@ -27,6 +28,7 @@ export function HojaShowcase({
   brand: string;
   /** Opciones de ejemplo de cada relación (por clave de campo). */
   options: Record<string, RelationOption[]>;
+  dataUrl: string;
 }) {
   const data = useMemo(
     () => ({
@@ -63,7 +65,7 @@ export function HojaShowcase({
         <p className="mb-5 mt-1 text-sm text-ink-muted">{subtitle}</p>
         <ViewBrandProvider brand={chosen}>
           <FormDataSourceProvider value={data}>
-            <ViewCanvas view={view} target={{ kind: 'demo' }} />
+            <LiveViewCanvas initial={view} target={{ kind: 'demo' }} dataUrl={dataUrl} />
           </FormDataSourceProvider>
         </ViewBrandProvider>
       </main>

@@ -13,6 +13,12 @@ import { referenceList } from '../reference-lists';
 import { ambientTrm, trmListRows } from '../trackers/trm';
 import type { SheetFormat, SheetOp } from './sheet-math';
 import {
+  type SheetWindowInfo,
+  WINDOW_ROW_CAP,
+  pluralEs,
+  windowDateOf,
+} from './sheet-window';
+import {
   type TrackerOrigin,
   creatingOrigin,
   lockedFieldKeys,
@@ -130,6 +136,20 @@ export interface ViewSource {
    * `rows` llega vacío — no filtrado, vacío: lo que no se leyó no puede viajar.
    */
   blocked?: string;
+  /**
+   * Las filas de cada hoja con ventana (id del bloque → lo que trajo la carga):
+   * sólo la ventana y los grupos completos, leídas con el filtro en la consulta.
+   * `computeView` las pone en lugar de `rows` para ESE bloque; los demás bloques
+   * de la misma tabla siguen leyendo `rows`.
+   */
+  windows?: Map<string, SheetWindowData>;
+}
+
+export interface SheetWindowData {
+  rows: ViewRow[];
+  /** Filas de la tabla padre de los grupos que cayeron fuera de las leídas (encabezados completos). */
+  parents?: ViewRow[];
+  info: Omit<SheetWindowInfo, 'shownFrom' | 'shownTo' | 'rows' | 'rowNoun' | 'groupNoun' | 'today'>;
 }
 
 export type ValueFormat = 'number' | 'money' | 'percent';
@@ -250,11 +270,16 @@ export type ComputedBlock =
         /** Columnas que se suman en el encabezado (índices de `columns`). */
         subtotals: number[];
         collapsed: boolean;
+        /** La clave con que el servidor ordenó los grupos (para unir bloques cargados aparte). */
+        sortKey: string;
       }> | null;
+      groupDir: 1 | -1;
       totals: Array<{ col: number; op: SheetOp }>;
       total: number;
       truncated: boolean;
       searchable: true;
+      /** La ventana (sólo las más recientes + «cargar anterior»); null = la hoja entera. */
+      window: SheetWindowInfo | null;
       /** Fila nueva y pegar: sólo si quien mira escribe y la tabla recibe filas. */
       write: {
         add: boolean;
@@ -1200,7 +1225,8 @@ function computeSheet(
     if (rel) return { key: rel.id, label: rel.label || rel.id.slice(0, 8), parent: parentRows.get(rel.id) };
     return { key: String(raw), label: displayValue(tracker, r, g.by) };
   };
-  const sorted = sortRows(tracker, rows, block.sort).slice(0, block.limit);
+  const win = opts.sheetWindow ?? null;
+  const sorted = sortRows(tracker, rows, block.sort).slice(0, win ? WINDOW_ROW_CAP : block.limit);
   const order: string[] = [];
   const meta = new Map<string, { label: string; parent?: ViewRow }>();
   const members = new Map<string, ViewRow[]>();
@@ -1299,9 +1325,12 @@ function computeSheet(
               return i === undefined ? [] : [i];
             }),
             collapsed: g.collapsed,
+            sortKey:
+              g.sortBy && parentSrc ? String(m?.parent ? (rawValue(m.parent, g.sortBy) ?? '') : '') : (m?.label ?? k),
           };
         })
       : null,
+    groupDir: g?.sortDir === 'desc' ? -1 : 1,
     totals: (block.totals.length
       ? block.totals
       : columns.flatMap((c) => (c.kind === 'number' ? [{ field: c.key, op: 'sum' as const }] : []))
@@ -1310,8 +1339,30 @@ function computeSheet(
       return i === undefined ? [] : [{ col: i, op: t.op as SheetOp }];
     }),
     total: rows.length,
-    truncated: rows.length > block.limit,
+    truncated: win ? win.capped : rows.length > block.limit,
     searchable: true,
+    window: win
+      ? (() => {
+          const field = win.field;
+          const dates = ordered
+            .map((r) => windowDateOf(r, field))
+            .filter((d): d is string => d !== null)
+            .sort();
+          const parent = g?.parentTracker ? sources.get(g.parentTracker)?.tracker : undefined;
+          return {
+            ...win,
+            today,
+            groupCount: g ? order.length : 0,
+            groupNoun: g
+              ? pluralEs(fieldLabel(tracker, g.by).replace(/^(n[°º.]?|número de)\s+/i, '') || (parent?.name ?? ''))
+              : null,
+            rowNoun: tracker.name.trim().toLowerCase(),
+            shownFrom: dates[0] ?? null,
+            shownTo: dates[dates.length - 1] ?? null,
+            rows: ordered.length,
+          };
+        })()
+      : null,
     write:
       canWrite && (block.addRow || block.paste || block.editable.length)
         ? {
@@ -1451,6 +1502,8 @@ export interface ComputeOptions {
    * público) se pintan los saltos sin rol y los demás quedan apagados.
    */
   flowActor?: FlowActor;
+  /** Interno: la ventana del bloque que se está calculando (la pone `computeView`). */
+  sheetWindow?: SheetWindowData['info'] | null;
 }
 
 /** Si el campo se pinta con algo más que texto (foto, mapa). */
@@ -2779,7 +2832,7 @@ export function computeView(
             block,
             `El asistente de voz maneja el formulario «${block.form}», que ya no está en esta vista.`,
           )
-        : computeBlock(block, sources, today, options),
+        : computeBlock(...blockInputs(spec, block, sources, unfiltered, options, today)),
     ),
     computedAt: now.toISOString(),
     partial: [...unfiltered.values()].filter((s) => s.truncated).map((s) => s.tracker.name),
@@ -2801,6 +2854,42 @@ export function computeView(
         }
       : null,
   };
+}
+
+/**
+ * Lo que recibe `computeBlock`. Una hoja con ventana lee SUS filas (la ventana
+ * y los grupos completos), no las de la tabla entera; la barra de filtros las
+ * recorta igual que a cualquier bloque.
+ */
+function blockInputs(
+  spec: ViewSpec,
+  block: ViewBlock,
+  sources: Map<string, ViewSource>,
+  unfiltered: Map<string, ViewSource>,
+  options: ComputeOptions,
+  today: string,
+): [ViewBlock, Map<string, ViewSource>, string, ComputeOptions] {
+  if (block.type !== 'sheet' || !block.window) return [block, sources, today, options];
+  const base = unfiltered.get(block.tracker);
+  const data = base?.windows?.get(block.id);
+  if (!base || !data) return [block, sources, today, options];
+  const own = applyFilterBar(
+    spec,
+    new Map(unfiltered).set(block.tracker, { ...base, rows: data.rows }),
+    options.filters,
+  );
+  const merged = new Map(sources);
+  merged.set(block.tracker, own.get(block.tracker) ?? base);
+  const pt = block.group?.parentTracker;
+  const parentSrc = pt ? merged.get(pt) : undefined;
+  if (pt && parentSrc && data.parents?.length) {
+    const have = new Set(parentSrc.rows.map((r) => r.id));
+    merged.set(pt, {
+      ...parentSrc,
+      rows: [...parentSrc.rows, ...data.parents.filter((r) => !have.has(r.id))],
+    });
+  }
+  return [block, merged, today, { ...options, sheetWindow: data.info }];
 }
 
 /** Qué tablas de la vista vienen de una integración, para el aviso de cada bloque. */

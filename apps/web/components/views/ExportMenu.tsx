@@ -23,6 +23,7 @@ export function ExportMenu({
   filterParam,
   title,
   excel: canExcel = true,
+  sheetQuery = null,
 }: {
   /** La ruta de datos de la vista; de ella sale la de exportar. Null: sólo PDF. */
   dataUrl: string | null;
@@ -31,19 +32,28 @@ export function ExportMenu({
   title: string;
   /** Falso: oculta la opción de Excel (el rol no exporta). */
   excel?: boolean;
+  /**
+   * La vista tiene hojas con ventana: lo que se está mirando (`sw`/`sq`). Con
+   * esto el menú ofrece «lo que ves» o «todo el histórico».
+   */
+  sheetQuery?: { sw: string; sq: string } | null;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const excel = async () => {
+  const excel = async (scope: 'ves' | 'todo' = 'ves') => {
     if (!dataUrl) return;
     setBusy(true);
     setError(null);
     try {
       const base = dataUrl.replace(/\/data(\?|$)/, '/export$1');
-      const res = await fetch(withFilterParam(base, filterParam, window.location.origin), {
-        cache: 'no-store',
-      });
+      const target = new URL(withFilterParam(base, filterParam, window.location.origin), window.location.origin);
+      if (sheetQuery && scope === 'todo') target.searchParams.set('todo', '1');
+      else if (sheetQuery) {
+        if (sheetQuery.sw) target.searchParams.set('sw', sheetQuery.sw);
+        if (sheetQuery.sq) target.searchParams.set('sq', sheetQuery.sq);
+      }
+      const res = await fetch(`${target.pathname}${target.search}`, { cache: 'no-store' });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         setError(body?.error ?? 'No se pudo exportar.');
@@ -101,10 +111,19 @@ export function ExportMenu({
           >
             {dataUrl && canExcel && (
               <Menu.Item
-                onSelect={() => void excel()}
+                onSelect={() => void excel('ves')}
                 className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 font-medium text-ink outline-none data-[highlighted]:bg-surface-2"
               >
-                <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden /> Excel (.xlsx)
+                <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden />{' '}
+                {sheetQuery ? 'Excel · lo que ves' : 'Excel (.xlsx)'}
+              </Menu.Item>
+            )}
+            {dataUrl && canExcel && sheetQuery && (
+              <Menu.Item
+                onSelect={() => void excel('todo')}
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 font-medium text-ink outline-none data-[highlighted]:bg-surface-2"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden /> Excel · todo el histórico
               </Menu.Item>
             )}
             <Menu.Item

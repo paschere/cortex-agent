@@ -7,6 +7,7 @@ import {
   loadRecordContext,
   loadViewSources,
   parseViewFilterParam,
+  sheetWindowRequestsOf,
 } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -33,6 +34,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const sources = await loadViewSources(db, view.spec, {
     viewerId: user.id,
     ensureRowId: fila ?? undefined,
+    sheetWindows: sheetWindowRequestsOf(
+      view.spec,
+      req.nextUrl.searchParams.get('sw'),
+      req.nextUrl.searchParams.get('sq'),
+    ),
   });
   const record = await loadRecordContext(
     db,

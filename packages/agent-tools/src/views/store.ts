@@ -36,7 +36,14 @@ import {
   listTrackers,
   prepareValues,
 } from '../trackers/store';
-import { type ViewRow, type ViewSource, blockWriteFields } from './compute';
+import {
+  type SheetWindowData,
+  type ViewRow,
+  type ViewSource,
+  blockWriteFields,
+} from './compute';
+import { loadSheetWindow, windowRowsInMemory } from './sheet-window-load';
+import type { SheetWindowRequest } from './sheet-window';
 import {
   FEED_NO_VIEWER_MESSAGE,
   FEED_PUBLIC_MESSAGE,
@@ -427,6 +434,14 @@ export interface LoadViewSourcesOptions {
    * el mismo scope que el resto; si el rol no la ve, simplemente no entra.
    */
   ensureRowId?: string;
+  /**
+   * Las hojas con `window`: qué pidió el navegador por bloque (hasta dónde se
+   * cargó, búsqueda y filtros de columna en todo el histórico). Sin esto cada
+   * hoja con ventana trae su primer bloque. Ver views/sheet-window.ts.
+   */
+  sheetWindows?: Record<string, SheetWindowRequest>;
+  /** Exportar «todo»: las hojas con ventana se leen enteras (hasta el tope de la ventana). */
+  allSheetRows?: boolean;
 }
 
 /** Tablas del espacio que los campos con `match` de los formularios del spec usan como lista. */
@@ -559,6 +574,24 @@ export async function loadViewSources(
     }),
   );
 
+  const windowed = spec.blocks.flatMap((b) => (b.type === 'sheet' && b.window ? [b] : []));
+  const today = bogotaToday();
+  const requestOf = (id: string): SheetWindowRequest | undefined =>
+    options.allSheetRows ? { reach: 'all' } : options.sheetWindows?.[id];
+  // Fuentes de sólo lectura (plataforma, Feed): ya están en memoria, la ventana se recorta ahí.
+  for (const b of windowed) {
+    const src = sources.get(b.tracker);
+    if (!src || src.blocked || !isReadOnlySource(b.tracker) || !b.window) continue;
+    (src.windows ??= new Map()).set(
+      b.id,
+      windowRowsInMemory(src.rows, {
+        block: { id: b.id, columns: b.columns, window: b.window, group: b.group },
+        fields: src.tracker.fields,
+        request: requestOf(b.id),
+        today,
+      }),
+    );
+  }
   if (!slugs.length) return sources;
   const { data, error } = await db.from('trackers').select(TRACKER_COLUMNS).in('slug', slugs);
   if (error) throw error;
@@ -635,10 +668,28 @@ export async function loadViewSources(
         ? list.find((r) => r.id === options.ensureRowId)
         : undefined;
       if (ensured && !kept.includes(ensured)) kept.push(ensured);
+      const windows = new Map<string, SheetWindowData>();
+      for (const b of windowed) {
+        if (b.tracker !== t.slug || !b.window) continue;
+        windows.set(
+          b.id,
+          await loadSheetWindow(db, {
+            trackerId: t.id,
+            fields: tracker.fields,
+            block: { id: b.id, columns: b.columns, window: b.window, group: b.group },
+            access,
+            parentAccess: b.group?.parentTracker ? accessOf(b.group.parentTracker) : undefined,
+            request: requestOf(b.id),
+            today,
+            adapt: adaptEntry,
+          }),
+        );
+      }
       sources.set(t.slug, {
         tracker,
         rows: kept,
         truncated: list.length > VIEW_ROW_CAP,
+        ...(windows.size ? { windows } : {}),
       });
     }),
   );

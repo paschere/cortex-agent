@@ -66,6 +66,8 @@ export * from './store';
 export * from './sheet-math';
 export * from './sheet-export';
 export * from './sheet-paste';
+export * from './sheet-window';
+export { sheetWindowRequestsOf, windowRowsInMemory } from './sheet-window-load';
 export * from './form-extras';
 export * from './form-lines';
 export * from './sources';

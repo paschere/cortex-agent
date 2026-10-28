@@ -48,4 +48,40 @@ describe('complete Feed tables', () => {
     expect(() => querySheet(sheets, input({ column: 100 }))).toThrow('columna');
     expect(() => querySheet(sheets, input({ sheet: 'Otra' }))).toThrow('hoja');
   });
+
+  it('filters by contains/ranges, bounds rows and groups totals', () => {
+    const t = [
+      {
+        name: 'Ventas',
+        truncated: true,
+        totalRows: 5065,
+        rows: [
+          ['Fecha', 'Cliente', 'Valor'],
+          ['2026-01-05', 'Ñandú SAS', 100],
+          ['2026-02-10', 'Ana', 50],
+          ['2026-03-15', 'ñandu sas', 25],
+        ],
+      },
+    ];
+    const q = (extra = {}) =>
+      querySheet(
+        t,
+        tableQuerySchema.parse({
+          attachmentId: 'a',
+          sheet: 'Ventas',
+          operation: 'sum',
+          column: 3,
+          ...extra,
+        }),
+      );
+    expect(q({ filter: { column: 2, op: 'contains', value: 'nandu' } })).toMatchObject({
+      value: 125,
+    });
+    expect(q({ filter: { column: 1, op: 'gte', value: '2026-02-01' } })).toMatchObject({
+      value: 75,
+    });
+    expect(q({ startRow: 2, endRow: 3 })).toMatchObject({ value: 150, matchedRows: 2 });
+    expect(q({ groupBy: 2 })).toMatchObject({ totalGroups: 3 });
+    expect(q({ operation: 'count', groupBy: 1 }).warning).toContain('5065');
+  });
 });

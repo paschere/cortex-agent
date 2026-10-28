@@ -1,6 +1,11 @@
 import { specForExport, takeExportSlot, workbookResponse } from '@/lib/views/export-response';
 import { isUnlocked, openPublicView, unlockCookieName } from '@/lib/views/public';
-import { computeView, loadViewSources, parseViewFilterParam } from '@cortex/agent-tools';
+import {
+  computeView,
+  loadViewSources,
+  parseViewFilterParam,
+  sheetWindowRequestsOf,
+} from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -33,7 +38,15 @@ export async function GET(req: NextRequest) {
   const spec = specForExport(view.spec);
   const computed = computeView(
     spec,
-    await loadViewSources(db, spec, { audience: 'public' }),
+    await loadViewSources(db, spec, {
+      audience: 'public',
+      sheetWindows: sheetWindowRequestsOf(
+        spec,
+        req.nextUrl.searchParams.get('sw'),
+        req.nextUrl.searchParams.get('sq'),
+      ),
+      allSheetRows: req.nextUrl.searchParams.get('todo') === '1',
+    }),
     new Date(),
     {
       writable: false,

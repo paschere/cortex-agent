@@ -10,6 +10,7 @@ import { TRACKER_COLUMNS, type TrackerRow } from '../trackers/store';
 import { type ComputedView, type ViewSource, computeView } from '../views/compute';
 import { formLineSections, isLinesKey } from '../views/form-lines';
 import { loadRecordContext } from '../views/record-history';
+import type { SheetWindowRequest } from '../views/sheet-window';
 import { internalShareRefusal, internalSourcesOf } from '../views/sources';
 import {
   APPROVE_ACTION_ID,
@@ -1047,6 +1048,10 @@ export async function readScreen(
     fila?: string | null;
     /** `?d=<bloque>`: cuál detalle, si la pantalla tiene varios. */
     detail?: string | null;
+    /** Las hojas con ventana: lo que pidió el navegador (ver views/sheet-window.ts). */
+    sheetWindows?: Record<string, SheetWindowRequest>;
+    /** Exportar «todo»: las hojas con ventana se leen enteras. */
+    allSheetRows?: boolean;
   } = {},
 ): Promise<ScreenRead> {
   const view = await screenView(db, screen);
@@ -1054,6 +1059,8 @@ export async function readScreen(
   const scope = rowScopeFor(access.role, access.user, spec);
   const sources = await loadViewSources(db, spec, {
     ensureRowId: options.fila ?? undefined,
+    sheetWindows: options.sheetWindows,
+    allSheetRows: options.allSheetRows,
     // Quien no administra la empresa ve la app con la barrera del enlace
     // público: nada interno, personal ni del Feed. El administrador la ve
     // como una vista del equipo (y con sus fuentes personales).

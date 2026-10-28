@@ -3,8 +3,10 @@ import {
   type ComputedView,
   type ViewRow,
   type ViewSource,
+  type SheetWindowRequest,
   computeView,
   viewSpecSchema,
+  windowRowsInMemory,
 } from '@cortex/agent-tools';
 
 /**
@@ -154,8 +156,110 @@ const GUIAS: Array<[number, ...G]> = [
   [4, 'Logística Andina', '075-91121100', 'No', 'LA 580 / LATAM', '2026-10-21', '2026-10-23', 25, 401.0, 0.09, 3440.2, 'Pendiente'],
 ];
 
-function sources(): Map<string, ViewSource> {
-  const mRows: ViewRow[] = MANIFIESTOS.map(([nombre, numero, fva, estado, cobro], i) => ({
+/**
+ * El histórico: 16 manifiestos más (FLEX 5 a FLEX 20) que retroceden semana a
+ * semana hasta junio, con 3 a 4 guías cada uno, para probar «cargar anterior».
+ * Más una guía de agosto de FLEX 3 (el manifiesto de octubre): el grupo entra
+ * COMPLETO aunque esa guía caiga fuera de la ventana de 30 días.
+ */
+const EXTRA_M: Array<{ nombre: string; numero: string; fva: string; estado: string; cobro: number; week: number }> = Array.from(
+  { length: 16 },
+  (_, i) => ({
+    nombre: `FLEX ${i + 5}`,
+    numero: String(3400 + 90 - i * 6),
+    fva: `FVA-${1190 - i * 6}`,
+    estado: ['Enviado a Siigo', 'OK', 'Pendiente', 'Rechazado'][i % 4] as string,
+    cobro: i % 3 === 0 ? 40_000 : 0,
+    week: i + 1,
+  }),
+);
+const dayBack = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString().slice(0, 10);
+const HIST_CLIENTES = ['Aeroexpress SAS', 'Logística Andina', 'Carga del Sur', 'Floralia Export'];
+const HIST_VUELOS = ['AV 2134 / Avianca', 'LA 580 / LATAM', 'CM 232 / Copa', 'AA 922 / American'];
+
+function histGuias(): Array<[number, ...G]> {
+  const out: Array<[number, ...G]> = [];
+  EXTRA_M.forEach((m, mi) => {
+    const n = 3 + (mi % 2);
+    for (let k = 0; k < n; k++) {
+      const arribo = dayBack(m.week * 7 + 3 + k);
+      const traslado = dayBack(m.week * 7 + 2 + k);
+      const cli = HIST_CLIENTES[(mi + k) % 4] as string;
+      out.push([
+        mi + 5,
+        cli,
+        `${100 + ((mi * 7 + k) % 80)}-${50_000_000 + mi * 1000 + k * 11}`,
+        (mi + k) % 5 === 0 ? 'Sí' : 'No',
+        HIST_VUELOS[(mi + k) % 4] as string,
+        arribo,
+        traslado,
+        5 + ((mi * 3 + k * 5) % 30),
+        Math.round((60 + ((mi * 37 + k * 53) % 600)) * 10) / 10,
+        0.09,
+        3400 + ((mi * 13 + k * 7) % 60),
+        ['Enviado a Siigo', 'OK', 'Pendiente', 'Rechazado'][(mi + k) % 4] as string,
+      ]);
+    }
+  });
+  // La guía vieja de un manifiesto reciente (FLEX 3): cae fuera de la ventana, entra con su grupo.
+  out.push([3, 'Carga del Sur', '134-50070001', 'No', 'CM 232 / Copa', '2026-08-19', '2026-08-20', 9, 120, 0.09, 3380, 'OK']);
+  return out;
+}
+
+/** Una hoja grande de verdad (`?filas=5000`): n guías en n/15 manifiestos que retroceden un día por manifiesto. */
+function bulkRows(n: number): { m: ViewRow[]; g: ViewRow[] } {
+  const groups = Math.max(1, Math.round(n / 15));
+  const m: ViewRow[] = [];
+  for (let k = 0; k < groups; k++)
+    m.push({
+      id: uuid(5000 + k),
+      label: `FLEX ${k + 1}`,
+      values: { nombre: `FLEX ${k + 1}`, numero: String(5000 - k), fva: `FVA-${9000 - k}`, estado: ['OK', 'Pendiente', 'Rechazado', 'Enviado a Siigo'][k % 4] as string, ...(k % 3 === 0 ? { cobro_adicional: 50_000 } : {}) },
+      created_by: null,
+      created_at: at,
+      updated_at: at,
+    });
+  const g: ViewRow[] = [];
+  for (let i = 0; i < n; i++) {
+    const k = i % groups;
+    const cli = CLIENTES_DEMO[i % 4] as (typeof CLIENTES_DEMO)[number];
+    const tar = TARIFAS_DEMO[0] as (typeof TARIFAS_DEMO)[number];
+    const kilos = 20 + ((i * 37) % 500);
+    const totalUsd = Math.round(kilos * tar.tarifa * 100) / 100;
+    const day = dayBack(k);
+    g.push({
+      id: uuid(20_000 + i),
+      label: cli.nombre,
+      values: {
+        cliente: rel(cli.id, cli.nombre),
+        tarifa: rel(tar.id, tar.nombre),
+        guia: `${100 + (i % 800)}-${60_000_000 + i}`,
+        estado: ['Pendiente', 'OK', 'Rechazado', 'Enviado a Siigo'][i % 4] as string,
+        parcial: i % 11 === 0 ? 'Sí' : 'No',
+        vuelo: HIST_VUELOS[i % 4] as string,
+        fecha_arribo: day,
+        fecha_traslado: day,
+        piezas: 3 + (i % 40),
+        kilos,
+        tarifa_usd: tar.tarifa,
+        total_usd: totalUsd,
+        trm: 3400 + (i % 60),
+        total_cop: Math.round(totalUsd * (3400 + (i % 60))),
+        manifiesto: rel(uuid(5000 + k), `FLEX ${k + 1}`),
+      },
+      created_by: null,
+      created_at: at,
+      updated_at: at,
+    });
+  }
+  return { m, g };
+}
+
+function sources(bulk = 0): Map<string, ViewSource> {
+  const mRows: ViewRow[] = [
+    ...MANIFIESTOS.map(([nombre, numero, fva, estado, cobro]) => [nombre, numero, fva, estado, cobro] as const),
+    ...EXTRA_M.map((m) => [m.nombre, m.numero, m.fva, m.estado, m.cobro] as const),
+  ].map(([nombre, numero, fva, estado, cobro], i) => ({
     id: uuid(100 + i),
     label: nombre,
     values: { nombre, numero, fva, estado, ...(cobro ? { cobro_adicional: cobro } : {}) },
@@ -163,12 +267,12 @@ function sources(): Map<string, ViewSource> {
     created_at: at,
     updated_at: at,
   }));
-  const gRows: ViewRow[] = GUIAS.map(
+  const gRows: ViewRow[] = [...GUIAS, ...histGuias()].map(
     ([m, cliente, guia, parcial, vuelo, arribo, traslado, piezas, kilos, _tarifa, trm, estado], i) => {
       const cli = CLIENTES_DEMO.find((c) => c.nombre === cliente) ?? (CLIENTES_DEMO[0] as (typeof CLIENTES_DEMO)[number]);
       const tar = TARIFAS_DEMO[cli.tarifa] as (typeof TARIFAS_DEMO)[number];
       const totalUsd = Math.round(kilos * tar.tarifa * 100) / 100;
-      const man = MANIFIESTOS[m - 1] as (typeof MANIFIESTOS)[number];
+      const man = (MANIFIESTOS[m - 1] ?? [EXTRA_M[m - 5]?.nombre ?? `FLEX ${m}`]) as readonly [string, ...unknown[]];
       return {
         id: uuid(i + 1),
         label: cliente,
@@ -195,6 +299,11 @@ function sources(): Map<string, ViewSource> {
       };
     },
   );
+  if (bulk > 0) {
+    const b = bulkRows(bulk);
+    mRows.splice(0, mRows.length, ...b.m);
+    gRows.splice(0, gRows.length, ...b.g);
+  }
   const tRows: ViewRow[] = TARIFAS_DEMO.map((t) => ({
     id: t.id,
     label: t.nombre,
@@ -223,8 +332,26 @@ export const HOJA_TITLE = 'Hoja de prefacturación';
 export const HOJA_SUBTITLE =
   'Manifiestos con sus guías: edita con el teclado, pega desde Excel y mira los totales al pie.';
 
-export function hojaView(): ComputedView {
-  const spec = viewSpecSchema.parse({
+const HOJA_WINDOW = { field: 'fecha_traslado', size: '30d' } as const;
+const HOJA_COLUMNS = [
+  'cliente',
+  'guia',
+  'estado',
+  'parcial',
+  'vuelo',
+  'fecha_arribo',
+  'fecha_traslado',
+  'piezas',
+  'kilos',
+  'tarifa',
+  'tarifa_usd',
+  'total_usd',
+  'trm',
+  'total_cop',
+];
+
+export function hojaSpec() {
+  return viewSpecSchema.parse({
     version: 1,
     editing: 'team',
     blocks: [
@@ -281,10 +408,34 @@ export function hojaView(): ComputedView {
           { field: 'total_cop', op: 'sum' },
         ],
         pasteKey: 'guia',
+        window: HOJA_WINDOW,
       },
     ],
   });
-  return computeView(spec, sources(), NOW, {
+}
+
+export function hojaView(requests: Record<string, SheetWindowRequest> = {}, bulk = 0): ComputedView {
+  const spec = hojaSpec();
+  const src = sources(bulk);
+  const guiasSrc = src.get('guias') as ViewSource;
+  // Lo mismo que hace `loadViewSources` con una tabla real, sobre las filas de ejemplo.
+  guiasSrc.windows = new Map([
+    [
+      'hoja',
+      windowRowsInMemory(guiasSrc.rows, {
+        block: {
+          id: 'hoja',
+          columns: HOJA_COLUMNS,
+          window: HOJA_WINDOW,
+          group: { by: 'manifiesto', parentTracker: 'manifiestos' },
+        },
+        fields: guiasSrc.tracker.fields,
+        request: requests.hoja,
+        today: '2026-10-27',
+      }),
+    ],
+  ]);
+  return computeView(spec, src, NOW, {
     writable: true,
     viewer: { id: 'demo-user', kind: 'member' },
   });
