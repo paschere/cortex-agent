@@ -42,6 +42,8 @@ import {
   type ViewSource,
   blockWriteFields,
 } from './compute';
+import { loadSourceAggregates } from './aggregate-load';
+import type { ViewFilterState } from './view-filters';
 import { loadSheetWindow, windowRowsInMemory } from './sheet-window-load';
 import type { SheetWindowRequest } from './sheet-window';
 import {
@@ -442,6 +444,13 @@ export interface LoadViewSourcesOptions {
   sheetWindows?: Record<string, SheetWindowRequest>;
   /** Exportar «todo»: las hojas con ventana se leen enteras (hasta el tope de la ventana). */
   allSheetRows?: boolean;
+  /**
+   * Lo elegido en la barra de filtros (ya validado). Con una tabla de más de
+   * VIEW_ROW_CAP filas, las cifras se calculan en la base sobre TODA la tabla y
+   * necesitan saber de qué barra: pásalo igual que a `computeView`; si no
+   * coincide, esa cifra vuelve a calcularse sobre las filas cargadas y se avisa.
+   */
+  filters?: ViewFilterState;
 }
 
 /** Tablas del espacio que los campos con `match` de los formularios del spec usan como lista. */
@@ -685,10 +694,24 @@ export async function loadViewSources(
           }),
         );
       }
+      const truncated = list.length > VIEW_ROW_CAP;
+      // Tabla truncada: las cifras se calculan en la base sobre TODA la tabla.
+      const aggregates = truncated
+        ? await loadSourceAggregates(db, {
+            trackerId: t.id,
+            slug: t.slug,
+            tracker,
+            spec,
+            access,
+            filters: options.filters ?? {},
+            today,
+          })
+        : undefined;
       sources.set(t.slug, {
         tracker,
         rows: kept,
-        truncated: list.length > VIEW_ROW_CAP,
+        truncated,
+        ...(aggregates ? { aggregates } : {}),
         ...(windows.size ? { windows } : {}),
       });
     }),

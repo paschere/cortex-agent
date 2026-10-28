@@ -33,6 +33,17 @@ import {
   parseLocation,
   parseRelationValue,
 } from '../trackers/schema';
+import {
+  AGGREGATE_BLOCK_TYPES,
+  type BlockAggregates,
+  EMPTY_STAT,
+  type SourceAggregates,
+  type Stat,
+  filtersKeyOf,
+  mergeStats,
+  statOfRows,
+  statValue,
+} from './aggregates';
 import { formLineSections } from './form-lines';
 import { computeCards } from './cards';
 import { type BlockDesign, hasDesign } from './design-shape';
@@ -129,6 +140,12 @@ export interface ViewSource {
   rows: ViewRow[];
   /** True cuando la lectura se cortó en el tope y hay más filas. */
   truncated: boolean;
+  /**
+   * Con la tabla truncada: lo que la base calculó sobre TODA la tabla para los
+   * bloques de cifras (aggregates.ts). Un bloque que no está aquí se calcula
+   * sobre `rows` y la vista lo avisa.
+   */
+  aggregates?: SourceAggregates;
   /**
    * Por qué esta fuente NO se leyó, cuando no se leyó a propósito: una fuente
    * interna pedida desde el enlace público, o una fuente de la plataforma que
@@ -1065,6 +1082,9 @@ function bucketOf(day: string, bucket: 'day' | 'week' | 'month'): string {
   return addDays(day, -weekday);
 }
 
+/** Para la carga de agregados (aggregate-load.ts). */
+export { bucketOf as viewBucketOf };
+
 function bucketLabel(key: string, bucket: 'day' | 'week' | 'month'): string {
   if (bucket === 'month') {
     const [y, m] = key.split('-');
@@ -1086,7 +1106,7 @@ function lastDayOfMonth(isoMonth: string): string {
   return addDays(`${addMonths(isoMonth, 1)}-01`, -1);
 }
 
-function shiftBucket(key: string, period: Period, n: number): string {
+export function shiftBucket(key: string, period: Period, n: number): string {
   if (period === 'month') return addMonths(key, n);
   return addDays(key, period === 'week' ? 7 * n : n);
 }
@@ -1098,7 +1118,7 @@ const PERIOD_PREV: Record<Period, string> = {
   month: 'vs. mes anterior',
 };
 /** Cuántos períodos dibuja la línea del KPI. */
-const SERIES_LENGTH: Record<Period, number> = { day: 12, week: 10, month: 12 };
+export const SERIES_LENGTH: Record<Period, number> = { day: 12, week: 10, month: 12 };
 
 /**
  * El tono de la opción `i` de un campo de opciones: siempre el mismo para la
@@ -1504,6 +1524,8 @@ export interface ComputeOptions {
   flowActor?: FlowActor;
   /** Interno: la ventana del bloque que se está calculando (la pone `computeView`). */
   sheetWindow?: SheetWindowData['info'] | null;
+  /** Interno: las tablas truncadas con algún bloque calculado sobre las filas cargadas. */
+  inexact?: Set<string>;
 }
 
 /** Si el campo se pinta con algo más que texto (foto, mapa). */
@@ -1653,13 +1675,18 @@ export function blockWriteFields(block: ViewBlock): string[] {
   return [];
 }
 
-function compareMetric(
+/** El resumen por período del KPI: desde las filas leídas o desde los agregados de la base. */
+function bucketStats(
   block: Extract<ViewBlock, { type: 'metric' }>,
   rows: ViewRow[],
-  today: string,
-  format: ValueFormat | 'ratio',
-): { value: number | null; rows: number; compare: ComputedCompare } {
+  agg?: BlockAggregates,
+): Map<string, Stat> {
   const period = block.period ?? 'month';
+  if (agg?.groups) {
+    const out = new Map<string, Stat>();
+    for (const g of agg.groups) if (g.key !== null) out.set(g.key, g.stat);
+    return out;
+  }
   const dateField = block.dateField ?? 'created_at';
   const groups = new Map<string, ViewRow[]>();
   for (const r of rows) {
@@ -1671,7 +1698,19 @@ function compareMetric(
     if (list) list.push(r);
     else groups.set(key, [r]);
   }
-  const value = (key: string) => aggregate(groups.get(key) ?? [], block.aggregate, block.field);
+  return new Map([...groups].map(([k, list]) => [k, statOfRows(list, block.field)]));
+}
+
+function compareMetric(
+  block: Extract<ViewBlock, { type: 'metric' }>,
+  rows: ViewRow[],
+  today: string,
+  format: ValueFormat | 'ratio',
+  agg?: BlockAggregates,
+): { value: number | null; rows: number; compare: ComputedCompare } {
+  const period = block.period ?? 'month';
+  const groups = bucketStats(block, rows, agg);
+  const value = (key: string) => statValue(groups.get(key) ?? EMPTY_STAT, block.aggregate, block.field);
   const now = bucketOf(today, period);
   const current = value(now);
   const previous = value(shiftBucket(now, period, -1));
@@ -1688,7 +1727,7 @@ function compareMetric(
   const n = SERIES_LENGTH[period];
   return {
     value: current,
-    rows: groups.get(now)?.length ?? 0,
+    rows: groups.get(now)?.cnt ?? 0,
     compare: {
       period,
       currentLabel: PERIOD_NOW[period],
@@ -1902,13 +1941,31 @@ function computeBlockBody(
       : src.rows;
   const writes = blockWriteFields(block);
 
+  // Tabla truncada: la cifra sale de la base sobre TODA la tabla si ésta pudo
+  // calcularla con la misma barra de filtros; si no, sobre las filas cargadas y
+  // la vista lo dice (`partial`).
+  const agg: BlockAggregates | undefined =
+    src.truncated &&
+    AGGREGATE_BLOCK_TYPES.has(block.type) &&
+    src.aggregates?.filtersKey === filtersKeyOf(opts.filters)
+      ? src.aggregates.byBlock.get(block.id)
+      : undefined;
+  const inexact = () => opts.inexact?.add(src.tracker.slug);
+  if (src.truncated && !agg && !(block.type === 'sheet' && block.window)) inexact();
+
   switch (block.type) {
     case 'metric': {
       const format = formatOf(tracker, block.field, block.format);
       const compared =
-        block.compare === 'previous_period' ? compareMetric(block, rows, today, format) : null;
-      const value = compared ? compared.value : aggregate(rows, block.aggregate, block.field);
-      const count = compared ? compared.rows : rows.length;
+        block.compare === 'previous_period'
+          ? compareMetric(block, rows, today, format, agg)
+          : null;
+      const value = compared
+        ? compared.value
+        : agg?.total
+          ? statValue(agg.total, block.aggregate, block.field)
+          : aggregate(rows, block.aggregate, block.field);
+      const count = compared ? compared.rows : (agg?.total?.cnt ?? rows.length);
       return {
         type: 'metric',
         id: block.id,
@@ -1939,6 +1996,11 @@ function computeBlockBody(
         ? block.columns
         : ['label', ...tracker.fields.slice(0, 5).map((f) => f.key)];
       const shown = sortRows(tracker, rows, block.sort).slice(0, block.limit);
+      // Con agregados el total es el de la tabla entera; las filas que se
+      // enseñan siguen siendo las cargadas, y sólo son «las primeras» si el
+      // orden es el de lectura y no falta ninguna.
+      if (agg && (block.sort || shown.length < Math.min(agg.total?.cnt ?? 0, block.limit)))
+        inexact();
       return {
         type: 'table',
         id: block.id,
@@ -1965,7 +2027,7 @@ function computeBlockBody(
             return v === undefined ? null : v;
           }),
         })),
-        total: rows.length,
+        total: agg?.total?.cnt ?? rows.length,
         searchable: block.searchable,
         source: tracker.name,
         actions: actionsFor(opts, block.actions, tracker, shown),
@@ -2035,41 +2097,50 @@ function computeBlockBody(
           source: tracker.name,
         };
       }
-      const groups = new Map<string, ViewRow[]>();
-      for (const r of rows) {
-        const v = rawValue(r, block.groupBy);
-        let key: string;
-        if (isDate) {
-          const day = typeof v === 'string' ? dayOf(v) : null;
-          if (!day) continue;
-          key = bucketOf(day, block.bucket);
-        } else if (type === 'relation' && v !== undefined) {
-          // Una relación se agrupa por el nombre de la fila relacionada, no por su JSON.
-          const rel = parseRelationValue(v);
-          key = rel ? rel.label || rel.id.slice(0, 8) : String(v);
-        } else {
-          key = v === undefined ? 'Sin dato' : String(v);
+      // Un resumen por grupo: de la base (toda la tabla) o de las filas leídas.
+      const groups = new Map<string, Stat>();
+      if (agg?.groups) {
+        for (const g of agg.groups) {
+          const key = g.key === null ? (isDate ? null : 'Sin dato') : g.key;
+          if (key === null) continue;
+          const have = groups.get(key);
+          groups.set(key, have ? mergeStats(have, g.stat) : g.stat);
         }
-        const list = groups.get(key);
-        if (list) list.push(r);
-        else groups.set(key, [r]);
+      } else {
+        const lists = new Map<string, ViewRow[]>();
+        for (const r of rows) {
+          const v = rawValue(r, block.groupBy);
+          let key: string;
+          if (isDate) {
+            const day = typeof v === 'string' ? dayOf(v) : null;
+            if (!day) continue;
+            key = bucketOf(day, block.bucket);
+          } else if (type === 'relation' && v !== undefined) {
+            // Una relación se agrupa por el nombre de la fila relacionada, no por su JSON.
+            const rel = parseRelationValue(v);
+            key = rel ? rel.label || rel.id.slice(0, 8) : String(v);
+          } else {
+            key = v === undefined ? 'Sin dato' : String(v);
+          }
+          const list = lists.get(key);
+          if (list) list.push(r);
+          else lists.set(key, [r]);
+        }
+        for (const [key, list] of lists) groups.set(key, statOfRows(list, block.field));
       }
-      let entries = [...groups.entries()].map(([key, list]) => ({
+      const valueOf = (st: Stat) => statValue(st, block.aggregate, block.field) ?? 0;
+      let entries = [...groups.entries()].map(([key, stat]) => ({
         key,
-        list,
-        value: aggregate(list, block.aggregate, block.field) ?? 0,
+        stat,
+        value: valueOf(stat),
       }));
       if (block.chart === 'funnel') {
         // Las etapas, en el orden de las opciones y con las vacías en cero: un
         // embudo sin su etapa vacía miente sobre dónde se cae la gente.
         const order = tracker.fields.find((f) => f.key === block.groupBy)?.options ?? [];
         entries = order.slice(0, block.limit).map((key) => {
-          const list = groups.get(key) ?? [];
-          return {
-            key,
-            list,
-            value: list.length ? (aggregate(list, block.aggregate, block.field) ?? 0) : 0,
-          };
+          const stat = groups.get(key) ?? EMPTY_STAT;
+          return { key, stat, value: stat.cnt ? valueOf(stat) : 0 };
         });
       } else if (isDate) {
         entries.sort((a, b) => a.key.localeCompare(b.key));
@@ -2089,14 +2160,15 @@ function computeBlockBody(
           (block.aggregate === 'count' || block.aggregate === 'sum')
         ) {
           const head = entries.slice(0, block.limit - 1);
-          const rest = entries.slice(block.limit - 1).flatMap((e) => e.list);
-          entries = [
-            ...head,
-            { key: 'Otros', list: rest, value: aggregate(rest, block.aggregate, block.field) ?? 0 },
-          ];
+          const rest = entries
+            .slice(block.limit - 1)
+            .reduce((acc, e) => mergeStats(acc, e.stat), EMPTY_STAT);
+          entries = [...head, { key: 'Otros', stat: rest, value: valueOf(rest) }];
         } else entries = entries.slice(0, block.limit);
       }
-      const total = aggregate(rows, block.aggregate, block.field);
+      const total = agg?.total
+        ? statValue(agg.total, block.aggregate, block.field)
+        : aggregate(rows, block.aggregate, block.field);
       return {
         type: 'chart',
         id: block.id,
@@ -2131,8 +2203,26 @@ function computeBlockBody(
         if (list) list.push(r);
         else loose.push(r);
       }
-      const columns = [...buckets.entries()].map(([key, list]) => ({ key, label: key, list }));
-      if (loose.length) columns.push({ key: '__none', label: 'Sin estado', list: loose });
+      // El conteo de cada columna: de la base (toda la tabla) o de las filas leídas.
+      const counted = new Map<string, number>();
+      let looseCount = loose.length;
+      if (agg?.groups) {
+        looseCount = 0;
+        for (const g of agg.groups) {
+          if (g.key !== null && buckets.has(g.key)) counted.set(g.key, g.stat.cnt);
+          else looseCount += g.stat.cnt;
+        }
+      }
+      const columns = [...buckets.entries()].map(([key, list]) => ({
+        key,
+        label: key,
+        list,
+        count: agg?.groups ? (counted.get(key) ?? 0) : list.length,
+      }));
+      if (looseCount > 0 || loose.length)
+        columns.push({ key: '__none', label: 'Sin estado', list: loose, count: looseCount });
+      // Las tarjetas son de las filas leídas: si a una columna le faltan, se avisa.
+      if (agg && columns.some((c) => c.list.length < Math.min(c.count, block.limit))) inexact();
       const visible = columns.flatMap((c) => c.list.slice(0, block.limit));
       const shared = {
         id: block.id,
@@ -2144,7 +2234,7 @@ function computeBlockBody(
         columns: columns.map((c) => ({
           key: c.key,
           label: c.label,
-          count: c.list.length,
+          count: c.count,
           cards: c.list.slice(0, block.limit).map((r) => ({
             id: r.id,
             label: r.label,
@@ -2378,32 +2468,44 @@ function computeBlockBody(
 
     case 'progress': {
       const format = formatOf(tracker, block.field, block.format);
-      const value = (list: ViewRow[]) => aggregate(list, block.aggregate, block.field) ?? 0;
+      const value = (st: Stat) => statValue(st, block.aggregate, block.field) ?? 0;
       let groups: Array<{ label: string; value: number }>;
       if (!block.groupBy) {
-        groups = [{ label: 'Total', value: value(rows) }];
+        groups = [
+          { label: 'Total', value: value(agg?.total ?? statOfRows(rows, block.field)) },
+        ];
       } else {
         const by = block.groupBy;
         const type = fieldType(tracker, by);
         const isDate = type === 'date' || type === 'builtin_date';
         const options =
           type === 'select' ? (tracker.fields.find((f) => f.key === by)?.options ?? []) : [];
-        const lists = new Map<string, ViewRow[]>(options.map((o) => [o, []]));
-        for (const t of block.targets) if (!lists.has(t.group)) lists.set(t.group, []);
-        for (const r of rows) {
-          const v = rawValue(r, by);
-          if (v === undefined) continue;
-          const key = isDate
-            ? typeof v === 'string' && dayOf(v)
-              ? bucketLabel(bucketOf(dayOf(v) as string, 'month'), 'month')
-              : null
-            : String(v);
-          if (!key) continue;
-          const list = lists.get(key);
-          if (list) list.push(r);
-          else lists.set(key, [r]);
+        const stats = new Map<string, Stat>(options.map((o) => [o, EMPTY_STAT]));
+        for (const t of block.targets) if (!stats.has(t.group)) stats.set(t.group, EMPTY_STAT);
+        const add = (key: string, st: Stat) => stats.set(key, mergeStats(stats.get(key) ?? EMPTY_STAT, st));
+        if (agg?.groups) {
+          for (const g of agg.groups) {
+            if (g.key === null) continue;
+            add(isDate ? bucketLabel(g.key, 'month') : g.key, g.stat);
+          }
+        } else {
+          const lists = new Map<string, ViewRow[]>();
+          for (const r of rows) {
+            const v = rawValue(r, by);
+            if (v === undefined) continue;
+            const key = isDate
+              ? typeof v === 'string' && dayOf(v)
+                ? bucketLabel(bucketOf(dayOf(v) as string, 'month'), 'month')
+                : null
+              : String(v);
+            if (!key) continue;
+            const list = lists.get(key);
+            if (list) list.push(r);
+            else lists.set(key, [r]);
+          }
+          for (const [key, list] of lists) add(key, statOfRows(list, block.field));
         }
-        groups = [...lists.entries()].map(([label, list]) => ({ label, value: value(list) }));
+        groups = [...stats.entries()].map(([label, st]) => ({ label, value: value(st) }));
         if (!options.length) groups.sort((a, b) => b.value - a.value);
         groups = groups.slice(0, block.limit);
       }
@@ -2630,7 +2732,7 @@ const fold = (v: string) =>
     .trim()
     .toLowerCase();
 
-function matchesBar(
+export function matchesBar(
   tracker: CatalogTracker,
   row: ViewRow,
   field: string,
@@ -2825,17 +2927,23 @@ export function computeView(
       rows,
     });
   }
+  // Las tablas truncadas con algún bloque calculado sobre las filas cargadas
+  // (los de cifras con agregados de la base quedan exactos y no cuentan).
+  options.inexact = new Set();
+  const blocks = spec.blocks.map((block) =>
+    block.type === 'voice' && !spec.blocks.some((b) => b.id === block.form && b.type === 'form')
+      ? problem(
+          block,
+          `El asistente de voz maneja el formulario «${block.form}», que ya no está en esta vista.`,
+        )
+      : computeBlock(...blockInputs(spec, block, sources, unfiltered, options, today)),
+  );
   return {
-    blocks: spec.blocks.map((block) =>
-      block.type === 'voice' && !spec.blocks.some((b) => b.id === block.form && b.type === 'form')
-        ? problem(
-            block,
-            `El asistente de voz maneja el formulario «${block.form}», que ya no está en esta vista.`,
-          )
-        : computeBlock(...blockInputs(spec, block, sources, unfiltered, options, today)),
-    ),
+    blocks,
     computedAt: now.toISOString(),
-    partial: [...unfiltered.values()].filter((s) => s.truncated).map((s) => s.tracker.name),
+    partial: [...unfiltered.values()]
+      .filter((s) => s.truncated && options.inexact?.has(s.tracker.slug))
+      .map((s) => s.tracker.name),
     refreshSeconds:
       spec.theme?.layout === 'tv' && (spec.refreshSeconds === 0 || spec.refreshSeconds > 30)
         ? 30

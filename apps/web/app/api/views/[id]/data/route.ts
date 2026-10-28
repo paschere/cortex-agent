@@ -31,8 +31,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const view = await getView(db, id);
   if (!view) return NextResponse.json({ error: 'Esa vista ya no existe.' }, { status: 404 });
   const fila = req.nextUrl.searchParams.get('fila');
+  const filters = parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f'));
   const sources = await loadViewSources(db, view.spec, {
     viewerId: user.id,
+    filters,
     ensureRowId: fila ?? undefined,
     sheetWindows: sheetWindowRequestsOf(
       view.spec,
@@ -49,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   );
   const computed = computeView(view.spec, sources, new Date(), {
     writable: canWriteView(view, 'member'),
-    filters: parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f')),
+    filters,
     viewer: { id: user.id, kind: 'member' },
     record,
   });

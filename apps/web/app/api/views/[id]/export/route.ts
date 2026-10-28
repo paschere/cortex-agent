@@ -35,6 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     spec,
     await loadViewSources(db, spec, {
       viewerId: user.id,
+      filters: parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f')),
       // «Lo que ves» (`sw`/`sq`) o «todo» (`todo=1`) en las hojas con ventana.
       sheetWindows: sheetWindowRequestsOf(
         spec,

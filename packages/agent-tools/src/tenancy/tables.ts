@@ -900,6 +900,9 @@ export function tenancyOf(table: string): TableTenancy {
 export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
+  // Migración 0242: agregados de una tabla propia para las vistas (suma/cuenta
+  // por grupo). Lee sólo filas de p_organization_id y devuelve totales, no filas.
+  view_rows_aggregate: 'organization',
   // Migración 0189: el puente de WhatsApp multiempresa. claim/release reparten
   // sesiones entre procesos (devuelven ids de espacio y un booleano, nunca
   // contenido); phone_taken dice sí/no sobre un número de OTRA empresa.

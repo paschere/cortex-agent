@@ -1061,6 +1061,8 @@ export async function readScreen(
     ensureRowId: options.fila ?? undefined,
     sheetWindows: options.sheetWindows,
     allSheetRows: options.allSheetRows,
+    // La barra de filtros: las cifras de una tabla grande se calculan en la base con ella.
+    filters: options.filters ?? {},
     // Quien no administra la empresa ve la app con la barrera del enlace
     // público: nada interno, personal ni del Feed. El administrador la ve
     // como una vista del equipo (y con sus fuentes personales).

@@ -101,7 +101,7 @@ describe('readChatSpreadsheet', () => {
       readChatSpreadsheet(Buffer.alloc(10 * 1024 * 1024 + 1), { name: 'a.xlsx', mime: XLSX }),
     ).rejects.toThrow(/10 MB/);
     await expect(
-      readChatSpreadsheet(Buffer.from('hola'), { name: 'a.xlsx', mime: XLSX }),
+      readChatSpreadsheet(Buffer.from(new TextEncoder().encode('hola')), { name: 'a.xlsx', mime: XLSX }),
     ).rejects.toThrow(/no parece un Excel/);
     const empty = await book((wb) => {
       wb.addWorksheet('Vacía');

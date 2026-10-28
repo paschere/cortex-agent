@@ -35,8 +35,10 @@ export async function GET(req: NextRequest) {
   )
     return NextResponse.json({ error: 'Vuelve a escribir la contraseña.' }, { status: 401 });
   const fila = req.nextUrl.searchParams.get('fila');
+  const filters = parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f'));
   const sources = await loadViewSources(db, view.spec, {
     audience: 'public',
+    filters,
     ensureRowId: fila ?? undefined,
     sheetWindows: sheetWindowRequestsOf(
       view.spec,
@@ -54,7 +56,7 @@ export async function GET(req: NextRequest) {
   const computed = computeView(view.spec, sources, new Date(), {
     writable: canWriteView(view, 'public'),
     audience: 'public',
-    filters: parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f')),
+    filters,
     record,
   });
   return NextResponse.json(

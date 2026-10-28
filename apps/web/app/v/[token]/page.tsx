@@ -66,8 +66,10 @@ export default async function PublicViewPage({
   // el cálculo: la ficha de una fila sólo trae lo que el bloque ya muestra,
   // salvo que el spec diga `detailFields`. Un enlace con `?f=` abre ya
   // filtrado (validado contra el spec guardado).
+  const filters = parseViewFilterParam(view.spec, typeof query.f === 'string' ? query.f : null);
   const sources = await loadViewSources(db, view.spec, {
     audience: 'public',
+    filters,
     ensureRowId: typeof query.fila === 'string' ? query.fila : undefined,
   });
   // `?fila=`: el detalle de un registro por el enlace, con una historia sin nombres internos.
@@ -81,7 +83,7 @@ export default async function PublicViewPage({
   const computed = computeView(view.spec, sources, new Date(), {
     writable: canWriteView(view, 'public'),
     audience: 'public',
-    filters: parseViewFilterParam(view.spec, typeof query.f === 'string' ? query.f : null),
+    filters,
     record,
   });
   const subtitle = view.spec.subtitle ?? view.description ?? null;

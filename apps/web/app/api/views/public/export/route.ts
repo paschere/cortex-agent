@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
     spec,
     await loadViewSources(db, spec, {
       audience: 'public',
+      filters: parseViewFilterParam(view.spec, req.nextUrl.searchParams.get('f')),
       sheetWindows: sheetWindowRequestsOf(
         spec,
         req.nextUrl.searchParams.get('sw'),
