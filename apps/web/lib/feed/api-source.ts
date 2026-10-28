@@ -12,6 +12,9 @@ import {
   runTool,
 } from '@cortex/agent-tools';
 import type { SheetData, SheetValue } from '@cortex/agent-tools/src/kb/spreadsheets';
+import { GoogleApiError } from '@cortex/agent-tools/src/gsheets/errors';
+import { describeSheetReadError } from '@cortex/agent-tools/src/table-sync/read-errors';
+import { driveVersion, getDriveFileInfo } from '@cortex/agent-tools/src/table-sync/drive-excel';
 import {
   hashConfig,
   registerFeedSourceCapture,
@@ -372,6 +375,8 @@ export async function refreshFeedSource(
       url?: string;
       spreadsheetId?: string;
       tabs?: string[];
+      /** md5/modifiedTime del Excel en Drive de la última lectura: si no cambió, no se descarga. */
+      driveVersion?: string;
       pagination?: FeedPagination;
       shape?: ApiShape;
     };
@@ -420,9 +425,39 @@ export async function refreshFeedSource(
     });
     if (data.kind === 'google_sheet') {
       if (!config.spreadsheetId) throw new Error('La fuente no conserva el id de Google Sheets.');
+      // Un Excel de Drive abierto como hoja: si md5/modifiedTime no cambió, no se vuelve a bajar.
+      if (config.driveVersion) {
+        const info = await getDriveFileInfo(context, config.spreadsheetId).catch(() => null);
+        if (info && driveVersion(info) === config.driveVersion) {
+          const latest = await db
+            .from('feed_sources')
+            .select('latest_attachment_id')
+            .eq('id', sourceId)
+            .maybeSingle();
+          const attachmentId = (latest.data as { latest_attachment_id?: string } | null)
+            ?.latest_attachment_id;
+          const entry = attachmentId
+            ? await ownedFeed(db, actorId).eq('id', attachmentId).maybeSingle()
+            : null;
+          if (entry?.data) {
+            const now = new Date().toISOString();
+            await db
+              .from('feed_sources')
+              .update({ last_checked_at: now, status: 'ok', error: null, updated_at: now })
+              .eq('id', sourceId)
+              .eq('enabled', true);
+            return { sourceId, entry: entry.data, deduplicated: true };
+          }
+        }
+      }
       const result = await readGoogleSheetFeed(context, config.spreadsheetId, {
         tabs: config.tabs,
       });
+      if (result.driveVersion && result.driveVersion !== config.driveVersion)
+        await db
+          .from('feed_sources')
+          .update({ config: { ...config, driveVersion: result.driveVersion } })
+          .eq('id', sourceId);
       return saveRefreshedCapture({
         db,
         actorId,
@@ -452,7 +487,19 @@ export async function refreshFeedSource(
       });
     }
     throw new Error('Los archivos y textos se actualizan añadiendo una nueva versión manual.');
-  } catch (error) {
+  } catch (rawError) {
+    let error = rawError;
+    if (rawError instanceof GoogleApiError)
+      error = await describeSheetReadError(
+        buildToolContext({
+          organizationId,
+          userId: actorId,
+          agentId: actorId,
+          surface: 'web',
+          signal: AbortSignal.timeout(10_000),
+        }),
+        rawError,
+      );
     await db
       .from('feed_sources')
       .update({

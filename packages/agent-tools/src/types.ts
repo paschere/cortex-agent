@@ -7,6 +7,8 @@ import type { DeclaredAmount } from './security/mandate.js';
 export interface IntegrationsClient {
   getAccessToken(provider: IntegrationProvider): Promise<{ token: string; scopes: string[] }>;
   hasScopes(provider: IntegrationProvider, scopes: string[]): Promise<boolean>;
+  /** Correo de la cuenta conectada (guardado; si falta lo pide al proveedor y lo guarda). */
+  accountEmail?(provider: IntegrationProvider): Promise<string | null>;
 }
 
 /**

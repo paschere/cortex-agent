@@ -20,6 +20,7 @@ import {
   sheetSourceConfig,
 } from './feed-capture';
 import { proposalMarkdown, proposeTableFromSheet } from './propose';
+import { describeSheetReadError } from './read-errors';
 import { createTrackerSync, latestSourceSheet, listTrackerSyncs } from './sync';
 
 /**
@@ -131,16 +132,7 @@ export async function setSourceQuery(
 async function sheetReadError(ctx: ToolContext, err: unknown): Promise<Error> {
   if (err instanceof FeedCaptureError) return new ValidationError(err.message);
   if (err instanceof ValidationError) return err;
-  const hasGoogle = await ctx.integrations
-    .hasScopes('google', ['https://www.googleapis.com/auth/spreadsheets.readonly'])
-    .catch(() => false);
-  if (!hasGoogle)
-    return new ValidationError(
-      'Google no está conectado en esta empresa (o falta el permiso de Hojas). Conéctalo en Datos y conexiones y vuelve a pegar el enlace; ése es el único paso que no puedo hacer yo.',
-    );
-  return new ValidationError(
-    'No pude leer la hoja con la conexión de Google de la empresa. Revisa que la persona tenga permiso sobre el archivo (compártelo con la cuenta conectada) y que el enlace sea el correcto.',
-  );
+  return describeSheetReadError(ctx, err);
 }
 
 /**

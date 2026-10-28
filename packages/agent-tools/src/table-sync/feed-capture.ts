@@ -3,8 +3,10 @@ import { ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { putFile, removeFiles } from '../files/store';
 import { sheetsFetch } from '../gsheets/client';
+import { isExcelRejection } from '../gsheets/errors';
 import type { SheetData } from '../kb/spreadsheets';
 import type { ToolContext } from '../types';
+import { type DriveFileInfo, driveVersion, loadDriveWorkbook } from './drive-excel';
 
 /**
  * Captura de una Google Sheet al Feed, compartida por el Feed de la web
@@ -112,9 +114,60 @@ export const SHEET_BLOCK_ROWS = 5000;
 /** Filas que se leen de una pestaña para proponer una tabla (más el encabezado). */
 export const PROPOSE_SAMPLE_ROWS = 300;
 
+/**
+ * Un libro abierto para leer, venga de la API de Sheets o de un Excel/CSV de
+ * Drive. Todo lo de abajo (proponer tabla, conectar fuente, sync periódico,
+ * fuentes contables) lee a través de esto, así que un Excel en Drive se
+ * comporta igual que una hoja nativa: mismas pestañas, filas y encabezados.
+ */
+interface OpenedSheet {
+  name: string;
+  tabs: SheetTabInfo[];
+  /** Filas `from`..`to` (1-based, inclusive) de una pestaña, columnas A..AZ. */
+  values(tab: SheetTabInfo, from: number, to: number): Promise<SheetCell[][]>;
+  /** Sólo Excel/CSV de Drive: md5 o modifiedTime del archivo leído. */
+  driveVersion?: string;
+}
+
 /** Título y tamaño de las pestañas, sin leer datos. */
 export async function listGoogleSheetTabs(ctx: ToolContext, id: string) {
-  return fetchSheetsMeta(ctx, id);
+  const open = await openSheet(ctx, id);
+  return { name: open.name, tabs: open.tabs };
+}
+
+async function openSheet(ctx: ToolContext, id: string): Promise<OpenedSheet> {
+  try {
+    const meta = await fetchSheetsMeta(ctx, id);
+    return {
+      ...meta,
+      values: (tab, from, to) =>
+        fetchValues(ctx, id, `${a1Title(tab.title)}!A${from}:${LAST_COL}${to}`),
+    };
+  } catch (err) {
+    if (!isExcelRejection(err)) throw err;
+    return openDriveFile(ctx, id);
+  }
+}
+
+/** Excel o CSV en Drive que se abrió con la interfaz de Hojas: se baja y se lee en memoria. */
+async function openDriveFile(
+  ctx: ToolContext,
+  id: string,
+  known?: DriveFileInfo,
+): Promise<OpenedSheet> {
+  const { info, sheets } = await loadDriveWorkbook(ctx, id, known);
+  const tabs: SheetTabInfo[] = sheets.map((sh) => ({
+    title: sh.name,
+    rows: sh.totalRows ?? sh.rows.length,
+    cols: sh.rows.reduce((n, row) => Math.max(n, row.length), 0),
+  }));
+  return {
+    name: info.name.replace(/\.(xlsx|xls|csv)$/i, ''),
+    tabs,
+    driveVersion: driveVersion(info),
+    values: async (tab, from, to) =>
+      (sheets[tabs.indexOf(tab)]?.rows ?? []).slice(from - 1, to) as SheetCell[][],
+  };
 }
 
 async function fetchSheetsMeta(ctx: ToolContext, id: string) {
@@ -200,14 +253,10 @@ export async function readGoogleSheetTab(
   options: { tab?: string | number; maxRows?: number } = {},
 ) {
   const maxRows = Math.max(1, Math.min(options.maxRows ?? PROPOSE_SAMPLE_ROWS, CHOSEN_TAB_MAX_ROWS));
-  const meta = await fetchSheetsMeta(ctx, spreadsheetId);
+  const meta = await openSheet(ctx, spreadsheetId);
   const index = resolveSheetTab(meta.tabs, options.tab);
   const info = meta.tabs[index] as SheetTabInfo;
-  const rows = await fetchValues(
-    ctx,
-    spreadsheetId,
-    `${a1Title(info.title)}!A1:${LAST_COL}${maxRows + 1}`,
-  );
+  const rows = await meta.values(info, 1, maxRows + 1);
   return {
     title: meta.name,
     tab: info.title,
@@ -222,18 +271,12 @@ export async function readGoogleSheetTab(
  * `maxRows` filas: no se le pide a Google todo de una. Un bloque que vuelve
  * corto es el final de los datos.
  */
-async function readTabInBlocks(
-  ctx: ToolContext,
-  id: string,
-  title: string,
-  gridRows: number,
-  maxRows: number,
-) {
+async function readTabInBlocks(open: OpenedSheet, tab: SheetTabInfo, maxRows: number) {
   const rows: SheetCell[][] = [];
-  const limit = gridRows > 0 ? Math.min(gridRows, maxRows) : maxRows;
+  const limit = tab.rows > 0 ? Math.min(tab.rows, maxRows) : maxRows;
   for (let from = 1; from <= limit; from += SHEET_BLOCK_ROWS) {
     const to = Math.min(from + SHEET_BLOCK_ROWS - 1, limit);
-    const block = await fetchValues(ctx, id, `${a1Title(title)}!A${from}:${LAST_COL}${to}`);
+    const block = await open.values(tab, from, to);
     rows.push(...block);
     if (block.length < to - from + 1) break;
   }
@@ -251,7 +294,7 @@ export async function readGoogleSheetFeed(
   id: string,
   options: { tabs?: string[] } = {},
 ) {
-  const meta = await fetchSheetsMeta(ctx, id);
+  const meta = await openSheet(ctx, id);
   const chosen = options.tabs?.length
     ? [...new Set(options.tabs.map((t) => resolveSheetTab(meta.tabs, t)))].map(
         (i) => meta.tabs[i] as SheetTabInfo,
@@ -268,8 +311,8 @@ export async function readGoogleSheetFeed(
   let truncated = false;
   for (const info of chosen ?? meta.tabs) {
     const rows = chosen
-      ? await readTabInBlocks(ctx, id, info.title, info.rows, maxRows)
-      : await fetchValues(ctx, id, `${a1Title(info.title)}!A1:${LAST_COL}${maxRows}`);
+      ? await readTabInBlocks(meta, info, maxRows)
+      : await meta.values(info, 1, maxRows);
     cells += rows.reduce((n, row) => n + row.length, 0);
     if (cells > maxCells)
       throw new ValidationError(
@@ -292,6 +335,8 @@ export async function readGoogleSheetFeed(
     tables,
     truncated,
     selected: chosen ? chosen.map((c) => c.title) : null,
+    /** md5/modifiedTime del archivo cuando era un Excel/CSV de Drive; si no, undefined. */
+    driveVersion: meta.driveVersion,
   };
 }
 

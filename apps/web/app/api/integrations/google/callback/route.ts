@@ -9,6 +9,7 @@ import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { getSyncState } from '@cortex/agent-tools';
+import { fetchGoogleAccountEmail } from '@cortex/agent-tools/src/integrations';
 import { IntegrationError, encryptToken, getEnv } from '@cortex/core';
 import { logger } from '@cortex/core';
 import { cookies } from 'next/headers';
@@ -68,6 +69,7 @@ export async function GET(req: NextRequest) {
     ? encryptToken(tok.refresh_token)
     : ((existing?.refresh_token_enc as string | undefined) ?? null);
 
+  const accountEmail = await fetchGoogleAccountEmail(tok.access_token);
   await db.from('integrations').upsert(
     {
       user_id: user.id,
@@ -80,6 +82,13 @@ export async function GET(req: NextRequest) {
     },
     { onConflict: 'user_id,provider' },
   );
+  // Aparte del upsert: si la columna (0240) aún no existe, conectar no debe fallar.
+  if (accountEmail)
+    await db
+      .from('integrations')
+      .update({ account_email: accountEmail })
+      .eq('user_id', user.id)
+      .eq('provider', 'google');
 
   // Arranque al conectar: conectar Google no es consentir a leer el correo ni
   // todo el Drive (eso lo pide el recorrido con su interruptor y su selector).

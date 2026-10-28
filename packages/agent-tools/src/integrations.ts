@@ -122,6 +122,35 @@ function privateAppToken(provider: IntegrationProvider): string | null {
   return null;
 }
 
+/**
+ * El correo de la cuenta de Google de un token, con lo que ya se pidió al
+ * conectar (no hace falta el permiso «email»): Drive `about`, y si no el id del
+ * calendario principal, que es el correo.
+ */
+export async function fetchGoogleAccountEmail(token: string): Promise<string | null> {
+  const headers = { Authorization: `Bearer ${token}` };
+  try {
+    const r = await fetch(
+      'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',
+      { headers },
+    );
+    if (r.ok) {
+      const j = (await r.json()) as { user?: { emailAddress?: string } };
+      if (j.user?.emailAddress) return j.user.emailAddress;
+    }
+  } catch {}
+  try {
+    const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary?fields=id', {
+      headers,
+    });
+    if (r.ok) {
+      const j = (await r.json()) as { id?: string };
+      if (j.id?.includes('@')) return j.id;
+    }
+  } catch {}
+  return null;
+}
+
 export function createIntegrationsClient(
   db: SupabaseClient,
   userId: UUID,
@@ -168,6 +197,31 @@ export function createIntegrationsClient(
         .eq('id', data.id as string);
       logger.info({ provider, userId }, 'refreshed integration token');
       return { token: refreshed.access_token, scopes: newScopes };
+    },
+    async accountEmail(provider) {
+      if (provider !== 'google') return null;
+      const { data } = await db
+        .from('integrations')
+        .select('account_email')
+        .eq('user_id', userId)
+        .eq('provider', 'google')
+        .maybeSingle();
+      const saved = (data as { account_email?: string | null } | null)?.account_email;
+      if (saved) return saved;
+      try {
+        const { token } = await this.getAccessToken('google');
+        const email = await fetchGoogleAccountEmail(token);
+        if (email)
+          await db
+            .from('integrations')
+            .update({ account_email: email })
+            .eq('user_id', userId)
+            .eq('provider', 'google');
+        return email;
+      } catch (err) {
+        logger.warn({ err }, 'could not resolve the connected Google account email');
+        return null;
+      }
     },
     async hasScopes(provider, scopes) {
       if (privateAppToken(provider)) return true;

@@ -1,5 +1,5 @@
-import { IntegrationError } from '@cortex/core';
 import type { ToolContext } from '../types';
+import { GoogleApiError, logGoogleError } from './errors';
 
 const BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
@@ -18,6 +18,10 @@ export async function sheetsFetch<T>(
     },
     signal: ctx.signal,
   });
-  if (!r.ok) throw new IntegrationError(`Sheets ${r.status} ${path}: ${await r.text()}`, 'google');
+  if (!r.ok) {
+    const err = new GoogleApiError('sheets', r.status, path, await r.text());
+    logGoogleError(ctx.logger, err, `sheets ${(init?.method ?? 'GET').toUpperCase()}`);
+    throw err;
+  }
   return r.json() as Promise<T>;
 }

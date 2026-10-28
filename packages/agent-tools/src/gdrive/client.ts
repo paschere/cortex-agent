@@ -1,4 +1,5 @@
 import { IntegrationError } from '@cortex/core';
+import { GoogleApiError, logGoogleError } from '../gsheets/errors';
 import type { ToolContext } from '../types';
 
 const BASE = 'https://www.googleapis.com/drive/v3';
@@ -16,7 +17,11 @@ export async function driveGet<T>(
     headers: { Authorization: `Bearer ${token}` },
     signal: ctx.signal,
   });
-  if (!r.ok) throw new IntegrationError(`Drive ${r.status} ${path}: ${await r.text()}`, 'google');
+  if (!r.ok) {
+    const err = new GoogleApiError('drive', r.status, path, await r.text());
+    logGoogleError(ctx.logger, err, 'drive GET');
+    throw err;
+  }
   return r.json() as Promise<T>;
 }
 
@@ -33,7 +38,11 @@ export async function driveGetText(
     headers: { Authorization: `Bearer ${token}` },
     signal: ctx.signal,
   });
-  if (!r.ok) throw new IntegrationError(`Drive ${r.status} ${path}: ${await r.text()}`, 'google');
+  if (!r.ok) {
+    const err = new GoogleApiError('drive', r.status, path, await r.text());
+    logGoogleError(ctx.logger, err, 'drive GET');
+    throw err;
+  }
   return r.text();
 }
 
@@ -50,7 +59,11 @@ export async function driveGetBytes(
     headers: { Authorization: `Bearer ${token}` },
     signal: ctx.signal,
   });
-  if (!r.ok) throw new IntegrationError(`Drive ${r.status} ${path}: ${await r.text()}`, 'google');
+  if (!r.ok) {
+    const err = new GoogleApiError('drive', r.status, path, await r.text());
+    logGoogleError(ctx.logger, err, 'drive GET');
+    throw err;
+  }
   return Buffer.from(await r.arrayBuffer());
 }
 

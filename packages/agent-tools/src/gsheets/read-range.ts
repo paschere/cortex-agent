@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { loadDriveWorkbook, sliceA1 } from '../table-sync/drive-excel';
 import { sheetsFetch } from './client';
+import { isExcelRejection } from './errors';
 
 export const sheetsReadRange = registerTool({
   id: 'gsheets.read_range',
@@ -18,10 +20,17 @@ export const sheetsReadRange = registerTool({
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     type R = { range: string; values?: string[][] };
-    const r = await sheetsFetch<R>(
-      ctx,
-      `/${input.spreadsheetId}/values/${encodeURIComponent(input.range)}`,
-    );
-    return { values: r.values ?? [] };
+    try {
+      const r = await sheetsFetch<R>(
+        ctx,
+        `/${input.spreadsheetId}/values/${encodeURIComponent(input.range)}`,
+      );
+      return { values: r.values ?? [] };
+    } catch (err) {
+      // Un Excel de Drive abierto como hoja: la API de Sheets lo rechaza, se lee por Drive.
+      if (!isExcelRejection(err)) throw err;
+      const { sheets } = await loadDriveWorkbook(ctx, input.spreadsheetId);
+      return { values: sliceA1(sheets, input.range) };
+    }
   },
 });

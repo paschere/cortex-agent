@@ -1,6 +1,8 @@
 import { buildToolContext } from '@/lib/agent';
 import { feedFingerprint } from '@/lib/feed/fingerprint';
 import { FeedCaptureError, persistFeedCapture } from '@/lib/feed/google-sheet-capture';
+import { GoogleApiError } from '@cortex/agent-tools/src/gsheets/errors';
+import { describeSheetReadError } from '@cortex/agent-tools/src/table-sync/read-errors';
 import { googleSpreadsheetId, readGoogleSheetFeed } from '@/lib/feed/google-sheets';
 import { FEED_MAX_BYTES, FEED_MAX_TEXT, feedMime } from '@/lib/feed/shared';
 import { ownedFeed } from '@/lib/feed/store';
@@ -157,6 +159,19 @@ export async function POST(req: NextRequest) {
       throw new Error('El contenido es demasiado extenso. Divídelo en archivos más pequeños.');
     }
   } catch (err) {
+    if (err instanceof GoogleApiError) {
+      const mapped = await describeSheetReadError(
+        buildToolContext({
+          organizationId: user.organization.id,
+          userId: user.id,
+          agentId: user.id,
+          surface: 'web',
+          signal: AbortSignal.timeout(10000),
+        }),
+        err,
+      );
+      return NextResponse.json({ error: mapped.message }, { status: 422 });
+    }
     const message =
       kind === 'url'
         ? 'No se pudo leer la fuente. Para Google Sheets, conecta Google en esta empresa y comprueba tu permiso sobre el archivo. Para otras URLs, usa una página pública.'
