@@ -53,12 +53,13 @@ export function useRecordOpener(
 
 type RecordBlock = Extract<
   ComputedBlock,
-  { type: 'table' | 'board' | 'zones' | 'gallery' | 'calendar' | 'cards' | 'map' }
+  { type: 'table' | 'sheet' | 'board' | 'zones' | 'gallery' | 'calendar' | 'cards' | 'map' }
 >;
 
 export function recordBlockOf(block: ComputedBlock | undefined): RecordBlock | null {
   return block &&
     (block.type === 'table' ||
+      block.type === 'sheet' ||
       block.type === 'board' ||
       block.type === 'zones' ||
       block.type === 'gallery' ||

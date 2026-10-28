@@ -4,11 +4,12 @@ import { useAppNav } from '@/components/apps/AppNav';
 import { activeOutbox } from '@/lib/apps/app-outbox';
 import { assignRowAction, assignablePeopleAction } from '@/lib/apps/location-actions';
 import { undoRowChangeAction } from '@/lib/apps/history-actions';
-import { editAppRowAction, runAppActionAction } from '@/lib/apps/write-actions';
-import { editViewRowAction, runViewActionAction } from '@/lib/views/actions';
+import { editAppRowAction, pasteAppRowsAction, runAppActionAction } from '@/lib/apps/write-actions';
+import { editViewRowAction, pasteViewRowsAction, runViewActionAction } from '@/lib/views/actions';
 import { hasPending, resolvePending } from '@/lib/views/offline-files';
 import type {
   AssignablePerson,
+  SheetPasteResult,
   ComputedAction,
   ComputedEditMeta,
   TrackerField,
@@ -53,6 +54,15 @@ export interface ViewWriter {
     opts?: EditOptions,
   ): Promise<Result>;
   act(blockId: string, action: ComputedAction, rowId: string, rowLabel: string): Promise<Result>;
+  /**
+   * Pegar filas de Excel / Sheets en una hoja (`apply: false` = sólo validar y
+   * mostrar qué haría cada fila). Sólo dentro de la plataforma y de las apps.
+   */
+  paste?(
+    blockId: string,
+    rows: Array<Record<string, string>>,
+    apply: boolean,
+  ): Promise<{ ok: true; result: SheetPasteResult } | { ok: false; error: string }>;
   /**
    * «Deshacer este cambio» del historial de un registro (sólo dentro de una
    * aplicación): el servidor decide si este rol puede y si el campo no cambió después.
@@ -138,6 +148,11 @@ export function ViewWriterProvider({
   let writer: ViewWriter | null = null;
   if (target.kind === 'app') {
     writer = {
+      async paste(blockId, rows, apply) {
+        const res = await pasteViewRowsAction(target.viewId, blockId, rows, apply);
+        if (res.ok && apply) onChanged?.();
+        return res;
+      },
       async edit(blockId, rowId, patch) {
         const res = await editViewRowAction(target.viewId, blockId, rowId, patch);
         if (res.ok) onChanged?.();
@@ -155,6 +170,15 @@ export function ViewWriterProvider({
     };
   } else if (target.kind === 'custom_app') {
     writer = {
+      async paste(blockId, rows, apply) {
+        try {
+          const res = await pasteAppRowsAction(target.appId, target.screen, blockId, rows, apply);
+          if (res.ok && apply) onChanged?.();
+          return res;
+        } catch {
+          return { ok: false, error: 'Sin conexión. Inténtalo otra vez.' };
+        }
+      },
       async undo(blockId, rowId, entryId) {
         try {
           const res = await undoRowChangeAction(target.appId, target.screen, blockId, rowId, entryId);
@@ -285,7 +309,28 @@ export function ViewWriterProvider({
           : 'Hecho (de mentira).',
       };
     };
-    writer = { edit: fake, act: fake };
+    writer = {
+      edit: fake,
+      act: fake,
+      async paste(_blockId, rows, apply) {
+        await new Promise((r) => setTimeout(r, 300));
+        return {
+          ok: true as const,
+          result: {
+            applied: apply,
+            lines: rows.map((r, i) => ({
+              line: i + 1,
+              action: 'create' as const,
+              label: r.guia ?? r.cliente ?? `Fila ${i + 1}`,
+            })),
+            created: rows.length,
+            updated: 0,
+            same: 0,
+            errors: 0,
+          },
+        };
+      },
+    };
   }
   return <WriterContext.Provider value={writer}>{children}</WriterContext.Provider>;
 }
@@ -299,7 +344,7 @@ export function ViewWriterProvider({
  * `validateRowValues` que corre allá, así el mensaje sale en la celda sin ir y
  * volver. Lo que sólo el servidor sabe (que un valor ya existe) lo dice él.
  */
-function checkCell(edit: ComputedEditMeta, label: string, value: string): string | null {
+export function checkCell(edit: ComputedEditMeta, label: string, value: string): string | null {
   const field = { key: 'v', label, ...edit } as TrackerField;
   return validateRowValues([field], { v: value })[0]?.message ?? null;
 }

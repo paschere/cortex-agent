@@ -16,6 +16,8 @@ import {
   saveFormRecord,
   getTrackerBySlug,
   mustGetView,
+  pasteViewRows,
+  type SheetPasteResult,
   restoreView,
   restoreViewVersion,
   runViewAction,
@@ -388,6 +390,32 @@ export async function editViewRowAction(
     };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo guardar el cambio.') };
+  }
+}
+
+/** Pegar filas de Excel / Sheets en una hoja: `apply: false` sólo valida y muestra qué haría. */
+export async function pasteViewRowsAction(
+  viewId: string,
+  blockId: string,
+  rows: Array<Record<string, string>>,
+  apply: boolean,
+): Promise<{ ok: true; result: SheetPasteResult } | { ok: false; error: string }> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId);
+    const result = await pasteViewRows(db, view, {
+      blockId,
+      rows: z.array(z.record(z.string(), z.string().max(2000))).max(500).parse(rows),
+      apply,
+      actor: user.id,
+      create: true,
+      update: true,
+    });
+    if (apply) revalidatePath('/views');
+    return { ok: true, result };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo pegar.') };
   }
 }
 

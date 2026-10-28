@@ -15,6 +15,7 @@ import {
   MapPinned,
   Mic,
   SquareKanban,
+  Sheet,
   Table2,
   Target,
   Type,
@@ -24,6 +25,7 @@ import {
 export const BLOCK_ICON: Record<string, LucideIcon> = {
   metric: Hash,
   table: Table2,
+  sheet: Sheet,
   chart: ChartColumn,
   board: SquareKanban,
   zones: MapPinned,
@@ -52,6 +54,7 @@ export function blockLabel(type: string): string {
 export const BLOCK_PITCH: Record<string, string> = {
   metric: 'Un número grande: un total, un conteo, un promedio.',
   table: 'Una lista con buscador, ordenada como quieras.',
+  sheet: 'Una hoja de cálculo: edita con el teclado, pega de Excel, agrupa con subtotales y totales al pie.',
   chart: 'Barras, línea en el tiempo o dona por categoría.',
   board: 'Tarjetas en columnas por estado; se pueden arrastrar.',
   zones: 'Un plano del lugar: cada zona con lo que hay adentro.',

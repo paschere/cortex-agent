@@ -186,6 +186,24 @@ describe('normalizeRows (ventas)', () => {
     expect(r.issues.map((i) => i.code)).toEqual(['moneda_sin_trm']);
   });
 
+  it('moneda distinta sin TRM en la fila: usa la TRM oficial del día (también domingo)', () => {
+    const trmTable = [{ from: '2026-01-30', to: '2026-02-02', value: 4100 }];
+    const r = normalizeRows(
+      'ventas',
+      ventasMap,
+      [
+        row('1', { factura: 'FV-11', fecha: '2026-02-01', valor: 1000, moneda: 'USD' }),
+        row('2', { factura: 'FV-12', fecha: '2026-03-01', valor: 1000, moneda: 'USD' }),
+        row('3', { factura: 'FV-13', fecha: '2026-02-01', valor: 1000, moneda: 'USD', trm: '4.000' }),
+      ],
+      { ...opts, trmTable },
+    );
+    expect(r.records[0]).toMatchObject({ totalCop: 4_100_000, trm: 4100 });
+    expect(r.records[1]?.totalCop).toBeNull();
+    expect(r.records[2]?.totalCop).toBe(4_000_000);
+    expect(r.issues.map((i) => i.code)).toEqual(['moneda_sin_trm']);
+  });
+
   it('repetida en la hoja: una vez, o se suman las líneas', () => {
     const rows = [
       row('1', { factura: 'FV-7', fecha: '2026-02-01', nit: '900123456', valor: 100 }),

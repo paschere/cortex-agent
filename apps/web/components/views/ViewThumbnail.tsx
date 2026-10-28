@@ -116,6 +116,7 @@ export function BlockGlyph({
         </div>
       );
     case 'table':
+    case 'sheet':
       return (
         <div className={clsx('flex flex-col justify-center gap-1 px-1.5', large ? 'h-14' : 'h-12')}>
           {[0, 1, 2, 3].map((i) => (

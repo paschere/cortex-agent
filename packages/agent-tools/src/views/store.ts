@@ -1,3 +1,5 @@
+import { TRM_LIST_ID } from '../trackers/trm';
+import { ensureTrm } from '../trackers/trm-store';
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { NotFoundError, ValidationError } from '@cortex/core';
@@ -23,10 +25,16 @@ import {
   currentFlowActor,
   guardFlowWrite,
 } from '../trackers/flow-guard';
-import { parseOrigins } from '../trackers/origin';
+import { creatingOrigin, parseOrigins } from '../trackers/origin';
 import { assertRowWriteAllowed } from '../trackers/origin-guard';
 import { displayTrackerValue, rowLabel } from '../trackers/schema';
-import { TRACKER_COLUMNS, type TrackerRow, listTrackers, prepareValues } from '../trackers/store';
+import {
+  TRACKER_COLUMNS,
+  type TrackerRow,
+  getTrackerBySlug,
+  listTrackers,
+  prepareValues,
+} from '../trackers/store';
 import { type ViewRow, type ViewSource, blockWriteFields } from './compute';
 import {
   FEED_NO_VIEWER_MESSAGE,
@@ -554,6 +562,13 @@ export async function loadViewSources(
   const { data, error } = await db.from('trackers').select(TRACKER_COLUMNS).in('slug', slugs);
   if (error) throw error;
   const trackers = (data ?? []) as unknown as TrackerRow[];
+  // «Buscar en cortex.trm» corre en el navegador sobre las vigencias que viajan con el bloque.
+  if (
+    trackers.some(
+      (t) => Array.isArray(t.fields) && t.fields.some((f) => f.match?.source === TRM_LIST_ID),
+    )
+  )
+    await ensureTrm(db);
   // La marca de duplicados, en una lectura aparte y tolerante: si la migración
   // 0201 aún no está, las vistas siguen funcionando, sólo sin resaltar.
   const flags = new Map<string, { field: string; value: string }>();
@@ -2380,6 +2395,7 @@ async function patchRow(
 /** Los bloques cuyas filas se tocan: celdas, tarjetas, fichas, eventos. */
 const ROW_BLOCKS: ReadonlySet<string> = new Set([
   'table',
+  'sheet',
   'board',
   'zones',
   'gallery',
@@ -2439,6 +2455,316 @@ export async function editViewRow(
     actorKind: input.actorKind,
   });
   return { label, duplicate };
+}
+
+
+// ---------------------------------------------------------------------------
+// Pegar en la hoja
+// ---------------------------------------------------------------------------
+
+export const SHEET_PASTE_MAX_ROWS = 500;
+
+export interface SheetPasteLine {
+  /** Posición (1-based) en lo pegado. */
+  line: number;
+  action: 'create' | 'update' | 'same' | 'error';
+  /** Cómo se llama la fila (la clave o el nombre). */
+  label: string;
+  /** Campos que cambian en un `update` (rótulos). */
+  changed?: string[];
+  error?: string;
+}
+
+export interface SheetPasteResult {
+  applied: boolean;
+  lines: SheetPasteLine[];
+  created: number;
+  updated: number;
+  same: number;
+  errors: number;
+}
+
+const foldKey = (v: unknown) =>
+  String(v ?? '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Pegar filas desde Excel / Sheets en una hoja. `apply: false` sólo valida y
+ * dice qué haría cada fila (crear, actualizar, igual, error); `apply: true` lo
+ * hace. IDEMPOTENTE: con `pasteKey` la fila que ya existe se actualiza (o queda
+ * igual si nada cambia); sin clave, una fila idéntica a una existente no se
+ * duplica. Los campos permitidos son los `editable` de la hoja y pasan por el
+ * mismo `prepareValues` que cualquier escritura (tipos, reglas, relaciones,
+ * lookups, fórmulas, campos con origen). `create` / `update` los decide quien
+ * llama según el rol; `forced` pone valores del servidor (el scope de una app).
+ */
+export async function pasteViewRows(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: {
+    blockId: string;
+    rows: Array<Record<string, string>>;
+    apply: boolean;
+    actor: string | null;
+    actorKind?: ActorKind;
+    create: boolean;
+    update: boolean;
+    forced?: Record<string, string>;
+  },
+): Promise<SheetPasteResult> {
+  if (!canWriteView(view, input.actor ? 'member' : 'public'))
+    throw new ValidationError('Esta vista no se puede editar.');
+  const block = findWriteBlock(view.spec, input.blockId);
+  if (!block || block.type !== 'sheet')
+    throw new NotFoundError('Esa hoja no está en esta vista.');
+  if (!block.paste && !block.addRow) throw new ValidationError('Esta hoja no recibe filas.');
+  if (!input.rows.length) throw new ValidationError('No hay filas que pegar.');
+  if (input.rows.length > SHEET_PASTE_MAX_ROWS)
+    throw new ValidationError(`Pega hasta ${SHEET_PASTE_MAX_ROWS} filas por vez.`);
+  if (!input.actor) await assertPublicBudget(db, view.id);
+  const tracker = await trackerForBlock(db, block.tracker);
+  const allowed = new Set(block.editable);
+  const fieldOf = (k: string) => tracker.fields.find((f) => f.key === k);
+  const makerBlocked = creatingOrigin(tracker) ? true : false;
+
+  // Filas que ya existen (para actualizar sin duplicar).
+  const { data: existingData, error: exErr } = await db
+    .from('tracker_rows')
+    .select('id, label, values, external_key')
+    .eq('tracker_id', tracker.id)
+    .limit(5000);
+  if (exErr) throw exErr;
+  const existing = (existingData ?? []) as Array<{
+    id: string;
+    label: string;
+    values: Record<string, string | number>;
+    external_key: string | null;
+  }>;
+  const keyField = block.pasteKey ? fieldOf(block.pasteKey) : undefined;
+  const keyOf = (values: Record<string, unknown>): string => {
+    if (!keyField) return '';
+    const raw = values[keyField.key];
+    return keyField.type === 'relation'
+      ? foldKey(displayTrackerValue({ type: 'relation' }, raw))
+      : foldKey(raw);
+  };
+  const byKey = new Map<string, (typeof existing)[number]>();
+  if (keyField) for (const r of existing) if (keyOf(r.values)) byKey.set(keyOf(r.values), r);
+
+  // Relaciones por nombre: «Cliente X» → la fila de la tabla relacionada.
+  const relations = new Map<string, Map<string, Array<{ id: string; label: string }>>>();
+  for (const f of tracker.fields) {
+    if (f.type !== 'relation' || !f.tracker || !allowed.has(f.key)) continue;
+    const touched = input.rows.some((r) => (r[f.key] ?? '') !== '');
+    if (!touched) continue;
+    const other = await getTrackerBySlug(db, f.tracker);
+    if (!other) continue;
+    const { data, error } = await db
+      .from('tracker_rows')
+      .select('id, label')
+      .eq('tracker_id', other.id)
+      .limit(5000);
+    if (error) throw error;
+    const idx = new Map<string, Array<{ id: string; label: string }>>();
+    for (const r of (data ?? []) as Array<{ id: string; label: string }>) {
+      const k = foldKey(r.label);
+      idx.set(k, [...(idx.get(k) ?? []), r]);
+    }
+    relations.set(f.key, idx);
+  }
+
+  const lines: SheetPasteLine[] = [];
+  const seenKeys = new Set<string>();
+  const plan: Array<
+    | { kind: 'create'; line: number; values: Record<string, string | number>; label: string }
+    | {
+        kind: 'update';
+        line: number;
+        rowId: string;
+        patch: Record<string, string | number>;
+        label: string;
+      }
+  > = [];
+  const actor = currentFlowActor(input.actor ? UNSCOPED_ACTOR : ANONYMOUS_ACTOR);
+
+  for (const [i, raw] of input.rows.entries()) {
+    const line = i + 1;
+    const fail = (error: string, label = ''): void => {
+      lines.push({ line, action: 'error', label: label || `Fila ${line}`, error });
+    };
+    const keys = Object.keys(raw).filter((k) => (raw[k] ?? '') !== '');
+    const outside = keys.filter((k) => !allowed.has(k));
+    if (outside.length) {
+      fail(`Esta hoja no deja escribir ${outside.map((k) => `«${k}»`).join(', ')}.`);
+      continue;
+    }
+    if (!keys.length) {
+      fail('La fila está vacía.');
+      continue;
+    }
+    // Relaciones por nombre → {id,label}.
+    const given: Record<string, string> = {};
+    let bad: string | null = null;
+    for (const k of keys) {
+      const f = fieldOf(k);
+      let v = String(raw[k]);
+      if (f?.type === 'relation' && !/^\s*[{[]/.test(v) && !/^[0-9a-f-]{36}$/i.test(v.trim())) {
+        const hits = relations.get(k)?.get(foldKey(v)) ?? [];
+        if (hits.length !== 1) {
+          bad = hits.length
+            ? `«${f.label}»: «${v}» está más de una vez; escribe el nombre completo.`
+            : `«${f.label}»: «${v}» no está en la lista de ${f.tracker}.`;
+          break;
+        }
+        v = JSON.stringify({ id: (hits[0] as { id: string }).id, label: (hits[0] as { label: string }).label });
+      }
+      given[k] = v;
+    }
+    if (bad) {
+      fail(bad);
+      continue;
+    }
+    const k0 = keyField ? foldKey(keyField.type === 'relation' ? displayTrackerValue({ type: 'relation' }, given[keyField.key]) : given[keyField.key]) : '';
+    if (keyField && k0) {
+      if (seenKeys.has(k0)) {
+        fail(`«${keyField.label}» repetida en lo pegado.`, String(raw[keyField.key] ?? ''));
+        continue;
+      }
+      seenKeys.add(k0);
+    }
+    const match = keyField && k0 ? byKey.get(k0) : undefined;
+    try {
+      if (match) {
+        if (!input.update) throw new ValidationError('Tu rol no edita filas que ya existen.');
+        const prepared = await prepareValues(
+          db,
+          tracker,
+          { ...match.values, ...given },
+          { selfId: match.id, only: new Set(keys) },
+        );
+        const changedKeys = keys.filter(
+          (k) => String(prepared[k] ?? '') !== String(match.values[k] ?? ''),
+        );
+        const label = match.label || String(raw[keyField?.key ?? ''] ?? '');
+        if (!changedKeys.length) {
+          lines.push({ line, action: 'same', label });
+          continue;
+        }
+        const patch = Object.fromEntries(changedKeys.map((k) => [k, given[k] as string]));
+        lines.push({
+          line,
+          action: 'update',
+          label,
+          changed: changedKeys.map((k) => fieldOf(k)?.label ?? k),
+        });
+        plan.push({ kind: 'update', line, rowId: match.id, patch, label });
+        continue;
+      }
+      if (!input.create) throw new ValidationError('Tu rol no agrega filas nuevas.');
+      if (makerBlocked)
+        throw new ValidationError(
+          'Esta tabla se llena sola desde una integración y no recibe filas a mano.',
+        );
+      const values = await prepareValues(
+        db,
+        tracker,
+        { ...given, ...(input.forced ?? {}) },
+        { applyDefaults: true, viewer: null },
+      );
+      Object.assign(values, guardFlowWrite(tracker, null, values, actor));
+      // Sin clave: una fila idéntica a una que ya existe no se duplica.
+      if (!keyField) {
+        const dup = existing.find((r) =>
+          keys.every((k) => String(r.values[k] ?? '') === String(values[k] ?? '')),
+        );
+        if (dup) {
+          lines.push({ line, action: 'same', label: dup.label });
+          continue;
+        }
+      }
+      const label = rowLabel(tracker.fields, values);
+      lines.push({ line, action: 'create', label });
+      plan.push({ kind: 'create', line, values, label });
+    } catch (err) {
+      if (err instanceof ValidationError) fail(err.message);
+      else throw err;
+    }
+  }
+
+  const count = (a: SheetPasteLine['action']) => lines.filter((l) => l.action === a).length;
+  const result: SheetPasteResult = {
+    applied: false,
+    lines,
+    created: count('create'),
+    updated: count('update'),
+    same: count('same'),
+    errors: count('error'),
+  };
+  // Con errores no se aplica nada a medias: se corrige y se pega de nuevo.
+  if (!input.apply || result.errors > 0 || !plan.length) return result;
+
+  const byApp = input.actorKind === 'app_user';
+  for (const step of plan) {
+    try {
+      if (step.kind === 'update') {
+        await patchRow(db, view, {
+          blockId: block.id,
+          tracker,
+          rowId: step.rowId,
+          patch: step.patch,
+          allowed,
+          kind: 'edit',
+          actor: input.actor,
+          actorKind: input.actorKind,
+        });
+      } else {
+        const { data: row, error } = await db
+          .from('tracker_rows')
+          .insert({
+            tracker_id: tracker.id,
+            label: step.label,
+            values: step.values,
+            created_by: byApp ? null : input.actor,
+            ...(byApp ? { created_by_app_user: input.actor } : {}),
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        const rowId = String((row as { id: string }).id);
+        const rule = await getDuplicateRule(db, tracker.id);
+        if (rule) await applyDuplicateRule(db, tracker.id, [step.values]);
+        if (await watchesTracker(db, tracker.id))
+          await emitAutomationEvent(db, {
+            kind: 'row_created',
+            trackerId: tracker.id,
+            trackerSlug: tracker.slug,
+            rowId,
+            after: step.values as Record<string, string | number>,
+            label: step.label,
+            version: new Date().toISOString(),
+            actor: { kind: byApp ? ('app_user' as const) : ('member' as const), id: input.actor },
+            viewId: view.id,
+            blockId: block.id,
+          });
+      }
+    } catch (err) {
+      // Lo ya escrito queda (cada fila es independiente); se dice cuál falló.
+      const l = lines.find((x) => x.line === step.line);
+      if (l) {
+        l.action = 'error';
+        l.error = err instanceof Error ? err.message : 'No se pudo guardar.';
+      }
+      result.errors += 1;
+    }
+  }
+  result.applied = true;
+  result.created = count('create');
+  result.updated = count('update');
+  return result;
 }
 
 /**

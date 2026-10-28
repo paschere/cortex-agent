@@ -475,6 +475,7 @@ export function newBlock(
     zones: 'plano',
     metric: 'cifra',
     table: 'tabla',
+    sheet: 'hoja',
     chart: 'grafico',
     board: 'tablero',
     form: 'formulario',
@@ -557,6 +558,25 @@ export function newBlock(
         limit: 50,
         searchable: true,
         editable: [],
+        actions: [],
+      };
+    case 'sheet':
+      return {
+        id,
+        type: 'sheet',
+        width: 'full',
+        tracker: source.slug,
+        filters: [],
+        title: clip(name),
+        columns: [],
+        frozen: 1,
+        editable: [],
+        limit: 500,
+        rules: [],
+        totals: [],
+        addRow: true,
+        paste: true,
+        density: 'compact',
         actions: [],
       };
     case 'chart': {

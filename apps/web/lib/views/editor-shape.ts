@@ -141,6 +141,7 @@ export const BLOCK_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 export const KNOWN_BLOCK_TYPES = [
   'metric',
   'table',
+  'sheet',
   'chart',
   'board',
   'gallery',
@@ -161,6 +162,7 @@ export const BLOCK_LABEL: Record<string, string> = {
   text: 'Texto',
   metric: 'Cifra',
   table: 'Tabla',
+  sheet: 'Hoja',
   chart: 'Gráfico',
   board: 'Tablero',
   form: 'Formulario',
@@ -179,6 +181,7 @@ export const BLOCK_LABEL: Record<string, string> = {
 /** Bloques cuyas filas abren su ficha al tocarlas. */
 export const RECORD_BLOCK_TYPES = [
   'table',
+  'sheet',
   'board',
   'zones',
   'gallery',

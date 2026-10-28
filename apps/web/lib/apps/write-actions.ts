@@ -8,6 +8,8 @@ import {
   SubmissionLimitError,
   editAppRow,
   editAppSubmission,
+  pasteAppRows,
+  type SheetPasteResult,
   runAppAction,
   saveAppFormRecord,
   screenFor,
@@ -135,6 +137,27 @@ export async function editAppRowAction(
     if (err instanceof RowConflictError)
       return { ok: false, error: err.message, conflict: err.conflicts };
     return { ok: false, error: describe(err, 'No se pudo guardar el cambio.') };
+  }
+}
+
+/** Pegar filas de Excel / Sheets en una hoja de la pantalla; el rol decide qué se puede. */
+export async function pasteAppRowsAction(
+  appRef: string,
+  screenRef: string,
+  blockId: string,
+  rows: Array<Record<string, string>>,
+  apply: boolean,
+): Promise<{ ok: true; result: SheetPasteResult } | { ok: false; error: string }> {
+  try {
+    const { db, access, view } = await open(appRef, screenRef);
+    const result = await pasteAppRows(db, access, view, {
+      blockId,
+      rows: z.array(z.record(z.string(), z.string().max(2000))).max(500).parse(rows),
+      apply,
+    });
+    return { ok: true, result };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo pegar.') };
   }
 }
 

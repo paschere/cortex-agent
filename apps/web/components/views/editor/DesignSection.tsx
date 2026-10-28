@@ -466,6 +466,7 @@ function Shapes({ type, variant }: { type: string; variant: string }) {
           ))}
         </>
       );
+    case 'sheet:grid':
     case 'table:lined':
       return (
         <>
@@ -483,6 +484,7 @@ function Shapes({ type, variant }: { type: string; variant: string }) {
           ))}
         </>
       );
+    case 'sheet:airy':
     case 'table:minimal':
       return (
         <>

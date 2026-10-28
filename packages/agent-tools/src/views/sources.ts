@@ -79,6 +79,8 @@ import {
   withModule,
 } from './module-sources';
 import { REFERENCE_LISTS, type ReferenceList } from '../reference-lists';
+import { ambientTrm, trmListRows } from '../trackers/trm';
+import { ensureTrm } from '../trackers/trm-store';
 import { type ViewSpec, isFeedSourceId, trackersOf } from './spec';
 
 /**
@@ -1960,12 +1962,18 @@ function referenceSource(list: ReferenceList): PlatformSource {
     description: list.description,
     sensitivity: 'shareable',
     fields: list.columns.map((c) => field(c.key, c.label, 'text')),
-    async read(_db, cap) {
+    async read(db, cap) {
       const created = new Date(0).toISOString();
-      const rows = list.rows
+      let source = list.rows;
+      if (list.dynamic === 'trm') {
+        await ensureTrm(db);
+        // Lo más reciente primero: la tabla del Feed que se mira es la de ahora.
+        source = trmListRows(ambientTrm(), new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10), 4000).reverse();
+      }
+      const rows = source
         .slice(0, cap)
         .map((r, i) => row(`${list.id}:${i}`, r[list.keyColumn] ?? '', { ...r }, created));
-      return { rows, truncated: list.rows.length > cap };
+      return { rows, truncated: source.length > cap };
     },
   };
 }

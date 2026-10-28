@@ -26,6 +26,12 @@ export interface ReferenceList {
   keyColumn: string;
   columns: ReferenceColumn[];
   rows: Array<Record<string, string>>;
+  /**
+   * `trm`: las filas no están en el repo; salen de la base (migración 0241) y la
+   * clave se busca por FECHA dentro de la vigencia (`range`), no por igualdad.
+   */
+  dynamic?: 'trm';
+  range?: { from: string; to: string };
 }
 
 const list = (
@@ -90,6 +96,21 @@ export const REFERENCE_LISTS: ReadonlyMap<string, ReferenceList> = new Map(
       ],
       CURRENCIES,
     ),
+    {
+      ...list(
+        'trm',
+        'TRM oficial (pesos por dólar)',
+        'Tasa Representativa del Mercado de la Superfinanciera (datos.gov.co): el valor rige desde vigencia_desde hasta vigencia_hasta, fines de semana y festivos incluidos. Se busca por FECHA (p. ej. de traslado) y se actualiza sola cada día.',
+        [
+          { key: 'vigencia_desde', label: 'Rige desde' },
+          { key: 'vigencia_hasta', label: 'Rige hasta' },
+          { key: 'valor', label: 'Pesos por dólar' },
+        ],
+        [],
+      ),
+      dynamic: 'trm' as const,
+      range: { from: 'vigencia_desde', to: 'vigencia_hasta' },
+    },
   ].map((l) => [l.id, l]),
 );
 

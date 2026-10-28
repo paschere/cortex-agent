@@ -818,6 +818,99 @@ function TypeFields({
           />
         </>
       );
+    case 'sheet':
+      return (
+        <>
+          <FieldChips
+            label="Columnas"
+            fields={fields}
+            value={block.columns}
+            max={24}
+            emptyHint="Automáticas: el nombre y los primeros siete campos."
+            onChange={(columns) => onChange({ ...block, columns })}
+          />
+          <Field label="Columnas fijas a la izquierda">
+            <NumberInput
+              min={0}
+              max={3}
+              value={block.frozen}
+              onChange={(frozen) => onChange({ ...block, frozen: frozen ?? 1 }, `${block.id}:frozen`)}
+            />
+          </Field>
+          <FieldChips
+            label="Se editan en la celda (y se pegan de Excel)"
+            fields={fields.filter((f) => !f.builtin)}
+            value={block.editable}
+            max={24}
+            emptyHint="Ninguna: la hoja es de sólo lectura."
+            onChange={(editable) => onChange({ ...block, editable })}
+          />
+          <Field label="Agrupar por (campo de esta tabla)">
+            <select
+              value={block.group?.by ?? ''}
+              onChange={(e) =>
+                onChange({
+                  ...block,
+                  group: e.target.value
+                    ? { parentFields: [], subtotals: [], collapsed: false, sortDir: 'asc', ...block.group, by: e.target.value }
+                    : undefined,
+                })
+              }
+              className="h-9 w-full rounded-sm border border-border bg-surface px-2 text-sm"
+            >
+              <option value="">Sin agrupar</option>
+              {fields
+                .filter((f) => !f.builtin)
+                .map((f) => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          {block.group && (
+            <FieldChips
+              label="Subtotales en el encabezado del grupo"
+              fields={fields.filter((f) => f.type === 'number' || f.type === 'money')}
+              value={block.group.subtotals}
+              max={6}
+              emptyHint="Ninguno."
+              onChange={(subtotals) =>
+                onChange({ ...block, group: block.group ? { ...block.group, subtotals } : undefined })
+              }
+            />
+          )}
+          <SortPicker
+            fields={fields}
+            sort={block.sort}
+            onChange={(sort) => onChange({ ...block, sort })}
+          />
+          <Field label="Máximo de filas">
+            <NumberInput
+              min={1}
+              max={2000}
+              value={block.limit}
+              onChange={(limit) => onChange({ ...block, limit: limit ?? 500 }, `${block.id}:limit`)}
+            />
+          </Field>
+          <Toggle
+            label="Fila nueva"
+            hint="Botón «Nueva fila» (necesita columnas editables y que la vista deje editar)."
+            checked={block.addRow}
+            onChange={(addRow) => onChange({ ...block, addRow })}
+          />
+          <Toggle
+            label="Pegar desde Excel"
+            hint="Ctrl+V con varias filas y columnas, con vista previa."
+            checked={block.paste}
+            onChange={(paste) => onChange({ ...block, paste })}
+          />
+          <p className="text-micro text-ink-faint">
+            El formato condicional (por ejemplo «parcial = Sí → rosado») y los totales al pie se
+            piden por texto a Cortex.
+          </p>
+        </>
+      );
     case 'form':
       return null;
     default: {
@@ -1248,7 +1341,7 @@ function Interaction({
   const writes =
     actions.length > 0 ||
     recordEditable.length > 0 ||
-    (block.type === 'table' && block.editable.length > 0) ||
+    ((block.type === 'table' || block.type === 'sheet') && block.editable.length > 0) ||
     (isBoard && board.draggable);
 
   return (
@@ -1267,7 +1360,7 @@ function Interaction({
               ofrecen los campos propios de la empresa.
             </p>
           )}
-          {block.type === 'table' && (
+          {(block.type === 'table' || block.type === 'sheet') && (
             <FieldChips
               label="Columnas que se editan en el sitio"
               fields={fields}

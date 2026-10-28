@@ -93,6 +93,7 @@ import {
   tableSyncRunJob,
   tableSyncSetupJob,
 } from '@/inngest/functions/table-sync';
+import { trmSyncJob } from '@/inngest/functions/trm-sync';
 import { turnContextPurgeJob, turnLatencyPurgeJob } from '@/inngest/functions/turn-context-purge';
 import { viewDigestDispatchJob, viewDigestRunJob } from '@/inngest/functions/view-digest';
 import {
@@ -151,6 +152,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'kb/document.ingest': ingestDocumentJob,
   // Cron Y evento a la vez, con el mismo nombre desde siempre.
   'kb/embeddings.reindex': reindexEmbeddingsJob,
+  'trm/sync': trmSyncJob,
   'turn-context/purge': turnContextPurgeJob,
   'turn-latency/purge': turnLatencyPurgeJob,
   'learning/pass.dispatch': learningPassDispatchJob,

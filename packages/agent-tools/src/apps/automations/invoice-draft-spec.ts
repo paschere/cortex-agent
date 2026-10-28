@@ -73,7 +73,7 @@ export const invoiceBodySchema = {
     .trim()
     .regex(/^[A-Z]{3}$/)
     .default('COP'),
-  /** TRM: número, `{{campo}}` o fórmula. Los precios se pasan a pesos con ella. */
+  /** TRM: número, `{{campo}}`, fórmula, o `oficial` / `oficial:{{fecha}}` (la TRM oficial de la Superfinanciera de ese día; sin fecha, hoy). Los precios se pasan a pesos con ella. */
   trm: amount.optional(),
   /** Observaciones de la factura (texto con `{{campos}}`). */
   observations: z.string().trim().min(1).max(1000).optional(),

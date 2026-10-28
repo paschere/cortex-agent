@@ -30,6 +30,7 @@ import { TvBoard } from './ViewTv';
 import { ViewZones } from './ViewZones';
 import { VoiceFormAssistant } from './VoiceFormAssistant';
 import { CalendarBlock } from './blocks/Calendar';
+import { SheetBlock } from './blocks/Sheet';
 import { CardsBlock } from './blocks/Cards';
 import { DetailBlock } from './blocks/Detail';
 import { FormBlock } from './blocks/FormBlock';
@@ -397,6 +398,8 @@ function BlockBody({
       return <MetricBlock block={block} />;
     case 'table':
       return <Table block={block} />;
+    case 'sheet':
+      return <SheetBlock block={block} />;
     case 'chart':
       return (
         <Card title={block.title} source={block.source}>

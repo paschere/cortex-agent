@@ -1,3 +1,5 @@
+import { usesTrm } from './trm';
+import { ensureTrm } from './trm-store';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { emitAutomationEvent, watchesTracker } from '../apps/automations/emit';
@@ -392,6 +394,7 @@ export async function prepareValues(
     allowedRelationTrackers?: ReadonlySet<string>;
   } = {},
 ): Promise<Record<string, string | number>> {
+  if (usesTrm(tracker.fields)) await ensureTrm(db);
   let existing: ShapeOptions['existing'];
   if (tracker.fields.some((f) => f.unique)) {
     const { data, error } = await db
@@ -549,6 +552,7 @@ export async function recomputeRows(
   keys: string[],
 ): Promise<{ checked: number; changed: number }> {
   const only = new Set(keys);
+  if (usesTrm(tracker.fields)) await ensureTrm(db);
   const cache = new Map<string, Record<string, unknown> | null>();
   const hasLookups = lookupSources(tracker.fields).some((s) => only.has(s.field.key));
   let checked = 0;

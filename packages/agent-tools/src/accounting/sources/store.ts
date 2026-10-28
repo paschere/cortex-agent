@@ -1,6 +1,8 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { originsOf } from '../../trackers/origin';
+import { ambientTrm } from '../../trackers/trm';
+import { ensureTrm } from '../../trackers/trm-store';
 import type { Precedence, SourceBatch } from './combine';
 import {
   KIND_SPEC,
@@ -284,6 +286,8 @@ export async function loadSourceBatches(
 ): Promise<LoadedBatch[]> {
   const sources = await listAccountingSources(db, { kind, onlyEnabled: true });
   const out: LoadedBatch[] = [];
+  // TRM oficial para las filas en dólares que no traen la suya.
+  if (sources.length) await ensureTrm(db);
   for (const source of sources) {
     try {
       const { rows, truncated } = await readTableRows(db, source.trackerId);
@@ -292,6 +296,7 @@ export async function loadSourceBatches(
         origin: source.origin,
         currency: source.currency,
         sumRepeated: source.sumRepeated,
+        trmTable: ambientTrm(),
       });
       const issues = [...n.issues];
       if (truncated)

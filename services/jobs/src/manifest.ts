@@ -65,6 +65,8 @@ export const JOBS: JobSpec[] = [
   // Ver GMAIL_SWEEP_CRON en apps/web/inngest/functions/gmail-learn.ts.
   { name: 'gmail/sweep', cron: '*/10 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'memory/derive.dispatch', cron: '0 7 * * *', retryLimit: 1, concurrency: 1 },
+  // La TRM oficial (0241): trae de datos.gov.co las vigencias nuevas. Ver apps/web/inngest/functions/trm-sync.ts.
+  { name: 'trm/sync', cron: '30 14,22 * * *', retryLimit: 2, concurrency: 1 },
   { name: 'turn-context/purge', cron: '40 8 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'turn-latency/purge', cron: '50 8 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'learning/pass.dispatch', cron: '20 9 * * *', retryLimit: 1, concurrency: 1 },

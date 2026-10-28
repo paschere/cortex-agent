@@ -1,3 +1,4 @@
+import { type TrmTable, ambientTrm, trmOn, trmWarning } from './trm';
 /**
  * EL EVALUADOR DE FÓRMULAS DE LAS TABLAS.
  *
@@ -208,6 +209,7 @@ const FN_SPECS: Record<string, FnSpec> = {
   reemplazar: { min: 3, max: 3 },
   contiene: { min: 2, max: 2 },
   hoy: { min: 0, max: 0 },
+  trm: { min: 0, max: 1 },
   ahora: { min: 0, max: 0 },
   fecha: { min: 3, max: 3 },
   fecha_hora: { min: 2, max: 2 },
@@ -263,6 +265,7 @@ const FN_ALIASES: Record<string, string> = {
   replace: 'reemplazar',
   contains: 'contiene',
   today: 'hoy',
+  official_trm: 'trm',
   now: 'ahora',
   date: 'fecha',
   days_between: 'dias_entre',
@@ -319,6 +322,11 @@ export const FORMULA_FUNCTIONS: Array<{ name: string; usage: string; help: strin
   { name: 'reemplazar', usage: 'reemplazar(t; buscar; nuevo)', help: 'Cambia un texto por otro.' },
   { name: 'contiene', usage: 'contiene(t; buscar)', help: 'Cierto si t incluye lo buscado.' },
   { name: 'hoy', usage: 'hoy()', help: 'La fecha de hoy.' },
+  {
+    name: 'trm',
+    usage: 'trm([fecha])',
+    help: 'TRM oficial (pesos por dólar) que rige ese día, fines de semana y festivos incluidos; sin fecha, la de hoy.',
+  },
   { name: 'ahora', usage: 'ahora()', help: 'La fecha y hora de ahora.' },
   { name: 'fecha', usage: 'fecha(año; mes; día)', help: 'Arma una fecha.' },
   { name: 'fecha_hora', usage: 'fecha_hora(fecha; hora)', help: 'Junta una fecha y una hora.' },
@@ -710,6 +718,8 @@ export interface FormulaContext {
   today: string;
   /** «HH:MM» de ahora (Bogotá). */
   now: string;
+  /** TRM oficial para `trm()`; si falta se usa la tabla ambiente que carga el servidor. */
+  trm?: TrmTable;
 }
 
 export interface FormulaResult {
@@ -1090,6 +1100,18 @@ class Run {
       case 'contiene': {
         const find = fold(textAt(1));
         return find === '' ? true : fold(textAt(0)).includes(find);
+      }
+      case 'trm': {
+        const day = args.length ? this.date(this.ev(a(0)), a(0)) : parseDateText(this.ctx.today);
+        if (!day) return null;
+        const iso = new Date(day.ms).toISOString().slice(0, 10);
+        const table = this.ctx.trm ?? ambientTrm();
+        const got = trmOn(table, iso);
+        if (!got.ok) {
+          this.warn(trmWarning(got, iso) ?? 'Sin TRM oficial para esa fecha.');
+          return null;
+        }
+        return got.value;
       }
       case 'hoy': {
         const d = parseDateText(this.ctx.today);

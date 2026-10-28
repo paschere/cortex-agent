@@ -1,3 +1,5 @@
+import { type TrmTable, trmOn, trmWarning } from '../../trackers/trm';
+const todayISO = () => new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10);
 import { createHash } from 'node:crypto';
 import { documentTotals, roundCents } from '../../sales/totals';
 import { type TemplateContext, lookupRaw, renderRaw, renderTemplate } from './engine';
@@ -147,7 +149,10 @@ export interface BuildDraftInput {
   customer: { taxId: string; name?: string };
   items: InvoiceItemSpec[];
   currency: string;
+  /** Número, `{{campo}}`, fórmula, u `oficial` / `oficial:{{fecha}}` (la TRM oficial de ese día; sin fecha, hoy). */
   trm?: number | string;
+  /** TRM oficial para `oficial` (la carga quien llama). */
+  trmTable?: TrmTable;
   observations?: string;
   paymentForm: 'contado' | 'credito';
   paymentDays: number;
@@ -186,7 +191,18 @@ export function buildInvoiceDraft(input: BuildDraftInput): DraftBuild {
   if (currency !== 'COP') {
     if (input.trm === undefined)
       return { ok: false, reason: `Los precios están en ${currency}: falta la TRM para pasarlos a pesos.` };
-    trm = evalAmount(input.trm, ctx);
+    const official =
+      typeof input.trm === 'string' ? /^\s*oficial(?:\s*:\s*(.+))?\s*$/i.exec(input.trm) : null;
+    if (official) {
+      const day = official[1] ? renderTemplate(official[1], ctx).trim() : '';
+      const got = trmOn(input.trmTable ?? [], day || todayISO());
+      if (!got.ok)
+        return {
+          ok: false,
+          reason: trmWarning(got, day || todayISO()) ?? 'No hay TRM oficial para esa fecha.',
+        };
+      trm = got.value;
+    } else trm = evalAmount(input.trm, ctx);
     if (!(trm > 0))
       return { ok: false, reason: `No se pudo leer la TRM (${String(input.trm)}); tiene que ser un número mayor que cero.` };
   }

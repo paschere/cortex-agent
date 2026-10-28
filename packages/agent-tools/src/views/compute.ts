@@ -10,6 +10,8 @@ import {
 } from '../format/display';
 import { type MatchTable, matchSourcesOf, toMatchTable } from '../trackers/match-shape';
 import { referenceList } from '../reference-lists';
+import { ambientTrm, trmListRows } from '../trackers/trm';
+import type { SheetFormat, SheetOp } from './sheet-math';
 import {
   type TrackerOrigin,
   creatingOrigin,
@@ -51,6 +53,7 @@ import {
   fieldType,
   formVoiceOf,
   isReadOnlySource,
+  type SheetTone,
 } from './spec';
 import type { FilterBarValue, ViewFilterState } from './view-filters';
 
@@ -204,6 +207,64 @@ export type ComputedBlock =
       total: number;
       searchable: boolean;
       source: string;
+      actions: ComputedAction[];
+      record: ComputedRecords | null;
+    })
+  | (BlockBase & {
+      type: 'sheet';
+      title: string;
+      source: string;
+      density: 'compact' | 'comfortable';
+      /** Cuántas columnas (desde la izquierda) quedan fijas. */
+      frozen: number;
+      columns: Array<{
+        key: string;
+        label: string;
+        kind: 'text' | 'number' | 'date';
+        /** El tipo del campo (checkbox, select, relation…) para pintar y filtrar. */
+        type: string;
+        fmt: SheetFormat;
+        rich?: RichKind;
+        /** Presente sólo si la columna se edita Y quien mira puede escribir. */
+        edit?: ComputedEditMeta;
+        /** Se calcula sola (fórmula o lookup fijo) o viene de una integración: nunca se edita ni se pega. */
+        readonly: boolean;
+      }>;
+      rows: Array<{
+        id: string;
+        cells: string[];
+        /** Valores crudos por columna (orden, filtros, totales y edición). */
+        sort: Array<string | number | null>;
+        alert?: boolean;
+        /** Índice en `groups`, o -1 si no hay agrupado. */
+        group: number;
+        /** Tono por celda según las reglas; null = sin tono. */
+        tones: Array<SheetTone | null>;
+        rowTone?: SheetTone;
+      }>;
+      groups: Array<{
+        key: string;
+        label: string;
+        /** Campos del padre que el encabezado muestra. */
+        fields: Array<{ label: string; value: string }>;
+        /** Columnas que se suman en el encabezado (índices de `columns`). */
+        subtotals: number[];
+        collapsed: boolean;
+      }> | null;
+      totals: Array<{ col: number; op: SheetOp }>;
+      total: number;
+      truncated: boolean;
+      searchable: true;
+      /** Fila nueva y pegar: sólo si quien mira escribe y la tabla recibe filas. */
+      write: {
+        add: boolean;
+        paste: boolean;
+        pasteKey: string | null;
+        /** Los campos que una fila nueva o un pegado pueden traer. */
+        fields: Array<{ key: string; label: string; type: string; options: string[] }>;
+        /** El campo de agrupado: una fila nueva dentro de un grupo lo trae. */
+        groupField: string | null;
+      } | null;
       actions: ComputedAction[];
       record: ComputedRecords | null;
     })
@@ -840,7 +901,12 @@ function displayValue(tracker: CatalogTracker, row: ViewRow, key: string): strin
   const type = fieldType(tracker, key);
   if (type === 'checkbox') return Number(v) === 1 ? 'Sí' : 'No';
   if (type === 'file' || type === 'relation') return displayTrackerValue({ type }, v) || '—';
-  if (type === 'money') return formatValue(Number(v), 'money');
+  if (type === 'money') {
+    const currency = tracker.fields.find((f) => f.key === key)?.currency;
+    return currency && currency !== 'COP' && Number.isFinite(Number(v))
+      ? formatMoney(Number(v), currency)
+      : formatValue(Number(v), 'money');
+  }
   if (type === 'number')
     return formatValue(
       Number(v),
@@ -1057,6 +1123,203 @@ export function optionTones(options: readonly string[]): Tone[] {
 // Bloques
 // ---------------------------------------------------------------------------
 
+/** La moneda de un campo de dinero ('COP' por omisión). */
+function currencyOf(tracker: CatalogTracker, key: string): string {
+  return tracker.fields.find((f) => f.key === key)?.currency ?? 'COP';
+}
+
+function formatOfColumn(tracker: CatalogTracker, key: string): SheetFormat {
+  const t = fieldType(tracker, key);
+  if (t === 'money') return { kind: 'money', currency: currencyOf(tracker, key) };
+  if (t === 'number')
+    return tracker.fields.find((f) => f.key === key)?.percent ? { kind: 'ratio' } : { kind: 'number' };
+  return { kind: 'text' };
+}
+
+/** «FLEX 10» después de «FLEX 2»: orden natural, con números. */
+const natural = (a: string, b: string) => a.localeCompare(b, 'es', { numeric: true });
+
+function computeSheet(
+  block: Extract<ViewBlock, { type: 'sheet' }>,
+  tracker: CatalogTracker,
+  rows: ViewRow[],
+  sources: Map<string, ViewSource>,
+  writes: string[],
+  today: string,
+  opts: ComputeOptions,
+): ComputedBlock {
+  const keys = block.columns.length
+    ? block.columns
+    : ['label', ...tracker.fields.slice(0, 7).map((f) => f.key)];
+  const readOnlySource = isReadOnlySource(block.tracker);
+  const canWrite = opts.writable && !readOnlySource;
+  const columns = keys.map((key) => {
+    const field = tracker.fields.find((f) => f.key === key);
+    const edit =
+      canWrite && field && block.editable.includes(key) ? editMeta(tracker, key) : undefined;
+    const readonly = Boolean(
+      !field ||
+        field.formula ||
+        (field.lookup && !field.lookup.editable) ||
+        hardOriginOfField(tracker, key),
+    );
+    return {
+      key,
+      label: fieldLabel(tracker, key),
+      kind: columnKind(tracker, key),
+      type: String(fieldType(tracker, key) ?? 'text'),
+      fmt: formatOfColumn(tracker, key),
+      ...(richKind(tracker, key) ? { rich: richKind(tracker, key) as RichKind } : {}),
+      ...(edit ? { edit } : {}),
+      readonly,
+    };
+  });
+  const colIndex = new Map(keys.map((k, i) => [k, i]));
+
+  // Agrupado: las filas quedan contiguas por grupo; el encabezado trae campos del padre.
+  const g = block.group;
+  const parentSrc = g?.parentTracker ? sources.get(g.parentTracker) : undefined;
+  const parentRows = new Map((parentSrc?.rows ?? []).map((r) => [r.id, r]));
+  const groupOf = (r: ViewRow): { key: string; label: string; parent?: ViewRow } => {
+    if (!g) return { key: '', label: '' };
+    const raw = rawValue(r, g.by);
+    if (raw === undefined) return { key: '', label: `Sin ${fieldLabel(tracker, g.by).toLowerCase()}` };
+    const rel = fieldType(tracker, g.by) === 'relation' ? parseRelationValue(raw) : null;
+    if (rel) return { key: rel.id, label: rel.label || rel.id.slice(0, 8), parent: parentRows.get(rel.id) };
+    return { key: String(raw), label: displayValue(tracker, r, g.by) };
+  };
+  const sorted = sortRows(tracker, rows, block.sort).slice(0, block.limit);
+  const order: string[] = [];
+  const meta = new Map<string, { label: string; parent?: ViewRow }>();
+  const members = new Map<string, ViewRow[]>();
+  for (const r of sorted) {
+    const gr = groupOf(r);
+    if (!members.has(gr.key)) {
+      members.set(gr.key, []);
+      order.push(gr.key);
+      meta.set(gr.key, { label: gr.label, parent: gr.parent });
+    }
+    members.get(gr.key)?.push(r);
+  }
+  if (g) {
+    const dir = g.sortDir === 'desc' ? -1 : 1;
+    order.sort((a, b) => {
+      const ma = meta.get(a);
+      const mb = meta.get(b);
+      if (!ma || !mb) return 0;
+      if (g.sortBy && parentSrc) {
+        const va = ma.parent ? String(rawValue(ma.parent, g.sortBy) ?? '') : '';
+        const vb = mb.parent ? String(rawValue(mb.parent, g.sortBy) ?? '') : '';
+        return natural(va, vb) * dir;
+      }
+      return natural(ma.label, mb.label) * dir;
+    });
+    // «Sin …» siempre al final.
+    const noneAt = order.indexOf('');
+    if (noneAt >= 0) order.push(...order.splice(noneAt, 1));
+  }
+  const groupIndex = new Map(order.map((k, i) => [k, i]));
+  const ordered = g ? order.flatMap((k) => members.get(k) ?? []) : sorted;
+
+  const toneOf = (r: ViewRow) => {
+    const tones: Array<SheetTone | null> = keys.map(() => null);
+    let rowTone: SheetTone | undefined;
+    for (const rule of block.rules) {
+      const hit = matches(tracker, r, { field: rule.field, op: rule.op, value: rule.value }, today);
+      if (!hit) continue;
+      if (rule.paint === 'row') rowTone ??= rule.tone;
+      else {
+        const i = colIndex.get(rule.column ?? rule.field);
+        if (i !== undefined) tones[i] ??= rule.tone;
+      }
+    }
+    return { tones, rowTone };
+  };
+
+  const writableFields = canWrite
+    ? tracker.fields.filter(
+        (f) =>
+          block.editable.includes(f.key) &&
+          !f.formula &&
+          !(f.lookup && !f.lookup.editable) &&
+          !hardOriginOfField(tracker, f.key) &&
+          f.type !== 'file',
+      )
+    : [];
+  const creatable = canWrite && !creatingOrigin(tracker);
+  return {
+    type: 'sheet',
+    id: block.id,
+    width: block.width,
+    title: block.title,
+    source: tracker.name,
+    density: block.density,
+    frozen: Math.min(block.frozen, columns.length),
+    columns,
+    rows: ordered.map((r) => ({
+      id: r.id,
+      cells: keys.map((key) => displayValue(tracker, r, key)),
+      sort: keys.map((key) => {
+        const v = rawValue(r, key);
+        return v === undefined ? null : v;
+      }),
+      ...(isAlertRow(tracker, r) ? { alert: true } : {}),
+      group: g ? (groupIndex.get(groupOf(r).key) ?? -1) : -1,
+      ...toneOf(r),
+    })),
+    groups: g
+      ? order.map((k) => {
+          const m = meta.get(k);
+          const parent = m?.parent;
+          const parentTracker = parentSrc?.tracker;
+          return {
+            key: k,
+            label: m?.label ?? k,
+            fields:
+              parent && parentTracker
+                ? g.parentFields.map((pk) => ({
+                    label: fieldLabel(parentTracker, pk),
+                    value: displayValue(parentTracker, parent, pk),
+                  }))
+                : [],
+            subtotals: g.subtotals.flatMap((sk) => {
+              const i = colIndex.get(sk);
+              return i === undefined ? [] : [i];
+            }),
+            collapsed: g.collapsed,
+          };
+        })
+      : null,
+    totals: (block.totals.length
+      ? block.totals
+      : columns.flatMap((c) => (c.kind === 'number' ? [{ field: c.key, op: 'sum' as const }] : []))
+    ).flatMap((t) => {
+      const i = colIndex.get(t.field);
+      return i === undefined ? [] : [{ col: i, op: t.op as SheetOp }];
+    }),
+    total: rows.length,
+    truncated: rows.length > block.limit,
+    searchable: true,
+    write:
+      canWrite && (block.addRow || block.paste || block.editable.length)
+        ? {
+            add: block.addRow && creatable,
+            paste: block.paste && creatable,
+            pasteKey: block.pasteKey ?? null,
+            fields: writableFields.map((f) => ({
+              key: f.key,
+              label: f.label,
+              type: f.type,
+              options: f.options ?? [],
+            })),
+            groupField: g ? g.by : null,
+          }
+        : null,
+    actions: actionsFor(opts, block.actions, tracker, ordered),
+    record: buildRecords(block, tracker, ordered, keys, writes, opts),
+  };
+}
+
 function problem(block: ViewBlock, message: string): ComputedBlock {
   return {
     type: 'problem',
@@ -1248,7 +1511,7 @@ const READONLY_DEFAULT_FIELDS = 8;
 
 type RecordBlock = Extract<
   ViewBlock,
-  { type: 'table' | 'board' | 'zones' | 'gallery' | 'calendar' | 'cards' | 'map' }
+  { type: 'table' | 'sheet' | 'board' | 'zones' | 'gallery' | 'calendar' | 'cards' | 'map' }
 >;
 
 /**
@@ -1308,7 +1571,8 @@ function buildRecords(
 /** Lo que un bloque deja escribir: la misma lista que `editViewRow` acepta. */
 export function blockWriteFields(block: ViewBlock): string[] {
   const record = 'recordEditable' in block ? (block.recordEditable ?? []) : [];
-  if (block.type === 'table') return [...new Set([...block.editable, ...record])];
+  if (block.type === 'table' || block.type === 'sheet')
+    return [...new Set([...block.editable, ...record])];
   if (block.type === 'board' || block.type === 'zones')
     return [...new Set([...(block.draggable ? [block.groupBy] : []), ...record])];
   if (
@@ -1493,6 +1757,15 @@ function computeBlockBody(
     ...(block.type === 'table'
       ? [...block.columns, ...(block.sort ? [block.sort.field] : [])]
       : []),
+    ...(block.type === 'sheet'
+      ? [
+          ...block.columns,
+          ...(block.sort ? [block.sort.field] : []),
+          ...block.rules.flatMap((r) => [r.field, ...(r.column ? [r.column] : [])]),
+          ...block.totals.map((t) => t.field),
+          ...(block.group ? [block.group.by, ...block.group.subtotals] : []),
+        ]
+      : []),
     ...(block.type === 'chart' || block.type === 'board' || block.type === 'zones'
       ? [block.groupBy]
       : []),
@@ -1633,6 +1906,9 @@ function computeBlockBody(
       };
     }
 
+    case 'sheet':
+      return computeSheet(block, tracker, rows, sources, writes, today, opts);
+
     case 'chart': {
       const format = formatOf(tracker, block.field, block.format);
       const type = fieldType(tracker, block.groupBy);
@@ -1700,6 +1976,10 @@ function computeBlockBody(
           const day = typeof v === 'string' ? dayOf(v) : null;
           if (!day) continue;
           key = bucketOf(day, block.bucket);
+        } else if (type === 'relation' && v !== undefined) {
+          // Una relación se agrupa por el nombre de la fila relacionada, no por su JSON.
+          const rel = parseRelationValue(v);
+          key = rel ? rel.label || rel.id.slice(0, 8) : String(v);
         } else {
           key = v === undefined ? 'Sin dato' : String(v);
         }
@@ -2211,6 +2491,11 @@ function matchTablesFor(
     const key = used.find((f) => f.match?.source === source)?.match?.key;
     if (!key) continue;
     const list = source.startsWith('cortex.') ? referenceList(source) : null;
+    if (list?.dynamic === 'trm') {
+      const rows = trmListRows(ambientTrm(), new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10));
+      out[source] = { key, rows, range: list.range };
+      continue;
+    }
     if (list) {
       out[source] = toMatchTable(list.rows, key, columns);
       continue;

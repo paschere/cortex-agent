@@ -1,4 +1,5 @@
 import type { ComputedBlock, ComputedView } from './compute';
+import { sheetMatrix } from './sheet-export';
 
 /**
  * EXPORTAR UNA VISTA A EXCEL.
@@ -87,6 +88,11 @@ export function viewExportSheets(view: ComputedView): ExportSheet[] {
           ),
         });
         break;
+      case 'sheet': {
+        const m = sheetMatrix(block);
+        sheets.push({ name: block.title, header: m.header, rows: m.rows });
+        break;
+      }
       case 'board':
       case 'zones':
         sheets.push({ name: block.title, ...boardSheet(block) });

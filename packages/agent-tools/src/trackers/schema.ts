@@ -157,6 +157,7 @@ export function normalizeFieldInput<T>(raw: T): T {
   }
   const type = f.type;
   if (type !== 'number') del('percent');
+  if (type !== 'money') del('currency');
   const textual = type === 'text' || type === 'longtext';
   const numeric = type === 'number' || type === 'money';
   const temporal = type === 'date' || type === 'time';
@@ -238,6 +239,14 @@ export const trackerFieldSchema = z
     formula: z.string().trim().min(1).max(FORMULA_MAX).optional(),
     /** number: se muestra como porcentaje (0,153 → 15,3 %). Se guarda la razón. */
     percent: z.boolean().optional(),
+    /**
+     * money: la moneda del campo (código ISO de 3 letras, «USD»). Sin ella es
+     * COP (pesos completos, sin decimales); en cualquier otra se muestran 2 decimales.
+     */
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .optional(),
     /**
      * Traer de otra tabla: `via` es un campo de relación de ESTA tabla y `field`
      * la clave del campo de la tabla relacionada. Se llena al elegir la relación;
@@ -580,7 +589,7 @@ export function parseRelationValue(raw: unknown): RelationRef | null {
 
 /** El valor de una celda como texto legible (para lectura, exportación y chat). */
 export function displayTrackerValue(
-  field: Pick<TrackerField, 'type'> & { percent?: boolean },
+  field: Pick<TrackerField, 'type'> & { percent?: boolean; currency?: string },
   value: unknown,
 ): string {
   if (value === undefined || value === null || value === '') return '';
@@ -603,7 +612,9 @@ export function displayTrackerValue(
     }
     case 'money': {
       const n = Number(value);
-      return Number.isFinite(n) ? formatMoney(n) : cleanText(value);
+      return Number.isFinite(n)
+        ? formatMoney(n, (field as { currency?: string }).currency)
+        : cleanText(value);
     }
     case 'date': {
       const s = String(value);

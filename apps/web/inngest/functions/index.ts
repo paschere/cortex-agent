@@ -35,6 +35,7 @@ import { reindexEmbeddings } from './reindex-embeddings';
 import { scheduleDispatch } from './schedule-dispatch';
 import { scheduleRun } from './schedule-run';
 import { tableSyncDispatch, tableSyncRun, tableSyncSetup } from './table-sync';
+import { trmSync } from './trm-sync';
 import { turnContextPurge, turnLatencyPurge } from './turn-context-purge';
 import { viewDigestDispatch, viewDigestRun } from './view-digest';
 import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
@@ -89,6 +90,7 @@ export {
   orchestratorSweep,
   errandRun,
   errandSweep,
+  trmSync,
   turnContextPurge,
   turnLatencyPurge,
   appAutomationDispatch,
@@ -163,6 +165,7 @@ export const functions = [
   orchestratorSweep,
   errandRun,
   errandSweep,
+  trmSync,
   turnContextPurge,
   turnLatencyPurge,
   appAutomationDispatch,

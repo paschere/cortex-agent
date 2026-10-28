@@ -1,3 +1,5 @@
+import { ambientTrm } from '../../trackers/trm';
+import { ensureTrm } from '../../trackers/trm-store';
 import { formatMoney } from '../../format/display';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { orgAdmins } from '../../directory/store';
@@ -110,11 +112,13 @@ export async function runDraftInvoiceAction(a: InvoiceDraftRunInput): Promise<st
           .map((i) => renderTemplate(i.productCode as string, ctx)),
       )
     : undefined;
+  if (typeof action.trm === 'string' && /^\s*oficial/i.test(action.trm)) await ensureTrm(db);
   const built = buildInvoiceDraft({
     customer: action.customer,
     items: action.items,
     currency: action.currency,
     trm: action.trm,
+    trmTable: typeof action.trm === 'string' && /^\s*oficial/i.test(action.trm) ? ambientTrm() : undefined,
     observations: action.observations,
     paymentForm: action.paymentForm,
     paymentDays: action.paymentDays,

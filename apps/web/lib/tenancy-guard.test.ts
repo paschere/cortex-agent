@@ -107,6 +107,10 @@ const ALLOWED = new Map<string, string>([
     'Retention sweep over captured turn contexts. It redacts and deletes by date across every workspace, which is the point — a per-tenant sweep would need a tenant to run it, and the rows nobody is looking at are exactly the ones that must still expire.',
   ],
   [
+    'inngest/functions/trm-sync.ts',
+    'Cron (0241). Sincroniza la TRM oficial pública (platform_trm_rates), un dato de la plataforma sin empresa: no hay tenant al que acotar el cliente.',
+  ],
+  [
     'app/api/mcp/route.ts',
     'Bearer-token surface. The token lookup determines the workspace; everything after it is scoped.',
   ],

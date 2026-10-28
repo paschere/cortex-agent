@@ -42,6 +42,11 @@ export interface MatchConfig {
 export interface MatchTable {
   key: string;
   rows: Array<Record<string, string>>;
+  /**
+   * Lista por VIGENCIA (cortex.trm): el valor disparador es una fecha «YYYY-MM-DD»
+   * y la fila que sirve es la que la cubre (`from` ≤ fecha ≤ `to`, inclusive).
+   */
+  range?: { from: string; to: string };
 }
 
 export const MATCH_MAX_FILLS = 8;
@@ -109,6 +114,25 @@ export function runMatch(
   table: MatchTable | undefined,
   values: Record<string, unknown>,
 ): MatchOutcome {
+  if (table?.range) {
+    const day = /^(\d{4}-\d{2}-\d{2})/.exec(String(values[config.from] ?? '').trim())?.[1] ?? null;
+    if (!day) return { hit: false, key: null, suggestions: {} };
+    const { from, to } = table.range;
+    let row: Record<string, string> | undefined;
+    for (const r of table.rows) {
+      const a = r[from];
+      const b = r[to] ?? a;
+      if (a && b && a <= day && day <= b && (!row || a > (row[from] ?? ''))) row = r;
+    }
+    if (!row) return { hit: false, key: day, suggestions: {} };
+    const suggestions: MatchOutcome['suggestions'] = {};
+    for (const [target, column] of Object.entries(config.fills)) {
+      const v = row[column];
+      if (typeof v === 'string' && v.trim())
+        suggestions[target] = { value: v.trim(), source: config.source };
+    }
+    return { hit: true, key: day, suggestions };
+  }
   const key = extractMatchKey(config.extract, values[config.from]);
   if (!key || !table) return { hit: false, key, suggestions: {} };
   const row = indexOf(table).get(key);

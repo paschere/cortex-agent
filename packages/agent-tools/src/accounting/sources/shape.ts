@@ -1,3 +1,4 @@
+import { type TrmTable, trmOn } from '../../trackers/trm';
 import { nitDv } from '../../clients/shape';
 import { carteraNameKey, docKey } from '../../payments/cartera';
 
@@ -406,6 +407,12 @@ export interface NormalizeOptions {
   currency?: string;
   /** Varias filas con el mismo número = líneas de la misma factura: se suman. */
   sumRepeated?: boolean;
+  /**
+   * TRM oficial (cortex.trm): una fila en dólares que NO trae su TRM usa la que
+   * regía el día de su fecha, en vez de quedar fuera de los pesos. Si la fila
+   * trae TRM, manda la de la fila.
+   */
+  trmTable?: TrmTable;
 }
 
 export interface NormalizeResult {
@@ -565,7 +572,11 @@ export function normalizeRows(
 
     const currency = parseCurrency(pick(row, mapping, 'moneda'), defaultCurrency);
     const trmRaw = pick(row, mapping, 'trm');
-    const trm = blank(trmRaw) ? null : parseMoneyCO(trmRaw);
+    let trm = blank(trmRaw) ? null : parseMoneyCO(trmRaw);
+    if (currency !== COP && !(trm && trm > 0) && opts.trmTable) {
+      const official = trmOn(opts.trmTable, date);
+      if (official.ok) trm = official.value;
+    }
     let totalCop: number | null = currency === COP ? total : null;
     if (currency !== COP) {
       if (trm && trm > 0) totalCop = Math.round(total * trm * 100) / 100;

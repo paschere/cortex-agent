@@ -353,6 +353,96 @@ export const tableBlockSchema = z.object({
   actions: z.array(rowActionSchema).max(3).default([]),
 });
 
+/**
+ * LA HOJA («sheet»): una tabla del espacio que se ve y se trabaja COMO UNA HOJA
+ * DE CÁLCULO. Encabezado fijo, columnas congeladas (`frozen`), edición en la
+ * celda con el teclado (Enter, Tab, flechas, Escape), pegar desde Excel o
+ * Sheets (varias filas y columnas, con vista previa), fila nueva al final,
+ * filtros y orden por columna, formato condicional (`rules`), totales al pie y
+ * AGRUPADO en dos niveles: `group.by` es un campo de esta tabla (casi siempre
+ * una relación al padre —el manifiesto—, o un valor común) y el encabezado de
+ * cada grupo muestra campos del padre (`parentFields`) y subtotales
+ * (`subtotals`); se pliega.
+ *
+ * Todo lo que escribe pasa por las mismas puertas que la tabla: el servidor
+ * decide con la lista blanca del bloque (`editable`), el rol de la app, los
+ * campos con origen (0237) y las fórmulas (de sólo lectura).
+ */
+export const SHEET_TONES = ['rose', 'amber', 'emerald', 'sky', 'primary'] as const;
+export type SheetTone = (typeof SHEET_TONES)[number];
+
+export const sheetRuleSchema = z
+  .object({
+    /** El campo que se mira (puede no ser una columna visible). */
+    field: fieldRef,
+    op: z.enum(FILTER_OPS),
+    value: z.union([z.string().max(200), z.number()]).optional(),
+    tone: z.enum(SHEET_TONES),
+    /** `cell` pinta la celda de la columna `column` (o la de `field`); `row` toda la fila. */
+    paint: z.enum(['cell', 'row']).default('cell'),
+    column: fieldRef.optional(),
+  })
+  .superRefine((r, ctx) => {
+    if (!VALUELESS_OPS.has(r.op) && (r.value === undefined || r.value === ''))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `La regla «${r.op}» necesita un valor.`,
+        path: ['value'],
+      });
+  });
+export type SheetRule = z.infer<typeof sheetRuleSchema>;
+
+export const SHEET_TOTAL_OPS = ['sum', 'count', 'avg'] as const;
+export const sheetTotalSchema = z.object({
+  field: fieldRef,
+  op: z.enum(SHEET_TOTAL_OPS).default('sum'),
+});
+
+export const sheetGroupSchema = z.object({
+  /** Campo de esta tabla por el que se agrupa (relación al padre o valor común). */
+  by: fieldRef,
+  /** Si `by` es una relación: la tabla padre, de donde salen `parentFields`. */
+  parentTracker: sourceRef.optional(),
+  /** Campos del padre que el encabezado del grupo muestra (N° manifiesto, estado, cobro adicional). */
+  parentFields: z.array(fieldRef).max(6).default([]),
+  /** Columnas numéricas de esta tabla que se suman en el encabezado del grupo. */
+  subtotals: z.array(fieldRef).max(6).default([]),
+  /** Los grupos nacen plegados. */
+  collapsed: z.boolean().default(false),
+  /** Orden de los grupos: por el nombre (por omisión) o por el campo del padre indicado. */
+  sortBy: fieldRef.optional(),
+  sortDir: z.enum(['asc', 'desc']).default('asc'),
+});
+
+export const sheetBlockSchema = z.object({
+  ...base,
+  ...source,
+  ...record,
+  type: z.literal('sheet'),
+  design: designSchemaFor('sheet').optional(),
+  title,
+  /** Las columnas, en orden. Vacío = las primeras ocho de la tabla. */
+  columns: z.array(fieldRef).max(24).default([]),
+  /** Cuántas columnas (desde la izquierda) quedan fijas al desplazar de lado. */
+  frozen: z.number().int().min(0).max(3).default(1),
+  /** Columnas que se editan en la celda (sólo tablas propias; las calculadas no). */
+  editable: z.array(fieldRef).max(24).default([]),
+  sort: z.object({ field: fieldRef, dir: z.enum(['asc', 'desc']).default('desc') }).optional(),
+  limit: z.number().int().min(1).max(2000).default(500),
+  group: sheetGroupSchema.optional(),
+  /** Formato condicional: «parcial = Sí → rose». */
+  rules: z.array(sheetRuleSchema).max(8).default([]),
+  /** Totales al pie. Vacío = suma de cada columna numérica o de dinero. */
+  totals: z.array(sheetTotalSchema).max(12).default([]),
+  /** Fila nueva al final (necesita `editing` y una tabla propia). */
+  addRow: z.boolean().default(true),
+  /** Pegar desde Excel / Sheets. `pasteKey` = campo que identifica la fila para actualizar en vez de duplicar. */
+  paste: z.boolean().default(true),
+  pasteKey: fieldRef.optional(),
+  density: z.enum(['compact', 'comfortable']).default('compact'),
+  actions: z.array(rowActionSchema).max(3).default([]),
+});
+
 export const CHART_KINDS = ['bar', 'line', 'donut', 'funnel', 'heatmap'] as const;
 export type ChartKind = (typeof CHART_KINDS)[number];
 
@@ -893,6 +983,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   textBlockSchema,
   metricBlockSchema,
   tableBlockSchema,
+  sheetBlockSchema,
   chartBlockSchema,
   boardBlockSchema,
   zonesBlockSchema,
@@ -1667,6 +1758,60 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         if (block.sort) need(block.sort.field, 'orden');
         checkWrites([...block.editable, ...recordEditable], block.actions);
         break;
+      case 'sheet': {
+        for (const c of block.columns) need(c, 'columna');
+        if (block.sort) need(block.sort.field, 'orden');
+        for (const r of block.rules) {
+          need(r.field, 'regla de formato');
+          if (r.column) need(r.column, 'regla de formato');
+        }
+        for (const t of block.totals) {
+          need(t.field, 'total');
+          if (t.op !== 'count')
+            needType(t.field, 'total', (x) => NUMERIC.has(x), 'un campo de número o dinero');
+        }
+        if (block.pasteKey) need(block.pasteKey, 'clave para pegar');
+        for (const k of block.editable) {
+          const f = tracker.fields.find((x) => x.key === k);
+          if (f && (f.formula || (f.lookup && !f.lookup.editable)))
+            problems.push(`${where}: «${f.label}» se calcula sola; una fórmula no se edita a mano.`);
+        }
+        const wants = block.editable.length > 0 || block.addRow || block.paste;
+        if (wants && isReadOnlySource(block.tracker)) {
+          // Una fuente de sólo lectura: la hoja se ve, pero no escribe.
+          if (block.editable.length > 0)
+            problems.push(
+              `${where}: «${tracker.name}» es ${readOnlyWhat(block.tracker)} y es de sólo lectura; quita \`editable\` o usa una tabla propia.`,
+            );
+        } else {
+          if (block.editable.length > 0) checkWrites([...block.editable, ...recordEditable], block.actions);
+          else if (block.actions.length || recordEditable.length)
+            checkWrites(recordEditable, block.actions);
+        }
+        if (block.group) {
+          const g = block.group;
+          if (need(g.by, 'agrupar') && !tracker.opaque) {
+            const gf = tracker.fields.find((x) => x.key === g.by);
+            if (g.parentTracker) {
+              const parent = bySlug.get(g.parentTracker);
+              if (!parent) problems.push(`${where}: la tabla padre «${g.parentTracker}» no existe.`);
+              else {
+                if (gf?.type !== 'relation' || gf.tracker !== g.parentTracker)
+                  problems.push(
+                    `${where}: «${g.by}» tiene que ser una relación hacia ${parent.name} para mostrar sus campos en el encabezado del grupo.`,
+                  );
+                for (const k of [...g.parentFields, ...(g.sortBy ? [g.sortBy] : [])])
+                  if (!parent.opaque && !fieldType(parent, k))
+                    problems.push(`${where}: «${k}» no es un campo de ${parent.name} (encabezado del grupo).`);
+              }
+            } else if (g.parentFields.length)
+              problems.push(`${where}: para mostrar campos del padre indica \`group.parentTracker\`.`);
+          }
+          for (const k of g.subtotals)
+            needType(k, 'subtotal del grupo', (x) => NUMERIC.has(x), 'un campo de número o dinero');
+        }
+        break;
+      }
       case 'board': {
         if (
           need(block.groupBy, 'columnas del tablero') &&
@@ -1794,6 +1939,7 @@ export function specWrites(spec: Pick<ViewSpec, 'blocks'>): boolean {
     if (b.type === 'map' && b.assign) return true;
     if (b.type === 'detail' && b.related.some((r) => r.actions.length > 0)) return true;
     if (b.type === 'table') return b.editable.length > 0;
+    if (b.type === 'sheet') return b.editable.length > 0;
     if (b.type === 'board' || b.type === 'zones') return b.draggable;
     return false;
   });
@@ -1811,6 +1957,10 @@ export function trackersOf(spec: ViewSpec): string[] {
       ...spec.blocks.flatMap((b) => ('tracker' in b ? [b.tracker] : [])),
       // Las listas relacionadas de un detalle también se leen (y llevan scope).
       ...spec.blocks.flatMap((b) => (b.type === 'detail' ? b.related.map((r) => r.tracker) : [])),
+      // La hoja agrupada por una relación lee también la tabla padre (encabezados de grupo).
+      ...spec.blocks.flatMap((b) =>
+        b.type === 'sheet' && b.group?.parentTracker ? [b.group.parentTracker] : [],
+      ),
       // Las tablas hijas de las líneas con monto (para correr sus fórmulas en el navegador) y las de un
       // formulario que completa un registro (para mostrar las ya guardadas).
       ...spec.blocks.flatMap((b) =>
@@ -1829,6 +1979,7 @@ export const BLOCK_LABEL: Record<ViewBlockType, string> = {
   text: 'Texto',
   metric: 'Cifra',
   table: 'Tabla',
+  sheet: 'Hoja',
   chart: 'Gráfico',
   board: 'Tablero',
   zones: 'Plano',

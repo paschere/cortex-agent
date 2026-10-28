@@ -28,6 +28,7 @@ import {
   createView,
   createViewTask,
   editViewRow,
+  pasteViewRows,
   editViewSubmission,
   saveFormRecord,
   loadViewSources,
@@ -1473,6 +1474,46 @@ export async function editAppRow(
   const { expect: _expect, ...rest } = input;
   return withFlowActor(flowActorOf(access), () =>
     editViewRow(db, view, { ...rest, actor: access.user.id, actorKind: actorKindOf(access) }),
+  );
+}
+
+
+/**
+ * Pegar filas desde Excel / Sheets en una hoja de una pantalla. El rol decide
+ * qué se puede: crear filas (`canCreateIn`), actualizar las que ya existen (sólo
+ * con edición de todas y lectura de todas), y los campos que su rol escribe.
+ * Quien ve «las filas donde Cliente = su cliente» sólo crea filas de SU cliente.
+ */
+export async function pasteAppRows(
+  db: SupabaseClient,
+  access: AppAccess,
+  view: CustomViewRow,
+  input: { blockId: string; rows: Array<Record<string, string>>; apply: boolean },
+) {
+  const slug = trackerOfBlock(view, input.blockId);
+  const create = canCreateIn(access.role, slug);
+  const scope = rowAccessFor(access.role, access.user, slug);
+  const update = editAccessFor(access.role, slug) === 'all' && scope.kind === 'all';
+  if (!create && !update)
+    throw new ValidationError('Tu rol en esta aplicación no registra ni edita en esta tabla.');
+  const keys = [...new Set(input.rows.flatMap((r) => Object.keys(r).filter((k) => r[k] !== '')))];
+  assertFields(access, slug, keys);
+  let forced: Record<string, string> | undefined;
+  if (scope.kind === 'equals') {
+    if (scope.value === null)
+      throw new ValidationError('Tu usuario no tiene el atributo que esta tabla necesita.');
+    forced = { [scope.field]: scope.value };
+  }
+  if (input.apply) await assertExternalBudget(db, access, 'write');
+  return withFlowActor(flowActorOf(access), () =>
+    pasteViewRows(db, view, {
+      ...input,
+      create,
+      update,
+      forced,
+      actor: access.user.id,
+      actorKind: actorKindOf(access),
+    }),
   );
 }
 

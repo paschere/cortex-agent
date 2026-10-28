@@ -173,7 +173,7 @@ export function trackerColumns(
     };
     if (f.type === 'select')
       column.options = (f.options ?? []).map((o) => ({ value: o, tone: toneFor(o) }));
-    if (f.type === 'money') column.currency = 'COP';
+    if (f.type === 'money') column.currency = (f as { currency?: string }).currency ?? 'COP';
     if (!isName && (f.type === 'select' || f.type === 'money' || f.type === 'date'))
       column.primary = true;
     return column;

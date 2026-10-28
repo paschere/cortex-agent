@@ -209,3 +209,16 @@ export {
   statusOfSyncRow,
 } from './origin-status';
 export type { OriginWithStatus, RefreshResult } from './origin-status';
+
+export {
+  TRM_LIST_ID,
+  TRM_SOURCE_URL,
+  normalizeTrm,
+  parseSocrataTrm,
+  trmDay,
+  trmOn,
+  trmWarning,
+  usesTrm,
+} from './trm';
+export type { TrmLookup, TrmRate, TrmTable } from './trm';
+export { ensureTrm, loadTrm, syncTrm } from './trm-store';
