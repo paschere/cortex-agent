@@ -16,7 +16,7 @@ import type {
 } from '@cortex/agent-tools';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { Ellipsis, Info, Pencil, Plus, X } from 'lucide-react';
+import { Ellipsis, Info, PanelLeftClose, PanelLeftOpen, Pencil, Plus, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -302,6 +302,24 @@ export function AppRunner({
     };
   }, [standalone]);
 
+  // El menú de pantallas se pliega a una franja de íconos para que la hoja o
+  // el tablero ganen ancho; se recuerda por app en este navegador.
+  const railKey = `cortex:app-rail:${app.id}`;
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    try {
+      setCompact(window.localStorage.getItem(railKey) === '1');
+    } catch {}
+  }, [railKey]);
+  function toggleRail() {
+    setCompact((was) => {
+      try {
+        window.localStorage.setItem(railKey, was ? '0' : '1');
+      } catch {}
+      return !was;
+    });
+  }
+
   async function refresh() {
     // El lienzo se actualiza solo (LiveViewCanvas escucha este evento); el
     // servidor vuelve a calcular lo que no es lienzo (Inicio, tarjetas).
@@ -353,24 +371,41 @@ export function AppRunner({
                   : undefined
               }
             >
-              <BrandScope className="md:flex md:gap-6">
-                <aside className="view-no-print hidden w-60 shrink-0 md:block">
-                  <div className="sticky top-4 flex flex-col gap-4">
-                    <div className="app-hero flex items-center gap-3 rounded-card border border-border p-4 shadow-card">
-                      <AppMark app={app} iconUrl={look?.iconUrl ?? null} className="h-11 w-11" />
-                      <div className="min-w-0 leading-tight">
-                        <p className="truncate text-base font-extrabold tracking-tight text-ink">
-                          {app.name}
-                        </p>
-                        <p className="mt-0.5 truncate text-micro font-semibold text-ink-muted">
-                          {role.name}
-                          {session?.external ? ` · ${session.name}` : ''}
-                        </p>
-                      </div>
+              <BrandScope className="md:flex md:gap-5">
+                <aside
+                  className={clsx(
+                    'view-no-print hidden shrink-0 transition-[width] duration-200 md:block',
+                    compact ? 'w-14' : 'w-52',
+                  )}
+                >
+                  <div className="sticky top-4 flex flex-col gap-3">
+                    <div
+                      className={clsx(
+                        'app-hero flex items-center rounded-card border border-border shadow-card',
+                        compact ? 'justify-center p-1.5' : 'gap-2.5 p-2.5',
+                      )}
+                      title={compact ? `${app.name} · ${role.name}` : undefined}
+                    >
+                      <AppMark
+                        app={app}
+                        iconUrl={look?.iconUrl ?? null}
+                        className={compact ? 'h-9 w-9' : 'h-9 w-9'}
+                      />
+                      {!compact && (
+                        <div className="min-w-0 leading-tight">
+                          <p className="truncate text-sm font-extrabold tracking-tight text-ink">
+                            {app.name}
+                          </p>
+                          <p className="mt-0.5 truncate text-micro font-semibold text-ink-muted">
+                            {role.name}
+                            {session?.external ? ` · ${session.name}` : ''}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     <nav
                       aria-label={`Pantallas de ${app.name}`}
-                      className="flex flex-col gap-1 rounded-card border border-border bg-surface p-1.5 shadow-card"
+                      className="flex flex-col gap-0.5 rounded-card border border-border bg-surface p-1 shadow-card"
                     >
                       {screens.map((s) => {
                         const active = s.slug === current;
@@ -379,8 +414,11 @@ export function AppRunner({
                             key={s.slug}
                             href={hrefFor(s.slug)}
                             aria-current={active ? 'page' : undefined}
+                            aria-label={compact ? s.title : undefined}
+                            title={compact ? s.title : undefined}
                             className={clsx(
-                              'app-press relative flex min-h-11 items-center gap-3 rounded-sm px-3 text-sm font-semibold',
+                              'app-press relative flex min-h-10 items-center rounded-sm text-sm font-semibold',
+                              compact ? 'justify-center px-0' : 'gap-2.5 px-2.5',
                               active
                                 ? 'bg-primary-soft text-primary-ink'
                                 : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
@@ -393,23 +431,50 @@ export function AppRunner({
                               />
                             )}
                             <Glyph name={s.icon} className="h-5 w-5 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate">{s.title}</span>
-                            <NoticeBadge slugs={[s.slug]} />
+                            {!compact && <span className="min-w-0 flex-1 truncate">{s.title}</span>}
+                            <NoticeBadge
+                              slugs={[s.slug]}
+                              className={compact ? 'absolute right-0.5 top-0.5' : undefined}
+                            />
                           </Link>
                         );
                       })}
                     </nav>
-                    <div className="flex flex-col items-start gap-3 px-1">
-                      {accountActions}
-                      {standalone && <AppThemeToggle className="w-full" />}
+                    <div
+                      className={clsx(
+                        'flex flex-col gap-3 px-1',
+                        compact ? 'items-center' : 'items-start',
+                      )}
+                    >
+                      {!compact && accountActions}
+                      {!compact && standalone && <AppThemeToggle className="w-full" />}
                       {canManage && (
                         <Link
                           href={editHref}
+                          title={compact ? 'Editar la app' : undefined}
+                          aria-label={compact ? 'Editar la app' : undefined}
                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
                         >
-                          <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar la app
+                          <Pencil className="h-3.5 w-3.5" aria-hidden />
+                          {!compact && 'Editar la app'}
                         </Link>
                       )}
+                      <button
+                        type="button"
+                        onClick={toggleRail}
+                        title={compact ? 'Mostrar el menú' : 'Plegar el menú'}
+                        aria-label={compact ? 'Mostrar el menú' : 'Plegar el menú'}
+                        aria-expanded={!compact}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                      >
+                        {compact ? (
+                          <PanelLeftOpen className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <>
+                            <PanelLeftClose className="h-3.5 w-3.5" aria-hidden /> Plegar el menú
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 </aside>

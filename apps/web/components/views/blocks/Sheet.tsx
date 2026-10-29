@@ -480,6 +480,30 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     });
     return m;
   }, [lines]);
+  // El grupo que se está recorriendo: su tarjeta queda pegada bajo el encabezado hasta que la
+  // del siguiente grupo llega y la empuja hacia arriba (como los títulos de una lista larga).
+  const groupLines = useMemo(() => {
+    const out: number[] = [];
+    lines.forEach((l, i) => {
+      if (l.kind === 'group') out.push(i);
+    });
+    return out;
+  }, [lines]);
+  const pinned = useMemo(() => {
+    if (!groupLines.length) return null;
+    let k = -1;
+    for (let j = 0; j < groupLines.length; j++) {
+      if ((offsets[groupLines[j] ?? 0] ?? 0) < scrollTop - 1) k = j;
+      else break;
+    }
+    if (k < 0) return null;
+    const li = groupLines[k] ?? 0;
+    const line = lines[li];
+    if (line?.kind !== 'group') return null;
+    const next = groupLines[k + 1];
+    const gap = next === undefined ? Number.POSITIVE_INFINITY : (offsets[next] ?? 0) - scrollTop;
+    return { gi: line.gi, count: line.count, shift: Math.min(0, gap - groupPx) };
+  }, [groupLines, lines, offsets, scrollTop, groupPx]);
   const span = useMemo(() => {
     if (!virtual) return { from: 0, to: lines.length };
     const margin = rowPx * 12;
@@ -1129,6 +1153,115 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     root.querySelector(sel)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [active]);
 
+  // La tarjeta del grupo (manifiesto): se pinta en su línea y, pegada arriba, la del grupo
+  // que se está recorriendo, hasta que el siguiente la empuja.
+  function groupCard(gi: number, count: number, floating = false) {
+    const g = block.groups?.[gi];
+    if (!g) return null;
+    const isClosed = collapsed.has(g.key);
+    const members = visible.filter((r) => r.group === gi);
+    const all = block.rows.filter((r) => r.group === gi);
+    const progress =
+      statusCol >= 0
+        ? groupProgress(all.map((r) => rawText(pending[`${r.id}:${statusCol}`]) || (r.cells[statusCol] ?? '')))
+        : null;
+    const estado = g.fields.find((f) => /^(estado|status)$/i.test(f.label));
+    const tone: ToneName | null =
+      (estado ? toneOfStatus(estado.value) : null) ??
+      (progress
+        ? progress.rejected > 0
+          ? 'rose'
+          : progress.total > 0 && progress.done === progress.total
+            ? 'emerald'
+            : null
+        : null);
+    const pct = progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
+    return (
+      <div
+        className={clsx(
+          'flex flex-wrap items-center gap-x-5 gap-y-2 rounded-sm border border-border/70 border-l-4 px-3 py-2 shadow-card',
+        floating && 'shadow-pop',
+          GROUP_BG[tone ?? 'primary'],
+        )}
+        style={tone ? undefined : { borderLeftColor: 'rgb(var(--primary) / 0.5)' }}
+      >
+        <button
+          type="button"
+          aria-expanded={!isClosed}
+          onClick={() =>
+            setCollapsed((c) => {
+              const n = new Set(c);
+              if (n.has(g.key)) n.delete(g.key);
+              else n.add(g.key);
+              return n;
+            })
+          }
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink"
+        >
+          {isClosed ? (
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          ) : (
+            <ChevronDown className="h-4 w-4" aria-hidden />
+          )}
+          {g.label}
+          <span className="tabular rounded-pill bg-surface/70 px-1.5 font-mono text-micro font-normal text-ink-muted">
+            {count}
+          </span>
+        </button>
+        {g.fields.map((f) => (
+          <span key={f.label} className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
+            <span className="text-micro text-ink-faint">{f.label}</span>
+            {f === estado && f.value ? (
+              <StatusChip value={f.value} tone={toneOfStatus(f.value)} />
+            ) : (
+              <span className="tabular font-mono font-semibold text-ink">{f.value}</span>
+            )}
+          </span>
+        ))}
+        {progress && progress.total > 0 && (
+          <span className="inline-flex items-center gap-2 text-micro text-ink-muted">
+            <span
+              role="progressbar"
+              aria-label={`Avance de ${g.label}`}
+              aria-valuemin={0}
+              aria-valuemax={progress.total}
+              aria-valuenow={progress.done}
+              className="relative h-1.5 w-20 overflow-hidden rounded-pill bg-surface/80"
+            >
+              <span
+                className={clsx('absolute inset-y-0 left-0 rounded-pill', progress.rejected ? 'bg-rose' : 'bg-emerald')}
+                style={{ width: `${pct}%`, transition: 'width .3s ease' }}
+              />
+            </span>
+            <span className="tabular font-mono">
+              {progress.done}/{progress.total}
+            </span>
+          </span>
+        )}
+        <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-0.5">
+          {g.subtotals.map((ci) => {
+            const c = block.columns[ci];
+            if (!c) return null;
+            const op = block.totals.find((t) => t.col === ci)?.op ?? 'sum';
+            return (
+              <span key={c.key} className="inline-flex items-baseline gap-1.5 text-xs text-ink-muted">
+                <span className="text-micro text-ink-faint">{c.label}</span>
+                <BumpText
+                  className="tabular font-mono text-sm font-semibold text-ink"
+                  text={sheetTotalDisplay(
+                    members.map((r) => r.sort[ci]),
+                    op,
+                    c.fmt,
+                  )}
+                />
+              </span>
+            );
+          })}
+        </span>
+      </div>
+    );
+  }
+
   const scrollRaf = useRef(0);
   function onGridScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
@@ -1477,7 +1610,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         // biome-ignore lint/a11y/noNoninteractiveTabindex: la rejilla es el control; las flechas mueven la celda activa.
         tabIndex={0}
         onKeyDown={onKeyDown}
-        onScroll={virtual ? onGridScroll : undefined}
+        onScroll={virtual || block.groups?.length ? onGridScroll : undefined}
         style={{ ...(viewW ? ({ '--sheet-view': `${viewW}px` } as React.CSSProperties) : {}), overflowAnchor: 'none' }}
         onPaste={(e) => {
           if (editing) return;
@@ -1492,6 +1625,19 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
           full ? 'min-h-0 flex-1 -mx-3 sm:-mx-4' : '-mx-4 max-h-[70vh] sm:-mx-6',
         )}
       >
+        {pinned && (
+          <div
+            className="pointer-events-none sticky left-0 z-[25] h-0 w-[var(--sheet-view,72rem)] max-w-full"
+            style={{ top: measured.head }}
+          >
+            <div
+              className="pointer-events-auto px-2 pt-1 transition-opacity"
+              style={{ transform: `translateY(${pinned.shift}px)` }}
+            >
+              <div className="rounded-sm bg-surface">{groupCard(pinned.gi, pinned.count, true)}</div>
+            </div>
+          </div>
+        )}
         <table
           className="border-separate border-spacing-0 text-xs"
           style={{ width: tableWidth, tableLayout: 'fixed' }}
@@ -1576,111 +1722,12 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
             )}
             {(virtual ? lines.slice(span.from, span.to) : lines).map((line) => {
               if (line.kind === 'group') {
-                const g = block.groups?.[line.gi];
-                if (!g) return null;
-                const isClosed = collapsed.has(g.key);
-                const members = visible.filter((r) => r.group === line.gi);
-                const all = block.rows.filter((r) => r.group === line.gi);
-                const progress =
-                  statusCol >= 0
-                    ? groupProgress(all.map((r) => rawText(pending[`${r.id}:${statusCol}`]) || (r.cells[statusCol] ?? '')))
-                    : null;
-                const estado = g.fields.find((f) => /^(estado|status)$/i.test(f.label));
-                const tone: ToneName | null =
-                  (estado ? toneOfStatus(estado.value) : null) ??
-                  (progress
-                    ? progress.rejected > 0
-                      ? 'rose'
-                      : progress.total > 0 && progress.done === progress.total
-                        ? 'emerald'
-                        : null
-                    : null);
-                const pct = progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
+                if (!block.groups?.[line.gi]) return null;
                 return (
                   <tr key={`g${line.gi}`} data-vk="group">
                     <td colSpan={1 + block.columns.length} className="border-b border-border p-0">
                       <div className="sticky left-0 w-[var(--sheet-view,72rem)] max-w-full px-2 py-2">
-                        <div
-                          className={clsx(
-                            'flex flex-wrap items-center gap-x-5 gap-y-2 rounded-sm border border-border/70 border-l-4 px-3 py-2 shadow-card',
-                            GROUP_BG[tone ?? 'primary'],
-                          )}
-                          style={tone ? undefined : { borderLeftColor: 'rgb(var(--primary) / 0.5)' }}
-                        >
-                          <button
-                            type="button"
-                            aria-expanded={!isClosed}
-                            onClick={() =>
-                              setCollapsed((c) => {
-                                const n = new Set(c);
-                                if (n.has(g.key)) n.delete(g.key);
-                                else n.add(g.key);
-                                return n;
-                              })
-                            }
-                            className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink"
-                          >
-                            {isClosed ? (
-                              <ChevronRight className="h-4 w-4" aria-hidden />
-                            ) : (
-                              <ChevronDown className="h-4 w-4" aria-hidden />
-                            )}
-                            {g.label}
-                            <span className="tabular rounded-pill bg-surface/70 px-1.5 font-mono text-micro font-normal text-ink-muted">
-                              {line.count}
-                            </span>
-                          </button>
-                          {g.fields.map((f) => (
-                            <span key={f.label} className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
-                              <span className="text-micro text-ink-faint">{f.label}</span>
-                              {f === estado && f.value ? (
-                                <StatusChip value={f.value} tone={toneOfStatus(f.value)} />
-                              ) : (
-                                <span className="tabular font-mono font-semibold text-ink">{f.value}</span>
-                              )}
-                            </span>
-                          ))}
-                          {progress && progress.total > 0 && (
-                            <span className="inline-flex items-center gap-2 text-micro text-ink-muted">
-                              <span
-                                role="progressbar"
-                                aria-label={`Avance de ${g.label}`}
-                                aria-valuemin={0}
-                                aria-valuemax={progress.total}
-                                aria-valuenow={progress.done}
-                                className="relative h-1.5 w-20 overflow-hidden rounded-pill bg-surface/80"
-                              >
-                                <span
-                                  className={clsx('absolute inset-y-0 left-0 rounded-pill', progress.rejected ? 'bg-rose' : 'bg-emerald')}
-                                  style={{ width: `${pct}%`, transition: 'width .3s ease' }}
-                                />
-                              </span>
-                              <span className="tabular font-mono">
-                                {progress.done}/{progress.total}
-                              </span>
-                            </span>
-                          )}
-                          <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-0.5">
-                            {g.subtotals.map((ci) => {
-                              const c = block.columns[ci];
-                              if (!c) return null;
-                              const op = block.totals.find((t) => t.col === ci)?.op ?? 'sum';
-                              return (
-                                <span key={c.key} className="inline-flex items-baseline gap-1.5 text-xs text-ink-muted">
-                                  <span className="text-micro text-ink-faint">{c.label}</span>
-                                  <BumpText
-                                    className="tabular font-mono text-sm font-semibold text-ink"
-                                    text={sheetTotalDisplay(
-                                      members.map((r) => r.sort[ci]),
-                                      op,
-                                      c.fmt,
-                                    )}
-                                  />
-                                </span>
-                              );
-                            })}
-                          </span>
-                        </div>
+                        {groupCard(line.gi, line.count)}
                       </div>
                     </td>
                   </tr>
