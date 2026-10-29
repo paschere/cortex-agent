@@ -767,7 +767,7 @@ export interface ComputedDetail {
 export interface ComputedAction {
   id: string;
   label: string;
-  kind: 'set_field' | 'notify' | 'assign';
+  kind: 'set_field' | 'notify' | 'assign' | 'claim';
   confirm: boolean;
   tone: Tone;
   /** Si viene, el botón sólo aparece en estas filas (Aprobar / Rechazar: las pendientes). */

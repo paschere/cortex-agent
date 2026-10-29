@@ -363,10 +363,13 @@ export function isBound(type: 'date' | 'time', b: string): boolean {
 
 export type TrackerField = z.infer<typeof trackerFieldSchema>;
 
+/** Tope de campos de una tabla completa (una operación real: vuelo, guía, atención, pasa de 30). */
+export const MAX_TABLE_FIELDS = 60;
+
 export const trackerFieldsSchema = z
   .array(z.preprocess(normalizeFieldInput, trackerFieldSchema))
   .min(1)
-  .max(20)
+  .max(MAX_TABLE_FIELDS)
   .superRefine((fields, ctx) => {
     const seen = new Set<string>();
     for (const [i, field] of fields.entries()) {

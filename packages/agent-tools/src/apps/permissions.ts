@@ -44,6 +44,17 @@ export const tablePermissionSchema = z.object({
   read: rowReadSchema.default('all'),
   create: z.boolean().default(false),
   edit: z.enum(['none', 'own', 'all']).default('none'),
+  /**
+   * Con `edit: 'own'`, además de lo que registró, edita las filas donde `field` vale
+   * `$user.<atributo>` (`$user.id` = ella): la atención que le TOCÓ aunque la haya
+   * creado una automatización. No amplía `none` ni `all`.
+   */
+  editWhere: z
+    .object({
+      field: z.string().trim().min(1).max(40),
+      equals: z.string().regex(USER_ATTRIBUTE_RE, 'Debe ser $user.<atributo>'),
+    })
+    .optional(),
   /** Campos que puede escribir (crear y editar). Sin lista = los del bloque. */
   fields: z.array(z.string().trim().min(1).max(40)).max(60).optional(),
   /** Ids de botones del spec; `__approve` y `__reject` para la aprobación. */
@@ -219,6 +230,27 @@ export function isOwnRow(
   row: Pick<ViewRow, 'created_by' | 'created_by_app_user'>,
 ): boolean {
   return user.external ? row.created_by_app_user === user.id : row.created_by === user.id;
+}
+
+/**
+ * ¿Este rol puede editar ESTA fila? `all` sí; `none` no; `own` si la creó quien mira o,
+ * con `editWhere`, si el campo nombrado vale el atributo (o el id) de quien mira.
+ */
+export function canEditRow(
+  role: ResolvedRole,
+  user: AppUser,
+  tracker: string,
+  row: Pick<ViewRow, 'values' | 'created_by' | 'created_by_app_user'>,
+): boolean {
+  const edit = editAccessFor(role, tracker);
+  if (edit === 'all') return true;
+  if (edit === 'none') return false;
+  if (isOwnRow(user, row)) return true;
+  const where = role.permissions.tables[tracker]?.editWhere;
+  if (!where) return false;
+  const attr = USER_ATTRIBUTE_RE.exec(where.equals)?.[1] ?? '';
+  const value = attr === USER_ID_ATTRIBUTE ? user.id : user.attributes[attr];
+  return typeof value === 'string' && value.trim() !== '' && String(row.values[where.field] ?? '') === value.trim();
 }
 
 export const SCOPE_BLOCKED_MESSAGE = 'Tu rol en esta aplicación no ve esta tabla.';

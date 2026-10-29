@@ -132,6 +132,8 @@ export interface TemplateContext {
   appName?: string;
   link?: string;
   reason?: string;
+  /** La fila que despertó la regla: `{{fila}}` la da lista para un campo de relación. */
+  rowId?: string;
   /** Etiquetas de los campos (para que `{{Guía}}` también funcione, no sólo la llave). */
   labels?: Record<string, string>;
   /** Tipo de cada campo (llave → tipo): `renderText` lo usa para leer dinero, números y fechas como se ven. */
@@ -149,6 +151,17 @@ export function lookupRaw(name: string, ctx: TemplateContext): unknown {
   if (lower === 'motivo') return ctx.reason ?? '';
   // La fecha de hoy en Bogotá (AAAA-MM-DD): «fecha de pago = {{hoy}}» (0232).
   if (lower === 'hoy') return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  // La hora de ahora en Bogotá (HH:MM): «hora de llegada = {{hora}}».
+  if (lower === 'hora' && ctx.after.hora === undefined)
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Bogota',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date());
+  // La fila que despertó la regla, como valor de un campo de relación: `{{fila}}`.
+  if (lower === 'fila' && ctx.after.fila === undefined && ctx.rowId)
+    return JSON.stringify({ id: ctx.rowId, label: ctx.label ?? '' });
   const prior = lower.startsWith('antes.');
   const key = prior ? n.slice(6).trim() : n;
   const source = prior ? (ctx.before ?? {}) : ctx.after;
@@ -430,7 +443,12 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
     case 'notify_member':
       return {
         type: a.type,
-        summary: `Avisaría en la campana: «${renderTemplate(a.title, ctx)}».`,
+        summary: `Avisaría en la campana${a.onShift ? ' (sólo a quienes tienen el turno abierto)' : ''}: «${renderTemplate(a.title, ctx)}».`,
+      };
+    case 'check_zone':
+      return {
+        type: a.type,
+        summary: `Miraría ${a.from ? `la ubicación «${a.from}»` : 'dónde está quien lo hizo'} frente a ${a.zones?.length ? `las zonas ${a.zones.join(', ')}` : 'los lugares de la app'} y dejaría la zona${a.outsideField ? ` y «${a.outsideField}» (${a.outsideValue}/${a.insideValue}/${a.unknownValue})` : ''}.`,
       };
     case 'notify_app_user':
       return {

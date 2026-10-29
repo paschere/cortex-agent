@@ -237,6 +237,8 @@ export const automationActionSchema = z.discriminatedUnion('type', [
     roles: z.array(roleKeySchema).max(8).default([]),
     /** Owners y admins de la empresa. */
     admins: z.boolean().default(false),
+    /** Sólo a quienes tienen el turno abierto ahora (con ubicación compartida) en la app. */
+    onShift: z.boolean().optional(),
     title: text(160),
     body: z.string().trim().max(600).optional(),
   }),
@@ -245,6 +247,8 @@ export const automationActionSchema = z.discriminatedUnion('type', [
     ...branch,
     /** El creador de la fila, o los usuarios de la app con un rol. */
     to: z.union([z.literal('creator'), z.object({ role: roleKeySchema })]),
+    /** Sólo a quienes tienen el turno abierto ahora (con ubicación compartida) en la app. */
+    onShift: z.boolean().optional(),
     title: text(120),
     body: z.string().trim().max(400).optional(),
     /** Pantalla que abre el aviso (slug); vacío = la app. */
@@ -284,6 +288,34 @@ export const automationActionSchema = z.discriminatedUnion('type', [
      * sigue pidiendo aprobación, como siempre.
      */
     allow: z.array(z.enum(ASK_ALLOWABLE_TOOLS)).max(2).optional(),
+  }),
+  /**
+   * MARCAR LA ZONA DE QUIEN HIZO ESTO. Toma la última posición de la persona que
+   * disparó el suceso (si es reciente) —o la de un campo de ubicación de la fila— y la
+   * compara con los lugares de la app (círculos o polígonos, ver geofence.ts). Escribe
+   * en ESTA fila: la zona, «Sí/No/Sin señal» de fuera de zona y, si se pide, la
+   * ubicación. Las acciones que siguen ya ven esos valores (`if`, `{{zona}}`): así un
+   * «fuera de zona» se avisa al supervisor en la misma regla. No bloquea nada: deja
+   * trabajar, marca y avisa.
+   */
+  z.object({
+    type: z.literal('check_zone'),
+    ...branch,
+    /** Campo de ubicación («lat,lng») de la fila; vacío = la posición en vivo de quien lo hizo. */
+    from: fieldKey.optional(),
+    /** Lugares (ids) que cuentan como «dentro»; vacío = todos los de la app. */
+    zones: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,31}$/)).max(30).optional(),
+    /** Campo (texto) donde queda el nombre de la zona. */
+    zoneField: fieldKey.optional(),
+    /** Campo (texto o opciones) donde queda Sí / No / Sin señal. */
+    outsideField: fieldKey.optional(),
+    outsideValue: z.string().max(40).default('Sí'),
+    insideValue: z.string().max(40).default('No'),
+    unknownValue: z.string().max(40).default('Sin señal'),
+    /** Campo de ubicación donde se guarda la posición usada (si `from` no es de la fila). */
+    locationField: fieldKey.optional(),
+    /** Qué tan vieja puede ser la posición en vivo para valer. */
+    maxAgeMinutes: z.number().int().min(1).max(120).default(10),
   }),
   z.object({
     type: z.literal('update_related'),
@@ -380,6 +412,7 @@ export const ACTION_LABEL: Record<ActionType, string> = {
   email: 'Mandar un correo',
   webhook: 'Llamar a otro sistema (webhook)',
   ask_cortex: 'Pedirle algo a Cortex',
+  check_zone: 'Marcar la zona y si está fuera de zona',
   update_related: 'Cambiar filas relacionadas (subir o bajar por una relación)',
   update_rows: 'Cambiar filas de otra tabla por filtro',
   rollup: 'Acumular en la fila padre (suma, conteo, promedio…)',
@@ -473,6 +506,10 @@ export function structuralProblems(input: AutomationInput): string[] {
       out.push('El aviso al equipo necesita a quién: miembros, roles o administradores.');
     if (a.type === 'ask_cortex' && a.writes && rowless)
       out.push('«Escribir en la fila» necesita una fila; con un horario o un botón no hay fila.');
+    if (a.type === 'check_zone' && rowless)
+      out.push('«Marcar la zona» escribe en una fila; con un horario o un botón no hay fila.');
+    if (a.type === 'check_zone' && !a.zoneField && !a.outsideField && !a.locationField)
+      out.push('«Marcar la zona» necesita al menos un campo donde dejar la zona o el «fuera de zona».');
     if (a.type === 'webhook' && !a.url.toLowerCase().startsWith('https://'))
       out.push('El webhook sólo acepta direcciones https.');
     if (a.type === 'report' && !a.to.length && !a.roles.length)

@@ -8,7 +8,9 @@ import {
   geofenceProblems,
   geofenceSchema,
   leaveRadiusM,
+  pointInPolygon,
   stepPlace,
+  zoneOf,
 } from '../geofence';
 import { parseLocationSettings } from '../location-shape';
 
@@ -113,5 +115,50 @@ describe('esquema y texto', () => {
     expect(
       parseLocationSettings({ enabled: true, retentionDays: 10, geofences: [{ id: 'MAL' }] }),
     ).toEqual({ enabled: true, retentionDays: 10, geofences: [] });
+  });
+});
+
+describe('polígonos y zonas', () => {
+  // Rectángulo ~200 m x 100 m alrededor de BODEGA.
+  const d = 0.0009;
+  const rect = (): Geofence =>
+    geofenceSchema.parse({
+      id: 'plataforma',
+      name: 'Plataforma',
+      ...BODEGA,
+      radiusM: 150,
+      polygon: [
+        [BODEGA.lat - d / 2, BODEGA.lng - d],
+        [BODEGA.lat - d / 2, BODEGA.lng + d],
+        [BODEGA.lat + d / 2, BODEGA.lng + d],
+        [BODEGA.lat + d / 2, BODEGA.lng - d],
+      ],
+      marginM: 10,
+    });
+  it('el punto en rayos', () => {
+    const poly = rect().polygon as Array<[number, number]>;
+    expect(pointInPolygon(BODEGA, poly)).toBe(true);
+    expect(pointInPolygon({ lat: BODEGA.lat + 0.01, lng: BODEGA.lng }, poly)).toBe(false);
+  });
+  it('dentro, en la holgura y fuera', () => {
+    const p = rect();
+    expect(zoneOf([p], BODEGA).place?.id).toBe('plataforma');
+    // ~5 m al norte del borde: dentro por la holgura de 10 m.
+    expect(zoneOf([p], { lat: BODEGA.lat + d / 2 + 5 / 111_195, lng: BODEGA.lng }).place?.id).toBe('plataforma');
+    // ~80 m al norte del borde: fuera.
+    expect(zoneOf([p], { lat: BODEGA.lat + d / 2 + 80 / 111_195, lng: BODEGA.lng }).place).toBeNull();
+  });
+  it('una posición borrosa y fuera no decide', () => {
+    const v = zoneOf([rect()], { lat: 4.8, lng: -74.0, accuracyM: 900 });
+    expect(v).toMatchObject({ place: null, uncertain: true });
+  });
+  it('restrictTo limita las zonas y el cruce de un polígono respeta la histéresis', () => {
+    const p = rect();
+    expect(zoneOf([p], BODEGA, ['otra']).place).toBeNull();
+    expect(stepPlace(p, false, BODEGA)).toMatchObject({ inside: true, transition: 'enter' });
+    const edge = { lat: BODEGA.lat + d / 2 + 20 / 111_195, lng: BODEGA.lng };
+    expect(stepPlace(p, true, edge).transition).toBeNull(); // 20 m < salida (35 m)
+    const far = { lat: BODEGA.lat + d / 2 + 60 / 111_195, lng: BODEGA.lng };
+    expect(stepPlace(p, true, far).transition).toBe('leave');
   });
 });

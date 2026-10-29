@@ -12,6 +12,7 @@ import {
   applyRowScope,
   canApprove,
   canCreateIn,
+  canEditRow,
   canExport,
   canRunAction,
   canSeeScreen,
@@ -206,5 +207,39 @@ describe('en lenguaje simple', () => {
     expect(describeRead({ field: 'cliente', equals: '$user.cliente' }, 'Cliente')).toBe(
       'Ve las filas donde «Cliente» es su cliente',
     );
+  });
+});
+
+describe('editar lo que me tocó (editWhere)', () => {
+  const R = role({
+    tables: {
+      atenciones: {
+        read: { field: 'operario_id', equals: '$user.id' },
+        create: false,
+        edit: 'own',
+        editWhere: { field: 'operario_id', equals: '$user.id' },
+        actions: [],
+      },
+      guias: { read: 'all', edit: 'own', actions: [] },
+    },
+  });
+  const row = (values: Record<string, unknown>, created_by: string | null = null) => ({
+    values: values as never,
+    created_by,
+    created_by_app_user: null,
+  });
+  it('edita la que le tocó aunque la creara una automatización', () => {
+    expect(canEditRow(R, ANA, 'atenciones', row({ operario_id: 'user-ana' }))).toBe(true);
+    expect(canEditRow(R, BETO, 'atenciones', row({ operario_id: 'user-ana' }))).toBe(false);
+    expect(canEditRow(R, ANA, 'atenciones', row({ operario_id: '' }))).toBe(false);
+  });
+  it('lo propio sigue valiendo y sin editWhere nada cambia', () => {
+    expect(canEditRow(R, ANA, 'atenciones', row({}, 'user-ana'))).toBe(true);
+    expect(canEditRow(R, ANA, 'guias', row({ operario_id: 'user-ana' }))).toBe(false);
+  });
+  it('no amplía none ni all', () => {
+    const N = role({ tables: { a: { edit: 'none', editWhere: { field: 'x', equals: '$user.id' } } } });
+    expect(canEditRow(N, ANA, 'a', row({ x: 'user-ana' }))).toBe(false);
+    expect(canEditRow(adminRole(), ANA, 'zzz', row({}))).toBe(true);
   });
 });

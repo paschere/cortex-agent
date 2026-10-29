@@ -76,7 +76,7 @@ import {
   editAccessFor,
   fieldsOutside,
   writableFieldsFor,
-  isOwnRow,
+  canEditRow,
   parsePermissions,
   roleKeySchema,
   rowAccessFor,
@@ -1480,8 +1480,8 @@ export async function editAppRow(
   const edit = editAccessFor(access.role, slug);
   if (edit === 'none') throw new ValidationError('Tu rol en esta aplicación no edita esta tabla.');
   const row = await assertRowVisible(db, access, slug, input.rowId);
-  if (edit === 'own' && !isOwnRow(access.user, row))
-    throw new ValidationError('Sólo puedes editar lo que registraste tú.');
+  if (edit === 'own' && !canEditRow(access.role, access.user, slug, row))
+    throw new ValidationError('Sólo puedes editar lo que registraste tú o te tocó a ti.');
   assertFields(access, slug, Object.keys(input.patch));
   if (input.expect) {
     const conflicts = Object.entries(input.expect)
@@ -1557,8 +1557,8 @@ export async function undoAppRowChange(
   const edit = editAccessFor(access.role, slug);
   if (edit === 'none') throw new ValidationError('Tu rol en esta aplicación no edita esta tabla.');
   const row = await assertRowVisible(db, access, slug, input.rowId);
-  if (edit === 'own' && !isOwnRow(access.user, row))
-    throw new ValidationError('Sólo puedes editar lo que registraste tú.');
+  if (edit === 'own' && !canEditRow(access.role, access.user, slug, row))
+    throw new ValidationError('Sólo puedes editar lo que registraste tú o te tocó a ti.');
   const tracker = await trackerRow(db, slug);
 
   let changes: FieldChanges | null = null;
@@ -1668,6 +1668,8 @@ export async function runAppAction(
       actionId: input.actionId,
       rowId: input.rowId,
       reason: input.reason,
+      // «Tomar»: la persona es QUIEN TOCA, resuelta por la sesión (nunca por el navegador).
+      person: wanted?.kind === 'claim' ? { id: access.user.id, name: access.user.name } : undefined,
       actor: access.user.id,
       actorKind: actorKindOf(access),
     }),

@@ -82,6 +82,7 @@ import {
   type FormBlock,
   type FormLines,
   REJECT_ACTION_ID,
+  type RowAction,
   type ViewSpec,
   approvalFor,
   autofixSpecAgainst,
@@ -2366,6 +2367,14 @@ async function trackerForBlock(db: SupabaseClient, slug: string): Promise<Tracke
  * silencio. Se valida con el esquema de la tabla sobre la fila COMPLETA (lo que
  * había más lo nuevo), así que un cambio no puede dejar vacío un obligatorio.
  */
+/** Otra persona tomó la fila entre que se leyó y se escribió. */
+export class ClaimLostError extends Error {
+  constructor() {
+    super('La fila ya la tomó otra persona.');
+    this.name = 'ClaimLostError';
+  }
+}
+
 async function patchRow(
   db: SupabaseClient,
   view: CustomViewRow,
@@ -2381,6 +2390,12 @@ async function patchRow(
     actorKind?: ActorKind;
     /** Motivo de un rechazo, para las automatizaciones (`{{motivo}}`). */
     reason?: string | null;
+    /**
+     * Compare-and-set: la fila se escribe SÓLO si, en el mismo UPDATE, `unset` está vacío
+     * y (si se pide) `statusIs.field` vale `statusIs.value`. Si otra persona se adelantó,
+     * no se escribe nada y se lanza `ClaimLostError`.
+     */
+    guard?: { unset: string; statusIs?: { field: string; value: string } };
   },
 ): Promise<{
   label: string;
@@ -2455,12 +2470,19 @@ async function patchRow(
     externalKey: (current as { external_key?: string | null }).external_key ?? null,
   });
 
-  const { error } = await db
+  let upd = db
     .from('tracker_rows')
     .update({ values, label, updated_at: new Date().toISOString() })
     .eq('id', input.rowId)
     .eq('tracker_id', input.tracker.id);
+  if (input.guard) {
+    upd = upd.or(`values->>${input.guard.unset}.is.null,values->>${input.guard.unset}.eq.`);
+    if (input.guard.statusIs)
+      upd = upd.eq(`values->>${input.guard.statusIs.field}`, input.guard.statusIs.value);
+  }
+  const { data: written, error } = await upd.select('id');
   if (error) throw error;
+  if (input.guard && !(written ?? []).length) throw new ClaimLostError();
   // Cambiar la guía o su fecha puede crear o resolver un conflicto de duplicados;
   // se revisa la guía de antes y la de ahora.
   const dupRule = await getDuplicateRule(db, input.tracker.id);
@@ -2953,6 +2975,14 @@ export type ViewActionOutcome =
       rowId: string;
       /** La pantalla que abre el aviso a la persona (del botón), o null = la app. */
       screen: string | null;
+    }
+  | {
+      kind: 'claim';
+      label: string;
+      message: string;
+      rowId: string;
+      /** True si ya era suya: tocar de nuevo no cambia nada. */
+      already: boolean;
     };
 
 /** La persona a quien se asigna: ya resuelta y comprobada por la capa de apps. */
@@ -3024,6 +3054,11 @@ export async function runViewAction(
   const action = block.actions.find((a) => a.id === input.actionId);
   if (!action) throw new NotFoundError('Ese botón ya no está en la vista.');
   if (!input.actor) await assertPublicBudget(db, view.id);
+
+  if (action.kind === 'claim' && action.field && action.nameField) {
+    if (!input.person) throw new ValidationError('No se sabe quién toca el botón.');
+    return claimRow(db, view, block, action, input.rowId, input.person, input.actor, input.actorKind);
+  }
 
   if (action.kind === 'assign' && action.field) {
     if (!input.person) throw new ValidationError('Elige a quién asignar.');
@@ -3117,6 +3152,111 @@ export async function runViewAction(
     actionLabel: action.label,
     message: 'Listo, avisamos al equipo.',
   };
+}
+
+/**
+ * «TOMAR»: quien toca se queda con la fila si todavía es de nadie. ATÓMICO: la
+ * escritura es un solo UPDATE condicionado a que el campo siga vacío (y el estado
+ * sea el pedido), así que dos que la toquen a la vez dejan UN ganador; el otro lee
+ * quién la tiene. IDEMPOTENTE: quien ya la tiene la toca de nuevo y no pasa nada.
+ * La identidad sale de la sesión (`person`), nunca de lo que mande el navegador.
+ */
+async function claimRow(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  block: { id: string; tracker: string },
+  action: RowAction,
+  rowId: string,
+  person: AssignedPerson,
+  actor: string | null,
+  actorKind?: ActorKind,
+): Promise<ViewActionOutcome> {
+  const field = action.field as string;
+  const nameField = action.nameField as string;
+  const tracker = await trackerForBlock(db, block.tracker);
+  const read = async () => {
+    const { data, error } = await db
+      .from('tracker_rows')
+      .select('values, label')
+      .eq('id', rowId)
+      .eq('tracker_id', tracker.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new NotFoundError('Esa fila ya no está en la tabla.');
+    return data as { values: Record<string, unknown>; label: string };
+  };
+  const judge = (cur: { values: Record<string, unknown>; label: string }) => {
+    const holder = String(cur.values[field] ?? '').trim();
+    if (holder === person.id)
+      return {
+        kind: 'claim',
+        label: cur.label,
+        rowId,
+        already: true,
+        message: `«${cur.label}» ya es tuya.`,
+      } as const;
+    if (holder)
+      throw new ValidationError(
+        `Ya la tomó ${String(cur.values[nameField] ?? '').trim() || 'otra persona'}.`,
+      );
+    if (
+      action.statusField &&
+      action.when !== undefined &&
+      String(cur.values[action.statusField] ?? '') !== action.when
+    )
+      throw new ValidationError(
+        `Ya no se puede tomar: está en «${String(cur.values[action.statusField] ?? '—')}».`,
+      );
+    return null;
+  };
+  const first = judge(await read());
+  if (first) return first;
+  const patch: Record<string, unknown> = { [field]: person.id, [nameField]: person.name };
+  if (action.statusField && action.value !== undefined) patch[action.statusField] = action.value;
+  if (action.dateField || action.timeField) {
+    const now = new Date();
+    if (action.dateField) patch[action.dateField] = bogotaToday(now);
+    if (action.timeField)
+      patch[action.timeField] = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'America/Bogota',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(now);
+  }
+  try {
+    const { label } = await patchRow(db, view, {
+      blockId: block.id,
+      tracker,
+      rowId,
+      patch,
+      allowed: new Set(Object.keys(patch)),
+      kind: 'action',
+      actionId: action.id,
+      actor,
+      actorKind,
+      guard: {
+        unset: field,
+        statusIs:
+          action.statusField && action.when !== undefined
+            ? { field: action.statusField, value: action.when }
+            : undefined,
+      },
+    });
+    return {
+      kind: 'claim',
+      label,
+      rowId,
+      already: false,
+      message: `Listo: «${label}» es tuya.`,
+    };
+  } catch (err) {
+    if (!(err instanceof ClaimLostError)) throw err;
+    // Perdió la carrera: se lee quién ganó (si fue ella misma por un doble toque, es idempotente).
+    const again = judge(await read());
+    if (again) return again;
+    throw new ValidationError('Ya la tomó otra persona.');
+  }
 }
 
 export interface NewTaskInput {

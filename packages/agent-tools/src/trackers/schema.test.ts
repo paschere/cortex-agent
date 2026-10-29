@@ -101,3 +101,12 @@ describe('el esquema de una tabla inventada', () => {
     });
   });
 });
+
+describe('tablas con muchos campos', () => {
+  it('una tabla de operación (más de 20 campos) pasa; más de 60 no', () => {
+    const mk = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ key: `campo_${i}`, type: 'text', label: `Campo ${i}` }));
+    expect(trackerFieldsSchema.safeParse(mk(39)).success).toBe(true);
+    expect(trackerFieldsSchema.safeParse(mk(61)).success).toBe(false);
+  });
+});

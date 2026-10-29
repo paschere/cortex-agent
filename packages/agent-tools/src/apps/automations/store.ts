@@ -1,3 +1,4 @@
+import { parseLocationSettings } from '../location-shape';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -303,6 +304,23 @@ export async function validateAutomation(
             if (!keys.has(k)) problems.push(`«${k}» no es un campo de «${a.tracker}».`);
         }
       }
+    }
+    if (a.type === 'check_zone') {
+      const { data: appRow } = await db.from('custom_apps').select('location').eq('id', appId).maybeSingle();
+      const places = parseLocationSettings((appRow as { location?: unknown } | null)?.location).geofences;
+      if (!places.length) problems.push('«Marcar la zona» necesita lugares (geocercas) definidos en la app.');
+      for (const z of a.zones ?? [])
+        if (!places.some((g) => g.id === z)) problems.push(`El lugar «${z}» no está en la app.`);
+      if (triggerFields.size)
+        for (const k of [a.from, a.zoneField, a.outsideField, a.locationField])
+          if (k && !triggerFields.has(k))
+            problems.push(`«Marcar la zona» nombra «${k}», que no es un campo de «${slug}».`);
+      if (triggerTracker_)
+        for (const k of [a.zoneField, a.outsideField, a.locationField]) {
+          const o = k ? hardOriginOfField(triggerTracker_, k) : null;
+          if (o)
+            problems.push(fieldLockedMessage(o, [triggerTracker_.fields.find((f) => f.key === k)?.label ?? String(k)]));
+        }
     }
     if (a.type === 'notify_app_user' && a.to !== 'creator' && !roleKeys.has(a.to.role))
       problems.push(`El rol «${a.to.role}» no existe en esta app.`);

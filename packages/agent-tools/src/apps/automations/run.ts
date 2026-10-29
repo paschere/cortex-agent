@@ -49,6 +49,7 @@ import { runDraftInvoiceAction } from './invoice-draft-run';
 import { runOutboxAction } from './outbox-run';
 import { runReportAction } from './report-run';
 import { WaitingForPersonError, notifyWaitOpened, openWait } from './waits';
+import { onShiftOnly, runCheckZone } from './zone-run';
 
 /**
  * LA CORRIDA DE UNA AUTOMATIZACIÓN (migración 0210).
@@ -302,6 +303,7 @@ export async function executeRun(
     before: event.before ?? null,
     label: event.label,
     appName: app.name,
+    rowId: event.rowId,
     link,
     reason: event.reason,
     labels: trackerRow ? Object.fromEntries(trackerRow.fields.map((f) => [f.key, f.label])) : {},
@@ -676,6 +678,25 @@ async function runAction(a: ActionRun): Promise<string> {
       });
       return `«${action.field}» quedó en «${value}».`;
     }
+    case 'check_zone': {
+      if (!a.trackerRow || !event.rowId) throw new Error('Sin fila donde marcar la zona.');
+      const row = await currentRow(db, a.trackerRow.id, event.rowId);
+      if (!row) throw new Error('La fila ya no existe.');
+      const out = await runCheckZone({
+        db,
+        appId: app.id,
+        places: app.location.geofences,
+        action,
+        event,
+        trackerSlug: a.trackerRow.slug,
+        currentValues: row.values,
+        userId: automation.created_by,
+        now: a.now,
+      });
+      // Las acciones que siguen ven la fila ya marcada (`if`, `{{zona}}`).
+      ctx.after = { ...ctx.after, ...out.patch };
+      return out.detail;
+    }
     case 'create_row': {
       const target = await getTrackerBySlug(db, action.tracker);
       if (!target) throw new Error(`La tabla «${action.tracker}» ya no existe.`);
@@ -699,6 +720,11 @@ async function runAction(a: ActionRun): Promise<string> {
         for (const m of (data ?? []) as Array<{ user_id: string }>) ids.add(m.user_id);
       }
       if (action.admins) for (const id of await orgAdmins(db, 20)) ids.add(id);
+      if (action.onShift) {
+        const onShift = new Set(await onShiftOnly(db, app.id, 'member', [...ids]));
+        for (const id of [...ids]) if (!onShift.has(id)) ids.delete(id);
+        if (!ids.size) return 'Nadie de ese grupo tiene el turno abierto ahora.';
+      }
       if (!ids.size) return 'No había a quién avisar.';
       // Sólo miembros de ESTA empresa: el handle ya está acotado, y `users` es tenant.
       const { data: people, error } = await db
@@ -727,6 +753,14 @@ async function runAction(a: ActionRun): Promise<string> {
         else if (row?.created_by) memberCreator = row.created_by;
       } else {
         recipients = await appUsers(db, app.id, { role: action.to.role });
+      }
+      if (action.onShift) {
+        const onShift = new Set(
+          await onShiftOnly(db, app.id, 'app_user', recipients.map((r) => r.id)),
+        );
+        recipients = recipients.filter((r) => onShift.has(r.id));
+        if (!recipients.length && !memberCreator)
+          return 'Nadie de ese grupo tiene el turno abierto ahora.';
       }
       const title = renderText(action.title, ctx);
       const body = action.body ? renderText(action.body, ctx) : undefined;

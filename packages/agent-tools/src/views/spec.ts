@@ -270,7 +270,7 @@ export const rowActionSchema = z
   .object({
     id: z.string().regex(BLOCK_ID_RE),
     label: z.string().trim().min(1).max(32),
-    kind: z.enum(['set_field', 'notify', 'assign']),
+    kind: z.enum(['set_field', 'notify', 'assign', 'claim']),
     field: fieldRef.optional(),
     value: z.union([z.string().max(200), z.number()]).optional(),
     confirm: z.boolean().default(false),
@@ -291,6 +291,17 @@ export const rowActionSchema = z
      */
     nameField: fieldRef.optional(),
     statusField: fieldRef.optional(),
+    /**
+     * `claim` («Tomar»): quien toca el botón se queda con la fila SI TODAVÍA ES DE NADIE.
+     * `field` guarda su id, `nameField` su nombre, `statusField` recibe `value` (p. ej.
+     * «En atención»), `dateField`/`timeField` guardan cuándo (Bogotá). `when` exige que
+     * `statusField` valga eso para poder tomarla («Aterrizó»). Es atómico: si dos la tocan
+     * a la vez, gana UNA y la otra lee «Ya la tomó Ana»; quien ya la tiene la vuelve a
+     * tocar sin efecto (idempotente). Ver `claimRow` en views/store.ts.
+     */
+    when: z.string().max(200).optional(),
+    dateField: fieldRef.optional(),
+    timeField: fieldRef.optional(),
     roles: z
       .array(z.string().regex(/^[a-z][a-z0-9_]{1,31}$/))
       .max(8)
@@ -306,6 +317,18 @@ export const rowActionSchema = z
         code: z.ZodIssueCode.custom,
         message: `El botón «${a.label}» cambia un campo: necesita field y value.`,
         path: ['field'],
+      });
+    if (a.kind === 'claim' && (!a.field || !a.nameField))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `El botón «${a.label}» toma la fila: necesita field (id de quien la toma) y nameField (su nombre).`,
+        path: ['field'],
+      });
+    if (a.kind === 'claim' && a.when !== undefined && !a.statusField)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `«when» necesita statusField (el campo de estado que se compara).`,
+        path: ['when'],
       });
     if (a.kind === 'assign' && !a.field)
       ctx.addIssue({
@@ -1544,7 +1567,11 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
               `${where}: el botón «${a.label}» escribe «${k}», que viene de ${originName(hardOriginOfField(tracker, k) as TrackerOrigin)} y es de sólo lectura. Usa un campo propio.`,
             );
         for (const k of a.requireFields ?? []) need(k, `requisito del botón «${a.label}»`);
-        if (a.kind === 'assign') {
+        if (a.kind === 'assign' || a.kind === 'claim') {
+          if (a.kind === 'claim') {
+            if (a.dateField) need(a.dateField, `fecha, botón «${a.label}»`);
+            if (a.timeField) need(a.timeField, `hora, botón «${a.label}»`);
+          }
           if (a.field) need(a.field, `quién, botón «${a.label}»`);
           if (a.nameField) need(a.nameField, `nombre, botón «${a.label}»`);
           if (a.statusField) {
