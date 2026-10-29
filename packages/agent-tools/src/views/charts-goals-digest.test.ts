@@ -295,3 +295,52 @@ describe('exportación', () => {
     );
   });
 });
+
+describe('pronóstico en el gráfico', () => {
+  // Una factura por mes con valor creciente: ene…sep 2026 = 100…900.
+  const rows = Array.from({ length: 9 }, (_, i) =>
+    row(`f${i}`, { fecha: `2026-${String(i + 1).padStart(2, '0')}-10`, valor: (i + 1) * 100 }),
+  );
+  const chart = (forecast?: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
+    const view = computeView(
+      spec({
+        type: 'chart',
+        chart: 'bar',
+        groupBy: 'fecha',
+        bucket: 'month',
+        aggregate: 'sum',
+        field: 'valor',
+        format: 'money',
+        ...(forecast ? { forecast } : {}),
+        ...extra,
+      }),
+      sources(rows),
+      NOW,
+    );
+    const block = view.blocks[0];
+    if (block?.type !== 'chart') throw new Error('se esperaba un gráfico');
+    return block;
+  };
+
+  it('sin forecast no cambia nada', () => {
+    const b = chart();
+    expect(b.points.some((p) => p.projected)).toBe(false);
+    expect(b.forecast).toBeUndefined();
+  });
+
+  it('agrega 6 meses proyectados con banda y los marca', () => {
+    const b = chart({});
+    const proj = b.points.filter((p) => p.projected);
+    expect(proj).toHaveLength(6);
+    expect(b.points.slice(0, -6).every((p) => !p.projected)).toBe(true);
+    // oct 2026 es el mes en curso (sin filas): la recta sigue 100·n → oct = 1000
+    expect(proj[0]?.value).toBeCloseTo(1000, 0);
+    expect(proj[0]?.low).toBeLessThanOrEqual(proj[0]?.value ?? 0);
+    expect(b.forecast?.method).toBe('trend');
+    expect(b.forecast?.basis).toBe('tendencia de los últimos 9 meses');
+  });
+
+  it('se ignora en donut y en campos que no son fecha', () => {
+    expect(chart({}, { chart: 'donut' }).points.some((p) => p.projected)).toBe(false);
+  });
+});

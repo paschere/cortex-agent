@@ -49,6 +49,12 @@ import { computeCards } from './cards';
 import { type BlockDesign, hasDesign } from './design-shape';
 import { type EmbedProvider, embedSrc, httpsUrl, safeHref } from './embeds';
 import { buildDetail, findDetailTarget } from './record';
+import {
+  type ForecastMethod,
+  type ForecastResult,
+  forecastBasis,
+  forecastSeries,
+} from './forecast';
 import type { RecordHistoryRaw } from './record';
 import {
   APPROVE_ACTION_ID,
@@ -321,7 +327,17 @@ export type ComputedBlock =
       type: 'chart';
       title: string;
       chart: ChartKind;
-      points: Array<{ label: string; value: number; display: string }>;
+      points: Array<{
+        label: string;
+        value: number;
+        display: string;
+        /** Pronóstico: punto proyectado (no es un dato), con su banda. */
+        projected?: true;
+        low?: number;
+        high?: number;
+      }>;
+      /** Presente si el gráfico lleva pronóstico y hubo historia para hacerlo. */
+      forecast?: { method: ForecastMethod; periods: number; basis: string };
       /** Sólo en `heatmap`: filas lunes…domingo, columnas 0–23 h. */
       heat?: ComputedHeat;
       total: string;
@@ -2129,6 +2145,7 @@ function computeBlockBody(
         for (const [key, list] of lists) groups.set(key, statOfRows(list, block.field));
       }
       const valueOf = (st: Stat) => statValue(st, block.aggregate, block.field) ?? 0;
+      let projection: { result: ForecastResult; basis: string } | null = null;
       let entries = [...groups.entries()].map(([key, stat]) => ({
         key,
         stat,
@@ -2144,6 +2161,22 @@ function computeBlockBody(
         });
       } else if (isDate) {
         entries.sort((a, b) => a.key.localeCompare(b.key));
+        if (block.forecast && (block.chart === 'bar' || block.chart === 'line')) {
+          const fc = forecastSeries({
+            series: entries.map((e) => ({ key: e.key, value: e.value })),
+            bucket: block.bucket,
+            periods: block.forecast.periods,
+            method: block.forecast.method,
+            currentKey: bucketOf(today, block.bucket),
+            fillGaps: block.aggregate === 'count' || block.aggregate === 'sum',
+          });
+          if (fc) {
+            projection = {
+              result: fc,
+              basis: forecastBasis(fc.method, block.bucket, fc.basedOn),
+            };
+          }
+        }
         entries = entries.slice(-block.limit);
       } else if (type === 'select') {
         const order = tracker.fields.find((f) => f.key === block.groupBy)?.options ?? [];
@@ -2175,11 +2208,30 @@ function computeBlockBody(
         width: block.width,
         title: block.title,
         chart: block.chart,
-        points: entries.map((e) => ({
-          label: isDate ? bucketLabel(e.key, block.bucket) : e.key,
-          value: e.value,
-          display: formatValue(e.value, format),
-        })),
+        points: [
+          ...entries.map((e) => ({
+            label: isDate ? bucketLabel(e.key, block.bucket) : e.key,
+            value: e.value,
+            display: formatValue(e.value, format),
+          })),
+          ...(projection?.result.points ?? []).map((p) => ({
+            label: bucketLabel(p.key, block.bucket),
+            value: p.value,
+            display: formatValue(p.value, format),
+            projected: true as const,
+            low: p.low,
+            high: p.high,
+          })),
+        ],
+        ...(projection
+          ? {
+              forecast: {
+                method: projection.result.method,
+                periods: projection.result.points.length,
+                basis: projection.basis,
+              },
+            }
+          : {}),
         total: formatValue(total, format),
         tone: block.tone,
         source: tracker.name,

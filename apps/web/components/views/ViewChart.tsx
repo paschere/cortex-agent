@@ -211,13 +211,32 @@ function HeatRow({
 
 const SHARE = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
 
+function ForecastNote({ block }: { block: Chart }) {
+  if (!block.forecast) return null;
+  const n = block.points.filter((p) => p.projected).length;
+  return (
+    <p className="mt-2 text-micro text-ink-faint">
+      Pronóstico ({block.forecast.basis}) · próximos {n} · no son datos, son una estimación con su
+      rango probable.
+    </p>
+  );
+}
+
 function Bars({ block }: { block: Chart }) {
   return (
-    <RankBars
-      name={block.title}
-      color={TONE_COLOR[block.tone]}
-      items={block.points.map((p) => ({ label: p.label, value: p.value, display: p.display }))}
-    />
+    <>
+      <RankBars
+        name={block.title}
+        color={TONE_COLOR[block.tone]}
+        items={block.points.map((p) => ({
+          label: p.label,
+          value: p.value,
+          display: p.display,
+          projected: p.projected,
+        }))}
+      />
+      <ForecastNote block={block} />
+    </>
   );
 }
 
@@ -227,6 +246,17 @@ function Line({ block, fill }: { block: Chart; fill: boolean }) {
   const fmt = useMemo(() => axisFormatterFor(points[0]?.display), [points]);
   const first = points[0];
   const last = points[points.length - 1];
+  // Pronóstico: la misma serie, punteada desde el último dato real, con su banda.
+  const firstProjected = points.findIndex((p) => p.projected);
+  const lastReal = firstProjected > 0 ? firstProjected - 1 : -1;
+  const band =
+    lastReal >= 0
+      ? {
+          lo: points.map((p, i) => (i < lastReal ? p.value : (p.low ?? p.value))),
+          hi: points.map((p, i) => (i < lastReal ? p.value : (p.high ?? p.value))),
+          label: 'Rango probable',
+        }
+      : undefined;
   return (
     <figure className="m-0">
       <AreaChart
@@ -239,6 +269,7 @@ function Line({ block, fill }: { block: Chart; fill: boolean }) {
             area: fill,
             values: points.map((p) => p.value),
             display: points.map((p) => p.display),
+            ...(lastReal >= 0 ? { projectedFrom: lastReal, band } : {}),
           },
         ]}
         formatAxis={fmt}
@@ -247,8 +278,9 @@ function Line({ block, fill }: { block: Chart; fill: boolean }) {
         legend={false}
         ariaLabel={`${block.title}: de ${first?.display} (${first?.label}) a ${last?.display} (${last?.label}). Con las flechas se recorre punto por punto.`}
       />
+      <ForecastNote block={block} />
       <figcaption className="sr-only">
-        {points.map((p) => `${p.label}: ${p.display}`).join('; ')}
+        {points.map((p) => `${p.label}: ${p.display}${p.projected ? ' (pronóstico)' : ''}`).join('; ')}
       </figcaption>
     </figure>
   );

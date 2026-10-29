@@ -16,6 +16,8 @@ export interface RankItem {
   href?: string;
   /** La fila pide atención: la etiqueta y la cifra no cambian, pero lleva un punto rosa. */
   alert?: boolean;
+  /** Pronóstico: la barra va rayada y apagada, y la etiqueta lo dice. */
+  projected?: boolean;
 }
 
 const PCT = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
@@ -49,7 +51,7 @@ export function RankBars({
       {items.map((p, i) => (
         <li
           key={p.label}
-          title={`${p.label}: ${p.display}`}
+          title={p.projected ? `${p.label}: ${p.display} (pronóstico)` : `${p.label}: ${p.display}`}
           onPointerEnter={() => setHover(i)}
           onPointerLeave={() => setHover(null)}
           className="transition-opacity duration-150"
@@ -73,6 +75,11 @@ export function RankBars({
               ) : (
                 <span className="min-w-0 truncate font-medium text-ink">{p.label}</span>
               )}
+              {p.projected && (
+                <span className="shrink-0 rounded-pill bg-surface-2 px-1.5 text-micro text-ink-faint">
+                  Pronóstico
+                </span>
+              )}
             </span>
             <span className="shrink-0">
               <span className="tabular tabular-nums font-semibold text-ink">{p.display}</span>
@@ -88,8 +95,10 @@ export function RankBars({
               className="cx-grow-x h-full rounded-pill"
               style={{
                 width: `${Math.max((Math.abs(p.value) / max) * 100, p.value ? 2 : 0)}%`,
-                background: p.color ?? color,
-                opacity: i === 0 ? 1 : 0.8,
+                background: p.projected
+                  ? `repeating-linear-gradient(135deg, ${p.color ?? color} 0 4px, transparent 4px 7px)`
+                  : (p.color ?? color),
+                opacity: p.projected ? 0.55 : i === 0 ? 1 : 0.8,
                 animationDelay: `${i * 40}ms`,
               }}
             />

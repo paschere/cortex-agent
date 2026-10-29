@@ -516,6 +516,18 @@ export const chartBlockSchema = z.object({
   format: z.enum(['number', 'money', 'percent']).default('number'),
   limit: z.number().int().min(2).max(24).default(12),
   tone: z.enum(TONES).default('primary'),
+  /**
+   * Pronóstico: sólo con `groupBy` de fecha y gráfico bar o line. Agrega los
+   * próximos `periods` (por `bucket`) como puntos proyectados con su banda.
+   * trend = recta de los últimos 12 períodos completos; average = media de los
+   * últimos 3; seasonal = tendencia + temporada (pide 24+ períodos, si no, trend).
+   */
+  forecast: z
+    .object({
+      periods: z.number().int().min(1).max(12).default(6),
+      method: z.enum(['trend', 'average', 'seasonal']).default('trend'),
+    })
+    .optional(),
 });
 
 export const boardBlockSchema = z.object({
