@@ -421,6 +421,9 @@ export const sheetTotalSchema = z.object({
   op: z.enum(SHEET_TOTAL_OPS).default('sum'),
 });
 
+/** Tipos de campo del padre que se editan en la tarjeta del grupo. */
+export const PARENT_EDIT_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'money', 'longtext', 'select', 'date']);
+
 export const sheetGroupSchema = z.object({
   /** Campo de esta tabla por el que se agrupa (relación al padre o valor común). */
   by: fieldRef,
@@ -428,6 +431,12 @@ export const sheetGroupSchema = z.object({
   parentTracker: sourceRef.optional(),
   /** Campos del padre que el encabezado del grupo muestra (N° manifiesto, estado, cobro adicional). */
   parentFields: z.array(fieldRef).max(6).default([]),
+  /**
+   * Campos del padre (subconjunto de `parentFields`) que se editan en la tarjeta del grupo,
+   * sin ir a otra pantalla. Se escriben con el id de bloque `<hoja>:parent`; el servidor
+   * sólo deja tocar estos y con el rol de la app sobre la tabla padre.
+   */
+  editableParent: z.array(fieldRef).max(6).optional(),
   /** Columnas numéricas de esta tabla que se suman en el encabezado del grupo. */
   subtotals: z.array(fieldRef).max(6).default([]),
   /** Los grupos nacen plegados. */
@@ -1876,8 +1885,31 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
                   if (!parent.opaque && !fieldType(parent, k))
                     problems.push(`${where}: «${k}» no es un campo de ${parent.name} (encabezado del grupo).`);
               }
+              if (g.editableParent?.length && parent) {
+                if (isReadOnlySource(g.parentTracker))
+                  problems.push(
+                    `${where}: «${parent.name}» es ${readOnlyWhat(g.parentTracker)} y es de sólo lectura; quita \`group.editableParent\`.`,
+                  );
+                for (const k of g.editableParent) {
+                  const pf = parent.fields.find((x) => x.key === k);
+                  if (!g.parentFields.includes(k))
+                    problems.push(`${where}: «${k}» de \`group.editableParent\` tiene que estar también en \`group.parentFields\`.`);
+                  else if (!parent.opaque && !pf)
+                    problems.push(`${where}: «${k}» no es un campo de ${parent.name} (editable del encabezado).`);
+                  else if (pf && !PARENT_EDIT_TYPES.has(pf.type))
+                    problems.push(`${where}: «${pf.label}» es de tipo ${pf.type}; en el encabezado sólo se editan texto, número, dinero, opciones y fecha.`);
+                  else if (pf && (pf.formula || (pf.lookup && !pf.lookup.editable)))
+                    problems.push(`${where}: «${pf.label}» se calcula sola; una fórmula no se edita a mano.`);
+                  else if (pf && hardOriginOfField(parent, k))
+                    problems.push(
+                      `${where}: ${fieldLockedMessage(hardOriginOfField(parent, k) as TrackerOrigin, [pf.label])} Quítalo de \`group.editableParent\`.`,
+                    );
+                }
+              }
             } else if (g.parentFields.length)
               problems.push(`${where}: para mostrar campos del padre indica \`group.parentTracker\`.`);
+            else if (g.editableParent?.length)
+              problems.push(`${where}: \`group.editableParent\` necesita \`group.parentTracker\`.`);
           }
           for (const k of g.subtotals)
             needType(k, 'subtotal del grupo', (x) => NUMERIC.has(x), 'un campo de número o dinero');
@@ -2081,6 +2113,25 @@ export function findWriteBlock(
   const [head, tail] = blockId.split(':');
   const block = spec.blocks.find((b) => b.id === head);
   if (!tail) return block;
+  // `<hoja>:parent`: los campos del padre que el encabezado del grupo deja editar,
+  // como una tabla propia (misma lista blanca, mismo rol, mismas reglas de campo).
+  if (block?.type === 'sheet' && tail === 'parent') {
+    const g = block.group;
+    if (!g?.parentTracker || !g.editableParent?.length) return undefined;
+    return {
+      id: block.id,
+      type: 'table',
+      width: 'full',
+      tracker: g.parentTracker,
+      filters: [],
+      title: block.title,
+      columns: [],
+      limit: 1,
+      searchable: false,
+      editable: g.editableParent.filter((k) => g.parentFields.includes(k)),
+      actions: [],
+    };
+  }
   if (!block || block.type !== 'detail') return undefined;
   const rel = block.related.find((r) => r.id === tail);
   if (!rel) return undefined;

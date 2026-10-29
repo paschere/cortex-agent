@@ -58,6 +58,7 @@ import {
 import type { RecordHistoryRaw } from './record';
 import {
   APPROVE_ACTION_ID,
+  PARENT_EDIT_TYPES,
   type Aggregate,
   BLOCK_LABEL,
   type CatalogTracker,
@@ -295,6 +296,14 @@ export type ComputedBlock =
         collapsed: boolean;
         /** La clave con que el servidor ordenó los grupos (para unir bloques cargados aparte). */
         sortKey: string;
+        /**
+         * Edición en la tarjeta: la fila padre y, por campo editable, su meta y el valor crudo.
+         * Sólo si quien mira escribe y el grupo tiene padre; se escribe con el bloque `<hoja>:parent`.
+         */
+        parentEdit?: {
+          rowId: string;
+          fields: Array<{ index: number; key: string; raw: string; edit: ComputedEditMeta }>;
+        };
       }> | null;
       groupDir: 1 | -1;
       totals: Array<{ col: number; op: SheetOp }>;
@@ -1361,6 +1370,19 @@ function computeSheet(
               return i === undefined ? [] : [i];
             }),
             collapsed: g.collapsed,
+            ...(() => {
+              const pe =
+                canWrite && parent && parentTracker && !isReadOnlySource(parentTracker.slug)
+                  ? g.parentFields.flatMap((pk, index) => {
+                      if (!g.editableParent?.includes(pk)) return [];
+                      const edit = editMeta(parentTracker, pk);
+                      if (!edit || !PARENT_EDIT_TYPES.has(edit.type)) return [];
+                      const v = rawValue(parent, pk);
+                      return [{ index, key: pk, raw: v === undefined ? '' : String(v), edit }];
+                    })
+                  : [];
+              return parent && pe.length ? { parentEdit: { rowId: parent.id, fields: pe } } : {};
+            })(),
             sortKey:
               g.sortBy && parentSrc ? String(m?.parent ? (rawValue(m.parent, g.sortBy) ?? '') : '') : (m?.label ?? k),
           };

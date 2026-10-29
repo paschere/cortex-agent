@@ -50,7 +50,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from '@/lib/ui/dialog-queue';
 import type { SubmitTarget } from '../ViewCanvas';
 import { useFlashClass } from '../flash-context';
-import { RowActions, checkCell, useViewWriter } from '../view-writes';
+import { EditableValue, RowActions, checkCell, useViewWriter } from '../view-writes';
 import { parseRelation } from './RelationPicker';
 import { useRecordOpener } from './RecordDrawer';
 import { RelationCombo, RelationField, relationLabel, relationValue } from './SheetRelation';
@@ -1252,16 +1252,32 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
             {count}
           </span>
         </button>
-        {g.fields.map((f) => (
+        {g.fields.map((f, fi) => {
+          // Campo del padre editable en la tarjeta: click para escribir (Enter guarda, Esc cancela);
+          // el servidor lo decide con `group.editableParent` y el rol sobre la tabla padre.
+          const pe = writer ? g.parentEdit?.fields.find((x) => x.index === fi) : undefined;
+          return (
           <span key={f.label} className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
             <span className="text-micro text-ink-faint">{f.label}</span>
-            {f === estado && f.value ? (
+            {pe && g.parentEdit ? (
+              <EditableValue
+                blockId={`${block.id}:parent`}
+                rowId={g.parentEdit.rowId}
+                field={pe.key}
+                edit={pe.edit}
+                raw={pe.raw}
+                display={f.value || '—'}
+                label={f.label}
+                className="tabular inline-block rounded-sm px-1 font-mono font-semibold text-ink hover:bg-surface/70"
+              />
+            ) : f === estado && f.value ? (
               <StatusChip value={f.value} tone={toneOfStatus(f.value)} />
             ) : (
               <span className="tabular font-mono font-semibold text-ink">{f.value}</span>
             )}
           </span>
-        ))}
+          );
+        })}
         {progress && progress.total > 0 && (
           <span className="inline-flex items-center gap-2 text-micro text-ink-muted">
             <span
