@@ -1207,7 +1207,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         style={tone ? undefined : { borderLeftColor: 'rgb(var(--primary) / 0.5)' }}
       >
         {writer && batchActions.length > 0 && members.length > 0 && (() => {
-          const ids = members.filter((r) => !r.ghost && !r.fresh).map((r) => r.id);
+          const ids = members.map((r) => r.id);
           const all = ids.length > 0 && ids.every((id) => selRows.has(id));
           return (
             <input
