@@ -624,6 +624,39 @@ async function relatedActionProblems(
         filterFields(child, a.where);
       }
     }
+    if (a.type === 'link_rows') {
+      let other: Awaited<ReturnType<typeof getTrackerBySlug>> = null;
+      if (a.up) {
+        const rel = trigger.fields.find((f) => f.key === a.up);
+        if (!rel || rel.type !== 'relation' || !rel.tracker) {
+          out.push(`«${a.up}» no es un campo de relación de «${trigger.name}».`);
+          continue;
+        }
+        other = await getTrackerBySlug(db, rel.tracker);
+        if (!other) {
+          out.push(`La tabla «${rel.tracker}» de la relación «${a.up}» no existe.`);
+          continue;
+        }
+        settable(trigger, a.set ?? {});
+      } else if (a.down) {
+        other = await getTrackerBySlug(db, a.down.tracker);
+        if (!other) {
+          out.push(`La tabla «${a.down.tracker}» no existe.`);
+          continue;
+        }
+        const via = other.fields.find((f) => f.key === a.down?.via);
+        if (!via || via.type !== 'relation' || via.tracker !== trigger.slug)
+          out.push(
+            `«${a.down.via}» de «${other.name}» tiene que ser un campo de relación que apunte a «${trigger.name}».`,
+          );
+        settable(other, a.set ?? {});
+      }
+      if (other) {
+        if (!other.fields.some((f) => f.key === a.on))
+          out.push(`«${a.on}» no es un campo de «${other.name}» (donde se busca la clave).`);
+        filterFields(other, a.where);
+      }
+    }
     if (a.type === 'update_rows') {
       if (isReadOnlySource(a.tracker)) {
         out.push('No se cambian filas de una fuente de sólo lectura.');

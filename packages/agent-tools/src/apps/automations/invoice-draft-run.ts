@@ -9,7 +9,14 @@ import type { Values } from './match';
 import { type TemplateContext, renderTemplate } from './engine';
 import { loadListPrices } from '../../accounting/price-lists';
 import { buildInvoiceDraft, invoiceDraftKey, writeBackValues } from './invoice-draft';
-import { createInvoiceDraft, INVOICE_DRAFT_STATUS_LABEL, type InvoiceDraftRow } from './invoice-drafts';
+import type { EmissionDeps } from '../../sales/emit';
+import {
+  approveInvoiceDraft,
+  createInvoiceDraft,
+  INVOICE_DRAFT_STATUS_LABEL,
+  type InvoiceDraftRow,
+} from './invoice-drafts';
+import { type RuleAttribution, recordRuleChange } from './related';
 import type { AutomationAction } from './spec';
 
 /**
@@ -41,6 +48,12 @@ export interface InvoiceDraftRunInput {
     userIds: string[],
     note: { appId: string; title: string; body?: string; href: string; dedupeKey: string },
   ) => Promise<number>;
+  /** Quién causó el suceso (con `siigo_sin_dian`, quien aprobó es la persona que firma la factura). */
+  actor?: { kind: string; id?: string | null };
+  /** Nombre de la regla y motivo, para dejar rastro en el Historial de la fila. */
+  rule?: RuleAttribution;
+  emission?: EmissionDeps;
+  enqueueJob?: (name: string, data: Record<string, unknown>) => Promise<boolean>;
   /** La fila completa de la tabla (para escribir el estado «pendiente» sin pisar nada). */
   currentRowValues: () => Promise<Values | null>;
 }
@@ -92,6 +105,13 @@ export async function runDraftInvoiceAction(a: InvoiceDraftRunInput): Promise<st
     .eq('idempotency_key', key)
     .maybeSingle();
   if (existingError) throw existingError;
+  if (existing && action.send === 'siigo_sin_dian') {
+    const e = existing as { id: string; status: InvoiceDraftRow['status']; provider_number: string | null };
+    // Un intento anterior que falló (o quedó por revisar) se reintenta con el MISMO pedido y la misma llave.
+    if (e.status === 'error' || e.status === 'pending') return sendWithoutDian(a, e.id);
+    if (e.status === 'created') return `Ya existía la factura de esta fila en Siigo (${e.provider_number ?? 'creada'}): no se creó otra.`;
+    return `Ya existía una prefactura de esta fila (${INVOICE_DRAFT_STATUS_LABEL[e.status].toLowerCase()}): no se creó otra factura.`;
+  }
   if (existing) {
     const e = existing as { status: InvoiceDraftRow['status']; provider_number: string | null };
     return `Ya existía una prefactura de esta fila (${INVOICE_DRAFT_STATUS_LABEL[e.status].toLowerCase()}${e.provider_number ? `, factura ${e.provider_number}` : ''}): no se armó otra.`;
@@ -148,6 +168,8 @@ export async function runDraftInvoiceAction(a: InvoiceDraftRunInput): Promise<st
   if (!created)
     return `Ya existía una prefactura de esta fila (${INVOICE_DRAFT_STATUS_LABEL[draft.status].toLowerCase()}): no se armó otra.`;
 
+  if (action.send === 'siigo_sin_dian') return sendWithoutDian(a, draft.id);
+
   // Estado «pendiente» en la fila (si la regla lo pide); un fallo aquí no deshace la prefactura.
   let warning = '';
   const pending = writeBackValues(action.writeBack, 'pending');
@@ -195,4 +217,124 @@ export async function runDraftInvoiceAction(a: InvoiceDraftRunInput): Promise<st
   }
   const total = formatMoney(built.draft.total);
   return `Prefactura por revisar para ${built.draft.customerName || `NIT ${built.draft.customerTaxId}`}: ${built.draft.lines.length} línea${built.draft.lines.length === 1 ? '' : 's'}, ${total} con IVA (estimado)${built.draft.skipped.length ? `; sin ${built.draft.skipped.join(' ')}` : ''}. Nada se envió a Siigo; falta la aprobación de una persona${belled ? ` (aviso a ${belled})` : ''}.${warning}`;
+}
+
+/** Quién recibe el aviso: administradores, roles de la app y (opcional) quien causó el cambio. */
+async function recipients(a: InvoiceDraftRunInput): Promise<string[]> {
+  const { db, action } = a;
+  const ids = new Set<string>();
+  try {
+    if (action.notifyAdmins) for (const id of await orgAdmins(db, 20)) ids.add(id);
+    if (action.notifyRoles.length) {
+      const { data } = await db
+        .from('custom_app_members')
+        .select('user_id')
+        .eq('app_id', a.app.id)
+        .in('role_key', action.notifyRoles);
+      for (const m of (data ?? []) as Array<{ user_id: string }>) ids.add(m.user_id);
+    }
+  } catch {
+    // El aviso es un extra.
+  }
+  if (action.notifyActor && a.actor?.kind === 'member' && a.actor.id) ids.add(a.actor.id);
+  return [...ids];
+}
+
+/** Cambios que NO se pueden deshacer desde Cortex (la factura ya existe en Siigo): sin `from`. */
+async function traceExternal(
+  a: InvoiceDraftRunInput,
+  values: Record<string, string>,
+  reason: string,
+): Promise<void> {
+  if (!a.rowId || !Object.keys(values).length) return;
+  await recordRuleChange(a.db, {
+    rowId: a.rowId,
+    changes: Object.entries(values).map(([field, to]) => ({ field, from: undefined, to })),
+    rule: { name: a.rule?.name ?? 'Regla', reason },
+  });
+}
+
+async function writeState(
+  a: InvoiceDraftRunInput,
+  values: Record<string, string>,
+): Promise<string> {
+  if (!Object.keys(values).length || !a.trackerRow || !a.rowId) return '';
+  try {
+    const current = await a.currentRowValues();
+    const tracker = await getTrackerBySlug(a.db, a.trackerRow.slug);
+    if (tracker && current)
+      await upsertRow(a.db, {
+        tracker,
+        rowId: a.rowId,
+        values: { ...current, ...values },
+        userId: a.automation.created_by,
+        lenient: true,
+        only: new Set(Object.keys(values)),
+      });
+    return '';
+  } catch (err) {
+    return ` (no se pudo marcar la fila: ${err instanceof Error ? err.message : 'error'})`;
+  }
+}
+
+/**
+ * `send: 'siigo_sin_dian'`: la regla crea la factura en Siigo (sin enviarla a la DIAN) con el
+ * mismo camino que la aprobación de la bandeja. Aprueba quien causó el cambio (o el dueño de
+ * la regla si fue un horario). Falla con motivo: la fila queda en el estado de error y la
+ * corrida termina fallida; reintentar es volver a disparar la regla (misma llave: no duplica).
+ */
+async function sendWithoutDian(a: InvoiceDraftRunInput, draftId: string): Promise<string> {
+  const { db } = a;
+  const userId = (a.actor?.kind === 'member' && a.actor.id) || a.automation.created_by;
+  if (!userId) throw new Error('No hay quién firme la factura: la regla no tiene dueño.');
+  const who = a.actor?.kind === 'member' && a.actor.id ? 'quien aprobó' : 'el dueño de la regla';
+  try {
+    const out = await approveInvoiceDraft(
+      { db, organizationId: a.organizationId, userId, enqueueJob: a.enqueueJob },
+      draftId,
+      { sendToDian: false, ...(a.emission ?? {}) },
+    );
+    const d = out.draft;
+    const number = d.provider_number ?? d.provider_invoice_id ?? '';
+    const cleared = writeBackValues(a.action.writeBack, 'created', number);
+    await traceExternal(
+      a,
+      cleared,
+      `Se creó la factura ${number} en Siigo SIN enviar a la DIAN (la firmó ${who}). Es un hecho externo: no se deshace desde Cortex; si hay que anularla, se hace en Siigo con nota crédito.`,
+    );
+    const ids = await recipients(a);
+    let belled = 0;
+    if (ids.length)
+      try {
+        belled = await a.notifyMembers(db, ids, {
+          appId: a.app.id,
+          title: `Factura ${number} creada en Siigo: ${d.customer_name || `NIT ${d.customer_tax_id}`}`,
+          body: `${a.ctx.label ?? 'Una fila'}: ${formatMoney(d.total)} con IVA. Quedó SIN enviar a la DIAN; el contador la revisa y la timbra en Siigo.`,
+          href: inboxHref(a.baseUrl, d.id),
+          dedupeKey: `invsent:${d.id}`,
+        });
+      } catch {
+        // El aviso es un extra.
+      }
+    return `Factura ${number} creada en Siigo para ${d.customer_name || `NIT ${d.customer_tax_id}`} (${formatMoney(d.total)}), SIN enviar a la DIAN${belled ? `; aviso a ${belled}` : ''}.${out.warnings.length ? ` Ojo: ${out.warnings.join(' ')}` : ''}`;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : 'error desconocido';
+    const failed = writeBackValues(a.action.writeBack, 'error', null, reason);
+    const warn = await writeState(a, failed);
+    await traceExternal(a, failed, `Siigo no aceptó la factura: ${reason}`);
+    const ids = await recipients(a);
+    if (ids.length)
+      try {
+        await a.notifyMembers(db, ids, {
+          appId: a.app.id,
+          title: `No se pudo enviar a Siigo: ${a.ctx.label ?? 'una fila'}`,
+          body: reason.slice(0, 300),
+          href: inboxHref(a.baseUrl, draftId),
+          dedupeKey: `invfail:${draftId}:${Date.now()}`,
+        });
+      } catch {
+        // El aviso es un extra.
+      }
+    throw new Error(`Siigo no aceptó la factura: ${reason}${warn}`);
+  }
 }

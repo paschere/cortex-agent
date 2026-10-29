@@ -9,6 +9,7 @@ import { matchesTrigger } from './match';
 import {
   describeRelatedPlan,
   describeRollupPlan,
+  planLinkRows,
   planRollup,
   planUpdateRelated,
   planUpdateRows,
@@ -182,6 +183,20 @@ export async function simulateAutomation(
         actions.push({
           type: a.type,
           summary: describeRelatedPlan(plan),
+          details: plan.rows
+            .filter((r) => r.changes.length)
+            .slice(0, 10)
+            .map((r) => `${r.label}: ${summarizeChanges(r.changes)}`),
+        });
+        continue;
+      }
+      if (a.type === 'link_rows') {
+        const plan = await planLinkRows(db, { tracker, rowId: id, action: a, ctx, now });
+        actions.push({
+          type: a.type,
+          summary: plan.rows.length
+            ? `${plan.note ?? 'Casaría esta fila.'} ${describeRelatedPlan(plan)}`
+            : (plan.note ?? 'No hay nada que casar.'),
           details: plan.rows
             .filter((r) => r.changes.length)
             .slice(0, 10)

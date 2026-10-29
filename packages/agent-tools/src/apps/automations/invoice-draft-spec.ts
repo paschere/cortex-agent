@@ -59,8 +59,12 @@ export const invoiceWriteBackSchema = z.object({
       field: fieldKey,
       pending: z.string().trim().min(1).max(80).optional(),
       created: z.string().trim().min(1).max(80).optional(),
+      /** Con `send: 'siigo_sin_dian'`: el estado que queda si Siigo rechaza la factura («Error al enviar a Siigo»). */
+      error: z.string().trim().min(1).max(80).optional(),
     })
     .optional(),
+  /** Campo (texto) de la fila donde queda el motivo cuando Siigo rechaza; se limpia al lograrlo. */
+  errorReason: fieldKey.optional(),
 });
 export type InvoiceWriteBack = z.infer<typeof invoiceWriteBackSchema>;
 
@@ -84,6 +88,18 @@ export const invoiceBodySchema = {
   sellerId: z.string().trim().min(1).max(40).optional(),
   paymentTypeId: z.string().trim().min(1).max(40).optional(),
   writeBack: invoiceWriteBackSchema.optional(),
+  /**
+   * Adónde va la prefactura al armarse:
+   *   - `bandeja` (por defecto): queda POR REVISAR en «Prefacturas»; sólo una persona la aprueba allí.
+   *   - `siigo_sin_dian`: la regla la CREA en Siigo de una vez, SIN enviarla a la DIAN (el contador la
+   *     revisa y la timbra en Siigo). Úsalo sólo cuando el hecho que dispara la regla ya ES la
+   *     aprobación de una persona (p. ej. el manifiesto lo aprueba alguien con rol aprobador).
+   *     Misma llave de idempotencia (una fila + una regla = una factura) y mismo pedido en reintentos.
+   * Nunca hay una opción que envíe a la DIAN sola.
+   */
+  send: z.enum(['bandeja', 'siigo_sin_dian']).default('bandeja'),
+  /** Con `siigo_sin_dian`: avisar también a quien causó el cambio (quien aprobó). */
+  notifyActor: z.boolean().default(true),
   /** A quién se le avisa que hay una prefactura por revisar (además del aviso en la bandeja). */
   notifyRoles: z.array(roleKeySchema).max(8).default([]),
   notifyAdmins: z.boolean().default(true),

@@ -485,6 +485,13 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
         type: a.type,
         summary: `Cambiaría hasta ${a.max ?? DEFAULT_RELATED_ROWS} filas de «${a.tracker}» que cumplan ${a.where.length} filtro${a.where.length === 1 ? '' : 's'}: ${setText(a.set, ctx)}.`,
       };
+    case 'link_rows':
+      return {
+        type: a.type,
+        summary: a.up
+          ? `Buscaría en la tabla de «${a.up}» la fila cuyo «${a.on}» coincide con «${renderTemplate(a.value, ctx) || '(vacío)'}»${a.tolerance !== undefined ? ` (monto, ±${a.tolerance})` : ''} y, si es UNA sola, dejaría puesta la relación; si hay varias o ninguna, la deja para casar a mano.`
+          : `Buscaría en «${a.down?.tracker}» las filas libres cuyo «${a.on}» coincide con «${renderTemplate(a.value, ctx) || '(vacío)'}» y les pondría la relación «${a.down?.via}» hacia esta fila, hasta ${a.max ?? DEFAULT_RELATED_ROWS}.`,
+      };
     case 'rollup':
       return {
         type: a.type,
@@ -498,7 +505,7 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
     case 'accounting_draft_invoice':
       return {
         type: a.type,
-        summary: `Armaría una prefactura para el NIT ${renderTemplate(a.customer.taxId, ctx) || '(vacío)'} con ${a.items.length} ítem${a.items.length === 1 ? '' : 's'}${a.currency !== 'COP' ? ` en ${a.currency} (a pesos con la TRM)` : ''} y la dejaría POR REVISAR; sólo al aprobarla una persona se crea en Siigo.`,
+        summary: `Armaría una prefactura para el NIT ${renderTemplate(a.customer.taxId, ctx) || '(vacío)'} con ${a.items.length} ítem${a.items.length === 1 ? '' : 's'}${a.currency !== 'COP' ? ` en ${a.currency} (a pesos con la TRM)` : ''} ${a.send === 'siigo_sin_dian' ? 'y la CREARÍA en Siigo de una vez, SIN enviarla a la DIAN (el contador la revisa y la timbra en Siigo); quien causó el cambio firma como aprobador. Si Siigo rechaza, dejaría el motivo en la fila' : 'y la dejaría POR REVISAR; sólo al aprobarla una persona se crea en Siigo'}.`,
       };
     case 'accounting_upsert_customer':
       return {

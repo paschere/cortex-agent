@@ -31,6 +31,7 @@ import {
   recordRuleChange,
   describeRelatedPlan,
   describeRollupPlan,
+  planLinkRows,
   planRollup,
   planUpdateRelated,
   planUpdateRows,
@@ -45,6 +46,7 @@ import {
   adaptAutomationRun,
   runsToday,
 } from './store';
+import type { EmissionDeps } from '../../sales/emit';
 import { runDraftInvoiceAction } from './invoice-draft-run';
 import { runOutboxAction } from './outbox-run';
 import { runReportAction } from './report-run';
@@ -126,6 +128,10 @@ export interface AutomationDeps {
     payload: { title: string; body?: string; url: string; tag: string },
   ): Promise<string[]>;
   askCortex(db: SupabaseClient, args: AskCortexArgs): Promise<{ summary: string; staged: number }>;
+  /** Sólo pruebas: la sesión de Siigo y el día que usa `accounting_draft_invoice` con `send: 'siigo_sin_dian'`. */
+  emission?: EmissionDeps;
+  /** Cola de trabajos que `emitInvoice` usa para seguir una factura incierta; sin ella no se encola nada. */
+  enqueueJob?: (name: string, data: Record<string, unknown>) => Promise<boolean>;
 }
 
 interface ActionResult {
@@ -898,6 +904,23 @@ async function runAction(a: ActionRun): Promise<string> {
         );
       return describeRelatedPlan(plan, true);
     }
+    case 'link_rows': {
+      if (!a.trackerRow) throw new Error('Sin tabla de partida.');
+      const plan = await planLinkRows(db, {
+        tracker: a.trackerRow,
+        rowId: event.rowId,
+        action,
+        ctx,
+        now: a.now,
+      });
+      const out = await applyRelatedPlan(db, plan, automation.created_by, ruleOf(a));
+      if (out.failures.length) throw new Error(out.failures.slice(0, 2).join(' · '));
+      // Las acciones que siguen ven la relación ya puesta (`{{campo}}`, un acumulado `up`).
+      if (action.up && out.changed) ctx.after = { ...ctx.after, ...plan.set };
+      return plan.rows.length
+        ? `${plan.note ?? 'Casada.'}${out.changed ? '' : ' (ya estaba así)'}`
+        : (plan.note ?? 'Nada que casar.');
+    }
     case 'rollup': {
       if (!a.trackerRow) throw new Error('Sin tabla de partida.');
       const plan = await planRollup(db, {
@@ -939,6 +962,10 @@ async function runAction(a: ActionRun): Promise<string> {
         rowId: event.rowId ?? null,
         baseUrl: deps.baseUrl,
         notifyMembers: deps.notifyMembers,
+        actor: event.actor,
+        rule: ruleOf(a),
+        emission: deps.emission,
+        enqueueJob: deps.enqueueJob,
         currentRowValues: async () =>
           a.trackerRow && event.rowId
             ? ((await currentRow(db, a.trackerRow.id, event.rowId))?.values ?? null)

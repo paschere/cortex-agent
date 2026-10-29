@@ -346,6 +346,32 @@ export const automationActionSchema = z.discriminatedUnion('type', [
     set: setValues,
     max: z.number().int().min(1).max(MAX_RELATED_ROWS).optional(),
   }),
+  /**
+   * CASAR POR CLAVE: deja puesta la relación entre esta fila y otra tabla, buscando
+   * en el campo `on` lo que dice `value` (claves separadas por «/», «,» o «;», sin
+   * importar espacios, guiones ni mayúsculas; o montos con `tolerance`).
+   * `up`: esta fila recibe la relación a la ÚNICA fila que coincide (varias o ninguna
+   * = se deja para casar a mano). `down`: las filas de otra tabla que coinciden reciben
+   * la relación a esta fila. Nunca pisa una relación ya asignada salvo `overwrite`.
+   */
+  z.object({
+    type: z.literal('link_rows'),
+    ...branch,
+    up: fieldKey.optional(),
+    down: z.object({ tracker: slug, via: fieldKey }).optional(),
+    /** Campo de la otra tabla donde se busca la clave (o el monto). */
+    on: fieldKey,
+    /** Lo que se busca: texto con `{{campos}}` de esta fila (varias claves separadas por «/»). */
+    value: z.string().trim().min(1).max(300),
+    /** Con tolerancia, `on` y `value` se comparan como MONTOS (diferencia máxima, en la unidad del campo). */
+    tolerance: z.number().min(0).max(1e9).optional(),
+    /** Sólo cuentan las filas de la otra tabla que cumplan estos filtros. */
+    where: z.array(filterSchema).max(4).optional(),
+    /** Otros campos que se escriben junto con la relación (en la fila que la recibe). */
+    set: setValues.optional(),
+    overwrite: z.boolean().optional(),
+    max: z.number().int().min(1).max(MAX_RELATED_ROWS).optional(),
+  }),
   z.object({
     type: z.literal('rollup'),
     ...branch,
@@ -416,6 +442,7 @@ export const ACTION_LABEL: Record<ActionType, string> = {
   update_related: 'Cambiar filas relacionadas (subir o bajar por una relación)',
   update_rows: 'Cambiar filas de otra tabla por filtro',
   rollup: 'Acumular en la fila padre (suma, conteo, promedio…)',
+  link_rows: 'Casar con otra tabla por una clave (deja puesta la relación)',
   report: 'Mandar un reporte por correo (tabla + Excel / PDF)',
   accounting_draft_invoice: 'Preparar una prefactura para Siigo (por revisar)',
   accounting_upsert_customer: 'Crear el cliente en Siigo si no existe (por revisar)',
@@ -518,6 +545,8 @@ export function structuralProblems(input: AutomationInput): string[] {
       out.push(`Un reporte admite hasta ${REPORT_MAX_RECIPIENTS} destinatarios entre direcciones y roles.`);
     if (a.type === 'accounting_draft_invoice' && rowless)
       out.push('«Preparar una prefactura» parte de una fila (un cierre, una atención…); con un horario o un botón no hay fila.');
+    if (a.type === 'accounting_draft_invoice' && a.send === 'siigo_sin_dian' && !a.writeBack?.invoiceNumber)
+      out.push('Con «crear en Siigo sin enviar a la DIAN» hace falta `writeBack.invoiceNumber`: el campo donde queda el número de la factura creada.');
     if (a.type === 'accounting_draft_invoice' && a.currency !== 'COP' && a.trm === undefined)
       out.push(`Los precios están en ${a.currency}: falta la TRM (\`trm\`) para pasarlos a pesos.`);
     if (
@@ -573,6 +602,15 @@ function flowProblems(input: AutomationInput, rowless: boolean): string[] {
         if (a.up && a.max !== undefined)
           out.push(`Acción ${n}: al subir hay una sola fila; \`max\` sólo sirve al bajar.`);
         if (rowless) out.push(`Acción ${n}: «filas relacionadas» necesita una fila de partida.`);
+        break;
+      case 'link_rows':
+        if (!!a.up === !!a.down)
+          out.push(
+            `Acción ${n}: «casar» necesita UNA dirección: \`up\` (esta fila recibe la relación) o \`down\` (las filas de otra tabla la reciben).`,
+          );
+        if (a.up && a.max !== undefined)
+          out.push(`Acción ${n}: al subir hay una sola fila; \`max\` sólo sirve al bajar.`);
+        if (rowless) out.push(`Acción ${n}: «casar» necesita una fila de partida.`);
         break;
       case 'update_rows':
         if (!Object.keys(a.set).length)

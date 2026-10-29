@@ -294,15 +294,19 @@ export function invoiceDraftKeyForRun(automationId: string, runKey: string): str
 /** Lo que se escribe en la fila al armar o crear: texto legible de cada paso. */
 export function writeBackValues(
   wb: InvoiceWriteBack | undefined,
-  step: 'pending' | 'created',
+  step: 'pending' | 'created' | 'error',
   invoiceNumber?: string | null,
+  reason?: string,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   if (!wb) return out;
   if (wb.status) {
-    const v = step === 'pending' ? wb.status.pending : wb.status.created;
+    const v = step === 'pending' ? wb.status.pending : step === 'created' ? wb.status.created : wb.status.error;
     if (v) out[wb.status.field] = v;
   }
   if (step === 'created' && wb.invoiceNumber && invoiceNumber) out[wb.invoiceNumber] = invoiceNumber;
+  // El motivo del rechazo queda en la fila y se limpia cuando por fin se crea.
+  if (wb.errorReason && step === 'error') out[wb.errorReason] = (reason ?? '').slice(0, 380);
+  if (wb.errorReason && step === 'created') out[wb.errorReason] = '';
   return out;
 }

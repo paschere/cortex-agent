@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { relationParts } from '../../trackers/computed';
+import { normalizeMatchText } from '../../trackers/match-shape';
 import { type TrackerRow, getTrackerById, getTrackerBySlug, upsertRow } from '../../trackers/store';
 import { type ViewRow, matches } from '../../views/compute';
 import type { CatalogTracker, ViewFilter } from '../../views/spec';
@@ -195,7 +196,7 @@ export interface PlannedRow {
 }
 
 export interface RelatedPlan {
-  kind: 'update_related' | 'update_rows';
+  kind: 'update_related' | 'update_rows' | 'link_rows';
   tracker: { id: string; slug: string; name: string } | null;
   /** Todas las filas que cumplen (con o sin cambios), hasta el tope. */
   rows: PlannedRow[];
@@ -644,6 +645,154 @@ export async function applyRollupPlan(
     }
   }
   return { changed, failures };
+}
+
+// ---------------------------------------------------------------------------
+// CASAR FILAS POR CLAVE (acción `link_rows`)
+// ---------------------------------------------------------------------------
+
+export const LINK_SCAN_LIMIT = 5000;
+
+/**
+ * Las claves de un texto: se parte por «/», «,», «;» o «|» y cada trozo se
+ * normaliza (mayúsculas, sin espacios, guiones, puntos ni tildes), de modo que
+ * «FLEX 29 / FLEX- 30» da FLEX29 y FLEX30. Los trozos de un solo carácter se ignoran.
+ */
+export function linkTokens(raw: unknown): string[] {
+  if (raw === undefined || raw === null) return [];
+  return String(raw)
+    .split(/[\/,;|]+/)
+    .map((t) => normalizeMatchText(t))
+    .filter((t) => t.length >= 2);
+}
+
+/** ¿Estas dos claves se refieren a lo mismo? Por texto (alguna clave en común) o por monto (con tolerancia). */
+export function linkMatches(needle: string, candidate: unknown, tolerance?: number): boolean {
+  if (tolerance !== undefined) {
+    const a = toNumber(needle);
+    const b = toNumber(candidate);
+    return a !== null && b !== null && Math.abs(a - b) <= tolerance;
+  }
+  const want = new Set(linkTokens(needle));
+  if (!want.size) return false;
+  return linkTokens(candidate).some((t) => want.has(t));
+}
+
+async function scanRows(db: SupabaseClient, trackerId: string): Promise<RawRow[]> {
+  const { data, error } = await db
+    .from('tracker_rows')
+    .select('id, label, values, created_at, updated_at')
+    .eq('tracker_id', trackerId)
+    .order('created_at', { ascending: true })
+    .limit(LINK_SCAN_LIMIT);
+  if (error) throw error;
+  return (data ?? []) as RawRow[];
+}
+
+/**
+ * Casar por una clave: busca en otra tabla la fila cuyo campo `on` coincide con lo
+ * que dice `value`, y deja la relación puesta.
+ *   - `up`: ESTA fila recibe la relación a la ÚNICA fila que coincide (si hay cero o
+ *     varias, no se escribe nada y la nota lo dice: para revisar a mano).
+ *   - `down`: las filas de otra tabla que coinciden reciben la relación a ESTA fila.
+ * Nunca pisa una relación ya puesta (la asignada a mano manda) salvo `overwrite`.
+ */
+export async function planLinkRows(
+  db: SupabaseClient,
+  input: {
+    tracker: TrackerRow;
+    rowId: string | undefined;
+    action: Extract<AutomationAction, { type: 'link_rows' }>;
+    ctx: TemplateContext;
+    now: Date;
+  },
+): Promise<RelatedPlan> {
+  const { action, ctx } = input;
+  const extra = renderValues(action.set ?? {}, ctx);
+  const none = (note: string, tracker: RelatedPlan['tracker'] = null, set: Values = extra): RelatedPlan => ({
+    kind: 'link_rows',
+    tracker,
+    rows: [],
+    matched: 0,
+    max: 1,
+    capped: false,
+    note,
+    set,
+  });
+  if (!input.rowId) return none('Sin fila de partida para casar.');
+  const needle = renderTemplate(action.value, ctx).trim();
+  if (!needle) return none('La fila no trae todavía el dato con el que se casa; no se casó.');
+  const today = dayInBogota(input.now);
+  const ownLabel = ctx.label ?? '';
+
+  if (action.up) {
+    const field = input.tracker.fields.find((f) => f.key === action.up);
+    if (!field || field.type !== 'relation' || !field.tracker)
+      return none(`«${action.up}» no es un campo de relación de «${input.tracker.name}».`);
+    const own = await readRow(db, input.tracker.id, input.rowId);
+    if (!own) return none('La fila ya no existe.');
+    if (relatedId(own.values?.[action.up]) && !action.overwrite)
+      return none(`Ya tenía «${field.label}» (asignada); no se tocó.`);
+    const target = await getTrackerBySlug(db, field.tracker);
+    if (!target) return none(`La tabla «${field.tracker}» ya no existe.`);
+    const info = { id: target.id, slug: target.slug, name: target.name };
+    const cat = catalogOf(target);
+    const found = (await scanRows(db, target.id)).filter(
+      (r) =>
+        linkMatches(needle, r.values?.[action.on], action.tolerance) &&
+        rowMatchesWhere(cat, r as ViewRow, action.where ?? [], ctx, today),
+    );
+    if (!found.length)
+      return none(`Ninguna fila de «${target.name}» coincide con «${needle}»; queda sin casar.`, info);
+    if (found.length > 1)
+      return none(
+        `«${needle}» coincide con ${found.length} filas de «${target.name}» (${found
+          .slice(0, 3)
+          .map((r) => r.label)
+          .join(', ')}${found.length > 3 ? '…' : ''}); es dudoso, se deja para casar a mano.`,
+        info,
+      );
+    const hit = found[0] as RawRow;
+    const set: Values = { [action.up]: JSON.stringify({ id: hit.id, label: hit.label }), ...extra };
+    return {
+      kind: 'link_rows',
+      tracker: { id: input.tracker.id, slug: input.tracker.slug, name: input.tracker.name },
+      rows: [plannedRow(input.tracker, own, set)],
+      matched: 1,
+      max: 1,
+      capped: false,
+      note: `Casada con «${hit.label}» de «${target.name}».`,
+      set,
+    };
+  }
+
+  const down = action.down;
+  if (!down) return none('Falta la dirección: `up` o `down`.');
+  const child = await getTrackerBySlug(db, down.tracker);
+  if (!child) return none(`La tabla «${down.tracker}» ya no existe.`);
+  const info = { id: child.id, slug: child.slug, name: child.name };
+  const via = child.fields.find((f) => f.key === down.via);
+  if (!via || via.type !== 'relation' || via.tracker !== input.tracker.slug)
+    return none(`«${down.via}» de «${child.name}» no apunta a «${input.tracker.name}».`, info);
+  const cat = catalogOf(child);
+  const set: Values = { [down.via]: JSON.stringify({ id: input.rowId, label: ownLabel }), ...extra };
+  const hits = (await scanRows(db, child.id)).filter(
+    (r) =>
+      (action.overwrite || !relatedId(r.values?.[down.via])) &&
+      linkMatches(needle, r.values?.[action.on], action.tolerance) &&
+      rowMatchesWhere(cat, r as ViewRow, action.where ?? [], ctx, today),
+  );
+  const max = action.max ?? DEFAULT_RELATED_ROWS;
+  return {
+    kind: 'link_rows',
+    tracker: info,
+    rows: hits.slice(0, max).map((r) => plannedRow(child, r, set)),
+    matched: hits.length,
+    max,
+    capped: hits.length > max,
+    note: hits.length ? undefined : `Ninguna fila libre de «${child.name}» coincide con «${needle}».`,
+    set,
+  };
 }
 
 export { MAX_RELATED_ROWS };

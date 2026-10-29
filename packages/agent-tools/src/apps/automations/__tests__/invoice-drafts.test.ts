@@ -180,6 +180,7 @@ function world() {
         { key: 'vuelo', label: 'Vuelo', type: 'relation', tracker: 'vuelos' },
         { key: 'factura', label: 'Factura', type: 'text' },
         { key: 'fact_estado', label: 'Estado facturación', type: 'text' },
+        { key: 'fact_error', label: 'Motivo del error', type: 'text' },
       ], duplicates: null, created_by: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' },
       { id: 't-vu', organization_id: ORG, slug: 'vuelos', name: 'Vuelos', description: '', fields: [
         { key: 'nombre', label: 'Vuelo', type: 'text' },
@@ -198,6 +199,7 @@ function world() {
     custom_app_users: [],
     custom_app_members: [],
     users: [{ id: 'u1', organization_id: ORG, role: 'org_admin', email: 'a@a.co' }],
+    custom_view_events: [],
     app_invoice_drafts: [],
     clients: [],
     client_contacts: [],
@@ -452,3 +454,113 @@ describe('la bandeja: editar, descartar y aprobar', () => {
     await expect(updateInvoiceDraft(db, id, { observations: 'x' })).rejects.toThrow(/ya no se edita/);
   });
 });
+
+describe('send: siigo_sin_dian (la aprobación de la fila es la aprobación humana)', () => {
+  const SEND_ACTION = {
+    ...RULE_ACTION,
+    send: 'siigo_sin_dian',
+    notifyActor: true,
+    writeBack: {
+      invoiceNumber: 'factura',
+      status: { field: 'fact_estado', created: 'Enviado a Siigo', error: 'Error al enviar a Siigo' },
+      errorReason: 'fact_error',
+    },
+  };
+  const siigoDouble = (create: (p: Record<string, unknown>) => Promise<unknown>) => {
+    const createInvoice = vi.fn(create as never);
+    const session = {
+      requests: 0,
+      verify: async () => ({ token: null }),
+      listPage: async () => ({ records: [], hasMore: false }),
+      invoicing: {
+        catalog: async () => catalog,
+        findCustomer: async (nit: string) => (nit === '900123456' ? { id: 'c1', name: 'Nexa' } : null),
+        createInvoice,
+      },
+    } as unknown as ProviderSession;
+    return { createInvoice, emission: { openSession: async () => session, today: '2026-10-19' } };
+  };
+  const depsWith = (emission: AutomationDeps['emission'], notified: string[][] = []): AutomationDeps => ({ ...deps(notified), emission });
+  const rowValues = (tables: Record<string, Row[]>) => (tables.tracker_rows?.find((r) => r.id === 'a1') as { values: Row }).values;
+
+  it('crea la factura en Siigo SIN enviar a la DIAN, escribe número y estado, avisa a quien aprobó y deja rastro sin deshacer', async () => {
+    const { db, tables } = world();
+    addRule(tables, SEND_ACTION);
+    const s = siigoDouble(async () => ({ id: 'siigo-5', number: 'FV-2-380', cufe: null, einvoiceStatus: 'Sin enviar', url: null, total: 3_808_000 }));
+    const notified: string[][] = [];
+    const run = queueRun(tables);
+    const out = await executeRun(db, run.id, ORG, depsWith(s.emission, notified));
+    expect(out.status).toBe('succeeded');
+    expect(s.createInvoice).toHaveBeenCalledTimes(1);
+    const payload = s.createInvoice.mock.calls[0]?.[0] as unknown as { stamp: { send: boolean }; mail: { send: boolean } };
+    expect(payload.stamp.send).toBe(false);
+    expect(payload.mail.send).toBe(false);
+    const [d] = await listInvoiceDrafts(db);
+    expect(d).toMatchObject({ status: 'created', provider_number: 'FV-2-380', sent_to_dian: false });
+    expect(rowValues(tables)).toMatchObject({ factura: 'FV-2-380', fact_estado: 'Enviado a Siigo' });
+    expect(rowValues(tables).fact_error ?? '').toBe('');
+    expect(notified[0]).toContain('u1');
+    expect((run.result as Array<{ detail: string }>)[0]?.detail).toMatch(/FV-2-380.*SIN enviar a la DIAN/);
+    // Rastro externo: cambios sin «antes» (no se pueden deshacer).
+    const events = tables.custom_view_events as Array<{ changes: Record<string, { from?: unknown; to?: unknown }>; reason: string }>;
+    expect(events).toHaveLength(1);
+    expect(Object.values(events[0]?.changes ?? {}).every((c) => c.from === undefined)).toBe(true);
+    expect(events[0]?.reason).toMatch(/no se deshace desde Cortex/);
+  });
+
+  it('idempotente: volver a disparar la regla no crea otra factura', async () => {
+    const { db, tables } = world();
+    addRule(tables, SEND_ACTION);
+    const s = siigoDouble(async () => ({ id: 'siigo-5', number: 'FV-2-380', cufe: null, einvoiceStatus: null, url: null, total: 1 }));
+    await executeRun(db, queueRun(tables).id, ORG, depsWith(s.emission));
+    const again = queueRun(tables);
+    await executeRun(db, again.id, ORG, depsWith(s.emission));
+    expect(s.createInvoice).toHaveBeenCalledTimes(1);
+    expect((again.result as Array<{ detail: string }>)[0]?.detail).toMatch(/Ya existía la factura/);
+    expect(tables.app_invoice_drafts).toHaveLength(1);
+  });
+
+  it('si Siigo rechaza: la fila queda «Error al enviar a Siigo» con el motivo, avisa, y al reintentar usa el mismo pedido sin duplicar', async () => {
+    const { db, tables } = world();
+    addRule(tables, SEND_ACTION);
+    let calls = 0;
+    const s = siigoDouble(async () => {
+      calls += 1;
+      if (calls === 1) throw new (await import('../../../accounting/types')).ProviderValidationError('Siigo rechazó el producto SERV-001.');
+      return { id: 'siigo-9', number: 'FV-2-381', cufe: null, einvoiceStatus: null, url: null, total: 1 };
+    });
+    const notified: string[][] = [];
+    const failed = queueRun(tables);
+    const out = await executeRun(db, failed.id, ORG, depsWith(s.emission, notified));
+    expect(out.status).toBe('failed');
+    expect(failed.error).toMatch(/Siigo no aceptó la factura.*rechazó/);
+    expect(rowValues(tables)).toMatchObject({ fact_estado: 'Error al enviar a Siigo' });
+    expect(String(rowValues(tables).fact_error)).toMatch(/rechazó/);
+    expect(notified.flat()).toContain('u1');
+    expect((await listInvoiceDrafts(db))[0]).toMatchObject({ status: 'error' });
+    // Reintentar = volver a disparar la regla (el botón «Reintentar» devuelve el estado a OK).
+    const retry = queueRun(tables);
+    const ok = await executeRun(db, retry.id, ORG, depsWith(s.emission));
+    expect(ok.status).toBe('succeeded');
+    expect(s.createInvoice).toHaveBeenCalledTimes(2);
+    expect(tables.sales_documents?.filter((r) => r.kind === 'order')).toHaveLength(1);
+    expect(tables.app_invoice_drafts).toHaveLength(1);
+    expect(rowValues(tables)).toMatchObject({ factura: 'FV-2-381', fact_estado: 'Enviado a Siigo' });
+    expect(rowValues(tables).fact_error ?? '').toBe('');
+  });
+
+  it('la regla exige dónde guardar el número de la factura', () => {
+    const bad = automationInputSchema.parse({ ...rule2(), actions: [{ ...SEND_ACTION, writeBack: undefined }] });
+    expect(structuralProblems(bad).join(' ')).toMatch(/writeBack\.invoiceNumber/);
+    const good = automationInputSchema.parse({ ...rule2(), actions: [SEND_ACTION] });
+    expect(structuralProblems(good)).toEqual([]);
+  });
+});
+
+function rule2() {
+  return {
+    name: 'Factura al aprobar',
+    trigger: { type: 'row_updated', tracker: 'atenciones', field: 'estado', to: 'Cerrada' },
+    actions: [RULE_ACTION],
+  };
+}
