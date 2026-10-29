@@ -33,6 +33,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardPaste,
+  Columns3,
   Copy,
   Download,
   Filter,
@@ -536,8 +537,28 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   }, [navRows]);
 
   // --- Anchos y columnas congeladas ---
-  const widths = block.columns.map((c, i) => widthOf(c, i, compact) * REM);
+  // «Ver toda la fila»: las columnas se encogen en proporción para que la fila entera quepa
+  // en el ancho disponible (sin barra horizontal); se recuerda por bloque en este navegador.
+  const fitKey = `cortex:sheet-fit:${block.id}`;
+  const [fit, setFit] = useState(false);
+  useEffect(() => {
+    try {
+      setFit(window.localStorage.getItem(fitKey) === '1');
+    } catch {}
+  }, [fitKey]);
+  function toggleFit() {
+    setFit((was) => {
+      try {
+        window.localStorage.setItem(fitKey, was ? '0' : '1');
+      } catch {}
+      return !was;
+    });
+  }
   const gutter = (compact ? 4 : 5.75) * REM;
+  const natural = block.columns.map((c, i) => widthOf(c, i, compact) * REM);
+  const naturalSum = natural.reduce((a, b) => a + b, 0);
+  const fitScale = fit && !compact && viewW > 0 ? Math.min(1, (viewW - gutter - 2) / naturalSum) : 1;
+  const widths = fitScale < 1 ? natural.map((w) => Math.max(3 * REM, Math.floor(w * fitScale))) : natural;
   // En el teléfono sólo la primera columna queda fija: dos se comen toda la pantalla.
   const frozen = compact ? Math.min(block.frozen, 1) : block.frozen;
   const leftOf = (i: number) => gutter + widths.slice(0, i).reduce((a, b) => a + b, 0);
@@ -1185,6 +1206,29 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         )}
         style={tone ? undefined : { borderLeftColor: 'rgb(var(--primary) / 0.5)' }}
       >
+        {writer && batchActions.length > 0 && members.length > 0 && (() => {
+          const ids = members.filter((r) => !r.ghost && !r.fresh).map((r) => r.id);
+          const all = ids.length > 0 && ids.every((id) => selRows.has(id));
+          return (
+            <input
+              type="checkbox"
+              checked={all}
+              onChange={() =>
+                setSelRows((cur) => {
+                  const n = new Set(cur);
+                  for (const id of ids) {
+                    if (all) n.delete(id);
+                    else n.add(id);
+                  }
+                  return n;
+                })
+              }
+              aria-label={`Elegir las ${ids.length} filas de ${g.label}`}
+              title={`Elegir las ${ids.length} filas de ${g.label}`}
+              className="h-4 w-4 cursor-pointer accent-[rgb(var(--primary))]"
+            />
+          );
+        })()}
         <button
           type="button"
           aria-expanded={!isClosed}
@@ -1545,6 +1589,21 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
               className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-primary px-3 text-xs font-semibold text-white hover:opacity-90"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden /> Nueva fila
+            </button>
+          )}
+          {!compact && (fit || naturalSum + gutter > viewW) && (
+            <button
+              type="button"
+              onClick={toggleFit}
+              aria-pressed={fit}
+              title={fit ? 'Volver al ancho normal de las columnas' : 'Encoger las columnas para ver toda la fila sin moverse de lado'}
+              className={clsx(
+                'inline-flex h-9 items-center gap-1.5 rounded-pill border px-3 text-xs font-semibold',
+                fit ? 'border-primary bg-primary-soft text-primary-ink' : 'border-border text-ink-muted hover:text-ink',
+              )}
+            >
+              <Columns3 className="h-3.5 w-3.5" aria-hidden />
+              {fit ? 'Ancho normal' : 'Ver toda la fila'}
             </button>
           )}
           <button
