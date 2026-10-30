@@ -37,6 +37,7 @@ import {
   Columns3,
   Copy,
   Download,
+  ExternalLink,
   Filter,
   Loader2,
   Maximize2,
@@ -1376,6 +1377,8 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
               />
             ) : f === estado && f.value ? (
               <StatusChip value={f.value} tone={toneOfStatus(f.value)} />
+            ) : isWebLink(f.value) ? (
+              <WebLink href={f.value} label={f.label} />
             ) : (
               <span className="tabular font-mono font-semibold text-ink">{f.value}</span>
             )}
@@ -2180,6 +2183,8 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
                               ? 'Escribe para agregar una fila…'
                               : ''}
                           </span>
+                        ) : isWebLink(cellText) ? (
+                          <WebLink href={cellText} label={c.label} />
                         ) : (
                           <span className={clsx('block truncate', (shown !== undefined || r.fresh) && 'italic')}>
                             {cellText}
@@ -3092,5 +3097,28 @@ function PasteDialog({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+/** Un texto que es sólo un enlace web (p. ej. la factura en Siigo) se muestra como «Abrir». */
+function isWebLink(v: string | undefined): v is string {
+  return Boolean(v && /^https?:\/\/\S+$/.test(v));
+}
+
+function WebLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={href}
+      aria-label={`Abrir ${label} en otra pestaña`}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+    >
+      Abrir
+      <ExternalLink className="h-3 w-3" aria-hidden />
+    </a>
   );
 }
