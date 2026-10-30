@@ -1236,6 +1236,8 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
         const row = navRows[active.r];
         if (e.shiftKey && row && !row.ghost && !row.fresh) pickRow(row, { shiftKey: false });
         else if (col?.type === 'checkbox') startEdit();
+        // Espacio sobre una fila: abre su ficha con todo el detalle (como Airtable).
+        else if (open && row && !row.ghost && !row.fresh) open(row.id);
         else return;
         break;
       }
