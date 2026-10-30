@@ -120,6 +120,7 @@ export function LiveViewCanvas({
   canExport = true,
   readOnly = false,
   onView,
+  bare = false,
 }: {
   initial: ComputedView;
   target: SubmitTarget;
@@ -140,6 +141,8 @@ export function LiveViewCanvas({
   readOnly?: boolean;
   /** Cada vez que llega un cálculo nuevo (incluido el inicial): la app guarda su copia sin señal. */
   onView?: (view: ComputedView) => void;
+  /** Sin portada ni fila de estado: la hoja llena la pantalla (Google Sheets). */
+  bare?: boolean;
 }) {
   const brand = useViewBrand();
   const scope = useBrandScope();
@@ -663,7 +666,7 @@ export function LiveViewCanvas({
 
   return (
     <div className={clsx('view-print-root', scope.className)} style={scope.style}>
-      {heading ? (
+      {bare ? null : heading ? (
         <ViewCover
           title={heading.title}
           subtitle={heading.subtitle}

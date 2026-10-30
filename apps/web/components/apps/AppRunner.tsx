@@ -4,6 +4,7 @@ import { BlockFixProvider } from '@/components/views/blocks/BlockFix';
 import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import type { SubmitTarget } from '@/components/views/ViewCanvas';
 import { BrandScope } from '@/components/views/blocks/brand';
+import { SheetFillContext } from '@/components/views/blocks/sheet-fill';
 import { headerHidden, shortTabLabels, splitTabs } from '@/lib/apps/app-nav';
 import { previewQuery } from '@/lib/apps/preview-query';
 import { rememberScreen } from '@/lib/apps/screen-store';
@@ -243,6 +244,9 @@ export function AppRunner({
   const { tabs, more, moreActive } = splitTabs(screens, current);
   const tabLabels = shortTabLabels(tabs);
   const standalone = Boolean(basePath);
+  // Una pantalla que empieza con una hoja la llena entera, como Google Sheets.
+  const firstBlock = !home && !tablero && !portal && !preview ? computed?.blocks[0] : undefined;
+  const fillId = firstBlock?.type === 'sheet' ? firstBlock.id : null;
   const computedAt =
     computed?.computedAt ??
     home?.computedAt ??
@@ -371,7 +375,7 @@ export function AppRunner({
                   : undefined
               }
             >
-              <BrandScope className="md:flex md:gap-5">
+              <BrandScope className={clsx('md:flex', fillId ? 'md:gap-3' : 'md:gap-5')}>
                 <aside
                   className={clsx(
                     'view-no-print hidden shrink-0 transition-[width] duration-200 md:block',
@@ -479,10 +483,18 @@ export function AppRunner({
                   </div>
                 </aside>
 
-                <main className="min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+                <main
+                  className={clsx(
+                    'min-w-0 flex-1',
+                    fillId ? 'app-fill' : 'pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0',
+                  )}
+                >
                   {standalone && (
                     <header
-                      className="app-header-bar view-no-print sticky top-0 z-30 -mx-4 mb-4 bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl sm:-mx-6"
+                      className={clsx(
+                        'app-header-bar view-no-print sticky top-0 z-30 bg-surface/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl',
+                        fillId ? '-mx-2 mb-2 md:-mx-4' : '-mx-4 mb-4 sm:-mx-6',
+                      )}
                       style={{ transform: hidden ? 'translateY(-100%)' : 'translateY(0)' }}
                     >
                       <span aria-hidden className="view-brand-stripe block h-[3px]" />
@@ -623,11 +635,13 @@ export function AppRunner({
                                 canFix: readOnly ? false : canManage ? true : undefined,
                               }}
                             >
+                              <SheetFillContext.Provider value={fillId}>
                               <LiveViewCanvas
                                 initial={computed}
                                 target={target}
                                 dataUrl={dataUrl ?? null}
                                 heading={{ title }}
+                                bare={Boolean(fillId)}
                                 showBrand={false}
                                 canExport={canExport}
                                 readOnly={readOnly && !viewAs?.sampled}
@@ -641,6 +655,7 @@ export function AppRunner({
                                     : undefined
                                 }
                               />
+                              </SheetFillContext.Provider>
                             </BlockFixProvider>
                           </>
                         )

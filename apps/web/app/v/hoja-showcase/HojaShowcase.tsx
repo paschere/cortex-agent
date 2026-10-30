@@ -2,6 +2,7 @@
 
 import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import { ViewBrandProvider } from '@/components/views/blocks/brand';
+import { SheetFillContext } from '@/components/views/blocks/sheet-fill';
 import { FormDataSourceProvider, type RelationOption } from '@/components/views/blocks/form-data-source';
 import type { ViewBrand } from '@/lib/branding/shape';
 import type { ComputedView } from '@cortex/agent-tools';
@@ -20,6 +21,7 @@ export function HojaShowcase({
   brand,
   options,
   dataUrl,
+  app = false,
 }: {
   view: ComputedView;
   title: string;
@@ -29,6 +31,8 @@ export function HojaShowcase({
   /** Opciones de ejemplo de cada relación (por clave de campo). */
   options: Record<string, RelationOption[]>;
   dataUrl: string;
+  /** `?app=1`: como en una app, la hoja llena la pantalla (Google Sheets). */
+  app?: boolean;
 }) {
   const data = useMemo(
     () => ({
@@ -60,14 +64,18 @@ export function HojaShowcase({
   const chosen = BRANDS[brand] ?? (BRANDS.andina as ViewBrand);
   return (
     <div className="cortex-workspace min-h-screen bg-canvas">
-      <main className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8">
-        <h1 className="text-xl font-semibold text-ink">{title}</h1>
-        <p className="mb-5 mt-1 text-sm text-ink-muted">{subtitle}</p>
-        <ViewBrandProvider brand={chosen}>
-          <FormDataSourceProvider value={data}>
-            <LiveViewCanvas initial={view} target={{ kind: 'demo' }} dataUrl={dataUrl} />
-          </FormDataSourceProvider>
-        </ViewBrandProvider>
+      <main className="app-shell-main mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8">
+        {!app && <h1 className="text-xl font-semibold text-ink">{title}</h1>}
+        {!app && <p className="mb-5 mt-1 text-sm text-ink-muted">{subtitle}</p>}
+        <div className={app ? 'app-fill' : undefined}>
+          <ViewBrandProvider brand={chosen}>
+            <FormDataSourceProvider value={data}>
+              <SheetFillContext.Provider value={app ? (view.blocks[0]?.id ?? null) : null}>
+                <LiveViewCanvas initial={view} target={{ kind: 'demo' }} dataUrl={dataUrl} bare={app} />
+              </SheetFillContext.Provider>
+            </FormDataSourceProvider>
+          </ViewBrandProvider>
+        </div>
       </main>
     </div>
   );

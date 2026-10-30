@@ -29,6 +29,7 @@ export default async function HojaShowcasePage({
       subtitle={HOJA_SUBTITLE}
       dark={one('modo') === 'oscuro'}
       brand={one('marca') ?? 'andina'}
+      app={one('app') === '1'}
       options={{
         cliente: CLIENTES_DEMO.map((c) => ({ id: c.id, label: c.nombre, detail: `NIT ${c.nit}` })),
         tarifa: TARIFAS_DEMO.map((t) => ({ id: t.id, label: t.nombre, detail: `${t.tarifa} USD/kg · ${t.notas}` })),

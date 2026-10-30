@@ -328,6 +328,11 @@ export type ComputedBlock =
         }>;
         /** El campo de agrupado: una fila nueva dentro de un grupo lo trae. */
         groupField: string | null;
+        /** Crear el padre desde la hoja (`group.addParent`): sus campos y cómo se llama. */
+        newParent?: {
+          noun: string;
+          fields: Array<{ key: string; label: string; type: string; options: string[] }>;
+        };
       } | null;
       actions: ComputedAction[];
       record: ComputedRecords | null;
@@ -1435,6 +1440,17 @@ function computeSheet(
               ...(f.type === 'relation' && f.tracker ? { tracker: f.tracker } : {}),
             })),
             groupField: g ? g.by : null,
+            ...(() => {
+              const pt = parentSrc?.tracker;
+              if (!g?.addParent?.length || !pt || isReadOnlySource(pt.slug) || creatingOrigin(pt)) return {};
+              const fields = g.addParent.flatMap((k) => {
+                const f = pt.fields.find((x) => x.key === k);
+                return f ? [{ key: f.key, label: f.label, type: f.type, options: f.options ?? [] }] : [];
+              });
+              if (!fields.length) return {};
+              const noun = fieldLabel(tracker, g.by).replace(/^(n[°º.]?|número de)\s+/i, '') || pt.name;
+              return { newParent: { noun: noun.toLowerCase(), fields } };
+            })(),
           }
         : null,
     actions: actionsFor(opts, block.actions, tracker, ordered),

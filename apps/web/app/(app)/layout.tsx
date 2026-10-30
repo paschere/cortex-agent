@@ -33,7 +33,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <Topbar email={user.email} />
         <BillingBanner organizationId={user.organization.id} />
         <main className="scroll-slim flex-1 overflow-y-auto print:overflow-visible">
-          <div className="mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
+          <div className="app-shell-main mx-auto w-full max-w-[1440px] px-4 py-6 md:px-8 md:py-8">
             <AreaTabs
               admin={user.role === 'org_admin'}
               modulesOff={modulesOff}

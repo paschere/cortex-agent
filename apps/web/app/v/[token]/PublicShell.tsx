@@ -33,7 +33,7 @@ export function PublicShell({
             </span>
           </div>
         </div>
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">{children}</main>
+        <main className="app-shell-main mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">{children}</main>
       </BrandScope>
     </ViewBrandProvider>
   );

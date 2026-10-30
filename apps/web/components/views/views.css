@@ -747,3 +747,25 @@ html:root
     transition: none !important;
   }
 }
+
+/* --- Una app cuya pantalla es una hoja: de borde a borde, como Google Sheets.
+ * El marco de afuera (la página pública o el espacio de trabajo) suelta su ancho
+ * máximo y casi todo su relleno; la rejilla se mide sola hasta abajo (Sheet.tsx). */
+.app-shell-main:has(.app-fill) {
+  max-width: none;
+  padding: 0 0.5rem;
+}
+@media (min-width: 768px) {
+  .app-shell-main:has(.app-fill) {
+    padding: 0.5rem 1rem 0;
+  }
+}
+/* Sheets no raya las filas: líneas finas y blanco. */
+.sheet-fill .sheet-grid .sheet-band {
+  background-color: rgb(var(--surface));
+}
+/* La celda activa nunca queda debajo del encabezado, del manifiesto fijo o de los totales. */
+.sheet-grid [data-cell] {
+  scroll-margin-top: 4.5rem;
+  scroll-margin-bottom: 2.75rem;
+}

@@ -2615,6 +2615,8 @@ export interface SheetPasteLine {
   /** Campos que cambian en un `update` (rótulos). */
   changed?: string[];
   error?: string;
+  /** La fila que quedó (ya existía, o la recién creada al aplicar). */
+  rowId?: string;
 }
 
 export interface SheetPasteResult {
@@ -2802,7 +2804,15 @@ export async function pasteViewRows(
     const match = keyField && k0 ? byKey.get(k0) : undefined;
     try {
       if (match) {
-        if (!input.update) throw new ValidationError('Tu rol no edita filas que ya existen.');
+        if (!input.update) {
+          // Sin permiso de editar: lo que ya existe tal cual no es un cambio (se devuelve la fila).
+          const keysGiven = Object.keys(given);
+          if (keysGiven.every((k) => foldKey(given[k]) === foldKey(match.values[k] ?? ''))) {
+            lines.push({ line, action: 'same', label: match.label, rowId: match.id });
+            continue;
+          }
+          throw new ValidationError('Tu rol no edita filas que ya existen.');
+        }
         const prepared = await prepareValues(
           db,
           tracker,
@@ -2814,7 +2824,7 @@ export async function pasteViewRows(
         );
         const label = match.label || String(raw[keyField?.key ?? ''] ?? '');
         if (!changedKeys.length) {
-          lines.push({ line, action: 'same', label });
+          lines.push({ line, action: 'same', label, rowId: match.id });
           continue;
         }
         const patch = Object.fromEntries(changedKeys.map((k) => [k, given[k] as string]));
@@ -2822,6 +2832,7 @@ export async function pasteViewRows(
           line,
           action: 'update',
           label,
+          rowId: match.id,
           changed: changedKeys.map((k) => fieldOf(k)?.label ?? k),
         });
         plan.push({ kind: 'update', line, rowId: match.id, patch, label });
@@ -2845,7 +2856,7 @@ export async function pasteViewRows(
           keys.every((k) => String(r.values[k] ?? '') === String(values[k] ?? '')),
         );
         if (dup) {
-          lines.push({ line, action: 'same', label: dup.label });
+          lines.push({ line, action: 'same', label: dup.label, rowId: dup.id });
           continue;
         }
       }
@@ -2898,6 +2909,8 @@ export async function pasteViewRows(
           .single();
         if (error) throw error;
         const rowId = String((row as { id: string }).id);
+        const made = lines.find((x) => x.line === step.line);
+        if (made) made.rowId = rowId;
         const rule = await getDuplicateRule(db, tracker.id);
         if (rule) await applyDuplicateRule(db, tracker.id, [step.values]);
         if (await watchesTracker(db, tracker.id))

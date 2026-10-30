@@ -32,6 +32,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
   ClipboardPaste,
   Columns3,
   Copy,
@@ -44,9 +45,10 @@ import {
   PanelRightOpen,
   Plus,
   Search,
+  Undo2,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { confirmDialog } from '@/lib/ui/dialog-queue';
 import type { SubmitTarget } from '../ViewCanvas';
 import { useFlashClass } from '../flash-context';
@@ -70,7 +72,9 @@ import {
   SummaryStrip,
   UndoRedoButtons,
 } from './SheetParts';
-import { WindowBar, WindowFooter } from './SheetWindowBar';
+import { WindowFooter, WindowReach, WindowSummary } from './SheetWindowBar';
+import { useSheetFill } from './sheet-fill';
+import { loadMoreLabel } from '@cortex/agent-tools/src/views/sheet-window';
 import { useSheetWindow } from '../sheet-window-context';
 import { useVariant } from './design';
 import { Card, StatusChip, TONE_SOFT, statusTone as themeTone } from './theme';
@@ -157,8 +161,28 @@ const toneOfStatus = (v: string): ToneName | null => {
 };
 
 type Pos = { r: number; c: number };
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
-export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTarget }) {
+export function SheetBlock({ block: base, target }: { block: Sheet; target?: SubmitTarget }) {
+  // Los padres (manifiestos) recién creados desde la hoja todavía no tienen filas, así que
+  // el servidor no los trae como grupo: se agregan al final hasta que lleguen con su primera fila.
+  const [extraGroups, setExtraGroups] = useState<Array<{ key: string; label: string }>>([]);
+  const baseGroups = base.groups?.length ?? 0;
+  const block = useMemo<Sheet>(() => {
+    if (!base.groups || !extraGroups.length) return base;
+    const have = new Set(base.groups.map((g) => g.key));
+    const extra = extraGroups.filter((e) => !have.has(e.key));
+    if (!extra.length) return base;
+    const subtotals = base.groups[0]?.subtotals ?? [];
+    return {
+      ...base,
+      groups: [
+        ...base.groups,
+        ...extra.map((e) => ({ key: e.key, label: e.label, fields: [], subtotals, collapsed: false, sortKey: e.label })),
+      ],
+    };
+  }, [base, extraGroups]);
+  const fill = useSheetFill(base.id);
   const writer = useViewWriter();
   const flash = useFlashClass();
   const open = useRecordOpener(block.id, block.record);
@@ -211,6 +235,11 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   const [batchBusy, setBatchBusy] = useState(false);
   const [rowMenu, setRowMenu] = useState<{ id: string; el: HTMLElement } | null>(null);
   const focusGhost = useRef<{ id: string; c: number } | null>(null);
+  // La fila «+ Nuevo manifiesto» del final (abierta = con su casilla para escribir el número).
+  const [parentOpen, setParentOpen] = useState(false);
+  const parentRowRef = useRef<HTMLTableRowElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const belowRef = useRef<HTMLDivElement>(null);
   // Pantalla completa: el mismo bloque (mismo estado: filtros, orden, celda activa,
   // grupos plegados) pasa a ocupar la ventana. Con la API Fullscreen del navegador
   // sobre el documento (así los diálogos y listas que flotan siguen viéndose); sin
@@ -280,6 +309,33 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     setViewH(el.clientHeight);
     return () => ro.disconnect();
   }, []);
+  // Llenar la pantalla: la rejilla va desde donde empieza hasta el fondo de la ventana (menos la
+  // barra de pestañas del celular y la línea de estado de abajo); el desplazamiento va por dentro.
+  const [fillH, setFillH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!fill) return;
+    const calc = () => {
+      const el = rootRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const bar = document.querySelector<HTMLElement>('.app-tabbar');
+      const tabs = bar && getComputedStyle(bar).display !== 'none' ? bar.offsetHeight : 0;
+      const below = belowRef.current?.offsetHeight ?? 0;
+      setFillH(Math.max(280, Math.floor(window.innerHeight - top - tabs - below - 4)));
+    };
+    calc();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(calc);
+    if (barRef.current) ro?.observe(barRef.current);
+    if (belowRef.current) ro?.observe(belowRef.current);
+    window.addEventListener('resize', calc);
+    window.visualViewport?.addEventListener('resize', calc);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', calc);
+      window.visualViewport?.removeEventListener('resize', calc);
+    };
+  }, [fill]);
+
   // El arrastre de un rango termina al soltar el botón en cualquier parte.
   useEffect(() => {
     const up = () => {
@@ -294,7 +350,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   useEffect(() => {
     setPending({});
     setLocal([]);
-  }, [block]);
+  }, [base]);
 
   const say = (ok: boolean, text: string) => {
     setNote({ ok, text });
@@ -415,6 +471,8 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
       }
       byGroup.get(row.group)?.push(row);
     }
+    // Los manifiestos recién creados (sin filas todavía) van al final, listos para llenarse.
+    for (let gi = baseGroups; gi < (block.groups?.length ?? 0); gi++) if (!byGroup.has(gi)) order.push(gi);
     for (const gi of order) {
       const rs = byGroup.get(gi) ?? [];
       out.push({ kind: 'group', gi, count: rs.length });
@@ -423,7 +481,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
       if (canAdd) out.push({ kind: 'row', row: ghostRow(gi) });
     }
     return out;
-  }, [block.groups, visible, local, collapsed, canAdd, ghostRow]);
+  }, [block.groups, baseGroups, visible, local, collapsed, canAdd, ghostRow]);
 
   const navRows = useMemo(
     () => lines.flatMap((l) => (l.kind === 'row' ? [l.row] : [])),
@@ -468,7 +526,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
   const [measured, setMeasured] = useState({ row: 0, group: 0, head: 40, foot: 38 });
   const virtual = lines.length > VIRTUAL_MIN;
   const rowPx = measured.row || baseRowH;
-  const groupPx = measured.group || 84;
+  const groupPx = measured.group || 38;
   const offsets = useMemo(() => {
     const o = new Float64Array(lines.length + 1);
     for (let i = 0; i < lines.length; i++) o[i + 1] = (o[i] ?? 0) + (lines[i]?.kind === 'group' ? groupPx : rowPx);
@@ -761,6 +819,50 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     });
     focusGhost.current = { id: r.id, c: Math.max(0, firstEditable) };
     say(true, 'Fila agregada.');
+  }
+
+  /**
+   * Crear el padre (el manifiesto) desde la hoja, con `<hoja>:newparent`. Si ya existía con ese
+   * número, se va a él. El grupo nuevo aparece al final con su fila vacía y el cursor en ella.
+   */
+  const newParent = writer?.paste ? (block.write?.newParent ?? null) : null;
+  async function createParent(values: Record<string, string>): Promise<boolean> {
+    if (!writer?.paste || !newParent) return false;
+    const res = await track(async () => {
+      const r = await writer.paste?.(`${block.id}:newparent`, [values], true, true);
+      return r ?? { ok: false as const, error: 'No se pudo guardar.' };
+    });
+    if (!res.ok) {
+      say(false, res.error ?? 'No se pudo crear.');
+      return false;
+    }
+    const line = res.result.lines[0];
+    if (!line || line.action === 'error' || !line.rowId) {
+      say(false, line?.error ?? 'No se pudo crear.');
+      return false;
+    }
+    const id = line.rowId;
+    const at = block.groups?.findIndex((g) => g.key === id) ?? -1;
+    const gi = at >= 0 ? at : (block.groups?.length ?? 0);
+    if (at < 0) setExtraGroups((cur) => [...cur, { key: id, label: line.label }]);
+    setCollapsed((c) => {
+      if (!c.has(id)) return c;
+      const n = new Set(c);
+      n.delete(id);
+      return n;
+    });
+    setQuery('');
+    setFilters({});
+    focusGhost.current = { id: `ghost:${gi}`, c: Math.max(0, firstEditable) };
+    // El teclado vuelve a la rejilla: lo siguiente que se escribe va a la primera fila del manifiesto.
+    requestAnimationFrame(() => rootRef.current?.focus({ preventScroll: true }));
+    say(
+      true,
+      line.action === 'create'
+        ? `${cap(newParent.noun)} ${line.label} creado: escribe sus filas.`
+        : `${cap(newParent.noun)} ${line.label} ya existía: agrégale filas.`,
+    );
+    return true;
   }
 
   /** Duplicar filas (la clave de pegado queda marcada «(copia)»). */
@@ -1200,8 +1302,10 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     return (
       <div
         className={clsx(
-          'flex flex-wrap items-center gap-x-5 gap-y-2 rounded-sm border border-border/70 border-l-4 px-3 py-2 shadow-card',
-        floating && 'shadow-pop',
+          // Una franja del ancho de la hoja (como un encabezado de bloque en Sheets): una sola
+          // línea; en el celular se desliza de lado en vez de partirse en varias.
+          'flex min-h-9 flex-nowrap items-center gap-x-4 overflow-x-auto whitespace-nowrap border-l-4 px-2 py-1 [scrollbar-width:none]',
+          floating && 'border-b border-border shadow-card',
           GROUP_BG[tone ?? 'primary'],
         )}
         style={tone ? undefined : { borderLeftColor: 'rgb(var(--primary) / 0.5)' }}
@@ -1298,7 +1402,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
             </span>
           </span>
         )}
-        <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-0.5">
+        <span className="ml-auto flex shrink-0 items-center gap-x-4 pl-2">
           {g.subtotals.map((ci) => {
             const c = block.columns[ci];
             if (!c) return null;
@@ -1526,20 +1630,30 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
       className={full ? 'fixed inset-0 z-[60] bg-canvas' : 'h-full'}
     >
     <Card
-      className={full ? 'sheet-full flex h-full flex-col !rounded-none !border-0 !p-3 sm:!p-4' : undefined}
-      title={block.title}
-      source={`${block.total} ${block.total === 1 ? 'fila' : 'filas'} · ${block.source}${block.truncated ? ' · hay más de las que se muestran' : ''}`}
+      className={
+        full
+          ? 'sheet-full flex h-full flex-col !rounded-none !border-0 !p-3 sm:!p-4'
+          : fill
+            ? 'sheet-fill !rounded-none !border-0 !bg-transparent !p-0 !shadow-none'
+            : undefined
+      }
+      title={fill ? undefined : block.title}
+      source={
+        fill
+          ? undefined
+          : `${block.total} ${block.total === 1 ? 'fila' : 'filas'} · ${block.source}${block.truncated ? ' · hay más de las que se muestran' : ''}`
+      }
     >
-      {win && winCtl && (
-        <WindowBar win={win} loading={winLoading} onReach={(id) => winCtl.choose(block.id, id)} />
-      )}
-      <div className="view-no-print mb-3 flex flex-wrap items-center gap-2">
-        <label className="flex h-9 min-w-[10rem] flex-1 items-center gap-2 rounded-pill border border-border bg-surface-2/70 px-3 focus-within:border-border-strong focus-within:bg-surface sm:max-w-xs">
+      <div ref={barRef} className={clsx('view-no-print flex items-center gap-1.5', fill ? 'mb-2' : 'mb-3')}>
+        {win && winCtl && (
+          <WindowReach win={win} loading={winLoading} slim onReach={(id) => winCtl.choose(block.id, id)} />
+        )}
+        <label className="flex h-8 min-w-[2rem] flex-1 items-center gap-2 rounded-pill border border-border bg-surface-2/70 px-2.5 focus-within:border-border-strong focus-within:bg-surface sm:max-w-xs">
           <Search className="h-4 w-4 text-ink-faint" aria-hidden />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={win ? 'Buscar en todo el histórico' : 'Buscar en la hoja'}
+            placeholder={compact ? 'Buscar' : win ? 'Buscar en todo el histórico' : 'Buscar en la hoja'}
             aria-label={`Buscar en ${block.title}`}
             className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
@@ -1551,75 +1665,52 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
               setQuery('');
               setFilters({});
             }}
-            className="inline-flex h-9 items-center gap-1 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted hover:text-ink"
+            title="Quitar la búsqueda y los filtros"
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-pill border border-border px-2.5 text-xs font-semibold text-ink-muted hover:text-ink"
           >
-            <X className="h-3.5 w-3.5" aria-hidden /> Quitar filtros
+            <X className="h-3.5 w-3.5" aria-hidden />
+            <span className="hidden sm:inline">Quitar filtros</span>
           </button>
         )}
-        <span className="tabular font-mono text-micro text-ink-faint">
-          {filtered ? `${visible.length} de ${block.rows.length}` : ''}
-        </span>
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        {filtered && (
+          <span className="tabular hidden shrink-0 font-mono text-micro text-ink-faint sm:inline">
+            {visible.length} de {block.rows.length}
+          </span>
+        )}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {writer && (
-            <UndoRedoButtons
-              canUndo={h.canUndo}
-              canRedo={h.canRedo}
-              undoLabel={h.nextUndo?.label}
-              redoLabel={h.nextRedo?.label}
-              onUndo={() => void undoRedo('undo')}
-              onRedo={() => void undoRedo('redo')}
-            />
+            <span className="hidden md:inline-flex">
+              <UndoRedoButtons
+                canUndo={h.canUndo}
+                canRedo={h.canRedo}
+                undoLabel={h.nextUndo?.label}
+                redoLabel={h.nextRedo?.label}
+                onUndo={() => void undoRedo('undo')}
+                onRedo={() => void undoRedo('redo')}
+              />
+            </span>
           )}
-          {block.groups && (
+          {newParent && (
             <button
               type="button"
-              onClick={() =>
-                setCollapsed((c) =>
-                  c.size ? new Set() : new Set((block.groups ?? []).map((g) => g.key)),
-                )
-              }
-              className="inline-flex h-9 items-center gap-1 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted hover:text-ink"
-            >
-              {collapsed.size ? 'Desplegar todo' : 'Plegar todo'}
-            </button>
-          )}
-          {block.write?.paste && writer?.paste && (
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await startPaste(await navigator.clipboard.readText());
-                } catch {
-                  setPasteState({ rows: [], header: false, targets: [], busy: false, server: null, error: null, manual: true });
-                }
+              onClick={() => {
+                setParentOpen(true);
+                queueMicrotask(() => parentRowRef.current?.scrollIntoView({ block: 'nearest' }));
               }}
-              className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-border px-3 text-xs font-semibold text-ink hover:bg-surface-2"
+              className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-primary px-3 text-xs font-semibold text-white hover:opacity-90"
             >
-              <ClipboardPaste className="h-3.5 w-3.5" aria-hidden /> Pegar de Excel
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              <span className="sm:hidden">{cap(newParent.noun)}</span>
+              <span className="hidden sm:inline">Nuevo {newParent.noun}</span>
             </button>
           )}
-          {block.write?.add && writer?.paste && (
+          {!newParent && block.write?.add && writer?.paste && (
             <button
               type="button"
               onClick={() => setNewRow({})}
-              className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-primary px-3 text-xs font-semibold text-white hover:opacity-90"
+              className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-primary px-3 text-xs font-semibold text-white hover:opacity-90"
             >
-              <Plus className="h-3.5 w-3.5" aria-hidden /> Nueva fila
-            </button>
-          )}
-          {!compact && (fit || naturalSum + gutter > viewW) && (
-            <button
-              type="button"
-              onClick={toggleFit}
-              aria-pressed={fit}
-              title={fit ? 'Volver al ancho normal de las columnas' : 'Encoger las columnas para ver toda la fila sin moverse de lado'}
-              className={clsx(
-                'inline-flex h-9 items-center gap-1.5 rounded-pill border px-3 text-xs font-semibold',
-                fit ? 'border-primary bg-primary-soft text-primary-ink' : 'border-border text-ink-muted hover:text-ink',
-              )}
-            >
-              <Columns3 className="h-3.5 w-3.5" aria-hidden />
-              {fit ? 'Ancho normal' : 'Ver toda la fila'}
+              <Plus className="h-3.5 w-3.5" aria-hidden /> <span className="hidden sm:inline">Nueva fila</span>
             </button>
           )}
           <button
@@ -1627,51 +1718,88 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
             type="button"
             onClick={full ? exitFull : enterFull}
             aria-pressed={full}
+            aria-label={full ? 'Salir de pantalla completa' : 'Pantalla completa'}
             title={full ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa (Ctrl/Cmd+Mayús+F)'}
             className={clsx(
-              'inline-flex h-9 items-center gap-1.5 rounded-pill border px-3 text-xs font-semibold',
+              'hidden h-8 w-8 place-items-center rounded-pill border sm:grid',
               full ? 'border-primary bg-primary text-white hover:opacity-90' : 'border-border text-ink-muted hover:text-ink',
             )}
           >
             {full ? <Minimize2 className="h-3.5 w-3.5" aria-hidden /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden />}
-            {full ? 'Salir' : 'Pantalla completa'}
           </button>
-          {win && winCtl && (win.more || win.search) ? (
-            <ExportMenuUi.Root>
-              <ExportMenuUi.Trigger className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted hover:text-ink">
-                <Download className="h-3.5 w-3.5" aria-hidden /> CSV <ChevronDown className="h-3 w-3" aria-hidden />
-              </ExportMenuUi.Trigger>
-              <ExportMenuUi.Portal>
-                <ExportMenuUi.Content
-                  align="end"
-                  sideOffset={6}
-                  className="view-no-print z-[70] min-w-[13rem] rounded-card border border-border bg-surface p-1 text-xs shadow-pop"
-                >
-                  <ExportMenuUi.Item
-                    onSelect={() => downloadCsv()}
-                    className="cursor-pointer rounded-sm px-3 py-2 font-medium text-ink outline-none data-[highlighted]:bg-surface-2"
+          <ExportMenuUi.Root>
+            <ExportMenuUi.Trigger
+              aria-label="Más opciones de la hoja"
+              title="Más opciones"
+              className="grid h-8 w-8 place-items-center rounded-pill border border-border text-ink-muted hover:text-ink data-[state=open]:bg-surface-2"
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden />
+            </ExportMenuUi.Trigger>
+            <ExportMenuUi.Portal>
+              <ExportMenuUi.Content
+                align="end"
+                sideOffset={6}
+                className="view-no-print z-[70] min-w-[14rem] rounded-card border border-border bg-surface p-1 text-xs shadow-pop"
+              >
+                {newParent && block.write?.add && writer?.paste && (
+                  <MoreItem icon={<Plus className="h-3.5 w-3.5" aria-hidden />} onSelect={() => setNewRow({})}>
+                    Nueva fila con formulario
+                  </MoreItem>
+                )}
+                {block.write?.paste && writer?.paste && (
+                  <MoreItem
+                    icon={<ClipboardPaste className="h-3.5 w-3.5" aria-hidden />}
+                    onSelect={async () => {
+                      try {
+                        await startPaste(await navigator.clipboard.readText());
+                      } catch {
+                        setPasteState({ rows: [], header: false, targets: [], busy: false, server: null, error: null, manual: true });
+                      }
+                    }}
                   >
-                    Lo que ves ({visible.length} filas)
-                  </ExportMenuUi.Item>
-                  <ExportMenuUi.Item
-                    onSelect={() => void downloadAllCsv()}
-                    className="cursor-pointer rounded-sm px-3 py-2 font-medium text-ink outline-none data-[highlighted]:bg-surface-2"
+                    Pegar de Excel o Sheets
+                  </MoreItem>
+                )}
+                {block.groups && (
+                  <MoreItem
+                    icon={<ChevronsUpDown className="h-3.5 w-3.5" aria-hidden />}
+                    onSelect={() =>
+                      setCollapsed((c) =>
+                        c.size ? new Set() : new Set((block.groups ?? []).map((g) => g.key)),
+                      )
+                    }
                   >
-                    Todo el histórico
-                  </ExportMenuUi.Item>
-                </ExportMenuUi.Content>
-              </ExportMenuUi.Portal>
-            </ExportMenuUi.Root>
-          ) : (
-          <button
-            type="button"
-            onClick={() => downloadCsv()}
-            className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-border px-3 text-xs font-semibold text-ink-muted hover:text-ink"
-            title="Descargar lo que se ve como CSV, con grupos y totales"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden /> CSV
-          </button>
-          )}
+                    {collapsed.size ? 'Desplegar todo' : 'Plegar todo'}
+                  </MoreItem>
+                )}
+                {!compact && (fit || naturalSum + gutter > viewW) && (
+                  <MoreItem icon={<Columns3 className="h-3.5 w-3.5" aria-hidden />} onSelect={toggleFit}>
+                    {fit ? 'Ancho normal de las columnas' : 'Ver toda la fila (encoger columnas)'}
+                  </MoreItem>
+                )}
+                {writer && (
+                  <span className="md:hidden">
+                    <MoreItem
+                      icon={<Undo2 className="h-3.5 w-3.5" aria-hidden />}
+                      disabled={!h.canUndo}
+                      onSelect={() => void undoRedo('undo')}
+                    >
+                      Deshacer
+                    </MoreItem>
+                  </span>
+                )}
+                <ExportMenuUi.Separator className="my-1 h-px bg-border" />
+                <MoreItem icon={<Download className="h-3.5 w-3.5" aria-hidden />} onSelect={() => downloadCsv()}>
+                  Descargar lo que ves ({visible.length} filas)
+                </MoreItem>
+                {win && winCtl && (win.more || win.search) && (
+                  <MoreItem icon={<Download className="h-3.5 w-3.5" aria-hidden />} onSelect={() => void downloadAllCsv()}>
+                    Descargar todo el histórico
+                  </MoreItem>
+                )}
+              </ExportMenuUi.Content>
+            </ExportMenuUi.Portal>
+          </ExportMenuUi.Root>
         </div>
       </div>
 
@@ -1686,7 +1814,11 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         tabIndex={0}
         onKeyDown={onKeyDown}
         onScroll={virtual || block.groups?.length ? onGridScroll : undefined}
-        style={{ ...(viewW ? ({ '--sheet-view': `${viewW}px` } as React.CSSProperties) : {}), overflowAnchor: 'none' }}
+        style={{
+          ...(viewW ? ({ '--sheet-view': `${viewW}px` } as React.CSSProperties) : {}),
+          ...(fill && !full && fillH ? { height: fillH } : {}),
+          overflowAnchor: 'none',
+        }}
         onPaste={(e) => {
           if (editing) return;
           const text = e.clipboardData.getData('text/plain');
@@ -1697,7 +1829,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         }}
         className={clsx(
           'sheet-grid view-table-scroll scroll-slim overflow-auto border-y border-border outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
-          full ? 'min-h-0 flex-1 -mx-3 sm:-mx-4' : '-mx-4 max-h-[70vh] sm:-mx-6',
+          full ? 'min-h-0 flex-1 -mx-3 sm:-mx-4' : fill ? '-mx-2 md:mx-0 md:border-x md:rounded-sm' : '-mx-4 max-h-[70vh] sm:-mx-6',
         )}
       >
         {pinned && (
@@ -1706,10 +1838,10 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
             style={{ top: measured.head }}
           >
             <div
-              className="pointer-events-auto px-2 pt-1 transition-opacity"
+              className="pointer-events-auto transition-opacity"
               style={{ transform: `translateY(${pinned.shift}px)` }}
             >
-              <div className="rounded-sm bg-surface">{groupCard(pinned.gi, pinned.count, true)}</div>
+              <div className="bg-surface">{groupCard(pinned.gi, pinned.count, true)}</div>
             </div>
           </div>
         )}
@@ -1801,7 +1933,7 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                 return (
                   <tr key={`g${line.gi}`} data-vk="group">
                     <td colSpan={1 + block.columns.length} className="border-b border-border p-0">
-                      <div className="sticky left-0 w-[var(--sheet-view,72rem)] max-w-full px-2 py-2">
+                      <div className="sticky left-0 w-[var(--sheet-view,72rem)] max-w-full">
                         {groupCard(line.gi, line.count)}
                       </div>
                     </td>
@@ -2080,6 +2212,17 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                 </td>
               </tr>
             )}
+            {newParent && (
+              <NewParentRow
+                rowRef={parentRowRef}
+                colSpan={1 + block.columns.length}
+                noun={newParent.noun}
+                fields={newParent.fields}
+                open={parentOpen}
+                onOpen={setParentOpen}
+                onCreate={createParent}
+              />
+            )}
           </tbody>
           {block.totals.length > 0 && (
             <tfoot>
@@ -2098,8 +2241,9 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
                   >
                     {ci === 0 && !totalOf(0) ? (
                       <span className="text-micro text-ink-faint">
-                        {win && (win.more || win.search) ? 'Total del rango cargado' : 'Total'} · {visible.length}{' '}
-                        {visible.length === 1 ? 'fila' : 'filas'}
+                        {compact
+                          ? `Total · ${visible.length}`
+                          : `${win && (win.more || win.search) ? 'Total del rango cargado' : 'Total'} · ${visible.length} ${visible.length === 1 ? 'fila' : 'filas'}`}
                       </span>
                     ) : (
                       <BumpText text={totalOf(ci) ?? ''} />
@@ -2112,6 +2256,37 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         </table>
       </div>
 
+      <div ref={belowRef}>
+      {fill ? (
+        <div className="view-no-print flex min-h-8 items-center gap-3 px-1 pt-1 text-micro">
+          {note ? (
+            <p role="status" className={clsx('min-w-0 truncate', note.ok ? 'text-emerald' : 'text-rose')}>
+              {note.text}
+            </p>
+          ) : win ? (
+            <WindowSummary win={win} />
+          ) : (
+            <span role="status" className="text-ink-faint">
+              {visible.length} {visible.length === 1 ? 'fila' : 'filas'}
+            </span>
+          )}
+          {win && winCtl && win.more && !win.search && win.next && (
+            <button
+              type="button"
+              disabled={winLoading}
+              onClick={() => win.next && winCtl.more(block.id, win.next)}
+              className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill border border-border bg-surface px-2.5 font-semibold text-ink hover:bg-surface-2 disabled:opacity-60"
+            >
+              {winLoading ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : null}
+              {loadMoreLabel(win)}
+            </button>
+          )}
+          <span className="ml-auto shrink-0">
+            <SaveBadge save={save} onRetry={retryRef.current ? () => retryRef.current?.() : undefined} />
+          </span>
+        </div>
+      ) : (
+        <>
       {win && winCtl && (
         <WindowFooter
           win={win}
@@ -2121,6 +2296,23 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         />
       )}
 
+      <div className={clsx('mt-2 flex min-h-5 flex-wrap items-center justify-between gap-x-4 gap-y-1', full && 'pl-12')}>
+        <p role="status" className={clsx('text-micro', note ? (note.ok ? 'text-emerald' : 'text-rose') : 'text-ink-faint')}>
+          {note
+            ? note.text
+            : fillTo !== null && rect && fillTo > rect.r1
+              ? `Rellenar ${fillTo - rect.r1} ${fillTo - rect.r1 === 1 ? 'fila' : 'filas'} hacia abajo`
+              : block.write
+                ? compact
+                  ? 'Toca una celda para editar'
+                  : 'Flechas para moverte · Enter o escribir para editar · Arrastra la esquina para rellenar · Ctrl+Z deshace'
+                : 'Sólo lectura'}
+        </p>
+        <SaveBadge save={save} onRetry={retryRef.current ? () => retryRef.current?.() : undefined} />
+      </div>
+
+        </>
+      )}
       {rangeInfo && (
         <div className="view-no-print mt-2">
           <SummaryStrip stats={rangeInfo.stats} col={rangeInfo.col} cells={rangeInfo.cells} />
@@ -2143,21 +2335,6 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
         />
       )}
 
-      <div className={clsx('mt-2 flex min-h-5 flex-wrap items-center justify-between gap-x-4 gap-y-1', full && 'pl-12')}>
-        <p role="status" className={clsx('text-micro', note ? (note.ok ? 'text-emerald' : 'text-rose') : 'text-ink-faint')}>
-          {note
-            ? note.text
-            : fillTo !== null && rect && fillTo > rect.r1
-              ? `Rellenar ${fillTo - rect.r1} ${fillTo - rect.r1 === 1 ? 'fila' : 'filas'} hacia abajo`
-              : block.write
-                ? compact
-                  ? 'Toca una celda para editar'
-                  : 'Flechas para moverte · Enter o escribir para editar · Arrastra la esquina para rellenar · Ctrl+Z deshace'
-                : 'Sólo lectura'}
-        </p>
-        <SaveBadge save={save} onRetry={retryRef.current ? () => retryRef.current?.() : undefined} />
-      </div>
-
       {block.actions.length > 0 && active && navRows[active.r] && !navRows[active.r]?.ghost && !navRows[active.r]?.fresh && (
         <div className="mt-2 border-t border-border/70 pt-2">
           <RowActions
@@ -2168,6 +2345,8 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
           />
         </div>
       )}
+
+      </div>
 
       {rowMenu && (
         <FloatingMenu anchor={rowMenu.el} onClose={() => setRowMenu(null)} label="Acciones de la fila" minWidth={208} align="left">
@@ -2279,6 +2458,155 @@ export function SheetBlock({ block, target }: { block: Sheet; target?: SubmitTar
     </Card>
     </div>
     </div>
+  );
+}
+
+/**
+ * La última fila de la hoja: «+ Nuevo manifiesto». Se escribe el número (y lo que pida
+ * `group.addParent`), Enter, y el manifiesto aparece al final con su fila vacía y el
+ * cursor en ella: como agregar un bloque nuevo en Google Sheets, sin salir de la hoja.
+ */
+function NewParentRow({
+  rowRef,
+  colSpan,
+  noun,
+  fields,
+  open,
+  onOpen,
+  onCreate,
+}: {
+  rowRef: React.RefObject<HTMLTableRowElement | null>;
+  colSpan: number;
+  noun: string;
+  fields: Array<{ key: string; label: string; type: string; options: string[] }>;
+  open: boolean;
+  onOpen: (open: boolean) => void;
+  onCreate: (values: Record<string, string>) => Promise<boolean>;
+}) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const firstRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  useEffect(() => {
+    if (open) firstRef.current?.focus();
+  }, [open]);
+  const submit = async () => {
+    const out: Record<string, string> = {};
+    for (const f of fields) if ((values[f.key] ?? '').trim()) out[f.key] = (values[f.key] ?? '').trim();
+    if (!Object.keys(out).length || busy) return;
+    setBusy(true);
+    const ok = await onCreate(out);
+    setBusy(false);
+    if (ok) {
+      setValues({});
+      onOpen(false);
+    }
+  };
+  // Las teclas y el pegado se quedan en la casilla (no van a la rejilla).
+  const keep = {
+    onKeyDown: (e: React.KeyboardEvent) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void submit();
+      }
+      if (e.key === 'Escape') onOpen(false);
+    },
+    onPaste: (e: React.ClipboardEvent) => e.stopPropagation(),
+  };
+  return (
+    <tr ref={rowRef} className="view-no-print">
+      <td colSpan={colSpan} className="border-b border-border p-0">
+        <div className="sticky left-0 flex w-[var(--sheet-view,72rem)] max-w-full items-center gap-2 px-2 py-1.5">
+          {open ? (
+            <>
+              <Plus className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+              {fields.map((f, i) =>
+                f.type === 'select' ? (
+                  <select
+                    key={f.key}
+                    ref={i === 0 ? (el) => { firstRef.current = el; } : undefined}
+                    value={values[f.key] ?? ''}
+                    onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                    aria-label={f.label}
+                    {...keep}
+                    className="h-8 min-w-0 rounded-sm border border-border bg-surface px-2 text-xs text-ink"
+                  >
+                    <option value="">{f.label}</option>
+                    {f.options.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    key={f.key}
+                    ref={i === 0 ? (el) => { firstRef.current = el; } : undefined}
+                    type={f.type === 'date' ? 'date' : 'text'}
+                    inputMode={f.type === 'number' || f.type === 'money' ? 'decimal' : undefined}
+                    value={values[f.key] ?? ''}
+                    onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                    placeholder={f.label}
+                    aria-label={f.label}
+                    {...keep}
+                    className="h-8 w-40 min-w-0 rounded-sm border border-primary/50 bg-surface px-2 text-xs text-ink outline-none ring-primary/20 focus:ring-2"
+                  />
+                ),
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void submit()}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />} Crear
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpen(false)}
+                aria-label="Cancelar"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-pill text-ink-faint hover:text-ink"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+              <span className="hidden truncate text-micro text-ink-faint md:inline">Enter crea · Esc cancela</span>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-sm px-2 text-xs font-semibold text-primary hover:bg-primary-soft/60"
+            >
+              <Plus className="h-4 w-4" aria-hidden /> Nuevo {noun}
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/** Una opción del menú «Más» de la barra. */
+function MoreItem({
+  icon,
+  children,
+  onSelect,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  onSelect: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <ExportMenuUi.Item
+      disabled={disabled}
+      onSelect={onSelect}
+      className="flex cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2 font-medium text-ink outline-none data-[disabled]:opacity-40 data-[highlighted]:bg-surface-2"
+    >
+      <span className="text-ink-muted">{icon}</span>
+      {children}
+    </ExportMenuUi.Item>
   );
 }
 

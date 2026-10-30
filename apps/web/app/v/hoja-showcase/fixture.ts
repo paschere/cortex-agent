@@ -396,6 +396,7 @@ export function hojaSpec() {
           by: 'manifiesto',
           parentTracker: 'manifiestos',
           parentFields: ['numero', 'fva', 'estado', 'cobro_adicional'],
+          addParent: ['numero'],
           subtotals: ['piezas', 'kilos', 'total_usd', 'total_cop'],
           sortBy: 'nombre',
         },

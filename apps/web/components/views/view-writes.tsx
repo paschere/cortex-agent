@@ -366,7 +366,8 @@ export function ViewWriterProvider({
             lines: rows.map((r, i) => ({
               line: i + 1,
               action: 'create' as const,
-              label: r.guia ?? r.cliente ?? `Fila ${i + 1}`,
+              label: r.guia ?? r.cliente ?? Object.values(r)[0] ?? `Fila ${i + 1}`,
+              rowId: crypto.randomUUID(),
             })),
             created: rows.length,
             updated: 0,

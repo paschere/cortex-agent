@@ -437,6 +437,13 @@ export const sheetGroupSchema = z.object({
    * sólo deja tocar estos y con el rol de la app sobre la tabla padre.
    */
   editableParent: z.array(fieldRef).max(6).optional(),
+  /**
+   * Crear el padre (el manifiesto) desde la hoja: los campos que se escriben al crearlo
+   * (casi siempre su número). Aparece la fila «+ Nuevo …» al final y el botón de la barra;
+   * se escribe con el id de bloque `<hoja>:newparent` (rol y lista blanca de la tabla padre).
+   * Los padres recién creados sin filas todavía se muestran vacíos para empezar a llenarlos.
+   */
+  addParent: z.array(fieldRef).min(1).max(4).optional(),
   /** Columnas numéricas de esta tabla que se suman en el encabezado del grupo. */
   subtotals: z.array(fieldRef).max(6).default([]),
   /** Los grupos nacen plegados. */
@@ -1906,8 +1913,23 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
                     );
                 }
               }
+              if (g.addParent?.length && parent) {
+                if (isReadOnlySource(g.parentTracker))
+                  problems.push(
+                    `${where}: «${parent.name}» es ${readOnlyWhat(g.parentTracker)} y es de sólo lectura; quita \`group.addParent\`.`,
+                  );
+                for (const k of g.addParent) {
+                  const pf = parent.fields.find((x) => x.key === k);
+                  if (!parent.opaque && !pf)
+                    problems.push(`${where}: «${k}» no es un campo de ${parent.name} (\`group.addParent\`).`);
+                  else if (pf && (pf.formula || (pf.lookup && !pf.lookup.editable) || hardOriginOfField(parent, k)))
+                    problems.push(`${where}: «${pf.label}» no se escribe a mano; quítalo de \`group.addParent\`.`);
+                }
+              }
             } else if (g.parentFields.length)
               problems.push(`${where}: para mostrar campos del padre indica \`group.parentTracker\`.`);
+            else if (g.addParent?.length)
+              problems.push(`${where}: \`group.addParent\` necesita \`group.parentTracker\`.`);
             else if (g.editableParent?.length)
               problems.push(`${where}: \`group.editableParent\` necesita \`group.parentTracker\`.`);
           }
@@ -2131,6 +2153,23 @@ export function findWriteBlock(
       editable: g.editableParent.filter((k) => g.parentFields.includes(k)),
       actions: [],
     };
+  }
+  // `<hoja>:newparent`: crear el padre (el manifiesto) desde la hoja, como una hoja propia
+  // sobre la tabla padre que sólo recibe los campos de `group.addParent`.
+  if (block?.type === 'sheet' && tail === 'newparent') {
+    const g = block.group;
+    if (!g?.parentTracker || !g.addParent?.length) return undefined;
+    return sheetBlockSchema.parse({
+      id: block.id,
+      type: 'sheet',
+      tracker: g.parentTracker,
+      title: block.title,
+      columns: g.addParent,
+      editable: g.addParent,
+      pasteKey: g.addParent[0],
+      addRow: true,
+      paste: true,
+    });
   }
   if (!block || block.type !== 'detail') return undefined;
   const rel = block.related.find((r) => r.id === tail);
