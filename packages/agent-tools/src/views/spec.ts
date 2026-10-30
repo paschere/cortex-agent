@@ -430,7 +430,7 @@ export const sheetGroupSchema = z.object({
   /** Si `by` es una relación: la tabla padre, de donde salen `parentFields`. */
   parentTracker: sourceRef.optional(),
   /** Campos del padre que el encabezado del grupo muestra (N° manifiesto, estado, cobro adicional). */
-  parentFields: z.array(fieldRef).max(6).default([]),
+  parentFields: z.array(fieldRef).max(8).default([]),
   /**
    * Campos del padre (subconjunto de `parentFields`) que se editan en la tarjeta del grupo,
    * sin ir a otra pantalla. Se escriben con el id de bloque `<hoja>:parent`; el servidor
