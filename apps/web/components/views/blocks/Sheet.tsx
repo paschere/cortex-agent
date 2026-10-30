@@ -211,7 +211,9 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
   }, [block.groups]);
   const [active, setActive] = useState<Pos | null>(null);
   const [rangeEnd, setRangeEnd] = useState<Pos | null>(null);
-  const [editing, setEditing] = useState<{ draft: string } | null>(null);
+  // La edición queda anclada a su celda (fila + columna): si la celda activa se mueve, el
+  // borrador no viaja con ella ni se guarda en otra fila.
+  const [editing, setEditing] = useState<{ draft: string; rowId: string; c: number } | null>(null);
   const [pending, setPending] = useState<Record<string, string>>({});
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [newRow, setNewRow] = useState<{ group?: string } | null>(null);
@@ -956,8 +958,21 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
     }
     cancelled.current = false;
     // La relación y el estado arrancan con la lista abierta (o con lo que se escribió).
-    if (isRelationCol(col) || col.edit?.type === 'select') return setEditing({ draft: initial ?? '' });
-    setEditing({ draft: initial ?? (row.ghost ? '' : rawText(pending[`${row.id}:${pos.c}`] ?? row.sort[pos.c])) });
+    const at0 = { rowId: row.id, c: pos.c };
+    if (isRelationCol(col) || col.edit?.type === 'select') return setEditing({ draft: initial ?? '', ...at0 });
+    setEditing({ draft: initial ?? (row.ghost ? '' : rawText(pending[`${row.id}:${pos.c}`] ?? row.sort[pos.c])), ...at0 });
+  }
+
+  /** Al ir a otra celda con una edición abierta: se guarda lo escrito en SU celda (como Sheets). */
+  function finishEditElsewhere(ri: number, ci: number) {
+    if (!editing) return;
+    const row = navRows[ri];
+    if (row?.id === editing.rowId && ci === editing.c) return;
+    const col = block.columns[editing.c];
+    const owner = navRows.find((x) => x.id === editing.rowId);
+    cancelled.current = true;
+    if (owner && col && !isRelationCol(col) && col.edit?.type !== 'select') void commit(owner, editing.c, editing.draft);
+    else setEditing(null);
   }
 
   // --- Rango seleccionado ---
@@ -2052,7 +2067,7 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
                     const key = `${r.id}:${ci}`;
                     const tone = r.tones[ci];
                     const shown = r.ghost ? draft?.[c.key] : pending[key];
-                    const isEditing = isActive && editing && !compact;
+                    const isEditing = isActive && editing && editing.rowId === r.id && editing.c === ci && !compact;
                     const inSel = inRange(ri, ci) && !isActive;
                     const inFill = fillTo !== null && rect && ri > rect.r1 && ri <= fillTo && ci >= rect.c0 && ci <= rect.c1;
                     const showHandle = Boolean(
@@ -2070,6 +2085,7 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
                         aria-readonly={!editable || undefined}
                         onMouseDown={(e) => {
                           if (e.button !== 0) return;
+                          finishEditElsewhere(ri, ci);
                           if (e.shiftKey && active) {
                             setRangeEnd({ r: ri, c: ci });
                             return;
@@ -2150,7 +2166,7 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
                           <CellEditor
                             col={c}
                             draft={editing.draft}
-                            onDraft={(d) => setEditing({ draft: d })}
+                            onDraft={(d) => setEditing((e) => (e ? { ...e, draft: d } : e))}
                             onCommit={(v, move) => {
                               if (cancelled.current) return;
                               void commit(r, ci, v, move);
@@ -2411,9 +2427,12 @@ export function SheetBlock({ block: base, target }: { block: Sheet; target?: Sub
         <CellSheet
           col={block.columns[active.c] as Col}
           draft={editing.draft}
-          onDraft={(d) => setEditing({ draft: d })}
+          onDraft={(d) => setEditing((e) => (e ? { ...e, draft: d } : e))}
           onCancel={() => setEditing(null)}
-          onSave={(v) => void commit(navRows[active.r] as Row, active.c, v ?? editing.draft)}
+          onSave={(v) => {
+            const owner = navRows.find((x) => x.id === editing.rowId);
+            if (owner) void commit(owner, editing.c, v ?? editing.draft);
+          }}
           relation={
             isRelationCol(block.columns[active.c]) && target
               ? {

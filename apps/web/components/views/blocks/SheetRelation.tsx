@@ -312,7 +312,7 @@ export function RelationCombo({
         className={
           inline
             ? 'h-11 w-full rounded-sm border border-border bg-surface px-3 text-base text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary/30'
-            : 'h-full w-full rounded-none border-0 bg-surface px-2 text-xs text-ink outline-none ring-2 ring-inset ring-primary placeholder:text-ink-faint'
+            : 'h-full w-full rounded-none border-0 bg-surface px-2 text-xs text-ink outline-none ring-2 ring-inset ring-primary placeholder:text-ink-muted'
         }
       />
       {inline ? list : typeof document !== 'undefined' ? createPortal(list, document.body) : null}
