@@ -838,6 +838,24 @@ export const relatedSchema = z
     sort: z.object({ field: fieldRef, dir: z.enum(['asc', 'desc']).default('desc') }).optional(),
     limit: z.number().int().min(1).max(30).default(10),
     actions: z.array(rowActionSchema).max(3).default([]),
+    /**
+     * «+ Registrar evento» dentro del registro: abre otra pantalla de la app con
+     * el formulario ya ligado a ESTE registro. Sin `prefill`, pone la relación
+     * `field` apuntando aquí; con él, valores fijos o `{{fila}}` (este registro,
+     * como relación) / `{{campo}}` (un campo de este registro, tal cual).
+     */
+    add: z
+      .object({
+        label: z.string().trim().min(1).max(32),
+        screen: z
+          .string()
+          .trim()
+          .regex(/^[a-z][a-z0-9_]{1,47}$/),
+        prefill: z
+          .record(z.string().regex(/^[a-z][a-z0-9_]{0,31}$/), z.union([z.string().max(300), z.number()]))
+          .optional(),
+      })
+      .optional(),
   })
   .superRefine((r, ctx) => {
     if (r.match === 'value' && !r.parentField)

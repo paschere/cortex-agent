@@ -10,6 +10,7 @@ import {
   FilePlus2,
   MousePointerClick,
   Pencil,
+  Plus,
   Sparkles,
   Undo2,
   UserPlus,
@@ -24,6 +25,7 @@ import { FlowHistory, FlowPanel } from './FlowStepper';
 import { RichValue } from './RichValue';
 import { useIsVariant } from './design';
 import { useRecordNav } from './record-nav';
+import { useAppNav } from '@/components/apps/AppNav';
 import { Card, EmptyState, StatusChip, formatWhen, useViewTheme } from './theme';
 import { confirmDialog, promptDialog } from '@/lib/ui/dialog-queue';
 
@@ -186,6 +188,7 @@ function CopyLink() {
 
 export function DetailBlock({ block, target }: { block: Detail; target?: SubmitTarget }) {
   const nav = useRecordNav();
+  const appNav = useAppNav();
   const { density } = useViewTheme();
   // «Historia primero»: sólo cuenta si el bloque trae línea de tiempo; si no, se ve como `sections`.
   const timelineFirst = useIsVariant('timeline-first') && Boolean(block.timeline);
@@ -415,6 +418,20 @@ export function DetailBlock({ block, target }: { block: Detail; target?: SubmitT
               title={rel.title}
               source={`${rel.total} · ${rel.source}`}
               className={clsx('!h-auto', only('related'))}
+              action={
+                rel.add && appNav ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      rel.add && appNav.goThen({ screen: rel.add.screen, prefill: rel.add.prefill }, {})
+                    }
+                    className="view-no-print inline-flex h-9 items-center gap-1.5 rounded-pill bg-primary px-3.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden />
+                    {rel.add.label}
+                  </button>
+                ) : undefined
+              }
             >
               {rel.problem ? (
                 <p className="text-xs text-ink-muted">{rel.problem}</p>

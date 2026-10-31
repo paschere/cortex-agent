@@ -645,6 +645,8 @@ export interface ComputedRecordDetail {
     actions: ComputedAction[];
     /** El bloque detalle al que abre una fila de esta lista, si hay uno para su tabla. */
     opens: string | null;
+    /** «+ Registrar…»: la pantalla que se abre y lo prellenado, ya resuelto con este registro. */
+    add?: { label: string; screen: string; prefill: Record<string, string> } | null;
     problem: string | null;
   }>;
   actions: ComputedAction[];

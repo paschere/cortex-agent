@@ -357,7 +357,19 @@ export function buildDetail(
   const related = block.related.map((rel): ComputedRecordDetail['related'][number] => {
     const blockKey = `${block.id}:${rel.id}`;
     const other = sources.get(rel.tracker);
+    const add =
+      rel.add && opts.writable
+        ? {
+            label: rel.add.label,
+            screen: rel.add.screen,
+            prefill: resolveAddPrefill(
+              rel.add.prefill ?? (rel.match === 'relation' ? { [rel.field]: '{{fila}}' } : {}),
+              row,
+            ),
+          }
+        : null;
     const empty = {
+      add,
       blockKey,
       title: rel.title,
       source: other?.tracker.name ?? rel.tracker,
@@ -497,4 +509,35 @@ function relationId(v: string | number): string | null {
   } catch {
     return null;
   }
+}
+
+const ADD_VAR = /\{\{\s*([a-z][a-z0-9_]{0,31})\s*\}\}/g;
+const ADD_WHOLE = /^\s*\{\{\s*([a-z][a-z0-9_]{0,31})\s*\}\}\s*$/;
+
+/**
+ * Lo prellenado de «+ Registrar…», resuelto con el registro abierto: `{{fila}}`
+ * es este registro como relación (`{id,label}`), `{{campo}}` su valor guardado
+ * tal cual (una relación sigue siendo relación) y lo demás, texto fijo. Lo vacío
+ * no se manda.
+ */
+export function resolveAddPrefill(
+  prefill: Record<string, string | number>,
+  row: { id: string; label: string; values: Record<string, unknown> },
+): Record<string, string> {
+  const read = (name: string, whole: boolean): string => {
+    if (name === 'fila') return whole ? JSON.stringify({ id: row.id, label: row.label }) : row.label;
+    const v = row.values[name];
+    return v === undefined || v === null ? '' : typeof v === 'string' ? v : String(v);
+  };
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(prefill)) {
+    if (typeof raw === 'number') {
+      out[key] = String(raw);
+      continue;
+    }
+    const whole = ADD_WHOLE.exec(raw);
+    const value = whole ? read(whole[1] ?? '', true) : raw.replace(ADD_VAR, (_m, n: string) => read(n, false));
+    if (value !== '') out[key] = value;
+  }
+  return out;
 }
