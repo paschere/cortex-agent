@@ -647,6 +647,22 @@ export const formLinesSchema = z.object({
 });
 export type FormLines = z.infer<typeof formLinesSchema>;
 
+/**
+ * Filas que el documento escaneado trae además de los campos del formulario (las guías
+ * de un manifiesto). La persona las revisa y al enviar van a una tabla hija; ver
+ * form-doc-rows.ts. `parent`: la relación de esa tabla con la fila que crea el formulario.
+ * `key`: el campo que identifica el renglón (sin él no se guarda). `defaults`: valores fijos.
+ */
+export const formDocRowsSchema = z.object({
+  tracker: z.string().regex(TRACKER_SLUG_RE),
+  parent: fieldRef,
+  key: fieldRef,
+  fields: z.array(fieldRef).min(1).max(10),
+  defaults: z.record(fieldRef, z.string().max(200)).optional(),
+  title: z.string().trim().min(1).max(60).default('Filas del documento'),
+});
+export type FormDocRows = z.infer<typeof formDocRowsSchema>;
+
 export const formBlockSchema = z.object({
   ...base,
   type: z.literal('form'),
@@ -703,6 +719,10 @@ export const formBlockSchema = z.object({
    * tiene tres o más campos que se leen de un papel; `false` lo apaga.
    */
   documentScan: z.boolean().optional(),
+  /** Además de los campos, leer del documento una lista de filas para una tabla hija. */
+  documentRows: formDocRowsSchema.optional(),
+  /** Campo `file` del formulario donde queda guardado el documento que se escaneó. */
+  documentFile: fieldRef.optional(),
 });
 
 /** Cómo se llena un formulario hablando (por defecto: dictar). */
@@ -1405,6 +1425,29 @@ export function approvalFor(
 }
 
 /** Las líneas apuntan a una tabla hija con relación al padre, relación a ítems y cantidad numérica. */
+function checkDocRows(
+  d: FormDocRows,
+  tracker: CatalogTracker,
+  bySlug: ReadonlyMap<string, CatalogTracker>,
+  problems: string[],
+  where: string,
+): void {
+  const child = bySlug.get(d.tracker);
+  if (!child) {
+    problems.push(`${where}: la tabla de las filas del documento «${d.tracker}» no existe.`);
+    return;
+  }
+  if (child.opaque) return;
+  const parent = child.fields.find((f) => f.key === d.parent);
+  if (parent?.type !== 'relation' || parent.tracker !== tracker.slug)
+    problems.push(`${where}: «${d.parent}» debe ser una relación de «${d.tracker}» con «${tracker.slug}».`);
+  if (!d.fields.includes(d.key))
+    problems.push(`${where}: el campo clave «${d.key}» debe estar entre los campos de las filas.`);
+  for (const key of [...d.fields, ...Object.keys(d.defaults ?? {})])
+    if (!child.fields.some((f) => f.key === key))
+      problems.push(`${where}: «${d.tracker}» no tiene el campo «${key}».`);
+}
+
 function checkFormLines(
   l: FormLines,
   tracker: CatalogTracker,
@@ -1486,6 +1529,12 @@ export function checkFormExtras(
     const tables = [block.lines, ...(block.moreLines ?? [])].flatMap((x) => (x ? [x.tracker] : []));
     if (new Set(tables).size < tables.length)
       problems.push(`${where}: cada sección de líneas va en su propia tabla hija.`);
+  }
+  if (bySlug && block.documentRows) checkDocRows(block.documentRows, tracker, bySlug, problems, where);
+  if (block.documentFile) {
+    const f = tracker.fields.find((x) => x.key === block.documentFile);
+    if (f?.type !== 'file' || (block.fields.length > 0 && !block.fields.includes(f.key)))
+      problems.push(`${where}: «documentFile» debe ser un campo de archivo del formulario.`);
   }
   const a = block.approval;
   if (a) {

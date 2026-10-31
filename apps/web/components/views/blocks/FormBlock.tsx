@@ -48,6 +48,10 @@ import { VoiceFormAssistant } from '../VoiceFormAssistant';
 import { ConnectionPill } from './ConnectionPill';
 import { FileInput, LocationInput, RelationInput, ScanInput } from './FieldInputs';
 import { type LinesConfig, LinesInput } from './LinesInput';
+import { type DocRowsState, DocRowsInput, mergeDocRows } from './DocRowsInput';
+import { DOC_ROWS_KEY } from '@cortex/agent-tools/src/views/form-doc-rows';
+import { parseFileValue, serializeFileValue } from '@/lib/views/upload-rules';
+import { uploadFile } from '../inputs/FileInput';
 import { NumberInput } from './NumberInput';
 import { ScanDocument, attachedImages, useDocumentScan } from './ScanDocument';
 import { type SubmitFn, correctorFor, recordSaverFor, uploaderFor } from './form-transport';
@@ -291,6 +295,26 @@ export function FormBlock({
         ? `${appApiBase(target)}/screens/${target.screen}/scan`
         : null;
   const readableCount = scannableFields(fields).length;
+  // Lo que el documento escaneado trajo aparte de los campos: sus renglones y el archivo mismo.
+  const [docRows, setDocRows] = useState<DocRowsState | null>(null);
+  const savingDocument = useRef(0);
+  const keepDocument = (file: File) => {
+    const key = block.documentFile;
+    const field = fields.find((f) => f.key === key);
+    if (!key || !field) return;
+    savingDocument.current += 1;
+    uploadFile(target, block.id, key, file, () => {})
+      .then((done) =>
+        setValues((v) => ({
+          ...v,
+          [key]: serializeFileValue([...parseFileValue(v[key]), done], Boolean(field.multiple)),
+        })),
+      )
+      .catch(() => setError('No pude guardar el documento en el registro. Adjúntalo a mano.'))
+      .finally(() => {
+        savingDocument.current -= 1;
+      });
+  };
   const scan = useDocumentScan({
     blockId: block.id,
     fields,
@@ -309,6 +333,8 @@ export function FormBlock({
     enabled: !disabled && !correcting && (block.documentScan ?? readableCount >= 3),
     onApplied: autofill.adopt,
     previous: autofill.previous,
+    onRows: (body) => setDocRows((old) => mergeDocRows(old, body)),
+    onFile: block.documentFile ? keepDocument : undefined,
   });
   const blurField = (key: string) =>
     setErrors((e) => {
@@ -366,6 +392,7 @@ export function FormBlock({
     dirty.current.clear();
     autofill.reset();
     scan.dismiss();
+    setDocRows(null);
   };
 
   /** Sólo lo que se muestra y tiene algo: lo oculto por `showIf` no viaja. Al corregir viajan también los vacíos (para poder borrar). */
@@ -382,6 +409,7 @@ export function FormBlock({
       if (all) payload[key] = values[key] || '[]';
       else if (values[key]) payload[key] = values[key];
     }
+    if (docRows?.rows.length) payload[DOC_ROWS_KEY] = JSON.stringify(docRows.rows);
     return payload;
   };
 
@@ -422,6 +450,10 @@ export function FormBlock({
   const send = () => {
     if (disabled || !submit) return;
     setError(null);
+    if (savingDocument.current > 0) {
+      setError('Aún se está guardando el documento. Espera un momento y envía.');
+      return;
+    }
     setAttempted(true);
     const found = check();
     if (Object.keys(found).length) return goToFirstError(found);
@@ -1280,6 +1312,9 @@ export function FormBlock({
                 />
               </div>
             ))}
+          {docRows && !correcting && (
+            <DocRowsInput state={docRows} onChange={setDocRows} large={operator} />
+          )}
           {dup.pending && (
             <div
               ref={dupRef}

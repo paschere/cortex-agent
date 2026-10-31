@@ -70,6 +70,7 @@ import {
   normalizeLines,
   parseLinesValue,
 } from './form-lines';
+import { DOC_ROWS_KEY, MAX_DOC_ROWS, type DocRow, normalizeDocRows, parseDocRows } from './form-doc-rows';
 import { UNDO_ACTION_ID } from './row-history-shape';
 import {
   PLATFORM_SOURCES,
@@ -81,6 +82,7 @@ import {
   APPROVE_ACTION_ID,
   type CatalogTracker,
   type FormBlock,
+  type FormDocRows,
   type FormLines,
   REJECT_ACTION_ID,
   type RowAction,
@@ -1468,6 +1470,7 @@ export async function submitViewForm(
 
   // Las líneas (ítems con cantidad) viajan aparte de los campos de la tabla, una llave por sección.
   const sections = readLineSections(block, input.values);
+  const docRows = readDocRows(block, input.values);
 
   const clientId = input.clientId?.trim().slice(0, 64) || null;
   const replay = async (): Promise<SubmitOutcome | null> => {
@@ -1547,10 +1550,11 @@ export async function submitViewForm(
   if (error) throw error;
   const rowId = String((row as { id: string }).id);
 
+  let docNote = '';
   // Las líneas: una fila hija por ítem, un insert por sección. Si algo falla, la fila
   // del formulario no se queda sola: se borra (con lo ya creado) y el error le llega a la persona.
   const made: Array<{
-    cfg: FormLines;
+    cfg: { tracker: string };
     ids: string[];
     trackerId: string;
     rows: Array<{ id: string; label: string; values: Record<string, unknown> }>;
@@ -1570,6 +1574,19 @@ export async function submitViewForm(
         restrictRelations: !(input.submittedBy && input.submittedByKind !== 'app_user'),
       });
       made.push({ cfg: sec.cfg, ...got });
+    }
+    if (block.documentRows && docRows.length) {
+      const got = await insertDocRows(db, {
+        view,
+        cfg: block.documentRows,
+        parent: { id: rowId, label: rowLabel(tracker.fields, values), tracker },
+        rows: docRows,
+        submittedBy: input.submittedBy,
+        byApp,
+        viewer: input.viewer,
+      });
+      made.push({ cfg: block.documentRows, ...got });
+      docNote = got.note;
     }
   } catch (err) {
     for (const m of made)
@@ -1664,12 +1681,122 @@ export async function submitViewForm(
 
   return {
     rowId,
-    message: block.successMessage,
+    message: `${block.successMessage}${docNote}`,
     duplicate,
     editToken,
     editUntil: editToken
       ? editDeadline((sub as { created_at: string }).created_at, editWindowOf(block))
       : null,
+  };
+}
+
+function readDocRows(block: FormBlock, values: Record<string, unknown>): DocRow[] {
+  const cfg = block.documentRows;
+  if (!cfg) return [];
+  const parsed = parseDocRows(values[DOC_ROWS_KEY]);
+  if (!parsed) throw new ValidationError('La lista leída del documento no se entiende. Léelo otra vez.');
+  const rows = normalizeDocRows(parsed, cfg);
+  if (rows.length > MAX_DOC_ROWS)
+    throw new ValidationError(`«${cfg.title}» admite hasta ${MAX_DOC_ROWS} filas por envío.`);
+  return rows;
+}
+
+/**
+ * Escribe las filas leídas de un documento en la tabla hija. Una relación (el cliente de la
+ * guía) viene como texto: se une a la fila de la otra tabla sólo si el nombre coincide con
+ * UNA. Lo que falte no detiene el envío (`lenient`): el papel no siempre lo trae, la fila
+ * queda para completarla y `note` le dice a la persona cuántas son.
+ */
+async function insertDocRows(
+  db: SupabaseClient,
+  input: {
+    view: CustomViewRow;
+    cfg: FormDocRows;
+    parent: { id: string; label: string; tracker: TrackerRow };
+    rows: DocRow[];
+    submittedBy: string | null;
+    byApp: boolean;
+    viewer?: string | null;
+  },
+): Promise<{
+  ids: string[];
+  trackerId: string;
+  rows: Array<{ id: string; label: string; values: Record<string, unknown> }>;
+  note: string;
+}> {
+  const { cfg } = input;
+  const child = await trackerForBlock(db, cfg.tracker);
+  assertRowWriteAllowed(child, { creating: true, after: {} });
+  const relations = child.fields.filter(
+    (f) => f.type === 'relation' && f.tracker && cfg.fields.includes(f.key) && f.key !== cfg.parent,
+  );
+  const allowed = new Set([
+    ...trackersOf(input.view.spec),
+    input.parent.tracker.slug,
+    ...relations.map((f) => f.tracker ?? ''),
+  ]);
+  const found = new Map<string, { id: string; label: string } | null>();
+  const resolve = async (target: string, label: string) => {
+    const memo = `${target}\n${label.toLowerCase()}`;
+    if (found.has(memo)) return found.get(memo) ?? null;
+    const other = await getTrackerBySlug(db, target);
+    const { data, error } = other
+      ? await db
+          .from('tracker_rows')
+          .select('id, label')
+          .eq('tracker_id', other.id)
+          .ilike('label', label.replace(/[\\%_]/g, '\\$&'))
+          .limit(2)
+      : { data: [], error: null };
+    if (error) throw error;
+    const hit = data?.length === 1 ? (data[0] as { id: string; label: string }) : null;
+    found.set(memo, hit);
+    return hit;
+  };
+  let incomplete = 0;
+  const rows: Array<Record<string, unknown>> = [];
+  for (const row of input.rows) {
+    const raw: Record<string, unknown> = {
+      ...cfg.defaults,
+      ...row,
+      [cfg.parent]: JSON.stringify({ id: input.parent.id, label: input.parent.label }),
+    };
+    for (const f of relations) {
+      const text = row[f.key];
+      delete raw[f.key];
+      const hit = text ? await resolve(f.tracker as string, text) : null;
+      if (hit) raw[f.key] = JSON.stringify(hit);
+    }
+    const values = await prepareValues(db, child, raw, {
+      applyDefaults: true,
+      lenient: true,
+      viewer: input.viewer,
+      allowedRelationTrackers: allowed,
+    });
+    if (child.fields.some((f) => f.required && !values[f.key])) incomplete += 1;
+    rows.push({
+      tracker_id: child.id,
+      label: rowLabel(child.fields, values),
+      values,
+      created_by: input.byApp ? null : input.submittedBy,
+      ...(input.byApp && input.submittedBy ? { created_by_app_user: input.submittedBy } : {}),
+    });
+  }
+  const { data, error } = await db.from('tracker_rows').insert(rows).select('id');
+  if (error) throw error;
+  const ids = ((data ?? []) as Array<{ id: string }>).map((r) => String(r.id));
+  const stored = rows.map((r) => r.values as Record<string, string | number>);
+  await applyDuplicateRule(db, child.id, stored);
+  const total = `${ids.length} ${ids.length === 1 ? 'fila guardada' : 'filas guardadas'}`;
+  return {
+    ids,
+    trackerId: child.id,
+    rows: ids.map((id, i) => ({
+      id,
+      label: String(rows[i]?.label ?? ''),
+      values: stored[i] ?? {},
+    })),
+    note: ` ${cfg.title}: ${total}${incomplete ? `, ${incomplete} por completar` : ''}.`,
   };
 }
 

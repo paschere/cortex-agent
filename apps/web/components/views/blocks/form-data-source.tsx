@@ -24,6 +24,10 @@ export interface ScanResponse {
   suggestions: Record<string, Suggestion>;
   read: number;
   note: string | null;
+  rows?: Array<Record<string, string>>;
+  rowFields?: Array<{ key: string; label: string; type: string; options?: string[] }>;
+  rowsTitle?: string;
+  rowsKey?: string;
 }
 
 export interface FormDataSource {

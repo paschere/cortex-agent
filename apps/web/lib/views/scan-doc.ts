@@ -1,6 +1,8 @@
 import 'server-only';
 import {
   type CustomViewRow,
+  type ScanDelivered,
+  getTrackerBySlug,
   NO_THINKING,
   type Suggestion,
   checkMeter,
@@ -46,7 +48,9 @@ export const SCAN_MAX_BYTES = 6 * 1024 * 1024;
 export const SCAN_PER_MINUTE = 6;
 export const SCAN_PER_DAY = 200;
 const TIME_LIMIT_MS = 25_000;
-const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+/** Con renglones (un manifiesto entero) la lectura es bastante más larga. */
+const ROWS_TIME_LIMIT_MS = 50_000;
+const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 
 export function isScanImage(mime: string): boolean {
   return IMAGE_MIMES.has((mime.split(';')[0] ?? '').trim().toLowerCase());
@@ -62,6 +66,29 @@ export interface ScanOutput {
   /** Cuántos campos leyó el modelo (antes de mezclar con lo escrito). */
   read: number;
   note: string | null;
+  /** Las filas leídas para la tabla hija (ver `documentRows`), con cómo mostrarlas. */
+  rows?: Array<Record<string, string>>;
+  rowFields?: Array<{ key: string; label: string; type: string; options?: string[] }>;
+  rowsTitle?: string;
+  rowsKey?: string;
+}
+
+/** Cada renglón en la forma que acepta su campo; una relación queda como el nombre impreso. */
+function shapeScanRows(
+  fields: Array<{ key: string; label: string; type: string; options?: string[] }>,
+  delivered: ScanDelivered[],
+): Array<Record<string, string>> {
+  return delivered.map((row) => {
+    const out: Record<string, string> = Object.fromEntries(
+      Object.entries(shapeScan(fields, row)).map(([k, s]) => [k, s.value]),
+    );
+    for (const f of fields) {
+      const raw = row[f.key];
+      if (f.type === 'relation' && raw !== null && raw !== undefined)
+        out[f.key] = String(raw).trim().slice(0, 200);
+    }
+    return out;
+  });
 }
 
 export async function scanDocument(input: {
@@ -75,7 +102,7 @@ export async function scanDocument(input: {
 }): Promise<ScanOutput> {
   const { db } = input;
   if (!isScanImage(input.image.mime))
-    throw new ScanError('Sólo leo fotos (JPG, PNG o WebP). Toma la foto otra vez.', 400);
+    throw new ScanError('Sólo leo fotos (JPG, PNG o WebP) y PDF. Prueba con otro archivo.', 400);
   if (input.image.bytes.byteLength === 0) throw new ScanError('La foto llegó vacía.', 400);
   if (input.image.bytes.byteLength > SCAN_MAX_BYTES)
     throw new ScanError('La foto pesa demasiado. Tómala otra vez más cerca del documento.', 413);
@@ -102,8 +129,19 @@ export async function scanDocument(input: {
   if (isRefused(await checkMeter(db, 'answers')))
     throw new ScanError('El plan de la empresa no tiene respuestas disponibles.', 429);
 
+  const block = input.view.spec.blocks.find((b) => b.id === input.blockId);
+  const rowsCfg = block?.type === 'form' ? block.documentRows : undefined;
+  const child = rowsCfg ? await getTrackerBySlug(db, rowsCfg.tracker) : null;
+  const rowFields = rowsCfg
+    ? rowsCfg.fields.flatMap((k) => {
+        const f = child?.fields.find((x) => x.key === k);
+        return f ? [f] : [];
+      })
+    : [];
+  const wantRows = rowFields.length > 0;
+
   const started = Date.now();
-  const timeout = AbortSignal.timeout(TIME_LIMIT_MS);
+  const timeout = AbortSignal.timeout(wantRows ? ROWS_TIME_LIMIT_MS : TIME_LIMIT_MS);
   const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout;
   const schema = z.object({
     values: z.object(
@@ -112,6 +150,9 @@ export async function scanDocument(input: {
       ),
     ),
     note: z.string().max(200).optional(),
+    ...(wantRows
+      ? { rows: z.array(z.record(z.union([z.string(), z.number(), z.null()]))).optional() }
+      : {}),
   });
   const meta = { block: input.blockId, fields: fields.length };
   try {
@@ -119,18 +160,24 @@ export async function scanDocument(input: {
       model: simpleModel(),
       experimental_providerMetadata: NO_THINKING,
       schema,
-      maxTokens: 1500,
+      maxTokens: wantRows ? 8000 : 1500,
       abortSignal: signal,
       system: SCAN_HOW_TO,
       messages: [
         {
           role: 'user',
           content: [
-            {
-              type: 'image',
-              image: Buffer.from(input.image.bytes).toString('base64'),
-              mimeType: input.image.mime.split(';')[0] ?? 'image/jpeg',
-            },
+            (input.image.mime.split(';')[0] ?? '').trim().toLowerCase() === 'application/pdf'
+              ? {
+                  type: 'file' as const,
+                  data: Buffer.from(input.image.bytes).toString('base64'),
+                  mimeType: 'application/pdf',
+                }
+              : {
+                  type: 'image' as const,
+                  image: Buffer.from(input.image.bytes).toString('base64'),
+                  mimeType: input.image.mime.split(';')[0] ?? 'image/jpeg',
+                },
             {
               type: 'text',
               text: JSON.stringify({
@@ -141,6 +188,19 @@ export async function scanDocument(input: {
                   tipo: f.type,
                   ...(f.options?.length ? { opciones: f.options } : {}),
                 })),
+                ...(wantRows
+                  ? {
+                      filas: {
+                        instruccion: `Además, en «rows» devuelve UNA fila por cada renglón de «${rowsCfg?.title}» que se vea en el documento, con estas claves. Si una no aparece en el renglón, null. No omitas renglones.`,
+                        campos: rowFields.map((f) => ({
+                          clave: f.key,
+                          nombre: f.label,
+                          tipo: f.type === 'relation' ? 'text' : f.type,
+                          ...(f.options?.length ? { opciones: f.options } : {}),
+                        })),
+                      },
+                    }
+                  : {}),
               }),
             },
           ],
@@ -152,6 +212,9 @@ export async function scanDocument(input: {
       object.values as Record<string, string | number | null | undefined>,
     );
     const read = Object.keys(suggestions).length;
+    const rows = wantRows
+      ? shapeScanRows(rowFields, (object as { rows?: ScanDelivered[] }).rows ?? [])
+      : [];
     await writeAuditEvent({
       db,
       userId: input.userId as UUID,
@@ -161,12 +224,28 @@ export async function scanDocument(input: {
       latencyMs: Date.now() - started,
       surface: 'web',
       decision: 'allowed',
-      metadata: { ...meta, read },
+      metadata: { ...meta, read, rows: rows.length },
     });
     return {
       suggestions,
       read,
-      note: read === 0 ? (object.note ?? 'No encontré datos en esa foto.') : (object.note ?? null),
+      note:
+        read === 0 && rows.length === 0
+          ? (object.note ?? 'No encontré datos en ese documento.')
+          : (object.note ?? null),
+      ...(wantRows && rowsCfg
+        ? {
+            rows,
+            rowFields: rowFields.map((f) => ({
+              key: f.key,
+              label: f.label,
+              type: f.type,
+              ...(f.options?.length ? { options: f.options } : {}),
+            })),
+            rowsTitle: rowsCfg.title,
+            rowsKey: rowsCfg.key,
+          }
+        : {}),
     };
   } catch (err) {
     logger.warn({ err, view: input.view.id }, 'scan: model turn failed');

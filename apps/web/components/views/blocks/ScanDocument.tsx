@@ -32,6 +32,8 @@ export interface ScanFieldLike {
   lookup?: { via: string; field: string; editable?: boolean };
 }
 
+const PDF_MAX_BYTES = 4 * 1024 * 1024; // lo que deja pasar la plataforma en una petición
+
 export type ScanPhase = 'idle' | 'reading' | 'done' | 'error';
 
 export function useDocumentScan(opts: {
@@ -45,8 +47,12 @@ export function useDocumentScan(opts: {
   /** Lo que se hizo con las sugerencias: el formulario las marca como sugeridas. */
   onApplied: (applied: Record<string, string>, source: string) => void;
   previous: () => Record<string, string>;
+  /** Los renglones que el documento trajo para la tabla hija (ver `documentRows`). */
+  onRows?: (body: ScanResponse) => void;
+  /** El archivo elegido o fotografiado, para guardarlo con el registro. */
+  onFile?: (file: File) => void;
 }) {
-  const { blockId, fields, setValues, url, enabled, onApplied, previous } = opts;
+  const { blockId, fields, setValues, url, enabled, onApplied, previous, onRows, onFile } = opts;
   const demo = useFormDataSource();
   const valuesRef = useRef(opts.values);
   valuesRef.current = opts.values;
@@ -60,8 +66,13 @@ export function useDocumentScan(opts: {
   const available = enabled && Boolean(url || demo?.scan);
 
   const scan = useCallback(
-    async (original: Blob) => {
+    async (original: Blob, how: { keep?: boolean } = {}) => {
       if (!available) return;
+      if (original.type === 'application/pdf' && original.size > PDF_MAX_BYTES) {
+        setPhase('error');
+        setMessage('Ese PDF pesa más de 4 MB. Envía las páginas como fotos o llena a mano.');
+        return;
+      }
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         setPhase('error');
         setMessage(
@@ -79,11 +90,18 @@ export function useDocumentScan(opts: {
         const file =
           original instanceof File
             ? await compressImage(original)
-            : await compressImage(new File([original], 'documento.jpg', { type: original.type }));
+            : await compressImage(
+                new File(
+                  [original],
+                  original.type === 'application/pdf' ? 'documento.pdf' : 'documento.jpg',
+                  { type: original.type },
+                ),
+              );
         setThumb((old) => {
           if (old) URL.revokeObjectURL(old);
-          return URL.createObjectURL(file);
+          return file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
         });
+        if (how.keep) onFile?.(file);
         let body: ScanResponse | null = null;
         if (demo?.scan) body = await demo.scan(file);
         else if (url) {
@@ -112,8 +130,13 @@ export function useDocumentScan(opts: {
           setValues(merged.applied);
           onApplied(merged.applied, 'documento');
         }
+        if (body.rows?.length) onRows?.(body);
         setPhase('done');
-        setMessage(scanMessage(merged, body.read) + (body.note ? ` ${body.note}` : ''));
+        setMessage(
+          scanMessage(merged, body.read) +
+            (body.rows?.length ? ` ${body.rowsTitle}: ${body.rows.length} leídas, revísalas.` : '') +
+            (body.note ? ` ${body.note}` : ''),
+        );
       } catch (err) {
         if ((err as { name?: string }).name === 'AbortError') return;
         reportNetworkFailure();
@@ -121,7 +144,7 @@ export function useDocumentScan(opts: {
         setMessage('Se cortó la conexión mientras se leía la foto. Inténtalo otra vez.');
       }
     },
-    [available, blockId, demo, fields, onApplied, previous, setValues, url],
+    [available, blockId, demo, fields, onApplied, onFile, onRows, previous, setValues, url],
   );
 
   /** Lee una foto que ya está adjunta (una dirección real o una guardada en el teléfono). */
@@ -156,7 +179,7 @@ export function attachedImages(
   for (const f of fields) {
     if (f.type !== 'file') continue;
     for (const file of parseFileValue(values[f.key])) {
-      if (!file.mime.startsWith('image/')) continue;
+      if (!file.mime.startsWith('image/') && file.mime !== 'application/pdf') continue;
       const src = isPendingUrl(file.url) ? previewUrl(file.url) : file.url;
       if (src) out.push({ field: f.key, label: f.label, name: file.name, src });
     }
@@ -191,7 +214,7 @@ export function ScanDocument({
   const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (file) void scan.scan(file);
+    if (file) void scan.scan(file, { keep: true });
   };
 
   if (compact)
@@ -236,7 +259,7 @@ export function ScanDocument({
         <input
           ref={gallery}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
           className="sr-only"
           tabIndex={-1}
           aria-label="Elegir la foto del documento de la galería"
@@ -349,7 +372,7 @@ export function ScanDocument({
       <input
         ref={gallery}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
         className="sr-only"
         tabIndex={-1}
         aria-label="Elegir la foto del documento de la galería"

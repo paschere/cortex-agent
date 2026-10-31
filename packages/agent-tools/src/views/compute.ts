@@ -405,6 +405,8 @@ export type ComputedBlock =
       };
       /** true/false si el spec lo fija; ausente = automático (ver `documentScan` del spec). */
       documentScan?: boolean;
+      /** Campo de archivo donde queda el documento escaneado. */
+      documentFile?: string;
       fields: ComputedFormField[];
       /** Listas de «Buscar en una lista» por fuente (sólo las columnas usadas). */
       matchTables?: Record<string, MatchTable>;
@@ -2654,6 +2656,7 @@ function computeBlockBody(
         voice: formVoiceOf(block),
         ...(block.afterSubmit ? { afterSubmit: block.afterSubmit } : {}),
         ...(block.documentScan !== undefined ? { documentScan: block.documentScan } : {}),
+        ...(block.documentFile ? { documentFile: block.documentFile } : {}),
         lines: block.lines ? linesOut(block.lines, sources) : null,
         ...(block.moreLines?.length
           ? { moreLines: block.moreLines.map((l) => linesOut(l, sources)) }
