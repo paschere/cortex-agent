@@ -11,7 +11,13 @@
  *   - el viaje: el navegador manda las líneas dentro de `values` bajo la llave
  *     reservada `__lines` como JSON; ningún campo de tabla puede llamarse así.
  *   - `normalizeLines`: ordena la entrada, suma el mismo ítem repetido y
- *     descarta lo que no sirve; `checkLines`: topes y cantidades.
+ *     descarta lo que no sirve; `checkLines`: topes, cantidades y fotos.
+ *
+ * FOTO POR LÍNEA (opcional, puede ser obligatoria): cada línea lleva en `photo` el
+ * valor de un campo `file` de la tabla hija (el JSON {url,name,mime,size} que ya
+ * produce la subida de archivos de los formularios). Al repetirse un ítem, las
+ * fotos de las dos líneas se juntan en el mismo campo (los campos `file` aceptan
+ * varios archivos), así que ninguna foto se pierde.
  */
 
 export const LINES_KEY = '__lines';
@@ -49,6 +55,11 @@ export interface FormLine {
   item: { id: string; label: string };
   qty: number;
   /**
+   * La foto de la línea: el valor del campo `file` de la tabla hija (JSON de un archivo o
+   * de varios). Vacío/ausente = sin foto.
+   */
+  photo?: string;
+  /**
    * Lo que la tabla hija trae de esa fila (la tarifa del equipo): sólo para mostrar el
    * monto al instante en el navegador. El servidor lo ignora y lo recalcula de la base.
    */
@@ -60,6 +71,41 @@ export interface FormLinesConfig {
   max?: number;
   /** Cantidades con decimales (kilos, metros). Por omisión, enteras. */
   decimals?: boolean;
+  /** Cada línea debe traer su foto (sólo tiene sentido si la sección pide foto). */
+  photoRequired?: boolean;
+}
+
+/** Tope de fotos por línea al juntar las de un ítem repetido (el mismo de un campo `file` múltiple). */
+export const MAX_LINE_PHOTOS = 5;
+const MAX_PHOTO_CHARS = 20_000;
+
+/** Los archivos que un valor de foto menciona (objetos con `url`), tolerando un objeto suelto o un arreglo. */
+function photoFiles(raw: string | undefined): Array<Record<string, unknown>> {
+  const s = (raw ?? '').trim();
+  if (!s) return [];
+  try {
+    const data: unknown = JSON.parse(s);
+    return (Array.isArray(data) ? data : [data]).filter(
+      (f): f is Record<string, unknown> =>
+        Boolean(f) && typeof f === 'object' && typeof (f as { url?: unknown }).url === 'string' && Boolean((f as { url: string }).url),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** ¿La línea trae al menos una foto? (una foto pendiente de subir también cuenta). */
+export function hasLinePhoto(l: Pick<FormLine, 'photo'>): boolean {
+  return photoFiles(l.photo).length > 0;
+}
+
+/** Junta dos valores de foto sin repetir archivos (por URL), hasta `MAX_LINE_PHOTOS`. */
+export function mergePhotos(a: string | undefined, b: string | undefined): string | undefined {
+  const all = [...photoFiles(a), ...photoFiles(b)];
+  const seen = new Set<string>();
+  const uniq = all.filter((f) => !seen.has(String(f.url)) && seen.add(String(f.url))).slice(0, MAX_LINE_PHOTOS);
+  if (!uniq.length) return undefined;
+  return JSON.stringify(uniq.length === 1 ? uniq[0] : uniq);
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -85,9 +131,15 @@ export function parseLinesValue(raw: unknown): FormLine[] | null {
     const qty = typeof e.qty === 'number' ? e.qty : Number(e.qty);
     if (!Number.isFinite(qty)) return null;
     const pick = cleanPick((entry as { pick?: unknown }).pick);
+    const rawPhoto = (entry as { photo?: unknown }).photo;
+    const photo =
+      typeof rawPhoto === 'string' && rawPhoto.length <= MAX_PHOTO_CHARS
+        ? mergePhotos(rawPhoto, undefined)
+        : undefined;
     out.push({
       item: { id, label: typeof e.item?.label === 'string' ? e.item.label.slice(0, 200) : '' },
       qty,
+      ...(photo ? { photo } : {}),
       ...(pick ? { pick } : {}),
     });
   }
@@ -105,17 +157,36 @@ function cleanPick(raw: unknown): Record<string, string | number> | undefined {
 
 export function serializeLines(lines: FormLine[]): string {
   return JSON.stringify(
-    lines.map((l) => ({ item: l.item, qty: l.qty, ...(l.pick ? { pick: l.pick } : {}) })),
+    lines.map((l) => ({
+      item: l.item,
+      qty: l.qty,
+      ...(l.photo ? { photo: l.photo } : {}),
+      ...(l.pick ? { pick: l.pick } : {}),
+    })),
   );
 }
 
-/** Suma el mismo ítem repetido, deja el orden de la primera aparición y quita las cantidades en cero. */
+/**
+ * Suma el mismo ítem repetido (juntando también sus fotos), deja el orden de la primera
+ * aparición y quita las cantidades en cero.
+ */
 export function normalizeLines(lines: FormLine[]): FormLine[] {
   const byId = new Map<string, FormLine>();
   for (const l of lines) {
     const hit = byId.get(l.item.id);
-    if (hit) hit.qty = Math.round((hit.qty + l.qty) * 1e6) / 1e6;
-    else byId.set(l.item.id, { item: { ...l.item }, qty: l.qty, ...(l.pick ? { pick: l.pick } : {}) });
+    if (hit) {
+      hit.qty = Math.round((hit.qty + l.qty) * 1e6) / 1e6;
+      const photo = mergePhotos(hit.photo, l.photo);
+      if (photo) hit.photo = photo;
+    } else {
+      const photo = mergePhotos(l.photo, undefined);
+      byId.set(l.item.id, {
+        item: { ...l.item },
+        qty: l.qty,
+        ...(photo ? { photo } : {}),
+        ...(l.pick ? { pick: l.pick } : {}),
+      });
+    }
   }
   return [...byId.values()].filter((l) => l.qty !== 0);
 }
@@ -139,6 +210,8 @@ export function checkLines(
     if (l.qty > MAX_LINE_QTY) return `${name}: la cantidad de ${who} es demasiado grande.`;
     if (!cfg.decimals && !Number.isInteger(l.qty))
       return `${name}: la cantidad de ${who} tiene que ser un número entero.`;
+    if (cfg.photoRequired && !hasLinePhoto(l))
+      return `${name}: falta la foto de ${who}.`;
   }
   return null;
 }

@@ -5,6 +5,7 @@ import { ACCOUNTING_EVENTS, ACCOUNTING_EVENT_LABEL, accountingEventTableSlug } f
 import { ACCOUNTING_PROVIDER_IDS } from '../../accounting/types';
 import { invoiceBodySchema } from './invoice-draft-spec';
 import { creditNoteBodySchema, customerBodySchema, receiptBodySchema } from './outbox-spec';
+import { LEDGER_CATEGORIES } from '../../ledger/types';
 import { REPORT_MAX_RECIPIENTS, reportBodySchema } from './report-spec';
 
 /**
@@ -389,6 +390,26 @@ export const automationActionSchema = z.discriminatedUnion('type', [
     where: z.array(filterSchema).max(4).optional(),
   }),
   /**
+   * CUENTA POR PAGAR PROBABLE: el costo de la fila (`amount`) queda en el libro
+   * de plata como un pago esperado a `counterparty`, vence `dueDays` después de
+   * `date` (vacío = hoy en Bogotá). Idempotente por fila: editar la fila
+   * actualiza el mismo movimiento; costo en cero lo anula. Ver ledger-payable.ts.
+   */
+  z.object({
+    type: z.literal('ledger_payable'),
+    ...branch,
+    /** Campo (number/money) de la fila con el valor. */
+    amount: fieldKey,
+    currency: z.string().trim().regex(/^[A-Z]{3}$/, 'Tres letras: COP, USD.').default('COP'),
+    /** A quién se le debe: texto con `{{campos}}` (`{{proveedor}}`). */
+    counterparty: z.string().trim().min(1).max(200),
+    description: z.string().trim().min(1).max(300),
+    /** Campo (date) de la fila con la fecha del costo; vacío = hoy. */
+    date: fieldKey.optional(),
+    dueDays: z.number().int().min(0).max(180).default(30),
+    category: z.enum(LEDGER_CATEGORIES).default('proveedores'),
+  }),
+  /**
    * REPORTE QUE SALE SOLO: arma una tabla (consulta agregada sobre una tabla de
    * la app o una pantalla) y la manda por correo a direcciones y/o roles, con la
    * tabla en el cuerpo y Excel y/o PDF adjuntos. Ver report-spec.ts.
@@ -442,6 +463,7 @@ export const ACTION_LABEL: Record<ActionType, string> = {
   update_related: 'Cambiar filas relacionadas (subir o bajar por una relación)',
   update_rows: 'Cambiar filas de otra tabla por filtro',
   rollup: 'Acumular en la fila padre (suma, conteo, promedio…)',
+  ledger_payable: 'Anotar el costo como cuenta por pagar en el libro de plata',
   link_rows: 'Casar con otra tabla por una clave (deja puesta la relación)',
   report: 'Mandar un reporte por correo (tabla + Excel / PDF)',
   accounting_draft_invoice: 'Preparar una prefactura para Siigo (por revisar)',
@@ -622,6 +644,9 @@ function flowProblems(input: AutomationInput, rowless: boolean): string[] {
             `Acción ${n}: ${ROLLUP_OP_LABEL[a.op]} necesita \`field\` (el campo de las hijas).`,
           );
         if (rowless) out.push(`Acción ${n}: acumular necesita una fila de partida (la hija).`);
+        break;
+      case 'ledger_payable':
+        if (rowless) out.push(`Acción ${n}: anotar una cuenta por pagar necesita una fila de partida (el costo).`);
         break;
       case 'wait':
         if (a.stillIf?.length && rowless)

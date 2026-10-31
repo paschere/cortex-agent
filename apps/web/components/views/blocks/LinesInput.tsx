@@ -9,10 +9,14 @@ import {
   parseLinesValue,
   serializeLines,
 } from '@cortex/agent-tools/src/views/form-lines';
+import { compressImage } from '@/lib/views/compress-image';
+import { isPendingUrl, previewUrl, stashBlob } from '@/lib/views/offline-files';
+import { checkUpload, parseFileValue, serializeFileValue } from '@/lib/views/upload-rules';
 import { clsx } from 'clsx';
-import { Minus, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Camera, Loader2, Minus, Plus, Trash2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import type { SubmitTarget } from '../ViewCanvas';
+import { OfflineUploadError, uploadFile } from '../inputs/FileInput';
 import { NumberInput } from './NumberInput';
 import { Initial, RelationSheet, useRelationSource } from './RelationPicker';
 
@@ -35,6 +39,8 @@ export interface LinesConfig {
   min?: number;
   max?: number;
   decimals?: boolean;
+  /** Foto por línea (se guarda en un campo `file` de la tabla hija); `required`: sin ella no se envía. */
+  photo?: { label: string; required: boolean };
   /** Monto por línea (fórmula de la tabla hija), calculado aquí al instante. */
   amount?: {
     key: string;
@@ -44,6 +50,134 @@ export interface LinesConfig {
     fields: Array<{ key: string; label: string; type: string; formula?: string; lookup?: { via: string; field: string; editable?: boolean }; percent?: boolean; options?: string[] }>;
     format: 'money' | 'number';
   };
+}
+
+/**
+ * La foto de UNA línea: un botón de cámara (trasera en el teléfono) que se vuelve
+ * miniatura. Sube por la misma ruta que los campos `file`; sin señal la guarda en
+ * el teléfono y sube al enviar (ver offline-files.ts).
+ */
+function LinePhoto({
+  value,
+  onChange,
+  label,
+  required,
+  who,
+  target,
+  blockId,
+  fieldKey,
+  large,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  label: string;
+  required: boolean;
+  /** El nombre de la línea, para los lectores de pantalla. */
+  who: string;
+  target: SubmitTarget;
+  blockId: string;
+  fieldKey: string;
+  large?: boolean;
+}) {
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const files = parseFileValue(value);
+  const first = files[0];
+
+  async function handle(list: FileList | null) {
+    const original = list?.[0];
+    if (!original) return;
+    setError(null);
+    const pre = checkUpload(original, 'image');
+    if (!pre.ok && !original.type.startsWith('image/')) return setError(pre.error);
+    setBusy(true);
+    try {
+      const file = original.type.startsWith('image/') ? await compressImage(original) : original;
+      const check = checkUpload(file, 'image');
+      if (!check.ok) return setError(check.error);
+      const saveHere = async () => onChange(serializeFileValue([await stashBlob(file as File)], false));
+      const live = target.kind === 'app' || target.kind === 'custom_app' || target.kind === 'public';
+      if (live && typeof navigator !== 'undefined' && !navigator.onLine) return await saveHere();
+      try {
+        onChange(serializeFileValue([await uploadFile(target, blockId, fieldKey, file, () => {})], false));
+      } catch (e) {
+        if (e instanceof OfflineUploadError) await saveHere();
+        else setError(e instanceof Error ? e.message : 'No se pudo subir la foto.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const size = large ? 'h-14 w-14' : 'h-11 w-11';
+  return (
+    <span className="flex items-center gap-2">
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(e) => {
+          void handle(e.target.files);
+          e.target.value = '';
+        }}
+      />
+      {first ? (
+        <span className="relative">
+          <button
+            type="button"
+            aria-label={`Cambiar la foto de ${who}`}
+            onClick={() => cameraRef.current?.click()}
+            className="block"
+          >
+            {(previewUrl(first.url) ?? !isPendingUrl(first.url)) ? (
+              <img
+                src={previewUrl(first.url) ?? first.url}
+                alt={`${label} de ${who}`}
+                className={clsx(size, 'rounded-sm border border-border-strong object-cover')}
+              />
+            ) : (
+              <span className={clsx(size, 'grid place-items-center rounded-sm border border-border-strong text-ink-muted')}>
+                <Camera className="h-5 w-5" aria-hidden />
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            aria-label={`Quitar la foto de ${who}`}
+            onClick={() => onChange('')}
+            className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-ink text-white shadow"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          aria-label={`${label} de ${who}${required ? ' (obligatoria)' : ''}`}
+          onClick={() => cameraRef.current?.click()}
+          className={clsx(
+            'inline-flex items-center gap-1.5 rounded-pill border-2 px-3 font-semibold transition-colors disabled:opacity-50',
+            large ? 'min-h-12 text-base' : 'min-h-11 text-sm',
+            required
+              ? 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
+              : 'border-border-strong text-ink-muted hover:bg-surface-2',
+          )}
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Camera className="h-4 w-4" aria-hidden />}
+          {label}
+          {required && <span aria-hidden className="text-rose">*</span>}
+        </button>
+      )}
+      {first && isPendingUrl(first.url) && (
+        <span className="text-micro leading-tight text-amber">Se sube al enviar</span>
+      )}
+      {error && <span role="alert" className="text-micro font-semibold text-rose">{error}</span>}
+    </span>
+  );
 }
 
 export function LinesInput({
@@ -81,6 +215,14 @@ export function LinesInput({
   const write = (next: FormLine[]) => {
     onChange(next.length ? serializeLines(next) : '');
   };
+  const setPhoto = (itemId: string, photo: string) =>
+    write(
+      lines.map((l) => {
+        if (l.item.id !== itemId) return l;
+        const { photo: _old, ...rest } = l;
+        return photo ? { ...rest, photo } : rest;
+      }),
+    );
   const setQty = (itemId: string, qty: number) =>
     write(lines.map((l) => (l.item.id === itemId ? { ...l, qty } : l)));
   const step = config.decimals ? 0.5 : 1;
@@ -183,6 +325,21 @@ export function LinesInput({
                   </button>
                 </span>
               </span>
+              {config.photo && (
+                <span className="order-6 w-full">
+                  <LinePhoto
+                    value={l.photo ?? ''}
+                    onChange={(next) => setPhoto(l.item.id, next)}
+                    label={config.photo.label}
+                    required={config.photo.required}
+                    who={l.item.label || 'la línea'}
+                    target={target}
+                    blockId={blockId}
+                    fieldKey={fieldKey}
+                    large={large}
+                  />
+                </span>
+              )}
             </li>
           ))}
         </ul>

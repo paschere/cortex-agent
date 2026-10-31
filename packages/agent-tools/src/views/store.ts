@@ -63,6 +63,7 @@ import {
   type FormLine,
   LINES_KEY,
   checkLines,
+  hasLinePhoto,
   formLineSections,
   isLinesKey,
   linesIndexOf,
@@ -1392,16 +1393,25 @@ export async function previewViewForm(
 function readLineSections(
   block: FormBlock,
   values: Record<string, unknown>,
+  /**
+   * Con `false`, la foto obligatoria no se juzga aquí: al completar un registro que ya existe,
+   * la línea puede traer la foto que guardó antes (`syncLineRows` la juzga con lo guardado).
+   */
+  judgePhotos = true,
 ): Array<{ key: string; cfg: FormLines; lines: FormLine[] }> {
   return formLineSections<FormLines>(block).map(({ key, cfg }) => {
     const parsed = parseLinesValue(values[key]);
     if (!parsed) throw new ValidationError('La lista de ítems no se entiende. Vuelve a armarla.');
-    const lines = normalizeLines(parsed);
+    // Sin campo de foto configurado, lo que el navegador mande en `photo` se ignora.
+    const lines = normalizeLines(parsed).map(({ photo, ...rest }) =>
+      cfg.photo && photo ? { ...rest, photo } : rest,
+    );
     const problem = checkLines(lines, {
       min: cfg.min,
       max: cfg.max,
       decimals: cfg.decimals,
       title: cfg.title,
+      photoRequired: judgePhotos && Boolean(cfg.photo && cfg.photoRequired),
     });
     if (problem) throw new ValidationError(problem);
     return { key, cfg, lines };
@@ -1692,6 +1702,7 @@ async function insertLineRows(
   const child = await trackerForBlock(db, cfg.tracker);
   assertRowWriteAllowed(child, { creating: true, after: {} });
   const itemField = child.fields.find((f) => f.key === cfg.item);
+  const photoField = cfg.photo ? child.fields.find((f) => f.key === cfg.photo) : undefined;
   const allowed = input.restrictRelations
     ? new Set([...trackersOf(input.view.spec), input.parent.tracker.slug, itemField?.tracker ?? ''])
     : undefined;
@@ -1704,6 +1715,7 @@ async function insertLineRows(
         [cfg.parent]: JSON.stringify({ id: input.parent.id, label: input.parent.label }),
         [cfg.item]: JSON.stringify({ id: line.item.id, label: line.item.label }),
         [cfg.qty]: line.qty,
+        ...(cfg.photo && line.photo ? { [cfg.photo]: photoForField(photoField, line.photo) } : {}),
       },
       { applyDefaults: true, viewer: input.viewer, allowedRelationTrackers: allowed },
     );
@@ -1727,6 +1739,20 @@ async function insertLineRows(
       values: (rows[i]?.values ?? {}) as Record<string, unknown>,
     })),
   };
+}
+
+/**
+ * El valor de la foto de una línea tal como lo guarda el campo `file` de la tabla hija:
+ * si el campo no admite varios archivos, se queda con el primero.
+ */
+function photoForField(field: { multiple?: boolean } | undefined, photo: string): string {
+  if (field?.multiple) return photo;
+  try {
+    const data: unknown = JSON.parse(photo);
+    return Array.isArray(data) ? JSON.stringify(data[0] ?? '') : photo;
+  } catch {
+    return photo;
+  }
 }
 
 async function labelOfRow(db: SupabaseClient, trackerId: string, rowId: string): Promise<string> {
@@ -1797,23 +1823,47 @@ async function syncLineRows(
   const allowed = !(input.actor && !byApp)
     ? new Set([...trackersOf(input.view.spec), input.parent.tracker.slug])
     : undefined;
+  const photoField = cfg.photo ? child.fields.find((f) => f.key === cfg.photo) : undefined;
+  // Foto obligatoria: cada línea la trae, o ya la tenía guardada (una línea que no cambió
+  // llega con su foto, pero el servidor tampoco confía en eso). Se juzga antes de escribir nada.
+  if (cfg.photo && cfg.photoRequired) {
+    const problem = checkLines(
+      input.lines.map((l) => {
+        const had = keep.get(l.item.id.toLowerCase())?.values?.[cfg.photo as string];
+        return hasLinePhoto(l) || !had ? l : { ...l, photo: String(had) };
+      }),
+      { title: cfg.title, decimals: true, photoRequired: true },
+    );
+    if (problem) throw new ValidationError(problem);
+  }
   let changed = 0;
   for (const [itemId, row] of keep) {
     const line = wanted.get(itemId);
-    if (!line || Number(row.values?.[cfg.qty]) === line.qty) continue;
+    if (!line) continue;
+    // Una línea sin foto nueva conserva la que ya tenía; con foto distinta, la reemplaza.
+    const newPhoto =
+      cfg.photo && line.photo ? photoForField(photoField, line.photo) : undefined;
+    const photoChanged =
+      newPhoto !== undefined && newPhoto !== String(row.values?.[cfg.photo as string] ?? '');
+    if (Number(row.values?.[cfg.qty]) === line.qty && !photoChanged) continue;
     const known = Object.fromEntries(
       Object.entries(row.values ?? {}).filter(([k]) => child.fields.some((f) => f.key === k)),
     );
+    const touched = [cfg.qty, ...(photoChanged && cfg.photo ? [cfg.photo] : [])];
     const values = await prepareValues(
       db,
       child,
-      { ...known, [cfg.qty]: line.qty },
-      { selfId: row.id, only: new Set([cfg.qty]), allowedRelationTrackers: allowed },
+      {
+        ...known,
+        [cfg.qty]: line.qty,
+        ...(photoChanged && cfg.photo && newPhoto ? { [cfg.photo]: newPhoto } : {}),
+      },
+      { selfId: row.id, only: new Set(touched), allowedRelationTrackers: allowed },
     );
     assertRowWriteAllowed(child, {
       before: known,
       after: values,
-      keys: [cfg.qty],
+      keys: touched,
       externalKey: (row as { external_key?: string | null }).external_key ?? null,
     });
     const label = rowLabel(child.fields, values);
@@ -1896,7 +1946,7 @@ export async function saveFormRecord(
   if (!block || block.type !== 'form' || !block.onRecord)
     throw new NotFoundError('Ese formulario no completa un registro.');
   const tracker = await trackerForBlock(db, block.tracker);
-  const sections = readLineSections(block, input.values);
+  const sections = readLineSections(block, input.values, false);
   const allowed = new Set(
     (block.fields.length ? block.fields : tracker.fields.map((f) => f.key)).filter(
       (k) => k !== block.approval?.field,
@@ -2013,7 +2063,7 @@ export async function editViewSubmission(
   const patch: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input.values)) if (allowed.has(k)) patch[k] = v;
   // Las líneas también se corrigen: si vienen (aunque sea vacías), la lista queda como se armó.
-  const sections = readLineSections(block, input.values).filter((sec) => sec.key in input.values);
+  const sections = readLineSections(block, input.values, false).filter((sec) => sec.key in input.values);
   let label = '';
   let duplicate: string | null = null;
   if (Object.keys(patch).length || !sections.length) {

@@ -51,6 +51,7 @@ import { runDraftInvoiceAction } from './invoice-draft-run';
 import { runOutboxAction } from './outbox-run';
 import { runReportAction } from './report-run';
 import { WaitingForPersonError, notifyWaitOpened, openWait } from './waits';
+import { runLedgerPayable } from './ledger-payable';
 import { onShiftOnly, runCheckZone } from './zone-run';
 
 /**
@@ -933,6 +934,18 @@ async function runAction(a: ActionRun): Promise<string> {
       const out = await applyRollupPlan(db, plan, automation.created_by, ruleOf(a));
       if (out.failures.length) throw new Error(out.failures.slice(0, 2).join(' · '));
       return describeRollupPlan(action, plan, true);
+    }
+    case 'ledger_payable': {
+      if (!a.trackerRow || !event.rowId) throw new Error('Sin fila de donde sacar el costo.');
+      return runLedgerPayable({
+        db,
+        app,
+        trackerSlug: a.trackerRow.slug,
+        rowId: event.rowId,
+        userId: automation.created_by,
+        action,
+        ctx,
+      });
     }
     case 'report':
       return runReportAction({

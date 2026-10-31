@@ -398,6 +398,7 @@ export type ComputedBlock =
           Array<{
             item: { id: string; label: string };
             qty: number;
+            photo?: string;
             pick?: Record<string, string | number>;
           }>
         >;
@@ -879,6 +880,8 @@ export interface ComputedLines {
   min?: number;
   max?: number;
   decimals?: boolean;
+  /** Con foto por línea: cómo se llama y si es obligatoria (la foto va en el campo `file` de la tabla hija). */
+  photo?: { label: string; required: boolean };
   /** Con monto por línea: el campo calculado de la tabla hija y cómo calcularlo en el navegador. */
   amount?: {
     key: string;
@@ -2676,6 +2679,7 @@ function linesOut(cfg: NonNullable<Extract<ViewBlock, { type: 'form' }>['lines']
     ...(cfg.min !== undefined ? { min: cfg.min } : {}),
     ...(cfg.max !== undefined ? { max: cfg.max } : {}),
     ...(cfg.decimals ? { decimals: true } : {}),
+    ...(cfg.photo ? { photo: { label: cfg.photoLabel ?? 'Foto', required: Boolean(cfg.photoRequired) } } : {}),
   };
   const child = sources.get(cfg.tracker)?.tracker;
   const amount = cfg.amount ? child?.fields.find((f) => f.key === cfg.amount) : undefined;
@@ -2725,10 +2729,12 @@ function recordOut(
         const v = r.values[f.key];
         if (v !== undefined && v !== null && v !== '') pick[f.key] = v;
       }
+      const photo = cfg.photo ? String(r.values[cfg.photo] ?? '').trim() : '';
       return [
         {
           item: { id: item.id, label: item.label },
           qty,
+          ...(photo ? { photo } : {}),
           ...(Object.keys(pick).length ? { pick } : {}),
         },
       ];

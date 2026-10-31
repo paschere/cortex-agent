@@ -88,6 +88,14 @@ interface Act {
   target: string;
   op: string;
   rollField: string;
+  /** ledger_payable (a.via no se usa): el campo del valor, la fecha, y los textos del proveedor y la glosa */
+  lpAmount: string;
+  lpDate: string;
+  lpCurrency: string;
+  lpCounterparty: string;
+  lpDescription: string;
+  lpDueDays: string;
+  lpCategory: string;
   // --- Esperar ---
   waitAmount: string;
   waitUnit: 'm' | 'h' | 'd';
@@ -232,6 +240,7 @@ const ACTIONS: Array<{ type: string; label: string }> = [
   { type: 'update_related', label: 'Cambiar filas relacionadas (subir o bajar por una relación)' },
   { type: 'update_rows', label: 'Cambiar filas de otra tabla que cumplan un filtro' },
   { type: 'rollup', label: 'Acumular en la fila padre (suma, conteo, promedio…)' },
+  { type: 'ledger_payable', label: 'Anotar el costo como cuenta por pagar en el libro de plata' },
   { type: 'report', label: 'Mandar un reporte por correo (tabla + Excel / PDF)' },
   { type: 'accounting_draft_invoice', label: 'Preparar una prefactura para Siigo (por revisar)' },
   { type: 'accounting_upsert_customer', label: 'Crear el cliente en Siigo si no existe (por revisar)' },
@@ -244,11 +253,27 @@ const NEEDS_ROW = new Set([
   'set_field',
   'update_related',
   'rollup',
+  'ledger_payable',
   'accounting_draft_invoice',
   'accounting_upsert_customer',
   'accounting_draft_receipt',
   'accounting_draft_credit_note',
 ]);
+/** Las categorías del libro de plata (espejo de LEDGER_CATEGORIES; el cliente no importa el paquete). */
+const LEDGER_PAYABLE_CATEGORIES: Array<{ id: string; label: string }> = [
+  { id: 'proveedores', label: 'Proveedores' },
+  { id: 'transporte', label: 'Transporte y fletes' },
+  { id: 'mantenimiento', label: 'Mantenimiento' },
+  { id: 'servicios_publicos', label: 'Servicios públicos' },
+  { id: 'arriendo', label: 'Arriendo' },
+  { id: 'honorarios', label: 'Honorarios' },
+  { id: 'software', label: 'Software y suscripciones' },
+  { id: 'mercadeo', label: 'Mercadeo y publicidad' },
+  { id: 'impuestos', label: 'Impuestos' },
+  { id: 'bancos_y_financieros', label: 'Bancos y financieros' },
+  { id: 'nomina', label: 'Nómina y seguridad social' },
+  { id: 'otros_gastos', label: 'Otros gastos' },
+];
 const REPORT_PRESETS: Array<{ id: string; label: string }> = [
   { id: 'last_week', label: 'La semana pasada' },
   { id: 'this_week', label: 'Esta semana' },
@@ -344,6 +369,13 @@ const emptyAct = (type: string): Act => ({
   target: '',
   op: 'sum',
   rollField: '',
+  lpAmount: '',
+  lpDate: '',
+  lpCurrency: 'COP',
+  lpCounterparty: '',
+  lpDescription: '',
+  lpDueDays: '30',
+  lpCategory: 'proveedores',
   waitAmount: '30',
   waitUnit: 'm',
   stillMode: 'rule',
@@ -642,6 +674,17 @@ function toInput(d: Draft): unknown {
           ...(a.op !== 'count' && a.rollField ? { field: a.rollField } : {}),
           ...(a.where.length ? { where: a.where.map(condInput) } : {}),
         };
+      case 'ledger_payable':
+        return {
+          type: a.type,
+          amount: a.lpAmount,
+          currency: a.lpCurrency.trim().toUpperCase() || 'COP',
+          counterparty: a.lpCounterparty,
+          description: a.lpDescription,
+          ...(a.lpDate ? { date: a.lpDate } : {}),
+          dueDays: Number(a.lpDueDays) >= 0 && a.lpDueDays !== '' ? Number(a.lpDueDays) : 30,
+          category: a.lpCategory,
+        };
       case 'report':
         return {
           type: a.type,
@@ -899,6 +942,15 @@ function toDraft(v: AutomationView): Draft {
       x.target = String(a.target ?? '');
       x.op = String(a.op ?? 'sum');
       x.rollField = String(a.field ?? '');
+    }
+    if (a.type === 'ledger_payable') {
+      x.lpAmount = String(a.amount ?? '');
+      x.lpDate = String(a.date ?? '');
+      x.lpCurrency = String(a.currency ?? 'COP');
+      x.lpCounterparty = String(a.counterparty ?? '');
+      x.lpDescription = String(a.description ?? '');
+      x.lpDueDays = String(a.dueDays ?? 30);
+      x.lpCategory = String(a.category ?? 'proveedores');
     }
     if (a.type === 'report') {
       const src = (a.source ?? {}) as Record<string, unknown>;
@@ -2672,6 +2724,79 @@ function ActionFields({
             Se recalcula siempre desde todas las hijas, así que correrla dos veces da lo mismo. Para
             que el total siga todos los cambios, crea la misma regla para «Se crea», «Cambia» y «Se
             borra» una fila.
+          </p>
+        </div>
+      );
+    }
+    case 'ledger_payable': {
+      return (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+            Valor a pagar
+            <select
+              value={a.lpAmount}
+              onChange={(e) => set({ lpAmount: e.target.value })}
+              className={INPUT}
+            >
+              <option value="">Campo de número o dinero…</option>
+              {numericOf(fields).map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+            en
+            <input
+              value={a.lpCurrency}
+              maxLength={3}
+              onChange={(e) => set({ lpCurrency: e.target.value.toUpperCase() })}
+              className={clsx(INPUT, 'w-16')}
+            />
+          </div>
+          {text(a.lpCounterparty, (v) => set({ lpCounterparty: v }), 'A quién se le debe (p. ej. {{proveedor}})')}
+          {text(a.lpDescription, (v) => set({ lpDescription: v }), 'Concepto (p. ej. Equipo {{equipo}} · vuelo {{vuelo}})')}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink">
+            Fecha del costo
+            <select
+              value={a.lpDate}
+              onChange={(e) => set({ lpDate: e.target.value })}
+              className={INPUT}
+            >
+              <option value="">Hoy (al correr la regla)</option>
+              {fields
+                .filter((f) => f.type === 'date')
+                .map((f) => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+            </select>
+            vence a los
+            <input
+              type="number"
+              min={0}
+              max={180}
+              value={a.lpDueDays}
+              onChange={(e) => set({ lpDueDays: e.target.value })}
+              className={clsx(INPUT, 'w-16')}
+            />
+            días
+            <select
+              value={a.lpCategory}
+              onChange={(e) => set({ lpCategory: e.target.value })}
+              className={INPUT}
+            >
+              {LEDGER_PAYABLE_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-micro text-ink-muted">
+            Queda en el libro de plata como cuenta por pagar probable (la proyección de caja la
+            ve). Si la fila cambia, se actualiza la misma; si el valor queda en cero, se anula; una
+            ya pagada no se toca. Úsala con «Se crea» y «Cambia» una fila.
           </p>
         </div>
       );

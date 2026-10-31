@@ -223,6 +223,7 @@ export function FormBlock({
         max: cfg.max,
         decimals: cfg.decimals,
         title: cfg.title,
+        photoRequired: cfg.photo?.required,
       });
       if (problem) found[key] = problem;
     }
@@ -1224,7 +1225,9 @@ export function FormBlock({
                         className={clsx('flex justify-between gap-3', operator ? 'text-base' : 'text-sm')}
                       >
                         <span className="min-w-0 break-words text-ink-muted">{l.item.label}</span>
-                        <span className="shrink-0 font-semibold tabular text-ink">× {l.qty}</span>
+                        <span className="shrink-0 font-semibold tabular text-ink">
+                          {l.photo ? 'con foto · ' : ''}× {l.qty}
+                        </span>
                       </div>
                     ))}
                     {!values[key] && <span className="text-ink-faint">—</span>}

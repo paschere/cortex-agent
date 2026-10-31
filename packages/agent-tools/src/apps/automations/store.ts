@@ -670,6 +670,18 @@ async function relatedActionProblems(
       settable(target, a.set);
       filterFields(target, a.where);
     }
+    if (a.type === 'ledger_payable') {
+      const amountField = trigger.fields.find((x) => x.key === a.amount);
+      if (!amountField) out.push(`«${a.amount}» no es un campo de «${trigger.name}».`);
+      else if (!['number', 'money'].includes(amountField.type))
+        out.push(`«${amountField.label}» tiene que ser un número o dinero para anotarlo por pagar.`);
+      if (a.date) {
+        const dateField = trigger.fields.find((x) => x.key === a.date);
+        if (!dateField) out.push(`«${a.date}» no es un campo de «${trigger.name}».`);
+        else if (dateField.type !== 'date')
+          out.push(`«${dateField.label}» tiene que ser una fecha.`);
+      }
+    }
     if (a.type === 'rollup') {
       const rel = trigger.fields.find((f) => f.key === a.up);
       if (!rel || rel.type !== 'relation' || !rel.tracker) {

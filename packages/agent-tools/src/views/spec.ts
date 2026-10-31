@@ -637,6 +637,13 @@ export const formLinesSchema = z.object({
    */
   amount: fieldRef.optional(),
   amountLabel: z.string().trim().min(1).max(40).optional(),
+  /**
+   * Un campo `file` de la tabla hija donde se guarda la foto de cada línea (p. ej. la foto
+   * del equipo usado). `photoRequired`: sin foto en cada línea no se puede enviar.
+   */
+  photo: fieldRef.optional(),
+  photoRequired: z.boolean().optional(),
+  photoLabel: z.string().trim().min(1).max(30).optional(),
 });
 export type FormLines = z.infer<typeof formLinesSchema>;
 
@@ -1417,10 +1424,20 @@ function checkFormLines(
         `${where}: «${l.amount}» de «${child.name}» tiene que calcularse solo (fórmula): el monto se muestra al instante en cada línea.`,
       );
   }
+  if (l.photo) {
+    const photo = child.fields.find((f) => f.key === l.photo);
+    if (!photo || photo.type !== 'file')
+      problems.push(
+        `${where}: «${l.photo}» de «${child.name}» (la foto de cada línea) tiene que ser un campo de archivos o fotos.`,
+      );
+    else if ([l.parent, l.item, l.qty, l.amount].includes(l.photo))
+      problems.push(`${where}: la foto de cada línea necesita su propio campo de «${child.name}».`);
+  } else if (l.photoRequired || l.photoLabel)
+    problems.push(`${where}: «photoRequired» y «photoLabel» necesitan «photo» (el campo de archivos de la tabla hija).`);
   for (const f of child.fields)
     if (
       f.required &&
-      ![l.parent, l.item, l.qty].includes(f.key) &&
+      ![l.parent, l.item, l.qty, l.photo].includes(f.key) &&
       f.default === undefined &&
       !f.formula &&
       !(f.lookup && !f.lookup.editable)

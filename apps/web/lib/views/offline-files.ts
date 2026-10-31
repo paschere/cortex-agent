@@ -8,6 +8,7 @@
  * sola; `stashBlob` y `resolvePending` usan el almacén.
  */
 
+import { isLinesKey } from '@cortex/agent-tools/src/views/form-lines';
 import { type UploadedFile, parseFileValue, serializeFileValue } from './upload-rules';
 
 export const PENDING_PREFIX = 'pending:';
@@ -33,9 +34,28 @@ export function swapPending(value: string, done: Record<string, UploadedFile>): 
   return serializeFileValue(swapped, value.trim().startsWith('['));
 }
 
-/** ¿Alguno de estos valores trae una foto sin subir? */
+/**
+ * Las líneas de un formulario (`__lines`…) viajan como JSON de `[{item, qty, photo}]`: sus
+ * fotos pendientes están dentro de cada `photo`. Devuelve esas líneas, o null si el valor no es eso.
+ */
+function lineEntries(key: string, value: string): Array<Record<string, unknown>> | null {
+  if (!isLinesKey(key) || !value) return null;
+  try {
+    const data: unknown = JSON.parse(value);
+    return Array.isArray(data) ? (data as Array<Record<string, unknown>>) : null;
+  } catch {
+    return null;
+  }
+}
+
+const photoOf = (l: Record<string, unknown>): string => (typeof l.photo === 'string' ? l.photo : '');
+
+/** ¿Alguno de estos valores (o la foto de una línea) trae una foto sin subir? */
 export function hasPending(values: Record<string, string>): boolean {
-  return Object.values(values).some((v) => pendingIds(v).length > 0);
+  return Object.entries(values).some(([k, v]) => {
+    const lines = lineEntries(k, v);
+    return lines ? lines.some((l) => pendingIds(photoOf(l)).length > 0) : pendingIds(v).length > 0;
+  });
 }
 
 /** Para validar en el navegador: la URL provisional se cambia por una que pasa el esquema. */
@@ -86,9 +106,10 @@ export async function resolvePending(
   const { getBlob, removeBlob } = await import('./offline-store');
   const out: Record<string, string> = { ...values };
   const uploaded: string[] = [];
-  for (const [field, value] of Object.entries(values)) {
+  // Sube las fotos pendientes de UN valor `file` y devuelve el valor con las URL reales.
+  const resolveOne = async (field: string, value: string): Promise<string> => {
     const ids = pendingIds(value);
-    if (!ids.length) continue;
+    if (!ids.length) return value;
     const done: Record<string, UploadedFile> = {};
     for (const id of ids) {
       const blob = await getBlob(id);
@@ -110,7 +131,18 @@ export async function resolvePending(
       };
       uploaded.push(id);
     }
-    out[field] = swapPending(value, done);
+    return swapPending(value, done);
+  };
+  for (const [field, value] of Object.entries(values)) {
+    const lines = lineEntries(field, value);
+    if (lines) {
+      if (!lines.some((l) => pendingIds(photoOf(l)).length)) continue;
+      const next: Array<Record<string, unknown>> = [];
+      for (const l of lines) next.push({ ...l, photo: await resolveOne(field, photoOf(l)) });
+      out[field] = JSON.stringify(next);
+      continue;
+    }
+    out[field] = await resolveOne(field, value);
   }
   for (const id of uploaded) await removeBlob(id);
   return out;

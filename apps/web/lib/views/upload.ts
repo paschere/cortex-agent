@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mintBlobToken } from '@/lib/blob-token';
 import { countRecentFilesDirect, putFileDirect } from '@/lib/files-db';
 import { type CustomViewRow, consumeToken, flowOf } from '@cortex/agent-tools';
+import { formLineSections, isLinesKey } from '@cortex/agent-tools/src/views/form-lines';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
@@ -80,6 +81,22 @@ export async function storeViewUpload(
     );
     if (!asked.has(input.field)) throw new ValidationError('Ese campo no recibe archivos.');
     return storeChecked(db, view, input, opts, 'image');
+  }
+  // La foto de una línea («__lines»): va al campo `file` de la tabla hija que la sección declara.
+  if (block?.type === 'form' && isLinesKey(input.field)) {
+    const section = formLineSections(block).find((x) => x.key === input.field)?.cfg;
+    if (!section?.photo) throw new ValidationError('Esa lista no recibe fotos.');
+    const { data, error } = await db
+      .from('trackers')
+      .select('fields')
+      .eq('slug', section.tracker)
+      .maybeSingle();
+    if (error) throw error;
+    const field = ((data as { fields?: UploadFieldDef[] } | null)?.fields ?? []).find(
+      (f) => f?.key === section.photo,
+    );
+    if (!field || field.type !== 'file') throw new ValidationError('Esa lista no recibe fotos.');
+    return storeChecked(db, view, input, opts, field.accept === 'any' ? 'any' : 'image');
   }
   if (block?.type === 'form') {
     const { data, error } = await db

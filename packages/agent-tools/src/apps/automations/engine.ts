@@ -497,6 +497,11 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
         type: a.type,
         summary: `Dejaría en «${a.target}» de la fila padre (por «${a.up}») ${ROLLUP_OP_LABEL[a.op]}${a.field ? ` de «${a.field}»` : ''} de todas sus filas hijas.`,
       };
+    case 'ledger_payable':
+      return {
+        type: a.type,
+        summary: `Anotaría en el libro de plata, como cuenta por pagar probable, el valor de «${a.amount}» a ${renderTemplate(a.counterparty, ctx) || '(proveedor vacío)'} (${a.currency}, vence ${a.dueDays} días después de ${a.date ? `«${a.date}»` : 'hoy'}, categoría ${a.category}); si la fila cambia lo actualiza, y si el valor queda en cero lo anula.`,
+      };
     case 'report':
       return {
         type: a.type,

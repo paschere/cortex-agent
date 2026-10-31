@@ -75,3 +75,43 @@ describe('secciones de líneas', () => {
     expect(out).toEqual([{ item: { id: A, label: 'Dolly' }, qty: 2, pick: { t: 5 } }]);
   });
 });
+
+describe('foto por línea', () => {
+  const f1 = JSON.stringify({ url: '/api/files/blob/a', name: 'a.jpg', mime: 'image/jpeg', size: 10 });
+  const f2 = JSON.stringify({ url: '/api/files/blob/b', name: 'b.jpg', mime: 'image/jpeg', size: 10 });
+
+  it('la foto viaja con la línea y se descarta lo que no es un archivo', () => {
+    const lines = [{ item: { id: A, label: 'Dolly' }, qty: 1, photo: f1 }];
+    expect(parseLinesValue(serializeLines(lines))).toEqual(lines);
+    const junk = JSON.stringify([{ item: { id: A, label: 'x' }, qty: 1, photo: 'no es un archivo' }]);
+    expect(parseLinesValue(junk)?.[0]?.photo).toBeUndefined();
+  });
+
+  it('el mismo ítem con fotos distintas junta las fotos y no repite la misma', () => {
+    const out = normalizeLines([
+      { item: { id: A, label: 'Dolly' }, qty: 1, photo: f1 },
+      { item: { id: A, label: 'Dolly' }, qty: 1, photo: f2 },
+      { item: { id: A, label: 'Dolly' }, qty: 1, photo: f1 },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.qty).toBe(3);
+    expect(JSON.parse(out[0]?.photo ?? '[]').map((f: { url: string }) => f.url)).toEqual([
+      '/api/files/blob/a',
+      '/api/files/blob/b',
+    ]);
+  });
+
+  it('con foto obligatoria dice qué línea la necesita', () => {
+    const lines = [
+      { item: { id: A, label: 'Dolly · Proveedor X' }, qty: 1, photo: f1 },
+      { item: { id: B, label: 'Montacargas' }, qty: 1 },
+    ];
+    expect(checkLines(lines, { title: 'Equipos usados', photoRequired: true })).toBe(
+      '«Equipos usados»: falta la foto de «Montacargas».',
+    );
+    expect(checkLines(lines, { title: 'Equipos usados' })).toBeNull();
+    expect(
+      checkLines([{ ...lines[1]!, photo: f2 }], { title: 'Equipos usados', photoRequired: true }),
+    ).toBeNull();
+  });
+});

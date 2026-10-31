@@ -113,7 +113,7 @@ function block(opts: { steps: boolean; scan: boolean; lines: boolean }): Extract
         ]
       : null,
     lines: opts.lines
-      ? { title: 'Equipos entregados', itemLabel: 'Equipo', qtyLabel: 'Cantidad', min: 0, max: 20 }
+      ? { title: 'Equipos entregados', itemLabel: 'Equipo', qtyLabel: 'Cantidad', min: 0, max: 20, photo: { label: 'Foto', required: true } }
       : null,
     fields: fields as unknown as Extract<ComputedBlock, { type: 'form' }>['fields'],
   } as unknown as Extract<ComputedBlock, { type: 'form' }>;
