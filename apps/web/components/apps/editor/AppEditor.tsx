@@ -13,6 +13,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { AppAskBar } from './AppAskBar';
 import { AppearanceTab } from './AppearanceTab';
 import { AutomationsTab } from './AutomationsTab';
+import { CodeTab } from './CodeTab';
 import { FlowsTab } from './FlowsTab';
 import { HistoryTab } from './HistoryTab';
 import { HomeTab } from './HomeTab';
@@ -67,6 +68,7 @@ type Tab =
   | 'portal'
   | 'history'
   | 'usage'
+  | 'code'
   | 'preview';
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'screens', label: 'Pantallas' },
@@ -82,6 +84,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'portal', label: 'Portal' },
   { id: 'history', label: 'Historial' },
   { id: 'usage', label: 'Uso' },
+  { id: 'code', label: 'Código' },
   { id: 'preview', label: 'Ver como…' },
 ];
 
@@ -387,6 +390,7 @@ export function AppEditor({
       {tab === 'portal' && <PortalTab data={data} />}
       {tab === 'history' && <HistoryTab data={data} />}
       {tab === 'usage' && <UsageTab data={data} />}
+      {tab === 'code' && <CodeTab data={data} />}
       {tab === 'preview' && <PreviewTab data={data} />}
 
       {data.screens.length > 0 && (

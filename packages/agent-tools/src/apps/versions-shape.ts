@@ -402,6 +402,9 @@ export function overlayAccess(access: AppAccess, snap: Snapshot): AppAccess | nu
       icon: s.icon,
       position: i,
       roles: s.roles,
+      // El tipo de pantalla (0243) no viaja en la foto: es el de la pantalla viva.
+      kind: live?.kind ?? 'view',
+      codeEntry: live?.codeEntry ?? null,
       frozenSpec: s.spec,
       frozenName: s.viewName,
     };

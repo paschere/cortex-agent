@@ -586,6 +586,10 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   custom_app_screens: tenant(),
   custom_app_roles: tenant(),
   custom_app_members: tenant(),
+  // 0243: el proyecto de código de una app y sus compilaciones. Tenant las dos:
+  // un bundle ajeno serviría código de otra empresa dentro de esta app.
+  custom_app_code: tenant(),
+  custom_app_code_builds: tenant(),
   // 0209: usuarios externos de una app, sus sesiones y sus códigos de entrada.
   // Tenant las tres: un usuario o una sesión ajena entraría a una app que no es suya.
   custom_app_users: tenant(),

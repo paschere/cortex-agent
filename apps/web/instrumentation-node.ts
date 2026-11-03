@@ -1,3 +1,4 @@
+import { buildCodeDeps } from '@/lib/apps/code-builder';
 import { wakeAutomationRuns } from '@/lib/apps/automation-wake';
 import { buildNoticeDelivery } from '@/lib/apps/notice-delivery';
 import { browserDocumentSink } from '@/lib/browser-download';
@@ -5,6 +6,7 @@ import { readWaitingIndex } from '@/lib/waiting';
 import {
   rowNoticeListener,
   setAutomationWaker,
+  setCodeBuildDeps,
   setDocumentSink,
   setNoticeDelivery,
   setRowChangeListener,
@@ -43,6 +45,13 @@ setWaitingReader(readWaitingIndex);
  * barrido de cada minuto hace el mismo trabajo.
  */
 setAutomationWaker(wakeAutomationRuns);
+
+/**
+ * El compilador de pantallas con código (Vercel Sandbox) y el SDK que se le
+ * entrega. Las herramientas del chat `apps.code_build` lo leen de aquí; las
+ * acciones del editor lo pasan directo (lib/apps/code-actions.ts).
+ */
+setCodeBuildDeps(buildCodeDeps());
 
 /**
  * Avisos automáticos de las apps (0231): cada fila creada o cambiada llega a

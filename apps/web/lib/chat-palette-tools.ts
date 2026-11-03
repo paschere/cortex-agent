@@ -436,6 +436,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'apps.publish': 'Publica la aplicación ',
   'apps.versions': 'Muestra o compara versiones de la aplicación ',
   'apps.restore_version': 'Devuelve la aplicación a la versión ',
+  'apps.code_publish': 'Publica el código de la aplicación ',
   'apps.inspect': 'Revisa lo que ve cada rol en la aplicación ',
   'apps.usage': 'Muestra el uso de la aplicación ',
   'apps.notices': 'Ajusta qué avisos recibe cada rol en la aplicación ',

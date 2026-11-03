@@ -71,6 +71,12 @@ const config = {
         headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
       },
       {
+        // Una pantalla con código de una app corre en un iframe del mismo origen (con
+        // `sandbox`, así que el documento queda con origen nulo); sin esto DENY la bloquea.
+        source: '/api/apps/:id/code/:screen/frame',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+      },
+      {
         source: '/v/app-editor-showcase',
         headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
       },

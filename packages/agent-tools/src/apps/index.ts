@@ -14,6 +14,7 @@ import './automations/tools';
 import './automations/report-tools';
 import './automations/invoice-draft-tools';
 import './notices/tools';
+import './code/tools';
 
 export {
   appsAssignMembers,
@@ -79,3 +80,15 @@ export type { DesignNote, DesignReview } from './design-review';
 export { appsSuggestBrand, buildBrandProposal, inferAppKind } from './brand-tool';
 export type { BrandProposal } from './brand-tool';
 export { accessibleVariants, paletteFromPixels, suggestFont } from './brand-palette';
+export * from './code/files';
+export * from './code/store';
+export * from './code/build';
+export { runSdkOp, SDK_OPS, SDK_CALLS_PER_MINUTE } from './code/sdk';
+export type { SdkCallContext, SdkOp, SdkRowOut } from './code/sdk';
+export {
+  appsCodeAddScreen,
+  appsCodeBuild,
+  appsCodePublish,
+  appsCodeRead,
+  appsCodeWrite,
+} from './code/tools';

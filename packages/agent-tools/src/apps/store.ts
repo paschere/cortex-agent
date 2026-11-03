@@ -116,7 +116,7 @@ import { type Snapshot, overlayAccess, parseSnapshot } from './versions-shape';
 export const APP_COLUMNS =
   'id, organization_id, slug, name, description, icon, theme, brand, home, dashboards, portal, location, home_screen, status, version, created_by, updated_by, created_at, updated_at, archived_at';
 const SCREEN_COLUMNS =
-  'id, app_id, view_id, slug, title, icon, position, roles, created_at, updated_at';
+  'id, app_id, view_id, slug, title, icon, position, roles, kind, code_entry, created_at, updated_at';
 const ROLE_COLUMNS = 'id, app_id, key, name, description, permissions, position';
 const MEMBER_COLUMNS = 'id, app_id, user_id, role_key, attributes, created_by, created_at';
 
@@ -172,6 +172,9 @@ export interface AppScreenRow {
   icon: string;
   position: number;
   roles: string[];
+  /** 'view' = pantalla de bloques; 'code' = pantalla con código (0243), con `codeEntry` como archivo de entrada. */
+  kind: 'view' | 'code';
+  codeEntry: string | null;
   /**
    * Sólo en lo que ven los USUARIOS de una app con versión publicada (0225):
    * el spec de la pantalla tal como estaba al publicar. Si viene, manda sobre
@@ -224,6 +227,8 @@ function adaptScreen(row: Record<string, unknown>): AppScreenRow {
     ...(row as unknown as AppScreenRow),
     roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
     position: Number(row.position ?? 0),
+    kind: row.kind === 'code' ? 'code' : 'view',
+    codeEntry: typeof row.code_entry === 'string' ? row.code_entry : null,
   };
 }
 

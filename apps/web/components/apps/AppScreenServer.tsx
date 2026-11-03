@@ -42,6 +42,8 @@ export interface AppScreenQuery {
   d?: string;
   /** `prueba`: «Ver como…» con filas de ejemplo (nada se guarda). */
   modo?: string;
+  /** Vista previa de una compilación de una pantalla con código (solo administradores). */
+  build?: string;
 }
 
 /**
@@ -75,6 +77,8 @@ export async function AppScreenServer({
   const screen = synthetic ? null : screenFor(access, ref);
   if (!synthetic && !screen) notFound();
   if (!readOnly) void recordAppEvent(db, access, { kind: 'screen_open', screen: ref });
+  // Pantalla con código: el marco de la app es el mismo, el cuerpo es un iframe aislado.
+  const isCode = (screen as { kind?: string } | null)?.kind === 'code';
   const basePath = embedBase ? embedBase(access.app.slug) : `/apps/${access.app.slug}`;
   const [tablero, portal] = await Promise.all([
     tableroDef ? computeTablero(db, access, tableroDef, { basePath }) : null,
@@ -83,7 +87,7 @@ export async function AppScreenServer({
   // «Ver como…» en modo prueba: las filas son de ejemplo y los formularios no guardan.
   const mode = readOnly ? previewModeOf(query.modo) : null;
   const sample =
-    mode && screen
+    mode && screen && !isCode
       ? await readScreenSample(db, access, screen, { fila: query.fila, detail: query.d })
       : null;
   const viewAs = readOnly
@@ -98,7 +102,7 @@ export async function AppScreenServer({
       }
     : undefined;
   const [read, home, brand, buttons, location] = await Promise.all([
-    screen && !sample
+    screen && !sample && !isCode
       ? readScreen(db, access, screen, { readOnly, fila: query.fila, detail: query.d })
       : null,
     isHome ? loadHome(db, access) : null,
@@ -128,6 +132,11 @@ export async function AppScreenServer({
         home={home ?? undefined}
         tablero={tablero ?? undefined}
         portal={portal ?? undefined}
+        code={
+          screen && isCode
+            ? { screen: screen.slug, build: viewer.companyAdmin ? query.build : undefined }
+            : undefined
+        }
         target={
           screen && sample
             ? {

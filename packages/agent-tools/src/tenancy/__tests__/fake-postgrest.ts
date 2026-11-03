@@ -356,7 +356,9 @@ class Query implements PromiseLike<Result<unknown>> {
           hit = [...hit].sort((a, b) => {
             const av = String(a[o.column] ?? '');
             const bv = String(b[o.column] ?? '');
-            return o.ascending ? av.localeCompare(bv) : bv.localeCompare(av);
+            // numeric: como Postgres con enteros, 9 va antes que 10 (los números llegan como texto).
+            const cmp = av.localeCompare(bv, undefined, { numeric: true });
+            return o.ascending ? cmp : -cmp;
           });
         }
         const count = hit.length;

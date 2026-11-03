@@ -30,6 +30,7 @@ import { AppNavProvider } from './AppNav';
 import { AppWorker, InstallButton, KioskIdleGuard, KioskMenu, SignOutMenu } from './AppSession';
 import { AppThemeScope, AppThemeToggle } from './AppTheme';
 import { AppToastProvider } from './AppToast';
+import { CodeScreen } from './CodeScreen';
 import { LocationMenu, LocationProvider } from './LocationShare';
 import { PortalHome } from './PortalHome';
 import { PullToRefresh } from './PullToRefresh';
@@ -95,6 +96,8 @@ export interface AppRunnerProps {
   tablero?: ComputedTablero;
   /** El portal de un cliente ya calculado (pantalla `portal`, 0225). */
   portal?: ComputedPortal;
+  /** Pantalla con código (apps con código): se pinta en un iframe aislado en vez del lienzo. */
+  code?: { screen: string; build?: string };
   title: string;
   /**
    * Para la entrada de afuera (/a/<id>, 0209): la base de las direcciones y quién
@@ -222,6 +225,7 @@ export function AppRunner({
   home,
   tablero,
   portal,
+  code,
   title,
   basePath,
   embedBase,
@@ -245,7 +249,7 @@ export function AppRunner({
   const tabLabels = shortTabLabels(tabs);
   const standalone = Boolean(basePath);
   // Una pantalla que empieza con una hoja la llena entera, como Google Sheets.
-  const firstBlock = !home && !tablero && !portal && !preview ? computed?.blocks[0] : undefined;
+  const firstBlock = !home && !tablero && !portal && !code && !preview ? computed?.blocks[0] : undefined;
   const fillId = firstBlock?.type === 'sheet' ? firstBlock.id : null;
   const computedAt =
     computed?.computedAt ??
@@ -569,7 +573,7 @@ export function AppRunner({
                           <AppButtons appId={app.id} screen={current} buttons={buttons} />
                         </div>
                       )}
-                      {!readOnly && !preview && !home && !tablero && !portal && (
+                      {!readOnly && !preview && !home && !tablero && !portal && !code && (
                         <PushToggle appId={app.id} />
                       )}
                       {preview && screenContent ? (
@@ -586,6 +590,14 @@ export function AppRunner({
                         <TableroView tablero={tablero} />
                       ) : portal ? (
                         <PortalHome portal={portal} />
+                      ) : code ? (
+                        <CodeScreen
+                          appId={app.slug}
+                          screen={code.screen}
+                          build={code.build}
+                          readOnly={readOnly}
+                          como={como}
+                        />
                       ) : (
                         computed &&
                         target && (
