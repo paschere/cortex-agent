@@ -3,9 +3,11 @@ import {
   MAX_CODE_FILES,
   MAX_CODE_FILE_BYTES,
   applyFileChanges,
-  disallowedPackages,
   entriesFromScreens,
+  functionEntries,
+  functionNames,
   orphanScreenFiles,
+  packageProblems,
   pathProblem,
   screenSlugOf,
   validateCodeFiles,
@@ -83,9 +85,37 @@ describe('entradas', () => {
 });
 
 describe('paquetes', () => {
-  it('marca los no permitidos', () => {
-    const pkg = JSON.stringify({ dependencies: { react: '18', lodash: '4' } });
-    expect(disallowedPackages({ 'package.json': pkg })).toEqual(['lodash']);
-    expect(disallowedPackages({})).toEqual([]);
+  it('cualquier paquete del registro sirve', () => {
+    const pkg = JSON.stringify({
+      dependencies: { react: '18', lodash: '4', '@aws-sdk/client-s3': '^3' },
+    });
+    expect(packageProblems({ 'package.json': pkg })).toEqual([]);
+    expect(packageProblems({})).toEqual([]);
+  });
+  it('rechaza rutas locales, JSON roto y exceso de paquetes', () => {
+    const local = JSON.stringify({ dependencies: { mio: 'file:../mio' } });
+    expect(packageProblems({ 'package.json': local })[0]).toMatch(/mio/);
+    expect(packageProblems({ 'package.json': '{' })[0]).toMatch(/JSON/);
+    const many = JSON.stringify({
+      dependencies: Object.fromEntries(Array.from({ length: 61 }, (_, i) => [`p${i}`, '1'])),
+    });
+    expect(packageProblems({ 'package.json': many })[0]).toMatch(/tope/);
+  });
+});
+
+describe('funciones de servidor', () => {
+  it('las saca de server/*.ts con nombre válido', () => {
+    const files = {
+      'server/cobrar.ts': '',
+      'server/Mala.ts': '',
+      'server/sub/x.ts': '',
+      'screens/a.tsx': '',
+      'server/enviar_correo.ts': '',
+    };
+    expect(functionEntries(files)).toEqual({
+      cobrar: 'server/cobrar.ts',
+      enviar_correo: 'server/enviar_correo.ts',
+    });
+    expect(functionNames(files)).toEqual(['cobrar', 'enviar_correo']);
   });
 });

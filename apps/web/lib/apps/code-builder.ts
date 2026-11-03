@@ -5,21 +5,23 @@ import {
   type BuilderInput,
   type BuilderOutput,
   type CodeBuildDeps,
-  PHASE1_PACKAGES,
-  declaredPackages,
+  packageProblems,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { Sandbox } from '@vercel/sandbox';
 
 /**
- * EL COMPILADOR DE PANTALLAS CON CÓDIGO (fase 1), EN VERCEL SANDBOX.
+ * EL COMPILADOR DE PANTALLAS Y FUNCIONES DE SERVIDOR (fases 1 y 2), EN VERCEL SANDBOX.
  *
  * Una función de Vercel no puede `npm install` ni correr esbuild con paquetes
  * arbitrarios; un Firecracker microVM sí. Por cada compilación se levanta un
  * sandbox NO persistente (nace y muere con la compilación; nada de lo que
- * escribe el código de la app sobrevive), se instalan las dependencias de la
- * lista permitida, se empaqueta cada pantalla con esbuild a un IIFE y se
- * devuelven los bundles como texto. El navegador nunca ve más que el bundle.
+ * escribe el código de la app sobrevive), se instalan las
+ * dependencias (cualquier paquete del registro de npm, con `--ignore-scripts`:
+ * ningún paquete corre código al instalarse), se empaqueta cada pantalla con
+ * esbuild a un IIFE para el navegador y cada función de `server/*.ts` a un
+ * CommonJS para Node 22 con sus paquetes dentro, y se devuelven como texto. El navegador nunca
+ * ve más que el bundle de la pantalla; las funciones nunca salen del servidor.
  *
  * Autenticación: igual que dev-tasks/sandbox.ts, `Sandbox.create` toma las
  * credenciales del entorno (OIDC de Vercel en producción; `VERCEL_TOKEN`,
@@ -40,7 +42,11 @@ import { Sandbox } from '@vercel/sandbox';
 const ROOT = '/vercel/sandbox';
 const SANDBOX_TIMEOUT_MS = 5 * 60_000;
 const INSTALL_TIMEOUT_MS = 150_000;
-const BUILD_TIMEOUT_MS = 90_000;
+const BUILD_TIMEOUT_MS = 120_000;
+/** Lo que pesan, instalados, los paquetes de una compilación: más que esto es un descuido (o un ataque al disco). */
+const MAX_INSTALLED_KB = 700 * 1024;
+/** Una función empaquetada con sus paquetes no pasa de esto (va dentro de una fila jsonb). */
+const MAX_FUNCTION_BUNDLE_BYTES = 6 * 1024 * 1024;
 const LOG_MAX_CHARS = 16_000;
 const RESULT_PATH = `${ROOT}/.cortex-build/result.json`;
 
@@ -111,7 +117,10 @@ import { build, formatMessages } from 'esbuild';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const entries = JSON.parse(readFileSync('.cortex-build/entries.json', 'utf8'));
+const fnEntries = JSON.parse(readFileSync('.cortex-build/functions.json', 'utf8'));
+const MAX_FN = ${MAX_FUNCTION_BUNDLE_BYTES};
 const bundles = {};
+const functions = {};
 const errors = [];
 for (const [slug, entry] of Object.entries(entries)) {
   try {
@@ -159,8 +168,38 @@ for (const [slug, entry] of Object.entries(entries)) {
     errors.push('Pantalla «' + slug + '» (' + entry + '):\\n' + msgs.join('\\n'));
   }
 }
+// Funciones de servidor: CommonJS para Node 22, con sus paquetes dentro.
+for (const [name, entry] of Object.entries(fnEntries)) {
+  try {
+    const res = await build({
+      entryPoints: [entry],
+      bundle: true,
+      write: false,
+      outdir: 'out-server',
+      format: 'cjs',
+      platform: 'node',
+      target: 'node22',
+      mainFields: ['module', 'main'],
+      sourcemap: 'inline',
+      sourcesContent: false,
+      legalComments: 'none',
+      logLevel: 'silent',
+      banner: { js: "const __cortex_import_meta_url = require('url').pathToFileURL(__filename).href;" },
+      define: { 'import.meta.url': '__cortex_import_meta_url', 'process.env.NODE_ENV': '"production"' },
+    });
+    const js = res.outputFiles.filter((f) => f.path.endsWith('.js')).map((f) => f.text).join('\\n');
+    if (Buffer.byteLength(js) > MAX_FN) {
+      errors.push('Función «' + name + '» (' + entry + '): pesa ' + Math.round(Buffer.byteLength(js) / 1048576) + ' MB con sus paquetes; el tope es ' + Math.round(MAX_FN / 1048576) + ' MB. Usa paquetes más livianos.');
+    } else {
+      functions[name] = js;
+    }
+  } catch (err) {
+    const msgs = err && err.errors ? await formatMessages(err.errors, { kind: 'error', color: false }) : [String(err)];
+    errors.push('Función «' + name + '» (' + entry + '):\\n' + msgs.join('\\n'));
+  }
+}
 mkdirSync('.cortex-build', { recursive: true });
-writeFileSync('.cortex-build/result.json', JSON.stringify({ bundles, errors }));
+writeFileSync('.cortex-build/result.json', JSON.stringify({ bundles, functions, errors }));
 `;
 
 function trim(text: string, max = LOG_MAX_CHARS): string {
@@ -187,18 +226,9 @@ export const sandboxBuilder: Builder = {
   async build(input: BuilderInput): Promise<BuilderOutput> {
     const log: string[] = [];
 
-    // Segunda barrera de la lista permitida (la primera es buildAppCode): el
-    // sandbox nunca instala un paquete que la fase 1 no deja.
-    const declared = declaredPackages(input.files);
-    if (declared === null)
-      return { ok: false, bundles: {}, log: 'El package.json no es un JSON válido.' };
-    const banned = declared.filter((p) => !PHASE1_PACKAGES.includes(p));
-    if (banned.length)
-      return {
-        ok: false,
-        bundles: {},
-        log: `Paquetes no permitidos en esta fase: ${banned.join(', ')}.`,
-      };
+    // Segunda barrera (la primera es buildAppCode): el sandbox no instala versiones locales ni un package.json roto.
+    const problems = packageProblems(input.files);
+    if (problems.length) return { ok: false, bundles: {}, functions: {}, log: problems.join('\n') };
 
     const started = Date.now();
     const sandbox = await Sandbox.create({
@@ -216,6 +246,7 @@ export const sandboxBuilder: Builder = {
           .map(([path, content]) => ({ path: `${ROOT}/${path}`, content })),
         { path: `${ROOT}/package.json`, content: projectPackageJson(input.files) },
         { path: `${ROOT}/.cortex-build/entries.json`, content: JSON.stringify(input.entries) },
+        { path: `${ROOT}/.cortex-build/functions.json`, content: JSON.stringify(input.functions) },
         { path: `${ROOT}/.cortex-build/build.mjs`, content: BUILD_SCRIPT },
       ]);
 
@@ -229,7 +260,25 @@ export const sandboxBuilder: Builder = {
       log.push(`$ npm install (${Math.round((Date.now() - started) / 1000)} s)`);
       if (install.output) log.push(install.output);
       if (install.exitCode !== 0)
-        return { ok: false, bundles: {}, log: trim(`${log.join('\n')}\nnpm install falló.`) };
+        return {
+          ok: false,
+          bundles: {},
+          functions: {},
+          log: trim(`${log.join('\n')}\nnpm install falló.`),
+        };
+
+      // 2b. Tope de lo instalado: un paquete que baja gigas no se empaqueta.
+      const size = await exec(sandbox, 'du', ['-sk', 'node_modules'], 30_000);
+      const kb = Number.parseInt(size.output.split(/\s+/)[0] ?? '0', 10);
+      if (Number.isFinite(kb) && kb > MAX_INSTALLED_KB)
+        return {
+          ok: false,
+          bundles: {},
+          functions: {},
+          log: trim(
+            `${log.join('\n')}\nLos paquetes instalados pesan ${Math.round(kb / 1024)} MB; el tope es ${Math.round(MAX_INSTALLED_KB / 1024)} MB. Quita los que no uses.`,
+          ),
+        };
 
       // 3. El SDK, después de instalar (npm poda lo que no está en package.json).
       await sandbox.writeFiles(sdkPackageFiles(input.sdkSource));
@@ -238,28 +287,45 @@ export const sandboxBuilder: Builder = {
       const built = await exec(sandbox, 'node', ['.cortex-build/build.mjs'], BUILD_TIMEOUT_MS);
       if (built.output) log.push(built.output);
       if (built.exitCode !== 0)
-        return { ok: false, bundles: {}, log: trim(`${log.join('\n')}\nesbuild no pudo correr.`) };
+        return {
+          ok: false,
+          bundles: {},
+          functions: {},
+          log: trim(`${log.join('\n')}\nesbuild no pudo correr.`),
+        };
 
       const raw = await sandbox.readFileToBuffer({ path: RESULT_PATH });
       if (!raw)
         return {
           ok: false,
           bundles: {},
+          functions: {},
           log: trim(`${log.join('\n')}\nSin resultado de esbuild.`),
         };
       const result = JSON.parse(raw.toString('utf8')) as {
         bundles: Record<string, { js: string; css: string }>;
+        functions: Record<string, string>;
         errors: string[];
       };
       if (result.errors.length) log.push(...result.errors);
       const ok = result.errors.length === 0;
-      if (ok)
-        log.push(
-          `Compilado: ${Object.entries(result.bundles)
-            .map(([slug, b]) => `${slug} (${Math.round(b.js.length / 1024)} KB)`)
-            .join(', ')}.`,
-        );
-      return { ok, bundles: ok ? result.bundles : {}, log: trim(log.join('\n')) };
+      if (ok) {
+        const parts = [
+          ...Object.entries(result.bundles).map(
+            ([slug, b]) => `pantalla ${slug} (${Math.round(b.js.length / 1024)} KB)`,
+          ),
+          ...Object.entries(result.functions ?? {}).map(
+            ([name, js]) => `función ${name} (${Math.round(js.length / 1024)} KB)`,
+          ),
+        ];
+        log.push(`Compilado: ${parts.join(', ')}.`);
+      }
+      return {
+        ok,
+        bundles: ok ? result.bundles : {},
+        functions: ok ? (result.functions ?? {}) : {},
+        log: trim(log.join('\n')),
+      };
     } catch (err) {
       logger.warn({ err }, 'app-code: sandbox build failed');
       throw err;

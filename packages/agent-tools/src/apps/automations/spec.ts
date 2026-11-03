@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { filterSchema, thenSchema } from '../../views/spec';
-import { roleKeySchema } from '../permissions';
+import { ADMIN_ROLE_KEY, roleKeySchema } from '../permissions';
 import { ACCOUNTING_EVENTS, ACCOUNTING_EVENT_LABEL, accountingEventTableSlug } from '../../accounting/events';
 import { ACCOUNTING_PROVIDER_IDS } from '../../accounting/types';
 import { invoiceBodySchema } from './invoice-draft-spec';
@@ -410,6 +410,29 @@ export const automationActionSchema = z.discriminatedUnion('type', [
     category: z.enum(LEDGER_CATEGORIES).default('proveedores'),
   }),
   /**
+   * FUNCIÓN DE SERVIDOR (apps con código, fase 2): corre `server/<name>.ts` de la
+   * compilación PUBLICADA de la app con `input` (los textos admiten `{{campos}}`
+   * de la fila). Corre con el rol `role` de la app —obligatorio: nunca un
+   * administrador implícito— y sus lecturas/escrituras pasan por los permisos de
+   * ese rol. Con un disparador de horario no necesita fila. Ver code/run-function.ts.
+   */
+  z.object({
+    type: z.literal('run_function'),
+    ...branch,
+    name: z.string().trim().regex(/^[a-z][a-z0-9_]{1,47}$/, 'El nombre de una función: minúsculas, números y «_».'),
+    /** El rol de la app con que corre (no `administrador`). */
+    role: roleKeySchema,
+    input: z
+      .record(
+        z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]{0,39}$/),
+        z.union([z.string().max(1000), z.number(), z.boolean(), z.null()]),
+      )
+      .default({})
+      .refine((o) => Object.keys(o).length <= 20, 'Hasta 20 datos de entrada.'),
+    /** Agrega `row` (los valores de la fila) y `rowId` a la entrada. */
+    withRow: z.boolean().default(false),
+  }),
+  /**
    * REPORTE QUE SALE SOLO: arma una tabla (consulta agregada sobre una tabla de
    * la app o una pantalla) y la manda por correo a direcciones y/o roles, con la
    * tabla en el cuerpo y Excel y/o PDF adjuntos. Ver report-spec.ts.
@@ -464,6 +487,7 @@ export const ACTION_LABEL: Record<ActionType, string> = {
   update_rows: 'Cambiar filas de otra tabla por filtro',
   rollup: 'Acumular en la fila padre (suma, conteo, promedio…)',
   ledger_payable: 'Anotar el costo como cuenta por pagar en el libro de plata',
+  run_function: 'Correr una función de servidor (código de la app)',
   link_rows: 'Casar con otra tabla por una clave (deja puesta la relación)',
   report: 'Mandar un reporte por correo (tabla + Excel / PDF)',
   accounting_draft_invoice: 'Preparar una prefactura para Siigo (por revisar)',
@@ -644,6 +668,12 @@ function flowProblems(input: AutomationInput, rowless: boolean): string[] {
             `Acción ${n}: ${ROLLUP_OP_LABEL[a.op]} necesita \`field\` (el campo de las hijas).`,
           );
         if (rowless) out.push(`Acción ${n}: acumular necesita una fila de partida (la hija).`);
+        break;
+      case 'run_function':
+        if (a.withRow && rowless)
+          out.push(`Acción ${n}: pasar la fila a la función necesita una fila de partida.`);
+        if (a.role === ADMIN_ROLE_KEY)
+          out.push(`Acción ${n}: la función corre con un rol de la app, no con «${ADMIN_ROLE_KEY}».`);
         break;
       case 'ledger_payable':
         if (rowless) out.push(`Acción ${n}: anotar una cuenta por pagar necesita una fila de partida (el costo).`);

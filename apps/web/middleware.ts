@@ -181,8 +181,21 @@ const SESSION_COOKIE_RE = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=/;
  * Any future `/mcp…` or `/login…` route would have inherited the same hole.
  */
 function isPublic(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return (
+    PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
+    CODE_HOOK_RE.test(pathname)
+  );
 }
+
+/**
+ * Funciones de servidor de las apps con código (0244). Webhook de entrada:
+ * POST /api/apps/<id>/code/hooks/<función> con su propio token (Bearer, guardado
+ * con hash); y el SDK al que vuelve una función en ejecución:
+ * POST /api/apps/code/fn-sdk con un token HMAC de 5 minutos. Ninguna lleva
+ * cookie; cada ruta verifica la suya y rechaza lo demás.
+ */
+const CODE_HOOK_RE =
+  /^\/api\/apps\/(?:[0-9a-f-]{36}\/code\/hooks\/[a-z][a-z0-9_]{1,47}|code\/fn-sdk)$/;
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

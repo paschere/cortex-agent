@@ -9,6 +9,8 @@ import {
 } from '../../trackers/origin';
 import { type TrackerRow, getTrackerBySlug } from '../../trackers/store';
 import { isReadOnlySource } from '../../views/spec';
+import { functionPath } from '../code/files';
+import { getAppCode } from '../code/store';
 import { listRoles, listScreens } from '../store';
 import { forgetAutomationWatch } from './emit';
 import { reportQueryProblems } from './report';
@@ -329,6 +331,13 @@ export async function validateAutomation(
     if ((a.type === 'email' || a.type === 'notify_member' || a.type === 'report') && 'roles' in a)
       for (const r of a.roles)
         if (!roleKeys.has(r)) problems.push(`El rol «${r}» no existe en esta app.`);
+    if (a.type === 'run_function') {
+      if (!roleKeys.has(a.role)) problems.push(`El rol «${a.role}» no existe en esta app.`);
+      // La función tiene que existir en el borrador (se corre la publicada, pero una que ni se escribió es un error de dedo).
+      const draft = await getAppCode(db, appId);
+      if (!draft || !(functionPath(a.name) in draft.files))
+        problems.push(`La app no tiene la función «${a.name}» (server/${a.name}.ts).`);
+    }
     if (a.type === 'report') {
       if (a.source.kind === 'screen') {
         if (!screenSlugs.has(a.source.screen))

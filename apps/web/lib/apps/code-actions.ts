@@ -1,15 +1,32 @@
 'use server';
 
 import { buildCodeDeps } from '@/lib/apps/code-builder';
+import { ensureFunctionRunner } from '@/lib/apps/function-runner';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { getCodeBuildDeps } from '@cortex/agent-tools';
 import {
+  ADMIN_ROLE_KEY,
   type AppCodeBuildSummary,
+  assertSecretName,
+  deleteHook,
+  functionNames,
+  functionPath,
+  listHooks,
+  listRoles,
+  listRunRows,
+  listSecretNames,
+  runAppFunction,
+  setAppSecret,
+  testAppAccess,
+  upsertHook,
   addCodeScreen as addCodeScreenInStore,
+  CORTEX_AUTHOR,
+  StaleCodeError,
   buildAppCode,
   ensureAppCode,
   getAppCode,
+  githubLinkOf,
   listBuilds,
   listScreens,
   mustGetApp,
@@ -31,7 +48,10 @@ import { z } from 'zod';
  * Nada de lo que se guarda o compila llega a los usuarios hasta `publish`.
  */
 
-export type CodeActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+export type CodeActionResult<T = object> =
+  | ({ ok: true } & T)
+  /** `stale`: alguien cambió el código mientras editabas (guardado con una revisión vieja). */
+  | { ok: false; error: string; stale?: boolean };
 
 export interface CodeScreenInfo {
   id: string;
@@ -51,6 +71,19 @@ export interface CodeBuildInfo {
   published: boolean;
 }
 
+/** Quién tocó por última vez un archivo del borrador (0245). */
+export interface CodeFileAuthor {
+  by: 'cortex' | 'me' | 'other';
+  at: string;
+}
+
+export interface CodeGithubLink {
+  repo: string;
+  branch: string;
+  path: string;
+  lastSha: string | null;
+}
+
 export interface CodeSnapshot {
   appId: string;
   /** Archivos del borrador: ruta → contenido. */
@@ -60,7 +93,12 @@ export interface CodeSnapshot {
   builds: CodeBuildInfo[];
   publishedBuildId: string | null;
   sdkVersion: string;
+  /** Revisión del borrador: el editor la manda al guardar (concurrencia optimista). */
   updatedAt: string | null;
+  /** Último autor por archivo. */
+  fileAuthors: Record<string, CodeFileAuthor>;
+  /** Vínculo con GitHub, o null si no está conectado. */
+  github: CodeGithubLink | null;
 }
 
 function describe(err: unknown, fallback: string): string {
@@ -104,6 +142,7 @@ const toBuildInfo = (b: AppCodeBuildSummary, publishedId: string | null): CodeBu
 async function snapshotOf(
   db: ReturnType<typeof getOrgScopedClient>,
   appId: string,
+  userId: string,
 ): Promise<CodeSnapshot> {
   const code = await getAppCode(db, appId);
   const screens = (await listScreens(db, appId))
@@ -118,6 +157,13 @@ async function snapshotOf(
     publishedBuildId: code?.published_build_id ?? null,
     sdkVersion: code?.sdk_version ?? '1',
     updatedAt: code?.updated_at ?? null,
+    fileAuthors: Object.fromEntries(
+      Object.entries(code?.file_meta ?? {}).map(([path, m]) => [
+        path,
+        { by: m.by === CORTEX_AUTHOR ? 'cortex' : m.by === userId ? 'me' : 'other', at: m.at },
+      ]),
+    ),
+    github: githubLinkOf(code),
   };
 }
 
@@ -128,14 +174,16 @@ async function snapshotOf(
  */
 export async function readCode(appRef: string): Promise<CodeSnapshot> {
   try {
-    const { db, app } = await gate(appRef);
-    return await snapshotOf(db, app.id);
+    const { user, db, app } = await gate(appRef);
+    return await snapshotOf(db, app.id, user.id);
   } catch (err) {
     throw new Error(describe(err, 'No se pudo leer el código de la aplicación.'));
   }
 }
 
 const filesInput = z.object({
+  /** Revisión (`updatedAt`) del borrador sobre la que se editó; si cambió, se rechaza. */
+  baseUpdatedAt: z.string().nullable().optional(),
   write: z.record(z.string(), z.string()).optional(),
   remove: z.array(z.string()).max(200).optional(),
 });
@@ -148,10 +196,17 @@ export async function saveFiles(
   try {
     const changes = filesInput.parse(raw);
     const { user, db, app } = await gate(appRef);
-    const code = await saveAppCodeFiles(db, app.id, changes, user.id);
+    const code = await saveAppCodeFiles(
+      db,
+      app.id,
+      { write: changes.write, remove: changes.remove },
+      user.id,
+      { baseUpdatedAt: changes.baseUpdatedAt, author: user.id },
+    );
     touched(app);
     return { ok: true, files: code.files, updatedAt: code.updated_at };
   } catch (err) {
+    if (err instanceof StaleCodeError) return { ok: false, error: err.message, stale: true };
     return { ok: false, error: describe(err, 'No se pudieron guardar los archivos.') };
   }
 }
@@ -219,7 +274,9 @@ const screenInput = z.object({
 export async function addCodeScreen(
   appRef: string,
   raw: z.input<typeof screenInput>,
-): Promise<CodeActionResult<{ screen: CodeScreenInfo; files: Record<string, string> }>> {
+): Promise<
+  CodeActionResult<{ screen: CodeScreenInfo; files: Record<string, string>; updatedAt: string }>
+> {
   try {
     const input = screenInput.parse(raw);
     const { user, db, app } = await gate(appRef);
@@ -235,8 +292,199 @@ export async function addCodeScreen(
         codeEntry: screen.codeEntry,
       },
       files: code.files,
+      updatedAt: code.updated_at,
     };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo agregar la pantalla.') };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fase 2: funciones de servidor — secretos, corridas, prueba y webhooks (0244)
+// ---------------------------------------------------------------------------
+
+export interface CodeSecretInfo {
+  name: string;
+  updatedAt: string;
+}
+
+/** Los secretos de la app: SOLO nombre y fecha. El valor no vuelve nunca al navegador. Lanza si no hay permiso. */
+export async function listSecrets(appRef: string): Promise<CodeSecretInfo[]> {
+  try {
+    const { db, app } = await gate(appRef);
+    return await listSecretNames(db, app.id);
+  } catch (err) {
+    throw new Error(describe(err, 'No se pudieron leer los secretos.'));
+  }
+}
+
+/**
+ * Pone o reemplaza un secreto (`value` texto) o lo borra (`null`). El nombre va
+ * en MAYÚSCULAS (SIIGO_API_KEY); la función lo lee en `ctx.secrets.SIIGO_API_KEY`.
+ */
+export async function setSecret(
+  appRef: string,
+  name: string,
+  value: string | null,
+): Promise<CodeActionResult> {
+  try {
+    const { user, db, app } = await gate(appRef);
+    const clean = String(name ?? '').trim();
+    assertSecretName(clean);
+    await setAppSecret(db, app.id, clean, value, user.id);
+    touched(app);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar el secreto.') };
+  }
+}
+
+export interface CodeRunInfo {
+  id: string;
+  function: string;
+  trigger: 'screen' | 'rule' | 'schedule' | 'webhook' | 'chat';
+  actor: string | null;
+  role: string | null;
+  buildNumber: number | null;
+  status: 'ok' | 'error' | 'timeout';
+  durationMs: number;
+  log: string;
+  error: string | null;
+  createdAt: string;
+}
+
+/** Las últimas corridas de funciones (más nueva primero). Sin secretos: el log lo escribe la función. Lanza si no hay permiso. */
+export async function listRuns(
+  appRef: string,
+  opts: { limit?: number; function?: string } = {},
+): Promise<CodeRunInfo[]> {
+  try {
+    const { db, app } = await gate(appRef);
+    const rows = await listRunRows(db, app.id, {
+      limit: opts.limit ?? 50,
+      functionName: opts.function,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      function: r.function_name,
+      trigger: r.trigger,
+      actor: r.actor,
+      role: r.role_key,
+      buildNumber: r.build_number,
+      status: r.status,
+      durationMs: r.duration_ms,
+      log: r.log,
+      error: r.error,
+      createdAt: r.created_at,
+    }));
+  } catch (err) {
+    throw new Error(describe(err, 'No se pudieron leer las corridas.'));
+  }
+}
+
+/**
+ * Prueba una función a mano con una entrada. Corre de verdad (lee y ESCRIBE
+ * filas reales por `ctx.cortex`) con el rol `opts.role` o, si no se da, como
+ * administrador. Por omisión usa la última compilación buena (para probar antes
+ * de publicar); `opts.published` usa la publicada.
+ */
+export async function runFunction(
+  appRef: string,
+  name: string,
+  input: unknown,
+  opts: { role?: string; published?: boolean } = {},
+): Promise<
+  | { ok: true; result: unknown; log: string; durationMs: number }
+  | { ok: false; error: string; log: string }
+> {
+  try {
+    const { user, db, app } = await gate(appRef);
+    ensureFunctionRunner();
+    const access = await testAppAccess(
+      db,
+      app,
+      { id: user.id, name: user.name ?? 'Administrador' },
+      opts.role,
+    );
+    const out = await runAppFunction(db, access, name, input ?? {}, {
+      trigger: 'chat',
+      build: opts.published ? 'published' : 'latest',
+      organizationId: user.organization.id,
+      actorLabel: `${user.name ?? user.id} (prueba)`,
+    });
+    return out.ok
+      ? { ok: true, result: out.result ?? null, log: out.log, durationMs: out.durationMs }
+      : { ok: false, error: out.error ?? 'La función falló.', log: out.log };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo correr la función.'), log: '' };
+  }
+}
+
+export interface CodeWebhookInfo {
+  name: string;
+  role: string;
+  url: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+function hookUrl(appId: string, name: string): string {
+  const base = (process.env.APP_BASE_URL ?? process.env.BETTER_AUTH_URL ?? '').replace(/\/+$/, '');
+  return `${base}/api/apps/${appId}/code/hooks/${name}`;
+}
+
+/** Los webhooks de la app (sin token: sólo se ve al crearlo). Lanza si no hay permiso. */
+export async function listWebhooks(appRef: string): Promise<CodeWebhookInfo[]> {
+  try {
+    const { db, app } = await gate(appRef);
+    return (await listHooks(db, app.id)).map((h) => ({
+      name: h.name,
+      role: h.role_key,
+      url: hookUrl(app.id, h.name),
+      createdAt: h.created_at,
+      lastUsedAt: h.last_used_at,
+    }));
+  } catch (err) {
+    throw new Error(describe(err, 'No se pudieron leer los webhooks.'));
+  }
+}
+
+/**
+ * Crea el webhook de una función (o lo rota: el token anterior deja de servir).
+ * Corre con `role` —un rol de la app, nunca el administrador— a nombre de quien
+ * lo crea. El token sale UNA vez, aquí.
+ */
+export async function createWebhook(
+  appRef: string,
+  input: { name: string; role: string },
+): Promise<CodeActionResult<{ url: string; token: string }>> {
+  try {
+    const { user, db, app } = await gate(appRef);
+    const name = String(input.name ?? '').trim();
+    const role = String(input.role ?? '').trim();
+    const code = await getAppCode(db, app.id);
+    if (!code || !(functionPath(name) in code.files))
+      throw new ValidationError(`La app no tiene la función «${name}» (server/${name}.ts).`);
+    if (role === ADMIN_ROLE_KEY)
+      throw new ValidationError('Un webhook no corre como administrador: elige un rol de la app.');
+    if (!(await listRoles(db, app.id)).some((r) => r.key === role))
+      throw new ValidationError(`El rol «${role}» no existe en esta app.`);
+    const { token } = await upsertHook(db, app.id, { name, roleKey: role, userId: user.id });
+    touched(app);
+    return { ok: true, url: hookUrl(app.id, name), token };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo crear el webhook.') };
+  }
+}
+
+/** Borra el webhook de una función: su URL deja de responder. */
+export async function deleteWebhook(appRef: string, name: string): Promise<CodeActionResult> {
+  try {
+    const { db, app } = await gate(appRef);
+    await deleteHook(db, app.id, String(name ?? '').trim());
+    touched(app);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo borrar el webhook.') };
   }
 }

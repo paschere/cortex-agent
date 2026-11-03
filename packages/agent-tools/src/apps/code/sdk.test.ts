@@ -402,11 +402,17 @@ describe('ubicaciones, zonas y lo que llega después', () => {
     }>;
     expect(zones).toEqual([expect.objectContaining({ id: 'bodega', radiusM: 150 })]);
   });
-  it('functions.call y db.query avisan de qué fase llegan', async () => {
+  it('functions.call valida el nombre, pide código publicado y no se anida; db.query avisa su fase', async () => {
     const { db, as } = await setup();
-    await expect(runSdkOp(db, await as(ANA), 'functions.call', { name: 'x' })).rejects.toThrow(
-      /fase 2/,
+    await expect(runSdkOp(db, await as(ANA), 'functions.call', { name: 'X!' })).rejects.toThrow(
+      /minúsculas/,
     );
+    await expect(runSdkOp(db, await as(ANA), 'functions.call', { name: 'cobrar' })).rejects.toThrow(
+      /código/,
+    );
+    await expect(
+      runSdkOp(db, await as(ANA), 'functions.call', { name: 'cobrar' }, { via: 'function' }),
+    ).rejects.toThrow(/otra función/);
     await expect(runSdkOp(db, await as(ANA), 'db.query', { sql: 'select 1' })).rejects.toThrow(
       /fase 3/,
     );

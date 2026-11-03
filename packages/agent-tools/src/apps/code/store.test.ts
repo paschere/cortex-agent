@@ -147,7 +147,7 @@ describe('pantallas con código y buildAppCode', () => {
     expect(code?.files['screens/torre_de_control.tsx']).toContain('export default function Screen');
   });
 
-  it('compila, guarda la build y rechaza paquetes fuera de la lista', async () => {
+  it('compila, guarda la build y deja cualquier paquete del registro y rechaza rutas locales', async () => {
     const { db } = world();
     const app = await mustGetApp(db, '11111111-1111-4111-8111-111111111111');
     const screen = await addCodeScreen(db, app, { title: 'Torre', slug: 'torre', userId: USER });
@@ -161,10 +161,20 @@ describe('pantallas con código y buildAppCode', () => {
       { write: { 'package.json': JSON.stringify({ dependencies: { lodash: '4' } }) } },
       USER,
     );
-    const banned = await buildAppCode(db, app.id, USER, okBuilder([screen.slug]), '{}');
-    expect(banned.status).toBe('error');
-    expect(banned.log).toMatch(/lodash/);
-    expect(banned.number).toBe(2);
+    const anyPackage = await buildAppCode(db, app.id, USER, okBuilder([screen.slug]), '{}');
+    expect(anyPackage.status).toBe('ok');
+    expect(anyPackage.number).toBe(2);
+
+    await saveAppCodeFiles(
+      db,
+      app.id,
+      { write: { 'package.json': JSON.stringify({ dependencies: { mio: 'file:../mio' } }) } },
+      USER,
+    );
+    const local = await buildAppCode(db, app.id, USER, okBuilder([screen.slug]), '{}');
+    expect(local.status).toBe('error');
+    expect(local.log).toMatch(/mio/);
+    expect(local.number).toBe(3);
   });
 
   it('un builder que revienta o no trae la pantalla deja una build con error', async () => {

@@ -34,6 +34,8 @@ import {
   rowVisible,
 } from '../permissions';
 import { type AppAccess, type AppScreenRow, assertExternalBudget } from '../store';
+import { FN_CALLS_PER_MINUTE, FN_SDK_CALLS_PER_MINUTE } from './functions';
+import { runAppFunction } from './run-function';
 
 /**
  * EL SDK DE LAS PANTALLAS CON CÓDIGO, LADO SERVIDOR (fase 1).
@@ -88,7 +90,14 @@ export interface SdkCallContext {
   screen?: Pick<AppScreenRow, 'id' | 'slug' | 'view_id'> | null;
   /** «Ver como…»: un administrador mirando con otro rol. No escribe nada. */
   readOnly?: boolean;
+  /** 'function': la llamada viene de una función de servidor (token de corrida), con otro tope y sin `functions.call`. */
+  via?: 'function';
 }
+
+const callSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  input: z.unknown().optional(),
+});
 
 const FIELD_KEY_RE = /^[a-zA-Z0-9_]{1,60}$/;
 const tableName = z.string().trim().min(1).max(80);
@@ -585,6 +594,30 @@ async function aiAsk(db: SupabaseClient, access: AppAccess, args: unknown): Prom
   }
 }
 
+/** `functions.call`: corre una función de servidor de la compilación publicada con el rol de quien llama. */
+async function functionsCall(
+  db: SupabaseClient,
+  access: AppAccess,
+  ctx: SdkCallContext,
+  args: unknown,
+): Promise<unknown> {
+  if (ctx.via === 'function')
+    throw new ValidationError('Una función de servidor no llama a otra función.');
+  const { name, input } = parseArgs(callSchema, args);
+  try {
+    await consumeToken(db, access.user.id, 'apps.fn.call', FN_CALLS_PER_MINUTE);
+  } catch {
+    throw new ValidationError('Muchas llamadas a funciones seguidas. Espera un momento.');
+  }
+  const out = await runAppFunction(db, access, name, input, {
+    trigger: 'screen',
+    screen: ctx.screen ?? null,
+    readOnly: ctx.readOnly,
+  });
+  if (!out.ok) throw new ValidationError(out.error ?? 'La función falló.');
+  return out.result ?? null;
+}
+
 /**
  * Ejecuta una operación del SDK con el rol de `access`. Lanza `ValidationError`
  * (400), `ForbiddenError` (403), `NotFoundError` (404) con mensajes en español
@@ -603,8 +636,10 @@ export async function runSdkOp(
   await consumeToken(
     db,
     access.user.id,
-    `apps.sdk:${ctx.screen?.id ?? access.app.id}`,
-    SDK_CALLS_PER_MINUTE,
+    ctx.via === 'function'
+      ? `apps.sdk.fn:${access.app.id}`
+      : `apps.sdk:${ctx.screen?.id ?? access.app.id}`,
+    ctx.via === 'function' ? FN_SDK_CALLS_PER_MINUTE : SDK_CALLS_PER_MINUTE,
   );
   switch (op as SdkOp) {
     case 'user.me':
@@ -631,7 +666,7 @@ export async function runSdkOp(
     case 'ai.ask':
       return aiAsk(db, access, args);
     case 'functions.call':
-      throw new ValidationError('Las funciones de servidor llegan en la fase 2.');
+      return functionsCall(db, access, ctx, args);
     case 'db.query':
       throw new ValidationError('La base de datos propia llega en la fase 3.');
   }

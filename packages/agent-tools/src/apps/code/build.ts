@@ -1,8 +1,20 @@
 import { ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { listScreens, mustGetApp } from '../store';
-import { type CodeFiles, disallowedPackages, entriesFromScreens, validateCodeFiles } from './files';
-import { type AppCodeBuildRow, type BundleMap, ensureAppCode, recordBuild } from './store';
+import {
+  type CodeFiles,
+  entriesFromScreens,
+  functionEntries,
+  packageProblems,
+  validateCodeFiles,
+} from './files';
+import {
+  type AppCodeBuildRow,
+  type BundleMap,
+  type FunctionBundles,
+  ensureAppCode,
+  recordBuild,
+} from './store';
 
 /**
  * COMPILAR UN PROYECTO DE CÓDIGO (fase 1).
@@ -12,7 +24,8 @@ import { type AppCodeBuildRow, type BundleMap, ensureAppCode, recordBuild } from
  * apps/web/lib/apps/code-builder.ts y compila en Vercel Sandbox). Aquí se
  * arma la entrada (las pantallas `code` y su archivo), se rechaza lo que la
  * fase 1 no deja (paquetes fuera de la lista) y se guarda el resultado como
- * una compilación numerada, buena o mala: el log de una mala es lo que Cortex
+ * una compilación numerada (con los bundles de las pantallas y las funciones
+ * de servidor), buena o mala: el log de una mala es lo que Cortex
  * lee para corregir.
  */
 
@@ -20,6 +33,8 @@ export interface BuilderInput {
   files: CodeFiles;
   /** slug de pantalla → ruta del archivo de entrada. */
   entries: Record<string, string>;
+  /** Funciones de servidor: nombre → ruta (`server/<nombre>.ts`). Se empaquetan para node. */
+  functions: Record<string, string>;
   /** Código fuente del SDK `@cortex/app-sdk` (ver `CodeBuildDeps`). */
   sdkSource: string;
 }
@@ -27,6 +42,8 @@ export interface BuilderInput {
 export interface BuilderOutput {
   ok: boolean;
   bundles: BundleMap;
+  /** nombre de función → JS CommonJS listo para correr con `node` (paquetes incluidos). */
+  functions?: FunctionBundles;
   log: string;
 }
 
@@ -94,29 +111,33 @@ export async function buildAppCode(
     return fail(
       `Falta el archivo de entrada de: ${missing.join(', ')}. Escríbelo o quita la pantalla.`,
     );
-  if (!Object.keys(entries).length)
-    return fail('La aplicación no tiene pantallas con código. Crea una con addCodeScreen.');
-  const banned = disallowedPackages(files);
-  if (banned.length)
+  const fnEntries = functionEntries(files);
+  if (!Object.keys(entries).length && !Object.keys(fnEntries).length)
     return fail(
-      `Paquetes no permitidos en esta fase: ${banned.join(', ')}. Disponibles: react, react-dom, lucide-react, recharts, leaflet, react-leaflet, date-fns.`,
+      'La aplicación no tiene pantallas con código ni funciones de servidor. Crea una pantalla con addCodeScreen o una función en server/<nombre>.ts.',
     );
+  const problems = packageProblems(files);
+  if (problems.length) return fail(problems.join('\n'));
 
   let out: Awaited<ReturnType<Builder['build']>>;
   try {
-    out = await builder.build({ files, entries, sdkSource });
+    out = await builder.build({ files, entries, functions: fnEntries, sdkSource });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return fail(`No se pudo compilar: ${message}`.slice(0, LOG_MAX));
   }
   // Cada pantalla pedida tiene que traer bundle; si no, no está "ok".
   const lacking = Object.keys(entries).filter((slug) => !out.bundles[slug]?.js);
-  const ok = out.ok && lacking.length === 0;
+  const lackingFns = Object.keys(fnEntries).filter((name) => !out.functions?.[name]);
+  const ok = out.ok && lacking.length === 0 && lackingFns.length === 0;
   const log =
-    lacking.length && out.ok ? `${out.log}\nSin bundle para: ${lacking.join(', ')}.` : out.log;
+    (lacking.length || lackingFns.length) && out.ok
+      ? `${out.log}\nSin bundle para: ${[...lacking, ...lackingFns].join(', ')}.`
+      : out.log;
   return recordBuild(db, code, {
     files,
     bundles: ok ? out.bundles : {},
+    functions: ok ? (out.functions ?? {}) : {},
     status: ok ? 'ok' : 'error',
     log: trimLog(log),
     userId: actor,

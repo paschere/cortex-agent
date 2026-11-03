@@ -522,6 +522,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   apps_code_build: { label: 'Compilar el código de la aplicación', icon: 'Hammer' },
   apps_code_add_screen: { label: 'Agregar una pantalla con código', icon: 'LayoutPanelTop' },
   apps_code_publish: { label: 'Publicar el código de la aplicación', icon: 'Rocket' },
+  apps_code_run: { label: 'Probar una función de servidor', icon: 'Play' },
+  apps_code_runs: { label: 'Ver las corridas de las funciones', icon: 'History' },
   apps_inspect: { label: 'Revisar lo que ve un rol en la aplicación', icon: 'ScanEye' },
   apps_delete: { label: 'Eliminar una aplicación', icon: 'Trash2' },
   apps_assign_members: { label: 'Asignar personas a una aplicación', icon: 'Users' },

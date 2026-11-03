@@ -83,6 +83,7 @@ export { accessibleVariants, paletteFromPixels, suggestFont } from './brand-pale
 export * from './code/files';
 export * from './code/store';
 export * from './code/build';
+export * from './code/github';
 export { runSdkOp, SDK_OPS, SDK_CALLS_PER_MINUTE } from './code/sdk';
 export type { SdkCallContext, SdkOp, SdkRowOut } from './code/sdk';
 export {
@@ -90,5 +91,12 @@ export {
   appsCodeBuild,
   appsCodePublish,
   appsCodeRead,
+  appsCodeRun,
+  appsCodeRuns,
   appsCodeWrite,
 } from './code/tools';
+export * from './code/functions';
+export * from './code/function-store';
+export { accessFromClaims, runAppFunction, systemAppAccess, testAppAccess } from './code/run-function';
+export type { FunctionOutcome, RunFunctionOptions } from './code/run-function';
+export { runFunctionAction, summarizeResult } from './code/rule-action';

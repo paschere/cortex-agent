@@ -7,10 +7,10 @@ import { ValidationError } from '@cortex/core';
  * desarrollador) antes de guardarlo y saca de los archivos las pantallas que
  * hay que compilar. Un proyecto es un mapa `{ruta: contenido}`:
  *
- *   package.json             dependencias (la lista permitida de la fase 1)
+ *   package.json             dependencias npm (cualquiera del registro; fase 2)
  *   screens/<slug>.tsx       una pantalla: `export default function Screen() {…}`
  *   lib/**                   código compartido
- *   server/<nombre>.ts       función de servidor (fase 2)
+ *   server/<nombre>.ts       función de servidor (fase 2): `export default async function (input, ctx)`
  *   db/migrations/NNNN_*.sql migraciones de la base propia (fase 3)
  *
  * Límites del contrato: 200 archivos, 512 KB por archivo, 4 MB en total.
@@ -23,17 +23,10 @@ export const MAX_CODE_TOTAL_BYTES = 4 * 1024 * 1024;
 export const CODE_PATH_RE = /^[a-zA-Z0-9_./-]+$/;
 export const SCREEN_FILE_RE = /^screens\/([a-z][a-z0-9_]{1,47})\.tsx$/;
 
-/** Los paquetes npm que la fase 1 deja instalar. El SDK y React van siempre. */
-export const PHASE1_PACKAGES: readonly string[] = [
-  'react',
-  'react-dom',
-  '@cortex/app-sdk',
-  'lucide-react',
-  'recharts',
-  'leaflet',
-  'react-leaflet',
-  'date-fns',
-];
+export const FUNCTION_FILE_RE = /^server\/([a-z][a-z0-9_]{1,47})\.ts$/;
+export const FUNCTION_NAME_RE = /^[a-z][a-z0-9_]{1,47}$/;
+/** Tope de paquetes declarados: más que esto no es una app, es un descuido. */
+export const MAX_DECLARED_PACKAGES = 60;
 
 export type CodeFiles = Record<string, string>;
 
@@ -152,9 +145,64 @@ export function declaredPackages(files: CodeFiles): string[] | null {
   }
 }
 
-/** Los paquetes declarados que la fase 1 no deja instalar. */
-export function disallowedPackages(files: CodeFiles): string[] {
-  return (declaredPackages(files) ?? []).filter((p) => !PHASE1_PACKAGES.includes(p));
+/**
+ * Cualquier paquete del registro de npm sirve (fase 2). Sólo se rechaza lo que
+ * no tiene sentido en una compilación aislada: versiones que apuntan al disco
+ * del sandbox (`file:`, `link:`, `workspace:`, `portal:`) y pasarse del tope de
+ * paquetes. Los scripts de instalación nunca corren (`--ignore-scripts`), así
+ * que un paquete con `postinstall` se instala pero no ejecuta nada. Devuelve
+ * los motivos en español (vacío = todo bien).
+ */
+export function packageProblems(files: CodeFiles): string[] {
+  const raw = files['package.json'];
+  if (raw === undefined) return [];
+  let json: { dependencies?: unknown; devDependencies?: unknown };
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return ['El package.json no es un JSON válido.'];
+  }
+  const out: string[] = [];
+  const specs: Array<[string, unknown]> = [];
+  for (const group of [json.dependencies, json.devDependencies]) {
+    if (group && typeof group === 'object' && !Array.isArray(group))
+      specs.push(...Object.entries(group as Record<string, unknown>));
+  }
+  if (specs.length > MAX_DECLARED_PACKAGES)
+    out.push(
+      `El package.json declara ${specs.length} paquetes; el tope es ${MAX_DECLARED_PACKAGES}.`,
+    );
+  for (const [name, version] of specs) {
+    if (typeof version !== 'string') {
+      out.push(`La versión de «${name}» debe ser texto.`);
+      continue;
+    }
+    if (/^(file|link|workspace|portal):/i.test(version.trim()))
+      out.push(
+        `«${name}» apunta a «${version}»: las rutas locales no existen en la compilación. Usa una versión del registro de npm.`,
+      );
+  }
+  return out;
+}
+
+/** Los archivos de funciones de servidor: `{nombre → ruta}`. */
+export function functionEntries(files: CodeFiles): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const path of Object.keys(files)) {
+    const name = FUNCTION_FILE_RE.exec(path)?.[1];
+    if (name) out[name] = path;
+  }
+  return out;
+}
+
+/** Los nombres de las funciones de servidor del proyecto, en orden. */
+export function functionNames(files: CodeFiles): string[] {
+  return Object.keys(functionEntries(files)).sort();
+}
+
+/** La ruta de la función `name`: `server/<name>.ts`. */
+export function functionPath(name: string): string {
+  return `server/${name}.ts`;
 }
 
 /** Resumen corto de un proyecto para el chat: rutas con tamaño. */

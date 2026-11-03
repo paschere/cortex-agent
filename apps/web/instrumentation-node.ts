@@ -1,4 +1,5 @@
 import { buildCodeDeps } from '@/lib/apps/code-builder';
+import { sandboxFunctionRunner } from '@/lib/apps/function-runner';
 import { wakeAutomationRuns } from '@/lib/apps/automation-wake';
 import { buildNoticeDelivery } from '@/lib/apps/notice-delivery';
 import { browserDocumentSink } from '@/lib/browser-download';
@@ -7,6 +8,7 @@ import {
   rowNoticeListener,
   setAutomationWaker,
   setCodeBuildDeps,
+  setFunctionRunner,
   setDocumentSink,
   setNoticeDelivery,
   setRowChangeListener,
@@ -52,6 +54,7 @@ setAutomationWaker(wakeAutomationRuns);
  * acciones del editor lo pasan directo (lib/apps/code-actions.ts).
  */
 setCodeBuildDeps(buildCodeDeps());
+setFunctionRunner(sandboxFunctionRunner);
 
 /**
  * Avisos automáticos de las apps (0231): cada fila creada o cambiada llega a

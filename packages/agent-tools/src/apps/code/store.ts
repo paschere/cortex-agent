@@ -18,8 +18,9 @@ import { type CodeFiles, applyFileChanges, screenFilePath, validateCodeFiles } f
 export const MAX_BUILDS_KEPT = 30;
 
 const CODE_COLUMNS =
-  'id, app_id, files, sdk_version, published_build_id, updated_by, updated_at, created_at';
-const BUILD_COLUMNS = 'id, code_id, number, files, bundles, status, log, created_by, created_at';
+  'id, app_id, files, file_meta, sdk_version, published_build_id, updated_by, updated_at, created_at, github_repo, github_branch, github_path, github_last_sha';
+const BUILD_COLUMNS =
+  'id, code_id, number, files, bundles, functions, status, log, created_by, created_at';
 /** Para listar: sin los archivos ni los bundles, que pesan. */
 const BUILD_LIST_COLUMNS = 'id, code_id, number, status, log, created_by, created_at';
 
@@ -33,9 +34,33 @@ export interface AppCodeRow {
   updated_by: string | null;
   updated_at: string;
   created_at: string;
+  /** Quién cambió cada archivo por última vez: id del miembro o 'cortex' (0245). */
+  file_meta: FileMeta;
+  /** Vínculo con GitHub (0245); null mientras no se conecte. */
+  github_repo: string | null;
+  github_branch: string | null;
+  github_path: string | null;
+  github_last_sha: string | null;
+}
+
+/** Autor que se anota cuando escribe el agente. */
+export const CORTEX_AUTHOR = 'cortex';
+
+export type FileMeta = Record<string, { by: string; at: string }>;
+
+/** La base del guardado ya no es la última: alguien (Cortex o una persona) cambió el código mientras tanto. */
+export class StaleCodeError extends ValidationError {
+  constructor(
+    msg = 'Alguien cambió el código mientras editabas. Vuelve a leerlo antes de guardar.',
+  ) {
+    super(msg);
+    this.name = 'StaleCodeError';
+  }
 }
 
 export type BundleMap = Record<string, { js: string; css: string }>;
+/** Las funciones de servidor compiladas de una compilación: {nombre: js (CommonJS, con sus paquetes dentro)}. */
+export type FunctionBundles = Record<string, string>;
 
 export interface AppCodeBuildRow {
   id: string;
@@ -43,6 +68,8 @@ export interface AppCodeBuildRow {
   number: number;
   files: CodeFiles;
   bundles: BundleMap;
+  /** Funciones de servidor compiladas (0244). */
+  functions: FunctionBundles;
   status: 'ok' | 'error';
   log: string;
   created_by: string | null;
@@ -50,7 +77,7 @@ export interface AppCodeBuildRow {
 }
 
 /** Una compilación sin archivos ni bundles (para listas). */
-export type AppCodeBuildSummary = Omit<AppCodeBuildRow, 'files' | 'bundles'>;
+export type AppCodeBuildSummary = Omit<AppCodeBuildRow, 'files' | 'bundles' | 'functions'>;
 
 function adaptCode(row: Record<string, unknown>): AppCodeRow {
   const files =
@@ -60,7 +87,25 @@ function adaptCode(row: Record<string, unknown>): AppCodeRow {
     files: files as CodeFiles,
     sdk_version: typeof row.sdk_version === 'string' ? row.sdk_version : '1',
     published_build_id: typeof row.published_build_id === 'string' ? row.published_build_id : null,
+    file_meta: adaptFileMeta(row.file_meta),
+    github_repo: str(row.github_repo),
+    github_branch: str(row.github_branch),
+    github_path: str(row.github_path),
+    github_last_sha: str(row.github_last_sha),
   };
+}
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+
+function adaptFileMeta(raw: unknown): FileMeta {
+  const out: FileMeta = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [path, v] of Object.entries(raw)) {
+    const m = v as { by?: unknown; at?: unknown } | null;
+    if (m && typeof m.by === 'string' && typeof m.at === 'string')
+      out[path] = { by: m.by, at: m.at };
+  }
+  return out;
 }
 
 function adaptBuild(row: Record<string, unknown>): AppCodeBuildRow {
@@ -69,6 +114,7 @@ function adaptBuild(row: Record<string, unknown>): AppCodeBuildRow {
     ...(row as unknown as AppCodeBuildRow),
     files: obj(row.files) as CodeFiles,
     bundles: obj(row.bundles) as BundleMap,
+    functions: obj(row.functions) as FunctionBundles,
     status: row.status === 'ok' ? 'ok' : 'error',
     log: typeof row.log === 'string' ? row.log : '',
     number: Number(row.number ?? 0),
@@ -111,24 +157,80 @@ export async function ensureAppCode(
 }
 
 /**
+ * Archivos que una persona cambió después de la última vez que escribió
+ * Cortex (la marca más reciente de 'cortex'; si Cortex nunca escribió, todo
+ * lo que tenga autor humano). Más nuevos primero, hasta 20.
+ */
+export function humanChangedFiles(
+  meta: FileMeta,
+  files: Record<string, string>,
+): Array<{ path: string; at: string }> {
+  let lastCortex = Number.NEGATIVE_INFINITY;
+  for (const m of Object.values(meta))
+    if (m.by === CORTEX_AUTHOR) lastCortex = Math.max(lastCortex, Date.parse(m.at) || 0);
+  return Object.entries(meta)
+    .filter(
+      ([path, m]) =>
+        path in files && m.by !== CORTEX_AUTHOR && (Date.parse(m.at) || 0) > lastCortex,
+    )
+    .map(([path, m]) => ({ path, at: m.at }))
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, 20);
+}
+
+/** ¿Dos marcas de tiempo son la misma? (la base devuelve microsegundos; JS, milisegundos). */
+export function sameInstant(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return a === b;
+  if (a === b) return true;
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  return Number.isFinite(ta) && Number.isFinite(tb) && ta === tb;
+}
+
+/**
+ * La revisión del guardado coincide con la del borrador? `base === undefined`
+ * = sin control (compatibilidad); `null` = «el proyecto aún no existía».
+ */
+export function isStaleBase(base: string | null | undefined, current: string | null): boolean {
+  if (base === undefined) return false;
+  return !sameInstant(base, current);
+}
+
+/**
  * Escribe y/o borra archivos del borrador. Valida rutas y límites sobre el
  * resultado completo. `write` reemplaza el archivo entero (no hay parches).
+ *
+ * Concurrencia optimista (0245): con `baseUpdatedAt` el guardado sólo procede
+ * si el borrador sigue como lo leyó quien guarda; si no, lanza `StaleCodeError`.
+ * `author` anota quién cambió cada archivo ('cortex' o el id del miembro; por
+ * omisión, `userId`).
  */
 export async function saveAppCodeFiles(
   db: SupabaseClient,
   appId: string,
   changes: { write?: Record<string, string>; remove?: string[] },
   userId: string,
+  opts: { baseUpdatedAt?: string | null; author?: string } = {},
 ): Promise<AppCodeRow> {
-  const code = await ensureAppCode(db, appId, userId);
+  const existing = await getAppCode(db, appId);
+  if (isStaleBase(opts.baseUpdatedAt, existing?.updated_at ?? null)) throw new StaleCodeError();
+  const code = existing ?? (await ensureAppCode(db, appId, userId));
   const files = applyFileChanges(code.files, changes);
-  const { data, error } = await db
+  const now = new Date().toISOString();
+  const by = opts.author ?? userId;
+  const meta: FileMeta = {};
+  for (const [path, m] of Object.entries(code.file_meta)) if (path in files) meta[path] = m;
+  for (const path of Object.keys(changes.write ?? {}))
+    if (path in files) meta[path] = { by, at: now };
+  let q = db
     .from('custom_app_code')
-    .update({ files, updated_by: userId, updated_at: new Date().toISOString() })
-    .eq('id', code.id)
-    .select(CODE_COLUMNS)
-    .single();
+    .update({ files, file_meta: meta, updated_by: userId, updated_at: now })
+    .eq('id', code.id);
+  // Guardia atómica: si alguien escribió entre la lectura y este update, no toca nada.
+  if (opts.baseUpdatedAt !== undefined) q = q.eq('updated_at', code.updated_at);
+  const { data, error } = await q.select(CODE_COLUMNS).maybeSingle();
   if (error) throw error;
+  if (!data) throw new StaleCodeError();
   return adaptCode(data as Record<string, unknown>);
 }
 
@@ -146,7 +248,12 @@ export async function listBuilds(
     .limit(limit);
   if (error) throw error;
   return (data ?? []).map((r) => {
-    const { files: _f, bundles: _b, ...rest } = adaptBuild(r as Record<string, unknown>);
+    const {
+      files: _f,
+      bundles: _b,
+      functions: _fn,
+      ...rest
+    } = adaptBuild(r as Record<string, unknown>);
     return rest;
   });
 }
@@ -194,6 +301,7 @@ export async function recordBuild(
   input: {
     files: CodeFiles;
     bundles: BundleMap;
+    functions?: FunctionBundles;
     status: 'ok' | 'error';
     log: string;
     userId: string;
@@ -219,6 +327,7 @@ export async function recordBuild(
         number,
         files: input.files,
         bundles: input.bundles,
+        functions: input.functions ?? {},
         status: input.status,
         log: input.log,
         created_by: input.userId,
@@ -271,16 +380,58 @@ export async function publishAppCode(
     );
   const { data, error } = await db
     .from('custom_app_code')
-    .update({
-      published_build_id: build.id,
-      updated_by: userId,
-      updated_at: new Date().toISOString(),
-    })
+    // `updated_at` es del borrador (control de concurrencia, 0245): publicar no lo mueve.
+    .update({ published_build_id: build.id, updated_by: userId })
     .eq('id', code.id)
     .select(CODE_COLUMNS)
     .single();
   if (error) throw error;
   return { code: adaptCode(data as Record<string, unknown>), build };
+}
+
+// ---------------------------------------------------------------------------
+// Vínculo con GitHub (0245)
+// ---------------------------------------------------------------------------
+
+export interface GithubLink {
+  repo: string;
+  branch: string;
+  path: string;
+  lastSha: string | null;
+}
+
+/** Guarda (o quita, con null) el vínculo con GitHub del proyecto. */
+export async function setGithubLink(
+  db: SupabaseClient,
+  appId: string,
+  userId: string,
+  link: GithubLink | null,
+): Promise<AppCodeRow> {
+  const code = await ensureAppCode(db, appId, userId);
+  const { data, error } = await db
+    .from('custom_app_code')
+    .update({
+      github_repo: link?.repo ?? null,
+      github_branch: link?.branch ?? null,
+      github_path: link ? link.path : null,
+      github_last_sha: link?.lastSha ?? null,
+    })
+    .eq('id', code.id)
+    .select(CODE_COLUMNS)
+    .single();
+  if (error) throw error;
+  return adaptCode(data as Record<string, unknown>);
+}
+
+/** El vínculo de un proyecto, o null si no está conectado. */
+export function githubLinkOf(code: AppCodeRow | null): GithubLink | null {
+  if (!code?.github_repo || !code.github_branch) return null;
+  return {
+    repo: code.github_repo,
+    branch: code.github_branch,
+    path: code.github_path ?? '',
+    lastSha: code.github_last_sha,
+  };
 }
 
 // ---------------------------------------------------------------------------

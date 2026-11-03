@@ -1,3 +1,4 @@
+import { ensureFunctionRunner } from '@/lib/apps/function-runner';
 import { isSameOrigin } from '@/lib/activations/request';
 import { openScreenForApi, previewAttributesOf } from '@/lib/apps/access';
 import { runSdkOp } from '@cortex/agent-tools';
@@ -72,6 +73,7 @@ export async function POST(
     return fail('Estás viendo como otro rol: nada se guarda.', 403);
 
   try {
+    if (op === 'functions.call') ensureFunctionRunner();
     const data = await runSdkOp(db, access, op, args, { screen, readOnly });
     return NextResponse.json({ ok: true, data }, { headers: { 'cache-control': 'no-store' } });
   } catch (err) {

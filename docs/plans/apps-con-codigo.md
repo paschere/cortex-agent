@@ -56,7 +56,7 @@ el SDK, y el servidor aplica el rol del usuario igual que hoy.
 Una app tiene como máximo UN proyecto de código (`custom_app_code`, `app_id` único). Sus archivos:
 
 ```
-package.json            dependencias npm (fase 2 las instala; fase 1 solo react/react-dom/@cortex/app-sdk + lista permitida)
+package.json            dependencias npm (fase 2: cualquier paquete del registro; scripts de instalación desactivados)
 screens/<slug>.tsx      una pantalla: `export default function Screen() {…}`
 lib/**/*.ts(x)          código compartido
 server/<nombre>.ts      función de servidor (fase 2): `export default async function (input, ctx) {…}`
@@ -117,3 +117,85 @@ Sin dependencias; el bundle de la pantalla lo incluye. Exporta `cortex` (las ops
 ### Cortex programando
 
 Herramientas del chat (`packages/agent-tools/src/apps/code/tools.ts`): `apps.code_read` (archivos y última compilación), `apps.code_write` (escribe/borra archivos del borrador), `apps.code_build` (compila y devuelve el log), `apps.code_add_screen` (pantalla `code` con su entrada), `apps.code_publish` (con confirmación). El modelo itera escribir → compilar → leer errores. Solo owner/admin.
+
+---
+
+## Fase 2: funciones de servidor, npm y secretos (migración `0244_custom_app_code_functions.sql`)
+
+### Funciones
+
+`server/<nombre>.ts` (`^[a-z][a-z0-9_]{1,47}$`) con `export default async function (input, ctx) { return resultado }`.
+`ctx = { user: {id,name,role,attributes}|null, cortex, secrets: Record<string,string>, log(...args) }`.
+`ctx.cortex` es el mismo SDK de las pantallas, del lado servidor: `tables.list/query/get/insert/update`, `locations.live`,
+`geofences.list`, `ai.ask`, `user.me`. NO tiene `functions.call` (una función no llama a otra: sin recursión).
+
+### Compilar
+
+`Builder.build` recibe además `functions: {nombre → ruta}` y devuelve `functions: {nombre → js}`. En el mismo Sandbox
+(un solo `npm install`), esbuild empaqueta cada función con `platform:'node', target:'node22', format:'cjs',
+bundle:true` y el sourcemap en línea (los errores salen con la línea del `.ts`). Va a la columna nueva
+`custom_app_code_builds.functions jsonb` ({nombre: js}); `bundles` queda solo con pantallas. Tope: 6 MB por función
+empaquetada, 700 MB de `node_modules`, 60 paquetes declarados, 150 s de instalación. Ya no hay lista permitida:
+cualquier paquete del registro sirve; instalar es con `--ignore-scripts` (nada corre al instalar). Lo único que se
+rechaza con motivo: versiones `file:`/`link:`/`workspace:`/`portal:` (apuntan al disco del sandbox, no existen
+fuera de él). Paquetes con binarios nativos (`.node`) fallan al empaquetar con el error de esbuild en el log.
+Un proyecto puede tener solo funciones (sin pantallas con código).
+
+### Correr (`runAppFunction`, `code/run-function.ts`)
+
+Una sola puerta para pantalla, regla, horario, webhook y chat. Corre la compilación PUBLICADA (o, para probar,
+`build:'latest'` = la última que salió bien). Un sandbox tibio por app y compilación
+(`cortex-fn-<app>-<build8>`, `Sandbox.getOrCreate`, no persistente, 3 min + 2 min por uso): la primera llamada escribe
+el runner y las funciones; las siguientes solo pagan el arranque de `node`. Cada llamada escribe
+`jobs/<id>.json` (entrada, secretos, token), corre `node runner.cjs` (tope 60 s, SIGKILL) y lee `jobs/<id>.out.json`
+(resultado ≤ 1 MB, log capturado de `console.*`). El runner borra el archivo del trabajo apenas lo lee. Si el sandbox
+tibio murió se reintenta una vez con uno nuevo. Salida a internet: todo permitido MENOS redes privadas, link-local y
+metadata (10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10); el sandbox no recibe ninguna llave de Cortex.
+Riesgo que queda: una función puede mandar a internet lo que su rol lee (por eso los roles de reglas/webhooks son
+explícitos y mínimos). Siguiente paso posible: lista de dominios por app en `networkPolicy.allow`.
+
+### Volver a llamar a Cortex
+
+Token HMAC de 5 minutos (`mintFnToken`, llave derivada de `JOBS_SECRET` con la etiqueta `cortex.app-fn-sdk.v1`) con
+`{org, app, actor{kind,id,name}, role, attributes, screen?, readOnly, fn, exp}`. `POST /api/apps/code/fn-sdk` (pública en
+el middleware, sin cookie) lo verifica, reconstruye el `AppAccess` con los permisos del rol LEÍDOS DE LA BASE en ese
+momento (`accessFromClaims`) y llama `runSdkOp(..., {via:'function'})`: los permisos son los del que disparó la
+función. Tope de `ctx.cortex`: 600 llamadas/min por app y usuario (la pantalla tiene 120). «Ver como…» propaga
+`readOnly`: la función corre, sus escrituras se rechazan. Una pantalla llama `cortex.functions.call(name, input)`
+(30/min por usuario); el error de la función vuelve como mensaje al usuario.
+
+### Disparadores
+
+- **Pantalla**: op `functions.call`. Rol: el de quien la usa.
+- **Regla / horario**: acción de automatización `run_function {name, role, input:{clave: "texto con {{campos}}"}, withRow?}`.
+  `role` es OBLIGATORIO y no puede ser `administrador`: la función corre con ese rol de la app, a nombre de quien creó
+  la regla (para que las filas que escriba tengan autor). Con un horario no hay fila (`withRow` no aplica). La validación
+  exige que el rol exista y que `server/<name>.ts` exista en el borrador. Un error de la función hace fallar la acción
+  (queda en el historial de la regla). Un rol con alcance por atributo («Cliente = el suyo») no sirve aquí: no hay persona.
+- **Webhook**: `POST /api/apps/<app>/code/hooks/<función>` con `Authorization: Bearer cxh_…` (o `X-Cortex-Token`). Un
+  webhook por función (`custom_app_code_hooks`: rol, hash del token, autor; crear de nuevo ROTA el token). La función
+  recibe `{ body, headers (sin credenciales), query }`. 60/min por webhook. Mismo 404 para inexistente/token malo/app sin publicar.
+- **Chat**: `apps.code_run` (probar con una entrada; por omisión la última compilación buena, como administrador o como
+  un rol dado) y `apps.code_runs` (últimas corridas). Solo owner/admin.
+
+### Secretos y registro
+
+`custom_app_code_secrets` (`^[A-Z][A-Z0-9_]{1,63}$`, ≤ 50 por app, ≤ 8 KB): valor cifrado con `encryptToken`
+(`TOKEN_ENCRYPTION_KEY`, el mismo cifrado que custom-tools). La lista solo devuelve nombre y fecha; el valor solo se
+inyecta en `ctx.secrets`. `custom_app_code_runs`: función, disparador, actor, rol, nº de compilación, ok/error/timeout,
+duración, log (≤ 20 KB) y error; se poda a las últimas 500 por app.
+
+### Server actions (`apps/web/lib/apps/code-actions.ts`)
+
+`listSecrets(appRef)`, `setSecret(appRef, name, value|null)`, `listRuns(appRef, {limit?, function?})`,
+`runFunction(appRef, name, input, {role?, published?})`, `listWebhooks(appRef)`, `createWebhook(appRef, {name, role})`,
+`deleteWebhook(appRef, name)`; `CodeSnapshot.functions: string[]`.
+
+### Pendientes / riesgos
+
+- Un `tables.insert/update` hecho por una función dispara las reglas de la tabla como cualquier escritura; la cadena
+  anti-bucle de automatizaciones no cruza el HTTP de vuelta, así que una regla que llama a una función que escribe en la
+  misma tabla que la dispara puede hacer un bucle (hoy solo lo frena el tope de 600 llamadas/min).
+- El sandbox tibio es por app: dos usuarios de la misma app comparten VM (cada llamada tiene su archivo y su token).
+- No probado contra el Sandbox real (sin credenciales locales): el runner, `getOrCreate`, la política de red y el
+  `extendTimeout` están escritos según los tipos de `@vercel/sandbox` 2.9.

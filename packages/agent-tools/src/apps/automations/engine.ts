@@ -497,6 +497,11 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
         type: a.type,
         summary: `Dejaría en «${a.target}» de la fila padre (por «${a.up}») ${ROLLUP_OP_LABEL[a.op]}${a.field ? ` de «${a.field}»` : ''} de todas sus filas hijas.`,
       };
+    case 'run_function':
+      return {
+        type: a.type,
+        summary: `Correría la función de servidor «${a.name}» con el rol «${a.role}»${Object.keys(a.input).length ? ` y los datos ${Object.keys(a.input).map((k) => `«${k}»`).join(', ')}` : ''}${a.withRow ? ' más los valores de la fila' : ''}.`,
+      };
     case 'ledger_payable':
       return {
         type: a.type,

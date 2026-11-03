@@ -51,6 +51,7 @@ import { runDraftInvoiceAction } from './invoice-draft-run';
 import { runOutboxAction } from './outbox-run';
 import { runReportAction } from './report-run';
 import { WaitingForPersonError, notifyWaitOpened, openWait } from './waits';
+import { runFunctionAction } from '../code/rule-action';
 import { runLedgerPayable } from './ledger-payable';
 import { onShiftOnly, runCheckZone } from './zone-run';
 
@@ -947,6 +948,16 @@ async function runAction(a: ActionRun): Promise<string> {
         ctx,
       });
     }
+    case 'run_function':
+      return runFunctionAction({
+        db,
+        organizationId: a.organizationId,
+        app,
+        automation,
+        action,
+        ctx,
+        rowId: event.rowId ?? null,
+      });
     case 'report':
       return runReportAction({
         db,
