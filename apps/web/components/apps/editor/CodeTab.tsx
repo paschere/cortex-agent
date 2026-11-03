@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FunctionsPanel, GithubPanel, RunsPanel, SecretsPanel } from './code/DevPanels';
+import { DbPanel, FunctionsPanel, GithubPanel, RunsPanel, SecretsPanel } from './code/DevPanels';
 import { FileTree } from './code/FileTree';
 import {
   type AppEditorData,
@@ -85,7 +85,7 @@ function pathProblem(path: string): string | null {
 function LogView({ log }: { log: string }) {
   const lines = log.split('\n');
   return (
-    <pre className="max-h-64 overflow-auto rounded-card bg-surface-2 p-3 font-mono text-[11px] leading-relaxed text-ink-muted">
+    <pre className="max-h-64 overflow-auto rounded-card bg-surface-2 p-3 font-mono text-micro leading-relaxed text-ink-muted">
       {lines.map((line, i) => {
         const bad = /error|✘|failed|no se pudo/i.test(line);
         return (
@@ -697,7 +697,7 @@ export function CodeTab({ data }: { data: AppEditorData }) {
                   />
                 </div>
                 {diagnostics.some((d) => d.path) && (
-                  <ul className="max-h-32 space-y-0.5 overflow-auto rounded-card border border-border bg-surface-2 p-2 text-[11px]">
+                  <ul className="max-h-32 space-y-0.5 overflow-auto rounded-card border border-border bg-surface-2 p-2 text-micro">
                     {diagnostics
                       .filter((d) => d.path)
                       .map((d, i) => (
@@ -791,7 +791,7 @@ export function CodeTab({ data }: { data: AppEditorData }) {
             {state.screens.map((s) => (
               <li key={s.slug} className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{s.title}</span>
-                <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-ink-muted">
+                <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-micro text-ink-muted">
                   {s.codeEntry ?? `screens/${s.slug}.tsx`}
                 </code>
                 {s.codeEntry && (
@@ -934,6 +934,7 @@ export function CodeTab({ data }: { data: AppEditorData }) {
 
       <FunctionsPanel appId={appId} functions={functions} roles={data.roles} />
       <SecretsPanel appId={appId} />
+      <DbPanel appId={appId} />
       <RunsPanel appId={appId} />
       <GithubPanel
         appId={appId}

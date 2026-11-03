@@ -118,6 +118,15 @@ export interface FnTokenClaims {
   readOnly: boolean;
   /** La función que corre (informativo, va al registro). */
   fn: string;
+  /**
+   * Cadena anti-bucle de las automatizaciones: si la función la disparó una
+   * regla, las reglas de la cadena (y su profundidad) viajan en el token para
+   * que las escrituras hechas por el SDK de vuelta emitan eventos con la misma
+   * cadena. Sin esto el HTTP de vuelta rompía la cadena y una regla que llama a
+   * una función que escribe en su propia tabla hacía un bucle.
+   */
+  chain?: string[];
+  depth?: number;
   /** Vence (epoch ms). */
   exp: number;
 }
@@ -163,7 +172,12 @@ export function verifyFnToken(token: string, now: number = Date.now()): FnTokenC
     if (c.v !== 1 || typeof c.exp !== 'number' || c.exp <= now) return null;
     if (!c.org || !c.app || !c.role || !c.actor?.id) return null;
     if (c.actor.kind !== 'member' && c.actor.kind !== 'external') return null;
-    return c;
+    // La cadena viene firmada, pero se sanea igual: sólo textos, tope de largo.
+    const chain = Array.isArray(c.chain)
+      ? c.chain.filter((id): id is string => typeof id === 'string').slice(0, 16)
+      : [];
+    const depth = Number.isInteger(c.depth) && (c.depth as number) > 0 ? (c.depth as number) : 0;
+    return { ...c, chain, depth };
   } catch {
     return null;
   }

@@ -105,7 +105,7 @@ Operaciones fase 1 (`packages/agent-tools/src/apps/code/sdk.ts`, `runSdkOp(db, a
 | `geofences.list` | – | zonas de la app |
 | `ai.ask` | `{prompt, data?}` | modelo rápido, medidor `answers`, tope por minuto; texto |
 | `functions.call` | `{name, input}` | fase 2 |
-| `db.query` | `{sql, params}` | fase 3 |
+| `db.query` | `{sql, params}` | fase 3: base propia de la app, ver «Fase 3» |
 
 Navegación y avisos son del host (no van al servidor): `nav.go({screen, prefill})`, `ui.toast(text)`.
 Tope: 120 llamadas por minuto por usuario y pantalla. Cada escritura queda en auditoría como una edición de app.
@@ -193,9 +193,96 @@ duración, log (≤ 20 KB) y error; se poda a las últimas 500 por app.
 
 ### Pendientes / riesgos
 
-- Un `tables.insert/update` hecho por una función dispara las reglas de la tabla como cualquier escritura; la cadena
-  anti-bucle de automatizaciones no cruza el HTTP de vuelta, así que una regla que llama a una función que escribe en la
-  misma tabla que la dispara puede hacer un bucle (hoy solo lo frena el tope de 600 llamadas/min).
+- Un `tables.insert/update` hecho por una función dispara las reglas de la tabla como cualquier escritura. La cadena
+  anti-bucle de automatizaciones SÍ cruza el HTTP de vuelta desde la fase 3 (ver «Cadena anti-bucle» abajo).
 - El sandbox tibio es por app: dos usuarios de la misma app comparten VM (cada llamada tiene su archivo y su token).
 - No probado contra el Sandbox real (sin credenciales locales): el runner, `getOrCreate`, la política de red y el
   `extendTimeout` están escritos según los tipos de `@vercel/sandbox` 2.9.
+
+---
+
+## Fase 3: base de datos propia por app (migración `0246_custom_app_db.sql`)
+
+### Cadena anti-bucle a través del HTTP de vuelta (arreglo de la fase 2)
+
+`FnTokenClaims` lleva ahora `chain: string[]` y `depth` (firmados en el mismo HMAC). `runAppFunction` los toma de
+`withAutomationOrigin` en curso (una regla que corre `run_function` no hace nada especial) o de `opts.automation`. La ruta
+`/api/apps/code/fn-sdk` envuelve `runSdkOp` en `withAutomationOrigin({chain, depth})`, así que un `tables.insert/update` de la
+función emite el evento con la cadena de la regla: `mayFire` descarta a la regla que ya está en la cadena y todo lo que pase de
+`AUTOMATION_MAX_DEPTH` (3). Una regla que llama a una función que escribe en su propia tabla ya no hace bucle. Pantalla,
+webhook y chat no llevan cadena (`[]`, 0).
+
+### Diseño
+
+- **Esquema + rol por app**: `app_<12 primeros hex del id>`; el rol del mismo nombre (LOGIN, sin superusuario, sin
+  CREATEDB/CREATEROLE, `CONNECTION LIMIT 6`) POSEE el esquema y no tiene nada más. Los crea Cortex la primera vez que corren
+  las migraciones de la app (no la migración 0246: ésta solo crea el registro `custom_app_db` y `custom_app_db_migrations`).
+- **El código no recibe credenciales.** Pide `db.query` por el SDK y es el servidor de Cortex quien abre la conexión.
+- **Se conecta COMO el rol de la app, no con `SET LOCAL ROLE`.** Probado: si la sesión empieza como el superusuario de
+  Cortex, el SQL de la app puede escribir `RESET ROLE`/`SET ROLE postgres` y salir de su esquema; con un rol intermedio
+  miembro de todos, podría saltar a la app de al lado. La contraseña del rol se DERIVA (HMAC de `JOBS_SECRET`, etiqueta
+  `cortex.app-db.v1`; no se guarda). Si cambia `JOBS_SECRET` o la app se cambia su contraseña, el motor la restablece solo
+  al ver `28P01`. Un pool corto (2 conexiones, LRU de 24 pools) por rol; `DISCARD ALL` al devolver la conexión, para que
+  nada de la sesión (`SET`, tablas temporales) pase a la llamada siguiente.
+- **Cada llamada es una transacción** con `SET LOCAL search_path = app_x`, `statement_timeout = 10 s`,
+  `idle_in_transaction_session_timeout`. El SQL puede quitarse el `statement_timeout` (es suyo): la defensa real es el
+  tope del cliente (10 s + 2 s), que mata el backend con `pg_terminate_backend` desde la conexión de administración.
+- **Una sentencia por llamada** (`assertSingleStatement` entiende comentarios, textos, `E'..'`, identificadores y `$$`).
+  Parámetros `$1…` (≤ 100, ≤ 256 KB cada uno). Resultado: ≤ 1000 filas y ≤ 2 MB (las consultas se leen con un cursor
+  `FETCH 1001`, no se carga todo en memoria); `truncated: true` si se recortó.
+- **Quién llama**: desde una función de servidor (`ctx.db.query(sql, params)` o `ctx.cortex.db.query`), lee y escribe;
+  con «Ver como…» solo lee. Desde una pantalla solo si el `package.json` trae `"cortex": {"dbFromScreens": true}` y
+  entonces SOLO `SELECT` (guarda de sintaxis + transacción `READ ONLY`). Tope: 300 llamadas/min por app y persona.
+- **La base de la app es de la app, NO del rol del usuario.** A diferencia de las tablas (`trackers`), donde el servidor
+  aplica el rol de quien pregunta, aquí no hay filtro por persona: una función que lee una tabla propia lee todo lo que
+  hay en ella. La función debe revisar `ctx.user.role` / `ctx.user.attributes` antes de devolver o cambiar datos (la
+  gramática de `apps.code_*` lo dice). Con `dbFromScreens` cualquier persona que abra esa pantalla puede leer cualquier
+  tabla del esquema: úsese solo para datos que todos los roles de la pantalla pueden ver.
+- **Cuota**: 500 MB por esquema (`sum(pg_total_relation_size)` de tablas y vistas materializadas; recordado 30 s). Se mira
+  antes de migrar y antes de cada escritura; con el esquema lleno solo se lee y se borra (`DELETE/TRUNCATE/DROP`).
+- **Migraciones**: `db/migrations/NNNN_nombre.sql` (4 dígitos). Orden por número, una vez cada una, cada una en su
+  transacción COMO el rol (nombres sin calificar; nada de `public.`), con `pg_advisory_xact_lock` por app. Se anotan en
+  `custom_app_db_migrations (org, app_id, name, checksum, applied_at, applied_by)` y, para ser atómicas con su efecto,
+  también en `__cortex_migrations` DENTRO del esquema (si Cortex se cae entre el commit y la anotación, la siguiente
+  corrida ve la marca, no repite el SQL y solo anota). Un archivo ya aplicado con otro checksum es un error; una nueva con
+  número menor que la última aplicada también. Se aplican al PUBLICAR (las del build que se publica; si una falla no se
+  publica nada) y con «Aplicar migraciones» / `apps.code_db_migrate` (las del borrador).
+- **Borrar la app** (`deleteApp`) borra antes el esquema (`CASCADE`) y el rol. Sin fila en `custom_app_db` no toca Postgres;
+  si hay base y el servidor no tiene el motor, o el borrado falla, la eliminación falla (no deja datos huérfanos).
+
+### Piezas
+
+`packages/agent-tools/src/apps/code/`: `app-db.ts` (puro: nombres, contraseña derivada, migraciones, guarda de SQL, cuota,
+tope de resultado, interfaz `AppDbDriver`), `app-db-store.ts` (registro, aplicar, estado, `runAppDbQuery`, `dropAppDb`),
+`app-db-publish.ts` (`publishAppCodeWithMigrations`); `sdk.ts` (`db.query`); `tools.ts` (`apps.code_db_migrate` con
+confirmación, `apps.code_db_query` solo lectura). `apps/web/lib/apps/app-db-driver.ts` (motor `pg`, registrado en
+`instrumentation-node.ts`), acciones `dbStatus`/`applyMigrations`/`dbQuery` en `code-actions.ts`, panel «Base de datos» en
+`DevPanels.tsx`, `ctx.db.query` en el runner de funciones.
+
+### Lo que el dueño debe hacer UNA vez en producción
+
+La conexión de Cortex es `SUPABASE_DB_URL` (en Railway es el usuario `postgres`, superusuario: puede crear roles y
+esquemas). Solo hace falta el ENDURECIMIENTO del esquema `public`, como superusuario (p. ej. `psql "$RAILWAY_DB_URL"`):
+
+```sql
+-- Por omisión PUBLIC puede usar el esquema public y ejecutar sus funciones; varias son SECURITY DEFINER de Cortex.
+REVOKE USAGE ON SCHEMA public FROM PUBLIC;
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;   -- ya lo tenían (bootstrap.sql); idempotente
+```
+
+Hasta que lo haga, el motor se niega a crear bases propias (el `preflight` lo detecta y devuelve este mismo texto).
+Comprobar antes que nada depende de PUBLIC: `select grantee, privilege_type from information_schema.usage_privileges
+where object_name = 'public'` y que ningún servicio use un rol distinto de `postgres`/`service_role` sobre `public`
+(PostgREST entra como `authenticator` → `service_role`; better-auth, jobs-worker y migraciones como `postgres`).
+
+Si `SUPABASE_DB_URL` NO fuera superusuario: además `ALTER ROLE "<usuario>" CREATEROLE; GRANT CREATE ON DATABASE "<base>" TO "<usuario>";`.
+Variables: ninguna nueva (`JOBS_SECRET` ya existe; `SUPABASE_DB_URL` debe ser la conexión DIRECTA o de sesión, no el pooler de
+transacciones, porque cada rol de app inicia sesión con su propio usuario).
+
+### Pruebas
+
+`app-db.test.ts` (puro + motor falso + base falsa: migraciones, guarda, cuota, borrado, `db.query`, cadena en el token),
+`app-db-driver.test.ts` (unidad + integración contra Postgres real si `APP_DB_TEST_URL` está definido: aislamiento entre
+apps y con `public`, `RESET ROLE`/`SET ROLE`, `SET statement_timeout = 0`, READ ONLY, cursor, migración atómica,
+autocuración de la contraseña, tamaño, borrado). Se corrió contra `pgvector/pgvector:pg16`:
+`APP_DB_TEST_URL=postgresql://postgres:<pw>@localhost:<puerto>/postgres pnpm --filter web exec vitest run lib/apps/app-db-driver.test.ts`.

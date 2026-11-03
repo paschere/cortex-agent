@@ -1,3 +1,4 @@
+import { appDbDriverFromEnv } from '@/lib/apps/app-db-driver';
 import { buildCodeDeps } from '@/lib/apps/code-builder';
 import { sandboxFunctionRunner } from '@/lib/apps/function-runner';
 import { wakeAutomationRuns } from '@/lib/apps/automation-wake';
@@ -7,6 +8,7 @@ import { readWaitingIndex } from '@/lib/waiting';
 import {
   rowNoticeListener,
   setAutomationWaker,
+  setAppDbDriver,
   setCodeBuildDeps,
   setFunctionRunner,
   setDocumentSink,
@@ -55,6 +57,13 @@ setAutomationWaker(wakeAutomationRuns);
  */
 setCodeBuildDeps(buildCodeDeps());
 setFunctionRunner(sandboxFunctionRunner);
+
+/**
+ * El motor de la base propia de cada app (0246): una conexión de Postgres por rol de app. Sin
+ * SUPABASE_DB_URL (pruebas, algún entorno sin base) no se registra y `db.query` dice que no
+ * está disponible; nada más se rompe.
+ */
+setAppDbDriver(appDbDriverFromEnv());
 
 /**
  * Avisos automáticos de las apps (0231): cada fila creada o cambiada llega a

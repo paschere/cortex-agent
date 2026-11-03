@@ -89,12 +89,17 @@ export type { SdkCallContext, SdkOp, SdkRowOut } from './code/sdk';
 export {
   appsCodeAddScreen,
   appsCodeBuild,
+  appsCodeDbMigrate,
+  appsCodeDbQuery,
   appsCodePublish,
   appsCodeRead,
   appsCodeRun,
   appsCodeRuns,
   appsCodeWrite,
 } from './code/tools';
+export * from './code/app-db';
+export * from './code/app-db-store';
+export * from './code/app-db-publish';
 export * from './code/functions';
 export * from './code/function-store';
 export { accessFromClaims, runAppFunction, systemAppAccess, testAppAccess } from './code/run-function';

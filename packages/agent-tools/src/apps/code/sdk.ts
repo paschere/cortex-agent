@@ -34,8 +34,11 @@ import {
   rowVisible,
 } from '../permissions';
 import { type AppAccess, type AppScreenRow, assertExternalBudget } from '../store';
+import { DB_CALLS_PER_MINUTE, dbFromScreensAllowed } from './app-db';
+import { runAppDbQuery } from './app-db-store';
 import { FN_CALLS_PER_MINUTE, FN_SDK_CALLS_PER_MINUTE } from './functions';
 import { runAppFunction } from './run-function';
+import { getAppCode } from './store';
 
 /**
  * EL SDK DE LAS PANTALLAS CON CÓDIGO, LADO SERVIDOR (fase 1).
@@ -123,6 +126,10 @@ const updateSchema = z.object({
   table: tableName,
   id: idSchema,
   values: z.record(z.string(), z.unknown()),
+});
+const dbQuerySchema = z.object({
+  sql: z.string().min(1).max(50_000),
+  params: z.array(z.unknown()).max(100).optional(),
 });
 const askSchema = z.object({
   prompt: z.string().trim().min(1).max(AI_PROMPT_MAX),
@@ -619,6 +626,37 @@ async function functionsCall(
 }
 
 /**
+ * `db.query`: UNA sentencia SQL sobre la base propia de la app (fase 3), con
+ * parámetros ($1…). Desde una función de servidor escribe y lee; desde una
+ * pantalla sólo si el `package.json` trae `"cortex": {"dbFromScreens": true}` y
+ * SÓLO lee (transacción READ ONLY). Ojo: la base de la app es de la app, no del
+ * rol del usuario — no hay filtro por persona; las funciones deciden qué ve cada rol.
+ * «Ver como…» (`readOnly`) también la deja en sólo lectura.
+ */
+async function dbQuery(db: SupabaseClient, access: AppAccess, ctx: SdkCallContext, args: unknown) {
+  const { sql, params } = parseArgs(dbQuerySchema, args);
+  const fromFunction = ctx.via === 'function';
+  if (!fromFunction) {
+    const code = await getAppCode(db, access.app.id);
+    if (!dbFromScreensAllowed(code?.files ?? {}))
+      throw new ForbiddenError(
+        'Esta pantalla no consulta la base de datos directo. Usa una función de servidor (cortex.functions.call) o activa "cortex": {"dbFromScreens": true} en el package.json.',
+      );
+  }
+  try {
+    await consumeToken(db, access.user.id, `apps.db:${access.app.id}`, DB_CALLS_PER_MINUTE);
+  } catch {
+    throw new ValidationError('Muchas consultas a la base seguidas. Espera un momento.');
+  }
+  const out = await runAppDbQuery(db, access.app.id, {
+    sql,
+    params,
+    readOnly: !fromFunction || Boolean(ctx.readOnly),
+  });
+  return out;
+}
+
+/**
  * Ejecuta una operación del SDK con el rol de `access`. Lanza `ValidationError`
  * (400), `ForbiddenError` (403), `NotFoundError` (404) con mensajes en español
  * que la ruta devuelve tal cual; cualquier otro error es del servidor.
@@ -668,6 +706,6 @@ export async function runSdkOp(
     case 'functions.call':
       return functionsCall(db, access, ctx, args);
     case 'db.query':
-      throw new ValidationError('La base de datos propia llega en la fase 3.');
+      return dbQuery(db, access, ctx, args);
   }
 }

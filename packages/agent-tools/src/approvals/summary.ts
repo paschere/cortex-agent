@@ -381,6 +381,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   apps_code_publish: 'Publicar el código de la aplicación',
   apps_code_run: 'Probar una función de servidor de la aplicación',
   apps_code_runs: 'Ver las corridas de las funciones de la aplicación',
+  apps_code_db_migrate: 'Aplicar las migraciones de la base de datos de la aplicación',
+  apps_code_db_query: 'Consultar la base de datos de la aplicación',
   apps_inspect: 'Revisar lo que ve un rol en la aplicación',
   apps_delete: 'Eliminar una aplicación',
   apps_assign_members: 'Asignar personas a una aplicación',

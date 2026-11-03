@@ -443,6 +443,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'apps.code_add_screen': 'Agrega una pantalla con código a la aplicación ',
   'apps.code_run': 'Prueba la función de servidor ',
   'apps.code_runs': 'Muéstrame las últimas corridas de las funciones de la aplicación ',
+  'apps.code_db_migrate': 'Aplica las migraciones de la base de datos de la aplicación ',
+  'apps.code_db_query': 'Consulta la base de datos de la aplicación ',
   'apps.inspect': 'Revisa lo que ve cada rol en la aplicación ',
   'apps.usage': 'Muestra el uso de la aplicación ',
   'apps.notices': 'Ajusta qué avisos recibe cada rol en la aplicación ',

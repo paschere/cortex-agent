@@ -402,7 +402,7 @@ describe('ubicaciones, zonas y lo que llega después', () => {
     }>;
     expect(zones).toEqual([expect.objectContaining({ id: 'bodega', radiusM: 150 })]);
   });
-  it('functions.call valida el nombre, pide código publicado y no se anida; db.query avisa su fase', async () => {
+  it('functions.call valida el nombre, pide código publicado y no se anida; db.query pide base propia', async () => {
     const { db, as } = await setup();
     await expect(runSdkOp(db, await as(ANA), 'functions.call', { name: 'X!' })).rejects.toThrow(
       /minúsculas/,
@@ -413,8 +413,9 @@ describe('ubicaciones, zonas y lo que llega después', () => {
     await expect(
       runSdkOp(db, await as(ANA), 'functions.call', { name: 'cobrar' }, { via: 'function' }),
     ).rejects.toThrow(/otra función/);
+    // Desde una pantalla, db.query está apagado salvo "dbFromScreens" en el package.json.
     await expect(runSdkOp(db, await as(ANA), 'db.query', { sql: 'select 1' })).rejects.toThrow(
-      /fase 3/,
+      /directo/,
     );
   });
   it('una operación que no existe se rechaza', async () => {

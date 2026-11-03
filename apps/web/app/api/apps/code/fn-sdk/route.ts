@@ -1,5 +1,10 @@
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { accessFromClaims, runSdkOp, verifyFnToken } from '@cortex/agent-tools';
+import {
+  accessFromClaims,
+  runSdkOp,
+  verifyFnToken,
+  withAutomationOrigin,
+} from '@cortex/agent-tools';
 import {
   ForbiddenError,
   NotFoundError,
@@ -65,11 +70,18 @@ export async function POST(req: NextRequest) {
     const screen = claims.screen
       ? (access.screens.find((s) => s.id === claims.screen) ?? null)
       : null;
-    const data = await runSdkOp(db, access, op, args, {
-      screen: screen ? { id: screen.id, slug: screen.slug, view_id: screen.view_id } : null,
-      readOnly: claims.readOnly,
-      via: 'function',
-    });
+    const run = () =>
+      runSdkOp(db, access, op, args, {
+        screen: screen ? { id: screen.id, slug: screen.slug, view_id: screen.view_id } : null,
+        readOnly: claims.readOnly,
+        via: 'function',
+      });
+    // Si una regla disparó la función, su cadena anti-bucle cruza este HTTP de vuelta
+    // (viene firmada en el token): lo que escriba emite eventos con la misma cadena y profundidad.
+    const data =
+      claims.depth || claims.chain?.length
+        ? await withAutomationOrigin({ chain: claims.chain ?? [], depth: claims.depth ?? 0 }, run)
+        : await run();
     return NextResponse.json({ ok: true, data }, { headers: { 'cache-control': 'no-store' } });
   } catch (err) {
     const { status, message } = statusOf(err);

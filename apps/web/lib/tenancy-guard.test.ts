@@ -23,6 +23,10 @@ import { describe, expect, it } from 'vitest';
  */
 const ALLOWED = new Map<string, string>([
   [
+    'app/api/apps/[id]/code/hooks/[name]/route.ts',
+    'Incoming webhook of an app with code (0244): there is no session, the per-hook token (stored hashed) is the credential. The raw client only finds the published app by id to learn its organization; the token check and the function run use getOrgScopedClient(app.organization_id).',
+  ],
+  [
     'inngest/functions/activation-followup.ts',
     'Cron scans only due automation IDs and organization IDs; each execution then uses a tenant-scoped client and an actor-authorized database claim.',
   ],

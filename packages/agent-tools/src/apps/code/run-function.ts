@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { currentAutomationOrigin } from '../automations/emit';
 import { ADMIN_ROLE_KEY, adminRole } from '../permissions';
 import {
   type AppAccess,
@@ -45,6 +46,12 @@ export interface RunFunctionOptions {
   organizationId?: string;
   /** Texto para el registro cuando el actor no es una persona ("Regla «X»"). */
   actorLabel?: string;
+  /**
+   * La cadena de reglas que dispararon esta corrida (anti-bucle). Por omisión se
+   * toma de `withAutomationOrigin` en curso: una regla que corre una función
+   * pasa la cadena sin hacer nada más.
+   */
+  automation?: { chain: string[]; depth: number } | null;
 }
 
 export interface FunctionOutcome {
@@ -140,12 +147,13 @@ export async function accessFromClaims(
   return withPublishedVersion(db, access);
 }
 
-function claimsOf(
+export function claimsOf(
   access: AppAccess,
   organizationId: string,
   name: string,
   opts: RunFunctionOptions,
 ): Omit<FnTokenClaims, 'v' | 'exp'> {
+  const origin = opts.automation === undefined ? currentAutomationOrigin() : opts.automation;
   return {
     org: organizationId,
     app: access.app.id,
@@ -159,6 +167,9 @@ function claimsOf(
     ...(opts.screen ? { screen: opts.screen.id } : {}),
     readOnly: Boolean(opts.readOnly),
     fn: name,
+    ...(origin && (origin.depth > 0 || origin.chain.length)
+      ? { chain: origin.chain.slice(0, 16), depth: origin.depth }
+      : {}),
   };
 }
 

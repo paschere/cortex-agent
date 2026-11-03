@@ -8,6 +8,7 @@ vi.mock('@cortex/core', async (orig) => ({
 
 import { createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../../tenancy/scoped-client';
+import { withAutomationOrigin } from '../automations/emit';
 import { mustGetApp } from '../store';
 import { type Builder, buildAppCode } from './build';
 import { listRunRows, setAppSecret } from './function-store';
@@ -130,6 +131,34 @@ describe('runAppFunction', () => {
       role_key: 'operario',
     });
     expect(JSON.stringify(run)).not.toContain('k-123');
+  });
+
+  it('la cadena anti-bucle de la regla viaja firmada en el token (y sin regla va vacía)', async () => {
+    const { db, app } = await publishedWorld();
+    const access = await systemAppAccess(db, app, 'operario', USER, 'Regla «x»');
+    await withAutomationOrigin({ chain: ['r1', 'r2'], depth: 2 }, () =>
+      runAppFunction(db, access, 'cobrar', {}, { trigger: 'rule' }),
+    );
+    expect(verifyFnToken((jobs.at(-1) as FunctionJob).token)).toMatchObject({
+      chain: ['r1', 'r2'],
+      depth: 2,
+    });
+    await runAppFunction(db, access, 'cobrar', {}, { trigger: 'screen' });
+    expect(verifyFnToken((jobs.at(-1) as FunctionJob).token)).toMatchObject({
+      chain: [],
+      depth: 0,
+    });
+    // un llamador puede dejarla explícita
+    await withAutomationOrigin({ chain: ['r1'], depth: 1 }, () =>
+      runAppFunction(
+        db,
+        access,
+        'cobrar',
+        {},
+        { trigger: 'rule', automation: { chain: ['z'], depth: 1 } },
+      ),
+    );
+    expect(verifyFnToken((jobs.at(-1) as FunctionJob).token)).toMatchObject({ chain: ['z'] });
   });
 
   it('un error de la función vuelve como ok:false y queda en el registro', async () => {

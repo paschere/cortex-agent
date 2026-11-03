@@ -6,6 +6,9 @@ import { registerTool } from '../../index';
 import { roleKeySchema } from '../permissions';
 import { mustGetApp } from '../store';
 import { listScreens } from '../store';
+import { DB_MAX_ROWS, formatDbBytes } from './app-db';
+import { publishAppCodeWithMigrations } from './app-db-publish';
+import { appDbStatus, applyAppDbMigrations, runAppDbQuery } from './app-db-store';
 import { buildAppCode, getCodeBuildDeps } from './build';
 import {
   type CodeFiles,
@@ -24,7 +27,6 @@ import {
   getAppCode,
   humanChangedFiles,
   listBuilds,
-  publishAppCode,
   saveAppCodeFiles,
 } from './store';
 
@@ -47,7 +49,7 @@ async function requireAppAdmin(ctx: { db: SupabaseClient; userId: string }): Pro
 
 const appRef = z.string().trim().min(1).max(80).describe('App id or slug.');
 
-const GRAMMAR = `A code screen is a React + TypeScript file screens/<slug>.tsx with \`export default function Screen() {…}\`, compiled to one bundle that runs in a sandboxed iframe (no cookies, no network of its own, no direct database). All data goes through the SDK \`import { cortex, useUser, useQuery, useLocations } from '@cortex/app-sdk'\`: cortex.tables.list/query/get/insert/update, cortex.locations.live, cortex.geofences.list, cortex.ai.ask, cortex.functions.call(name, input), cortex.nav.go({screen, prefill}), cortex.ui.toast(text); hooks useUser() -> {user, loading, error}, useQuery(table, {where, search, order, limit}, {refreshMs}) -> {rows, loading, error, refresh}, useLocations({refreshMs}). The SERVER applies the viewer's role to every call (tables the role does not read are refused, rows are scoped), so never hide data in the client as a security measure. Any npm package from the registry can be used (declare it in package.json; installs run with --ignore-scripts, so packages that need native binaries or install scripts will not work). SERVER FUNCTIONS: a file server/<name>.ts (name ^[a-z][a-z0-9_]{1,47}$) with \`export default async function (input, ctx) { return result }\`, bundled for Node 22 with its npm packages and run in an isolated sandbox (60 s limit, result JSON up to 1 MB, console.log is captured in the run log). ctx = { user: {id,name,role,attributes}|null, cortex: the same SDK as screens but server-side (tables.list/query/get/insert/update, locations.live, geofences.list, ai.ask; NO functions.call), secrets: Record<string,string> (named secrets the admin set in the editor; read them from ctx.secrets, never hardcode a key), log(...args) }. ctx.cortex calls run with the ROLE of whoever triggered the function (the person on a screen, or the role named in the rule/webhook: never an implicit admin). Screens call them with cortex.functions.call(name, input) (30/min per user); rules with the automation action {type:"run_function",name,role,input:{key:"text with {{fields}}"},withRow?}; a webhook POST /api/apps/<app>/code/hooks/<name> (admin creates its token). Functions only run from the PUBLISHED build (apps.code_run can test the latest build). Limits: 200 files, 512 KB each, 4 MB total; paths [a-zA-Z0-9_./-] without "..". Shared code goes in lib/**. Row values are strings or numbers keyed by field key: call cortex.tables.list first to learn the real keys and options instead of guessing them.`;
+const GRAMMAR = `A code screen is a React + TypeScript file screens/<slug>.tsx with \`export default function Screen() {…}\`, compiled to one bundle that runs in a sandboxed iframe (no cookies, no network of its own, no direct database). All data goes through the SDK \`import { cortex, useUser, useQuery, useLocations } from '@cortex/app-sdk'\`: cortex.tables.list/query/get/insert/update, cortex.locations.live, cortex.geofences.list, cortex.ai.ask, cortex.functions.call(name, input), cortex.nav.go({screen, prefill}), cortex.ui.toast(text); hooks useUser() -> {user, loading, error}, useQuery(table, {where, search, order, limit}, {refreshMs}) -> {rows, loading, error, refresh}, useLocations({refreshMs}). The SERVER applies the viewer's role to every call (tables the role does not read are refused, rows are scoped), so never hide data in the client as a security measure. Any npm package from the registry can be used (declare it in package.json; installs run with --ignore-scripts, so packages that need native binaries or install scripts will not work). SERVER FUNCTIONS: a file server/<name>.ts (name ^[a-z][a-z0-9_]{1,47}$) with \`export default async function (input, ctx) { return result }\`, bundled for Node 22 with its npm packages and run in an isolated sandbox (60 s limit, result JSON up to 1 MB, console.log is captured in the run log). ctx = { user: {id,name,role,attributes}|null, cortex: the same SDK as screens but server-side (tables.list/query/get/insert/update, locations.live, geofences.list, ai.ask; NO functions.call), secrets: Record<string,string> (named secrets the admin set in the editor; read them from ctx.secrets, never hardcode a key), log(...args) }. ctx.cortex calls run with the ROLE of whoever triggered the function (the person on a screen, or the role named in the rule/webhook: never an implicit admin). Screens call them with cortex.functions.call(name, input) (30/min per user); rules with the automation action {type:"run_function",name,role,input:{key:"text with {{fields}}"},withRow?}; a webhook POST /api/apps/<app>/code/hooks/<name> (admin creates its token). Functions only run from the PUBLISHED build (apps.code_run can test the latest build). OWN DATABASE: each app can have its own Postgres schema, created on the first migration. Put SQL in db/migrations/NNNN_name.sql (4 digits, lowercase, runs once, in order, each in its own transaction as a role that can only touch the app's schema; unqualified names, no "public."). NEVER edit an applied migration (its checksum is verified): add a new one. Migrations are applied on apps.code_publish (those of the published build) or with apps.code_db_migrate. Use it from server functions only: \`await ctx.db.query(sql, [params])\` -> {rows, rowCount, fields, truncated} (ONE statement per call, parameters $1.., 10 s per statement, 1000 rows / 2 MB, schema cap 500 MB). Screens can only SELECT, and only if package.json has "cortex": {"dbFromScreens": true}. IMPORTANT: the app database is NOT filtered by the user's role like the tables are: the function must check ctx.user.role / ctx.user.attributes itself before returning or changing data. Limits: 200 files, 512 KB each, 4 MB total; paths [a-zA-Z0-9_./-] without "..". Shared code goes in lib/**. Row values are strings or numbers keyed by field key: call cortex.tables.list first to learn the real keys and options instead of guessing them.`;
 
 const statusOut = z.object({
   id: z.string(),
@@ -302,7 +304,7 @@ export const appsCodeAddScreen = registerTool({
 export const appsCodePublish = registerTool({
   id: 'apps.code_publish',
   description:
-    'Publish a successful build of the application code: from then on people who open its code screens run THAT bundle (with their own role: the server still limits what each one reads and writes). Defaults to the newest build; pass `build` (number) to publish or go back to another one that compiled. Only builds with status ok can be published. Requires confirmation; company owners/admins only.',
+    'Publish a successful build of the application code (first applying the pending db/migrations of that build; if one fails nothing is published): from then on people who open its code screens run THAT bundle (with their own role: the server still limits what each one reads and writes). Defaults to the newest build; pass `build` (number) to publish or go back to another one that compiled. Only builds with status ok can be published. Requires confirmation; company owners/admins only.',
   inputSchema: z.object({
     app: appRef,
     build: z
@@ -333,12 +335,17 @@ export const appsCodePublish = registerTool({
           ? `No existe la compilación #${input.build}.`
           : 'No hay una compilación que haya salido bien. Compila con apps.code_build.',
       );
-    const { build } = await publishAppCode(ctx.db, app.id, wanted.id, ctx.userId);
+    const { build, migrationsApplied } = await publishAppCodeWithMigrations(
+      ctx.db,
+      app.id,
+      wanted.id,
+      ctx.userId,
+    );
     const screens = Object.keys(build.bundles);
     return {
       number: build.number,
       screens,
-      markdown: `Compilación #${build.number} publicada en **${app.name}**: ${screens.join(', ')}. Los usuarios la ven en cuanto abran la pantalla (si la app ya está publicada; si no, usa apps.publish).`,
+      markdown: `Compilación #${build.number} publicada en **${app.name}**: ${screens.join(', ') || 'solo funciones'}.${migrationsApplied.length ? ` Migraciones aplicadas: ${migrationsApplied.join(', ')}.` : ''} Los usuarios la ven en cuanto abran la pantalla (si la app ya está publicada; si no, usa apps.publish).`,
     };
   },
 });
@@ -455,6 +462,77 @@ export const appsCodeRuns = registerTool({
             )
             .join('\n')
         : 'Todavía no hay corridas.',
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// apps.code_db_migrate
+// ---------------------------------------------------------------------------
+
+export const appsCodeDbMigrate = registerTool({
+  id: 'apps.code_db_migrate',
+  description:
+    "Apply the pending SQL migrations (db/migrations/NNNN_name.sql of the DRAFT) to the application's own database, in order, each once in its own transaction as a role limited to the app's schema (created on the first run). A failed migration is rolled back and the error returned: fix it with a NEW file only if it was already applied, otherwise edit the pending file and run again. An applied file whose content changed is refused. Publishing (apps.code_publish) also applies the migrations of the published build. Requires confirmation; company owners/admins only.",
+  inputSchema: z.object({ app: appRef }),
+  outputSchema: z.object({
+    applied: z.array(z.string()),
+    warnings: z.array(z.string()),
+    markdown: z.string(),
+  }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    const app = await mustGetApp(ctx.db, input.app);
+    const code = await getAppCode(ctx.db, app.id);
+    const out = await applyAppDbMigrations(ctx.db, app.id, code?.files ?? {}, ctx.userId);
+    const status = await appDbStatus(ctx.db, app.id, code?.files ?? {});
+    return {
+      applied: out.applied,
+      warnings: out.warnings,
+      markdown: out.applied.length
+        ? `Migraciones aplicadas en **${app.name}**: ${out.applied.join(', ')}. Esquema \`${status.schema}\`${status.sizeBytes === null ? '' : ` (${formatDbBytes(status.sizeBytes)})`}.`
+        : `No había migraciones pendientes en **${app.name}** (${status.migrations.length} aplicadas).${out.warnings.length ? ` Avisos: ${out.warnings.join(' ')}` : ''}`,
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// apps.code_db_query
+// ---------------------------------------------------------------------------
+
+export const appsCodeDbQuery = registerTool({
+  id: 'apps.code_db_query',
+  description:
+    "Run ONE read-only SQL statement (SELECT / WITH / EXPLAIN) on the application's own database to look at its tables and data, as the app's limited role in a READ ONLY transaction (10 s, up to 1000 rows / 2 MB). Use it to check what a migration created or what a function stored. It sees all the app's data (the app database is not filtered by user role). Writes go through server functions. Company owners/admins only.",
+  inputSchema: z.object({
+    app: appRef,
+    sql: z.string().trim().min(1).max(20_000),
+    params: z.array(z.unknown()).max(50).default([]),
+  }),
+  outputSchema: z.object({
+    fields: z.array(z.string()),
+    rows: z.array(z.record(z.unknown())),
+    rowCount: z.number().int(),
+    truncated: z.boolean(),
+    markdown: z.string(),
+  }),
+  rateLimit: { perMinute: 30 },
+  handler: async (input, ctx) => {
+    await requireAppAdmin(ctx);
+    const app = await mustGetApp(ctx.db, input.app);
+    const out = await runAppDbQuery(ctx.db, app.id, {
+      sql: input.sql,
+      params: input.params,
+      readOnly: true,
+    });
+    return {
+      fields: out.fields,
+      rows: out.rows,
+      rowCount: out.rowCount,
+      truncated: out.truncated,
+      markdown: `${out.rows.length} fila(s)${out.truncated ? ` (recortado a ${DB_MAX_ROWS} filas o 2 MB)` : ''} · columnas: ${out.fields.join(', ') || 'ninguna'}.`,
     };
   },
 });

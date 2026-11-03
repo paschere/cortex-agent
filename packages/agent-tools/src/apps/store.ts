@@ -10,6 +10,7 @@ import { TRACKER_COLUMNS, type TrackerRow } from '../trackers/store';
 import { type ComputedView, type ViewSource, computeView } from '../views/compute';
 import { formLineSections, isLinesKey } from '../views/form-lines';
 import { loadRecordContext } from '../views/record-history';
+import { dropAppDb } from './code/app-db-store';
 import type { SheetWindowRequest } from '../views/sheet-window';
 import { internalShareRefusal, internalSourcesOf } from '../views/sources';
 import {
@@ -472,6 +473,8 @@ export async function deleteApp(db: SupabaseClient, id: string): Promise<boolean
   // También las archivadas: «Eliminar» desde la sección de archivadas.
   const app = await getApp(db, id, { includeArchived: true });
   if (!app) return false;
+  // La base propia de la app (esquema + rol, fase 3) se borra PRIMERO: si falla, la app sigue ahí y se puede reintentar.
+  await dropAppDb(db, app.id);
   const { error: viewsErr } = await db.from('custom_views').delete().eq('app_id', app.id);
   if (viewsErr) throw viewsErr;
   const { data, error } = await db

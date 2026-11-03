@@ -211,7 +211,7 @@ export function FileTree(props: FileTreeProps) {
   }
 
   return (
-    <ul className="max-h-[32rem] overflow-auto rounded-card border border-border bg-surface-2 p-1.5 font-mono text-[11px]">
+    <ul className="max-h-[32rem] overflow-auto rounded-card border border-border bg-surface-2 p-1.5 font-mono text-micro">
       {tree.length === 0 && <li className="px-2 py-1 text-ink-faint">Sin archivos todavía.</li>}
       {tree.map((n) => row(n, 0))}
     </ul>

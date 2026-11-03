@@ -1,5 +1,6 @@
 'use server';
 
+import { ensureAppDbDriver } from '@/lib/apps/app-db-driver';
 import { buildCodeDeps } from '@/lib/apps/code-builder';
 import { ensureFunctionRunner } from '@/lib/apps/function-runner';
 import { requireSession } from '@/lib/session';
@@ -8,30 +9,34 @@ import { getCodeBuildDeps } from '@cortex/agent-tools';
 import {
   ADMIN_ROLE_KEY,
   type AppCodeBuildSummary,
-  assertSecretName,
-  deleteHook,
-  functionNames,
-  functionPath,
-  listHooks,
-  listRoles,
-  listRunRows,
-  listSecretNames,
-  runAppFunction,
-  setAppSecret,
-  testAppAccess,
-  upsertHook,
-  addCodeScreen as addCodeScreenInStore,
+  type AppDbStatus,
   CORTEX_AUTHOR,
   StaleCodeError,
+  addCodeScreen as addCodeScreenInStore,
+  appDbStatus,
+  applyAppDbMigrations,
+  assertSecretName,
   buildAppCode,
+  deleteHook,
   ensureAppCode,
+  functionNames,
+  functionPath,
   getAppCode,
   githubLinkOf,
   listBuilds,
+  listHooks,
+  listRoles,
+  listRunRows,
   listScreens,
+  listSecretNames,
   mustGetApp,
-  publishAppCode,
+  publishAppCodeWithMigrations,
+  runAppDbQuery,
+  runAppFunction,
   saveAppCodeFiles,
+  setAppSecret,
+  testAppAccess,
+  upsertHook,
   viewerFromSession,
 } from '@cortex/agent-tools';
 import { ForbiddenError, NotFoundError, ValidationError } from '@cortex/core';
@@ -248,12 +253,26 @@ export async function build(appRef: string): Promise<CodeActionResult<{ build: C
 export async function publish(
   appRef: string,
   buildId: string,
-): Promise<CodeActionResult<{ publishedBuildId: string; number: number }>> {
+): Promise<
+  CodeActionResult<{ publishedBuildId: string; number: number; migrationsApplied: string[] }>
+> {
   try {
     const { user, db, app } = await gate(appRef);
-    const { build: published } = await publishAppCode(db, app.id, buildId, user.id);
+    // Si la compilación trae migraciones (db/migrations) se aplican antes; si una falla, no se publica nada.
+    ensureAppDbDriver();
+    const { build: published, migrationsApplied } = await publishAppCodeWithMigrations(
+      db,
+      app.id,
+      buildId,
+      user.id,
+    );
     touched(app);
-    return { ok: true, publishedBuildId: published.id, number: published.number };
+    return {
+      ok: true,
+      publishedBuildId: published.id,
+      number: published.number,
+      migrationsApplied,
+    };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo publicar la compilación.') };
   }
@@ -486,5 +505,77 @@ export async function deleteWebhook(appRef: string, name: string): Promise<CodeA
     return { ok: true };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo borrar el webhook.') };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fase 3: base de datos propia (0246)
+// ---------------------------------------------------------------------------
+
+export type CodeDbStatus = AppDbStatus;
+
+/**
+ * El estado de la base propia: esquema, tamaño contra la cuota, migraciones
+ * aplicadas y las del borrador que faltan. Lanza (mensaje en español) si no hay permiso.
+ */
+export async function dbStatus(appRef: string): Promise<CodeDbStatus> {
+  try {
+    const { db, app } = await gate(appRef);
+    ensureAppDbDriver();
+    const code = await getAppCode(db, app.id);
+    return await appDbStatus(db, app.id, code?.files ?? {});
+  } catch (err) {
+    throw new Error(describe(err, 'No se pudo leer el estado de la base de datos.'));
+  }
+}
+
+/**
+ * Aplica las migraciones pendientes del BORRADOR (cada una en su transacción,
+ * como el rol de la app). Para probar antes de publicar; publicar aplica las de
+ * la compilación publicada.
+ */
+export async function applyMigrations(
+  appRef: string,
+): Promise<CodeActionResult<{ applied: string[]; warnings: string[] }>> {
+  try {
+    const { user, db, app } = await gate(appRef);
+    ensureAppDbDriver();
+    const code = await getAppCode(db, app.id);
+    const out = await applyAppDbMigrations(db, app.id, code?.files ?? {}, user.id);
+    touched(app);
+    return { ok: true, applied: out.applied, warnings: out.warnings };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudieron aplicar las migraciones.') };
+  }
+}
+
+export interface CodeDbQueryResult {
+  fields: string[];
+  rows: Array<Record<string, unknown>>;
+  rowCount: number;
+  truncated: boolean;
+}
+
+/** Consola de administración: UNA consulta de sólo lectura sobre la base propia (10 s, 1000 filas). */
+export async function dbQuery(
+  appRef: string,
+  sql: string,
+): Promise<CodeActionResult<CodeDbQueryResult>> {
+  try {
+    const { db, app } = await gate(appRef);
+    ensureAppDbDriver();
+    const out = await runAppDbQuery(db, app.id, { sql: String(sql ?? ''), readOnly: true });
+    return {
+      ok: true,
+      fields: out.fields,
+      // Fechas y bigint a texto: el resultado cruza a un componente de cliente.
+      rows: JSON.parse(
+        JSON.stringify(out.rows, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
+      ),
+      rowCount: out.rowCount,
+      truncated: out.truncated,
+    };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo consultar la base de datos.') };
   }
 }

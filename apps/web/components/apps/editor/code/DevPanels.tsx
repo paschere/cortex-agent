@@ -7,6 +7,7 @@ import { clsx } from 'clsx';
 import {
   Check,
   Copy,
+  Database,
   GitBranch,
   KeyRound,
   Loader2,
@@ -329,7 +330,7 @@ function FunctionRow({ appId, fn, roles }: { appId: string; fn: string; roles: E
               onChange={(e) => setInput(e.target.value)}
               spellCheck={false}
               rows={3}
-              className="w-full rounded-card border border-border bg-surface p-2 font-mono text-[11px] text-ink outline-none focus:border-primary"
+              className="w-full rounded-card border border-border bg-surface p-2 font-mono text-micro text-ink outline-none focus:border-primary"
             />
           </label>
           <div className="flex flex-wrap items-center gap-2">
@@ -375,7 +376,7 @@ function FunctionRow({ appId, fn, roles }: { appId: string; fn: string; roles: E
           {hook && (
             <div className="space-y-1 rounded-card border border-amber/40 bg-amber-soft p-2 text-ink">
               <p className="font-semibold">Guárdalo ahora: el token no se vuelve a mostrar.</p>
-              <p className="break-all font-mono text-[11px]">{hook.url}</p>
+              <p className="break-all font-mono text-micro">{hook.url}</p>
               <div className="flex gap-1.5">
                 <CopyButton text={hook.url} label="Copiar URL" />
                 <CopyButton text={hook.token} label="Copiar token" />
@@ -391,12 +392,12 @@ function FunctionRow({ appId, fn, roles }: { appId: string; fn: string; roles: E
                 )}
               </p>
               {out.ok && out.result !== undefined && (
-                <pre className="max-h-48 overflow-auto rounded-card bg-surface-2 p-2 font-mono text-[11px] text-ink">
+                <pre className="max-h-48 overflow-auto rounded-card bg-surface-2 p-2 font-mono text-micro text-ink">
                   {JSON.stringify(out.result, null, 2)}
                 </pre>
               )}
               {out.log?.trim() && (
-                <pre className="max-h-48 overflow-auto rounded-card bg-surface-2 p-2 font-mono text-[11px] text-ink-muted">
+                <pre className="max-h-48 overflow-auto rounded-card bg-surface-2 p-2 font-mono text-micro text-ink-muted">
                   {out.log}
                 </pre>
               )}
@@ -574,7 +575,7 @@ export function RunsPanel({ appId }: { appId: string }) {
                           <tr>
                             <td colSpan={6} className="bg-surface-2 px-3 py-2">
                               {r.error && <p className="mb-1 font-semibold text-rose">{r.error}</p>}
-                              <pre className="max-h-64 overflow-auto font-mono text-[11px] leading-relaxed text-ink-muted">
+                              <pre className="max-h-64 overflow-auto font-mono text-micro leading-relaxed text-ink-muted">
                                 {r.log || ' '}
                               </pre>
                             </td>
@@ -585,6 +586,225 @@ export function RunsPanel({ appId }: { appId: string }) {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Base de datos propia (fase 3, 0246)
+// ---------------------------------------------------------------------------
+
+function bytesText(n: number | null): string {
+  if (n === null) return '—';
+  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
+function cell(v: unknown): string {
+  if (v === null || v === undefined) return '∅';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+/** Estado de la base propia de la app, migraciones y una consola de sólo lectura. */
+export function DbPanel({ appId }: { appId: string }) {
+  const [status, setStatus] = useState<Awaited<ReturnType<typeof codeActions.dbStatus>> | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [sql, setSql] = useState('');
+  const [result, setResult] = useState<{
+    fields: string[];
+    rows: Array<Record<string, unknown>>;
+    truncated: boolean;
+  } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setStatus(await codeActions.dbStatus(appId));
+      setError(null);
+    } catch (e) {
+      setError(fail(e, 'No se pudo leer el estado de la base de datos.'));
+    }
+  }, [appId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function apply() {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const res = await codeActions.applyMigrations(appId);
+      if (!res.ok) return setError(res.error);
+      setNote(
+        res.applied.length
+          ? `Migraciones aplicadas: ${res.applied.join(', ')}.`
+          : 'No había migraciones pendientes.',
+      );
+      await load();
+    } catch (e) {
+      setError(fail(e, 'No se pudieron aplicar las migraciones.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function run() {
+    if (!sql.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await codeActions.dbQuery(appId, sql);
+      if (!res.ok) {
+        setResult(null);
+        return setError(res.error);
+      }
+      setResult({ fields: res.fields, rows: res.rows, truncated: res.truncated });
+    } catch (e) {
+      setError(fail(e, 'No se pudo consultar la base de datos.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const pending = status?.pending.length ?? 0;
+  return (
+    <Section
+      title="Base de datos"
+      help="La base propia de la app: un esquema que solo ella ve. Las migraciones son los archivos db/migrations/NNNN_nombre.sql del código; se aplican una vez, en orden, al publicar o aquí. OJO: esta base no filtra por rol del usuario; las funciones deciden qué ve cada quien."
+      action={
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={BTN_SECONDARY}
+            disabled={busy}
+            onClick={() => void load()}
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Actualizar
+          </button>
+          {status?.available && (
+            <button
+              type="button"
+              className={BTN_PRIMARY}
+              disabled={busy || pending === 0 || (status?.errors.length ?? 0) > 0}
+              onClick={() => void apply()}
+            >
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Database className="h-3.5 w-3.5" aria-hidden />
+              )}{' '}
+              Aplicar migraciones{pending ? ` (${pending})` : ''}
+            </button>
+          )}
+        </div>
+      }
+    >
+      <ErrorLine error={error} />
+      {note && <p className="rounded-card bg-emerald-soft px-3 py-2 text-xs text-emerald">{note}</p>}
+      {status && !status.available && (
+        <p className="text-xs text-ink-muted">
+          Las bases propias no están disponibles en este servidor.
+        </p>
+      )}
+      {status && (
+        <>
+          <p className="text-xs text-ink-muted">
+            {status.exists ? (
+              <>
+                Esquema <span className="font-mono text-ink">{status.schema}</span> ·{' '}
+                {bytesText(status.sizeBytes)} de {bytesText(status.quotaBytes)}
+                {status.percent !== null ? ` (${status.percent} %)` : ''}
+              </>
+            ) : (
+              'Todavía no tiene base: se crea con la primera migración.'
+            )}
+          </p>
+          {status.errors.map((e) => (
+            <p key={e} role="alert" className="rounded-card bg-rose-soft px-3 py-2 text-xs text-rose">
+              {e}
+            </p>
+          ))}
+          {status.warnings.map((w) => (
+            <p key={w} className="text-xs text-amber">
+              {w}
+            </p>
+          ))}
+          {(status.migrations.length > 0 || pending > 0) && (
+            <ul className="divide-y divide-border rounded-card border border-border text-xs">
+              {status.migrations.map((m) => (
+                <li key={m.name} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                  <span className="font-mono text-ink">{m.name}</span>
+                  <span className="text-ink-faint">aplicada {when(m.appliedAt)}</span>
+                </li>
+              ))}
+              {status.pending.map((n) => (
+                <li key={n} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                  <span className="font-mono text-ink">{n}</span>
+                  <span className="rounded-pill bg-amber-soft px-2 py-0.5 text-micro font-semibold text-amber">
+                    pendiente
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {status.exists && status.available && (
+            <div className="space-y-2">
+              <textarea
+                className={clsx(INPUT, 'min-h-[72px] font-mono text-xs')}
+                placeholder="SELECT * FROM mi_tabla LIMIT 20  (solo lectura)"
+                value={sql}
+                onChange={(e) => setSql(e.target.value)}
+                aria-label="Consulta SQL de solo lectura"
+              />
+              <button
+                type="button"
+                className={BTN_SECONDARY}
+                disabled={busy || !sql.trim()}
+                onClick={() => void run()}
+              >
+                <Play className="h-3.5 w-3.5" aria-hidden /> Consultar
+              </button>
+              {result && (
+                <div className="overflow-x-auto rounded-card border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-surface-2 text-ink-muted">
+                      <tr>
+                        {result.fields.map((f) => (
+                          <th key={f} className="px-3 py-1.5 font-semibold">
+                            {f}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {result.rows.map((r, i) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: filas de un resultado sin identificador propio
+                        <tr key={i}>
+                          {result.fields.map((f) => (
+                            <td key={f} className="px-3 py-1.5 font-mono text-ink">
+                              {cell(r[f])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="px-3 py-1.5 text-micro text-ink-faint">
+                    {result.rows.length} fila(s){result.truncated ? ' (recortado)' : ''}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </>
