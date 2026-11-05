@@ -769,7 +769,7 @@ export function CodeTab({ data }: { data: AppEditorData }) {
               <iframe
                 key={`${previewBuild.id}:${shownPreview}:${previewNonce}`}
                 title="Vista previa de la pantalla"
-                src={`/apps/${data.app.slug}/${shownPreview}?build=${previewBuild.id}`}
+                src={`/panel/apps/${data.app.slug}/vista/${shownPreview}?build=${previewBuild.id}`}
                 className="h-[32rem] w-full rounded-card border border-border bg-surface"
               />
               {dirty && (
