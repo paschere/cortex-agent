@@ -100,8 +100,9 @@ export default function Torre() {
           </h2>
           <MapContainer center={EL_DORADO} zoom={15} scrollWheelZoom className="map">
             <TileLayer
-              attribution="&copy; OpenStreetMap &copy; CARTO"
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              attribution="Esri, HERE, Garmin, &copy; OpenStreetMap"
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+              maxNativeZoom={16}
             />
             {(zonas ?? []).map((z) =>
               z.polygon?.length ? (
