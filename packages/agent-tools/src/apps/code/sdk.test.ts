@@ -2,6 +2,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from '@cortex/core';
 import { describe, expect, it } from 'vitest';
 import { createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../../tenancy/scoped-client';
+import { todayBogota } from '../../trackers/validation';
 import { type AppAccess, resolveAppAccess } from '../store';
 import { CONTROL_EN_PLANTA } from '../templates';
 import { runSdkOp } from './sdk';
@@ -22,7 +23,7 @@ const ANA = 'u-ana'; // operaria: lee y edita lo suyo
 const BETO = 'u-beto'; // operario
 const SOFIA = 'u-sofia'; // supervisora: todo
 const GERENTE = 'u-gerente'; // gerencia: lee, no escribe
-const HOY = new Date().toISOString().slice(0, 10);
+const HOY = todayBogota();
 
 const guiaFields = CONTROL_EN_PLANTA.trackers[0]?.fields ?? [];
 

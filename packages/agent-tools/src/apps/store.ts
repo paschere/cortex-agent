@@ -121,7 +121,7 @@ const SCREEN_COLUMNS =
 const ROLE_COLUMNS = 'id, app_id, key, name, description, permissions, position';
 const MEMBER_COLUMNS = 'id, app_id, user_id, role_key, attributes, created_by, created_at';
 
-export const MAX_APP_SCREENS = 12;
+export const MAX_APP_SCREENS = 24;
 export const MAX_APP_ROLES = 8;
 
 export type AppStatus = 'draft' | 'published';
