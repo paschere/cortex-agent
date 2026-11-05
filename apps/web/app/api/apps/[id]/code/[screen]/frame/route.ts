@@ -42,8 +42,15 @@ function inlineSafe(text: string, tag: 'script' | 'style'): string {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Va dentro del marco: una página legible, no un JSON. */
 const notFound = (message = 'Esa pantalla no existe.') =>
-  NextResponse.json({ error: message }, { status: 404 });
+  new NextResponse(
+    `<!doctype html><html lang="es"><meta charset="utf-8"><body style="margin:0;display:grid;place-items:center;min-height:100vh;font:15px/1.5 system-ui,sans-serif;color:#57534e;background:#faf8f3"><p style="max-width:28rem;padding:24px;text-align:center">${message.replace(/[<>&]/g, '')}</p></body></html>`,
+    {
+      status: 404,
+      headers: { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': CSP },
+    },
+  );
 
 export async function GET(
   req: NextRequest,
@@ -60,7 +67,10 @@ export async function GET(
   if (screen.kind !== 'code') return notFound();
 
   const code = await getAppCode(db, access.app.id);
-  if (!code) return notFound('Esta pantalla todavía no tiene código publicado.');
+  if (!code)
+    return notFound(
+      'Esta pantalla todavía no tiene código publicado. En el editor, pestaña «Código»: Compilar y luego Publicar.',
+    );
 
   const wanted = sp.get('build');
   let buildId = code.published_build_id;
@@ -69,10 +79,16 @@ export async function GET(
     if (external || !viewer.companyAdmin || !UUID_RE.test(wanted)) return notFound();
     buildId = wanted;
   }
-  if (!buildId) return notFound('Esta pantalla todavía no tiene código publicado.');
+  if (!buildId)
+    return notFound(
+      'Esta pantalla todavía no tiene código publicado. En el editor, pestaña «Código»: Compilar y luego Publicar.',
+    );
   const build = await getBuild(db, code.id, buildId);
   const bundle = build?.status === 'ok' ? build.bundles[screen.slug] : undefined;
-  if (!build || !bundle?.js) return notFound('Esa compilación no tiene esta pantalla.');
+  if (!build || !bundle?.js)
+    return notFound(
+      'Esta pantalla todavía no está en la versión publicada. En el editor, pestaña «Código»: Compilar y luego Publicar.',
+    );
 
   const html = `<!doctype html>
 <html lang="es">
