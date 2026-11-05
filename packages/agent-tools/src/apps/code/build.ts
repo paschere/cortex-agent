@@ -114,7 +114,7 @@ export async function buildAppCode(
   const fnEntries = functionEntries(files);
   if (!Object.keys(entries).length && !Object.keys(fnEntries).length)
     return fail(
-      'La aplicación no tiene pantallas con código ni funciones de servidor. Crea una pantalla con addCodeScreen o una función en server/<nombre>.ts.',
+      'La aplicación no tiene pantallas con código ni funciones de servidor. Agrega una en «Pantallas con código» (nombre corto y título) o crea una función en server/<nombre>.ts, y vuelve a compilar.',
     );
   const problems = packageProblems(files);
   if (problems.length) return fail(problems.join('\n'));
