@@ -1,7 +1,9 @@
 'use client';
 
+import { PREFILL_PARAM, decodePrefill } from '@/lib/apps/after-submit';
 import { confirmDialog } from '@/lib/ui/dialog-queue';
 import { compressImage } from '@/lib/views/compress-image';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppErrorState } from './AppErrorState';
 import { useAppNav } from './AppNav';
@@ -171,7 +173,13 @@ export function CodeScreen({
   const [attempt, setAttempt] = useState(0);
 
   const base = `/api/apps/${encodeURIComponent(appId)}/code/${encodeURIComponent(screen)}`;
-  const src = `${base}/frame${build ? `?build=${encodeURIComponent(build)}` : ''}`;
+  // Lo prellenado con `nav.go({ screen, prefill })` llega a la pantalla como parámetros de su dirección.
+  const pre = decodePrefill(useSearchParams()?.get(PREFILL_PARAM));
+  delete pre.build;
+  const frameQuery = new URLSearchParams(pre);
+  if (build) frameQuery.set('build', build);
+  const qs = frameQuery.toString();
+  const src = `${base}/frame${qs ? `?${qs}` : ''}`;
   const sdkUrl = `${base}/sdk${como}`;
 
   // Los controladores cambian de identidad; el oyente lee siempre los últimos.
