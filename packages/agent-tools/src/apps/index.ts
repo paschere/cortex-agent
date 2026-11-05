@@ -73,7 +73,13 @@ export { sampleRows, PREVIEW_USER_ID } from './sample-data';
 export type { SampleRow } from './sample-data';
 export { tableDraftSchema } from './design';
 export type { TableDraft } from './design';
-export { SCREEN_PATTERNS, PATTERN_IDS, buildScreenFromPattern, describePatterns, inferFieldRoles } from './screen-patterns';
+export {
+  SCREEN_PATTERNS,
+  PATTERN_IDS,
+  buildScreenFromPattern,
+  describePatterns,
+  inferFieldRoles,
+} from './screen-patterns';
 export type { ScreenPattern, PatternId, BuildResult, FieldRoles } from './screen-patterns';
 export { reviewAppDesign, humanizeTitle } from './design-review';
 export type { DesignNote, DesignReview } from './design-review';
@@ -85,7 +91,7 @@ export * from './code/store';
 export * from './code/build';
 export * from './code/github';
 export { runSdkOp, SDK_OPS, SDK_CALLS_PER_MINUTE } from './code/sdk';
-export type { SdkCallContext, SdkOp, SdkRowOut } from './code/sdk';
+export type { SdkCallContext, SdkOp, SdkRowOut, StoredUpload } from './code/sdk';
 export {
   appsCodeAddScreen,
   appsCodeBuild,
@@ -102,6 +108,11 @@ export * from './code/app-db-store';
 export * from './code/app-db-publish';
 export * from './code/functions';
 export * from './code/function-store';
-export { accessFromClaims, runAppFunction, systemAppAccess, testAppAccess } from './code/run-function';
+export {
+  accessFromClaims,
+  runAppFunction,
+  systemAppAccess,
+  testAppAccess,
+} from './code/run-function';
 export type { FunctionOutcome, RunFunctionOptions } from './code/run-function';
 export { runFunctionAction, summarizeResult } from './code/rule-action';

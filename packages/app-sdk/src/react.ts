@@ -59,6 +59,18 @@ function useLoader<T>(load: () => Promise<T>, deps: unknown[], refreshMs?: numbe
   return { data, loading, error, refresh };
 }
 
+/**
+ * Carga lo que devuelva `load` ahora, cuando cambie `deps` y cada `refreshMs` (sondeo: se pausa
+ * con la pestaña oculta y refresca al volver). Sirve para combinar varias llamadas del SDK.
+ */
+export function useAsync<T>(
+  load: () => Promise<T>,
+  deps: unknown[] = [],
+  config: { refreshMs?: number } = {},
+): { data: T | null; loading: boolean; error: string | null; refresh: () => Promise<void> } {
+  return useLoader(load, deps, config.refreshMs);
+}
+
 /** Quién usa la pantalla. */
 export function useUser(): { user: SdkUser | null; loading: boolean; error: string | null } {
   const { data, loading, error } = useLoader(() => cortex.user.me(), []);

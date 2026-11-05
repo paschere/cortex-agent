@@ -53,3 +53,69 @@ export interface SdkGeofence {
   name: string;
   [key: string]: unknown;
 }
+
+/** Un botón de flujo de una tabla que el rol puede correr (`tables.listActions`). */
+export interface SdkAction {
+  key: string;
+  label: string;
+}
+
+export interface ActionResult {
+  message: string;
+  /** La fila como quedó, si el rol todavía la ve. */
+  row?: SdkRow;
+}
+
+export interface UploadOptions {
+  table: string;
+  id: string;
+  /** El campo de tipo archivo de la fila al que se agrega. */
+  field: string;
+  /** Nombre con que se guarda; por omisión el del archivo. */
+  name?: string;
+}
+
+export interface UploadResult {
+  url: string;
+  name: string;
+  /** Los valores de la fila después de agregar el archivo. */
+  values: Record<string, unknown>;
+}
+
+export interface PickOptions {
+  /** Atributo `accept` del selector: `image/*`, `application/pdf`… */
+  accept?: string;
+  /** Abre la cámara en vez de la galería (celulares). */
+  capture?: 'environment' | 'user';
+  multiple?: boolean;
+}
+
+export interface ScanOptions {
+  kind?: 'manifiesto' | 'guia' | 'general';
+  /** Devolver también los renglones (por omisión sí en `manifiesto`). */
+  rows?: boolean;
+}
+
+export type ScanValue = string | number;
+
+export interface ScanResult {
+  fields: Record<string, ScanValue>;
+  rows: Record<string, ScanValue>[];
+  text?: string;
+}
+
+export interface SdkPosition {
+  lat: number;
+  lng: number;
+  accuracy: number;
+  /** El nombre de la zona de la app donde está, o null. */
+  zone: string | null;
+  /** true/false según las zonas de la app; null si la app no tiene zonas. */
+  inside: boolean | null;
+}
+
+export interface ConfirmOptions {
+  confirmLabel?: string;
+  /** Pinta el botón principal como acción que no se deshace. */
+  danger?: boolean;
+}

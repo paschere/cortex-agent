@@ -43,8 +43,15 @@ function listen(): void {
   listening = true;
 }
 
-/** Llama una operación del host y espera su respuesta. */
-export function call<T = unknown>(op: string, args?: unknown): Promise<T> {
+/** Operaciones lentas (leer un documento con el modelo): esperan más. */
+export const SLOW_BRIDGE_TIMEOUT_MS = 75_000;
+
+/** Llama una operación del host y espera su respuesta. `timeoutMs` alarga la espera de las lentas. */
+export function call<T = unknown>(
+  op: string,
+  args?: unknown,
+  opts: { timeoutMs?: number } = {},
+): Promise<T> {
   if (typeof window === 'undefined' || window.parent === window) {
     return Promise.reject(new Error('Esta pantalla solo funciona dentro de la aplicación.'));
   }
@@ -54,7 +61,7 @@ export function call<T = unknown>(op: string, args?: unknown): Promise<T> {
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error('La operación tardó demasiado. Intenta de nuevo.'));
-    }, BRIDGE_TIMEOUT_MS);
+    }, opts.timeoutMs ?? BRIDGE_TIMEOUT_MS);
     pending.set(id, { resolve: resolve as (d: unknown) => void, reject, timer });
     // El origen del host no se conoce desde un iframe sin origen: '*' es necesario.
     window.parent.postMessage({ cortex: 1, id, op, args: args ?? null }, '*');

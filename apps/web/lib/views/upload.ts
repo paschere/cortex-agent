@@ -113,7 +113,7 @@ export async function storeViewUpload(
   return storeChecked(db, view, input, opts, target.accept);
 }
 
-async function storeChecked(
+export async function storeChecked(
   db: SupabaseClient,
   view: CustomViewRow,
   input: { blockId: string; field: string; file: File },

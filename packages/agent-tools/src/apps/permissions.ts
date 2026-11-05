@@ -131,11 +131,17 @@ export function parsePermissions(raw: unknown): AppPermissions {
 // Pantallas
 // ---------------------------------------------------------------------------
 
+/** Marca en `roles` de una pantalla: oculta del menú para todos. */
+export const HIDDEN_SCREEN_ROLE = '__oculta';
+
 /**
  * ¿Este rol ve esta pantalla? `roles` es la lista de la pantalla (vacía = la
  * ven todos los roles de la app). El administrador las ve todas.
  */
 export function canSeeScreen(role: ResolvedRole, screenRoles: readonly string[]): boolean {
+  // Una pantalla oculta no sale en el menú de nadie (ni del administrador), pero sigue
+  // existiendo: p. ej. las de bloques que solo definen las acciones de flujo que usa una app con código.
+  if (screenRoles.includes(HIDDEN_SCREEN_ROLE)) return false;
   if (role.admin) return true;
   return screenRoles.length === 0 || screenRoles.includes(role.key);
 }
@@ -250,7 +256,11 @@ export function canEditRow(
   if (!where) return false;
   const attr = USER_ATTRIBUTE_RE.exec(where.equals)?.[1] ?? '';
   const value = attr === USER_ID_ATTRIBUTE ? user.id : user.attributes[attr];
-  return typeof value === 'string' && value.trim() !== '' && String(row.values[where.field] ?? '') === value.trim();
+  return (
+    typeof value === 'string' &&
+    value.trim() !== '' &&
+    String(row.values[where.field] ?? '') === value.trim()
+  );
 }
 
 export const SCOPE_BLOCKED_MESSAGE = 'Tu rol en esta aplicación no ve esta tabla.';

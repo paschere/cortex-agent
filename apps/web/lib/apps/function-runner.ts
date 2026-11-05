@@ -125,6 +125,8 @@ const cortex = {
     get: (table, id) => sdk('tables.get', { table, id }),
     insert: (table, values) => sdk('tables.insert', { table, values }),
     update: (table, id, values) => sdk('tables.update', { table, id, values }),
+    action: (table, id, action, opts) => sdk('tables.action', { table, id, action, reason: opts && opts.reason }),
+    listActions: (table) => sdk('tables.listActions', { table }),
   },
   locations: { live: () => sdk('locations.live') },
   geofences: { list: () => sdk('geofences.list') },

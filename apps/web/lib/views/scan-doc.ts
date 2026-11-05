@@ -1,12 +1,12 @@
 import 'server-only';
 import {
   type CustomViewRow,
-  type ScanDelivered,
-  getTrackerBySlug,
   NO_THINKING,
+  type ScanDelivered,
   type Suggestion,
   checkMeter,
   consumeToken,
+  getTrackerBySlug,
   isRefused,
   scannableFields,
   shapeScan,
@@ -91,6 +91,26 @@ function shapeScanRows(
   });
 }
 
+/** Los topes de una lectura con visión: por persona y minuto, por empresa y día, y el plan. */
+export async function assertScanBudget(db: SupabaseClient, userId: string): Promise<void> {
+  try {
+    await consumeToken(db, userId, 'views.scan_document', SCAN_PER_MINUTE);
+  } catch {
+    throw new ScanError('Muchas fotos seguidas. Espera un momento.', 429);
+  }
+  const since = new Date(Date.now() - 86_400_000).toISOString();
+  const { count, error: countError } = await db
+    .from('audit_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('tool_id', 'views.scan_document')
+    .gte('created_at', since);
+  if (countError) throw new ScanError('Cortex no pudo leer la foto ahora. Llena a mano.', 503);
+  if ((count ?? 0) >= SCAN_PER_DAY)
+    throw new ScanError('La empresa llegó al tope de fotos leídas de hoy. Llena a mano.', 429);
+  if (isRefused(await checkMeter(db, 'answers')))
+    throw new ScanError('El plan de la empresa no tiene respuestas disponibles.', 429);
+}
+
 export async function scanDocument(input: {
   db: SupabaseClient;
   view: CustomViewRow;
@@ -112,22 +132,7 @@ export async function scanDocument(input: {
   if (!fields.length)
     throw new ScanError('Este formulario no tiene campos que se lean de un papel.');
 
-  try {
-    await consumeToken(db, input.userId, 'views.scan_document', SCAN_PER_MINUTE);
-  } catch {
-    throw new ScanError('Muchas fotos seguidas. Espera un momento.', 429);
-  }
-  const since = new Date(Date.now() - 86_400_000).toISOString();
-  const { count, error: countError } = await db
-    .from('audit_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('tool_id', 'views.scan_document')
-    .gte('created_at', since);
-  if (countError) throw new ScanError('Cortex no pudo leer la foto ahora. Llena a mano.', 503);
-  if ((count ?? 0) >= SCAN_PER_DAY)
-    throw new ScanError('La empresa llegó al tope de fotos leídas de hoy. Llena a mano.', 429);
-  if (isRefused(await checkMeter(db, 'answers')))
-    throw new ScanError('El plan de la empresa no tiene respuestas disponibles.', 429);
+  await assertScanBudget(db, input.userId);
 
   const block = input.view.spec.blocks.find((b) => b.id === input.blockId);
   const rowsCfg = block?.type === 'form' ? block.documentRows : undefined;
@@ -295,4 +300,140 @@ export function scanError(err: unknown): NextResponse {
     { error: 'Cortex no pudo leer la foto ahora. Llena a mano.' },
     { status: 503 },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Leer un documento SIN formulario: para las pantallas con código (cortex.docs.scan)
+// ---------------------------------------------------------------------------
+
+/** Vercel corta el cuerpo de una función en 4,5 MB: el archivo, ya comprimido, cabe en 4. */
+export const CODE_SCAN_MAX_BYTES = 4 * 1024 * 1024;
+
+export type CodeScanKind = 'manifiesto' | 'guia' | 'general';
+
+export interface CodeScanOutput {
+  fields: Record<string, string | number>;
+  rows: Array<Record<string, string | number>>;
+  text?: string;
+}
+
+const CODE_SCAN_SHAPES: Record<CodeScanKind, string> = {
+  manifiesto:
+    'Es un MANIFIESTO DE CARGA aéreo. En «fields» pon los datos del encabezado con estas claves (omite las que no se vean): vuelo, aerolinea, fecha (AAAA-MM-DD), origen, destino, matricula, total_piezas, total_kilos. En «rows» UNA fila por cada guía aérea (AWB) del manifiesto, con las claves: guia (el número impreso, ej. 729-12345675), piezas, kilos, descripcion, origen, destino, remitente, consignatario. No omitas renglones.',
+  guia: 'Es una GUÍA AÉREA (AWB). En «fields» pon: guia (número impreso), fecha (AAAA-MM-DD), origen, destino, vuelo, aerolinea, piezas, kilos, descripcion, remitente, consignatario. «rows» va vacío salvo que el documento traiga varias líneas de carga: entonces una fila por línea con piezas, kilos y descripcion.',
+  general:
+    'Es un documento cualquiera (factura, remisión, orden, nota). En «fields» pon cada dato rotulado que se vea con una clave corta en minúsculas con guion bajo (ej. numero, fecha, total, proveedor). Si hay una tabla de renglones, una fila por renglón en «rows» con claves cortas.',
+};
+
+/**
+ * Lee una foto o PDF y devuelve datos sueltos y renglones, sin un formulario que
+ * diga qué campos buscar (la pantalla con código decide qué hace con ellos). Mismos
+ * topes que el escáner de formularios. Nada se guarda ni se sube a ningún lado.
+ */
+export async function scanFreeDocument(input: {
+  db: SupabaseClient;
+  userId: string;
+  kind: CodeScanKind;
+  rows: boolean;
+  image: { bytes: Uint8Array; mime: string };
+  signal?: AbortSignal;
+}): Promise<CodeScanOutput> {
+  const { db } = input;
+  if (!isScanImage(input.image.mime))
+    throw new ScanError('Sólo leo fotos (JPG, PNG o WebP) y PDF. Prueba con otro archivo.', 400);
+  if (input.image.bytes.byteLength === 0) throw new ScanError('La foto llegó vacía.', 400);
+  if (input.image.bytes.byteLength > CODE_SCAN_MAX_BYTES)
+    throw new ScanError(
+      'El archivo pesa más de 4 MB. Tómalo otra vez más cerca del documento.',
+      413,
+    );
+  await assertScanBudget(db, input.userId);
+
+  const started = Date.now();
+  const timeout = AbortSignal.timeout(ROWS_TIME_LIMIT_MS);
+  const signal = input.signal ? AbortSignal.any([input.signal, timeout]) : timeout;
+  const cell = z.union([z.string(), z.number(), z.null()]);
+  const schema = z.object({
+    fields: z.record(cell),
+    rows: z.array(z.record(cell)).optional(),
+    text: z.string().max(4000).optional(),
+  });
+  const mime = (input.image.mime.split(';')[0] ?? '').trim().toLowerCase();
+  const meta = { kind: input.kind, free: true };
+  try {
+    const { object } = await generateObject({
+      model: simpleModel(),
+      experimental_providerMetadata: NO_THINKING,
+      schema,
+      maxTokens: 8000,
+      abortSignal: signal,
+      system: `${SCAN_HOW_TO}\nAquí no hay un formulario: devuelves los datos que ves con las claves que te indico. Los códigos de guía van sin espacios ni guiones sobrantes tal como están impresos (con su guion del prefijo si lo traen). Si un dato no se ve con seguridad, no pongas la clave. En «text» una transcripción corta de lo más importante (máx. 4000 caracteres).`,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            mime === 'application/pdf'
+              ? {
+                  type: 'file' as const,
+                  data: Buffer.from(input.image.bytes).toString('base64'),
+                  mimeType: 'application/pdf',
+                }
+              : {
+                  type: 'image' as const,
+                  image: Buffer.from(input.image.bytes).toString('base64'),
+                  mimeType: mime || 'image/jpeg',
+                },
+            {
+              type: 'text',
+              text: JSON.stringify({
+                hoy: todayInBogota(),
+                instruccion: CODE_SCAN_SHAPES[input.kind],
+                renglones: input.rows ? 'sí' : 'no: deja «rows» vacío',
+              }),
+            },
+          ],
+        },
+      ],
+    });
+    const clean = (rec: Record<string, string | number | null>) =>
+      Object.fromEntries(
+        Object.entries(rec).flatMap(([k, v]) => {
+          if (v === null || v === undefined || String(v).trim() === '') return [];
+          return [[k.slice(0, 60), typeof v === 'number' ? v : String(v).trim().slice(0, 500)]];
+        }),
+      ) as Record<string, string | number>;
+    const fields = clean(object.fields);
+    const rows = input.rows ? (object.rows ?? []).slice(0, 300).map(clean) : [];
+    await writeAuditEvent({
+      db,
+      userId: input.userId as UUID,
+      toolId: 'views.scan_document',
+      input: meta,
+      status: 'ok',
+      latencyMs: Date.now() - started,
+      surface: 'web',
+      decision: 'allowed',
+      metadata: { ...meta, read: Object.keys(fields).length, rows: rows.length },
+    });
+    return { fields, rows, ...(object.text ? { text: object.text } : {}) };
+  } catch (err) {
+    logger.warn({ err }, 'scan: free document turn failed');
+    await writeAuditEvent({
+      db,
+      userId: input.userId as UUID,
+      toolId: 'views.scan_document',
+      input: meta,
+      status: 'error',
+      latencyMs: Date.now() - started,
+      surface: 'web',
+      decision: 'allowed',
+      metadata: meta,
+    });
+    throw new ScanError(
+      timeout.aborted
+        ? 'Cortex tardó demasiado leyendo el documento. Intenta otra vez.'
+        : 'Cortex no pudo leer el documento ahora. Intenta otra vez.',
+      503,
+    );
+  }
 }
