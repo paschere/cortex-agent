@@ -1,11 +1,13 @@
 import { openScreenForApi, previewAttributesOf } from '@/lib/apps/access';
-import { getAppCode, getBuild } from '@cortex/agent-tools';
+import { getBuildBundle, getCodeRef } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
  * EL MARCO DE UNA PANTALLA CON CÓDIGO (0243).
  *
- * Devuelve una página HTML con el bundle compilado EN LÍNEA, pensada para ir
+ * Devuelve una página HTML PEQUEÑA que carga el bundle compilado desde la ruta inmutable
+ * `/api/apps/code/bundle/<build>/<pantalla>.js|css` (cacheable un año: el id de compilación
+ * cambia con cada compilación), pensada para ir
  * dentro de `<iframe sandbox="allow-scripts allow-forms allow-popups
  * allow-downloads">` (sin `allow-same-origin`): el documento tiene origen nulo,
  * no ve las cookies ni el DOM de Cortex. La CSP repite esa jaula del lado del
@@ -23,22 +25,28 @@ import { type NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const CSP = [
-  'sandbox allow-scripts allow-forms allow-popups allow-downloads',
-  "default-src 'none'",
-  "script-src 'unsafe-inline'",
-  "style-src 'unsafe-inline' https://fonts.googleapis.com",
-  'font-src https://fonts.gstatic.com data:',
-  'img-src https: data: blob:',
-  "connect-src 'none'",
-  // Solo Cortex la puede enmarcar (lo mismo que dice X-Frame-Options en next.config).
-  "frame-ancestors 'self'",
-].join('; ');
-
-/** El texto va dentro de <script>/<style>: que no pueda cerrar la etiqueta ni abrir un comentario. */
-function inlineSafe(text: string, tag: 'script' | 'style'): string {
-  return text.replace(new RegExp(`</${tag}`, 'gi'), `<\\/${tag}`).replace(/<!--/g, '<\\!--');
+/**
+ * La CSP del marco. El documento tiene origen NULO (sandbox sin allow-same-origin): no todos los
+ * navegadores hacen coincidir 'self' con el host en ese caso, así que además se nombra el host
+ * explícito de la petición. El bundle sale de /api/apps/code/bundle/…; no hay script en línea.
+ */
+function cspFor(host: string | null): string {
+  const self = host && /^[a-z0-9.-]+(:\d{1,5})?$/i.test(host) ? ` https://${host}` : '';
+  return [
+    'sandbox allow-scripts allow-forms allow-popups allow-downloads',
+    "default-src 'none'",
+    `script-src 'self'${self}`,
+    `style-src 'self'${self} 'unsafe-inline' https://fonts.googleapis.com`,
+    'font-src https://fonts.gstatic.com data:',
+    'img-src https: data: blob:',
+    "connect-src 'none'",
+    // Solo Cortex la puede enmarcar (lo mismo que dice X-Frame-Options en next.config).
+    "frame-ancestors 'self'",
+  ].join('; ');
 }
+
+/** Las páginas de aviso no cargan nada externo. */
+const CSP = cspFor(null);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -66,11 +74,10 @@ export async function GET(
   const { db, access, screen, viewer, external } = opened;
   if (screen.kind !== 'code') return notFound();
 
-  const code = await getAppCode(db, access.app.id);
-  if (!code)
-    return notFound(
-      'Esta pantalla todavía no tiene código publicado. En el editor, pestaña «Código»: Compilar y luego Publicar.',
-    );
+  const notPublished =
+    'Esta pantalla todavía no tiene código publicado. En el editor, pestaña «Código»: Compilar y luego Publicar.';
+  const code = await getCodeRef(db, access.app.id);
+  if (!code) return notFound(notPublished);
 
   const wanted = sp.get('build');
   let buildId = code.published_build_id;
@@ -79,17 +86,29 @@ export async function GET(
     if (external || !viewer.companyAdmin || !UUID_RE.test(wanted)) return notFound();
     buildId = wanted;
   }
-  if (!buildId)
-    return notFound(
-      'Esta pantalla todavía no tiene código publicado. En el editor, pestaña «Código»: Compilar y luego Publicar.',
-    );
-  const build = await getBuild(db, code.id, buildId);
-  const bundle = build?.status === 'ok' ? build.bundles[screen.slug] : undefined;
-  if (!build || !bundle?.js)
+  if (!buildId) return notFound(notPublished);
+  // Solo el bundle de ESTA pantalla (no la fila con todos), de una compilación de este proyecto.
+  const bundle = await getBuildBundle(db, { buildId, slug: screen.slug, codeId: code.id });
+  if (!bundle)
     return notFound(
       'Esta pantalla todavía no está en la versión publicada. En el editor, pestaña «Código»: Compilar y luego Publicar.',
     );
 
+  // La compilación y la pantalla fijan el contenido: sirve de validador (304 sin repetir el HTML).
+  const etag = `"${buildId}:${screen.slug}:${bundle.css ? 'c' : 'n'}"`;
+  const headers = {
+    'content-security-policy': cspFor(req.headers.get('host')),
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    // Depende de quién mira (rol) y la publicada puede cambiar: nada de cachés compartidas,
+    // y el navegador revalida siempre (la autorización de arriba corre en cada visita).
+    'cache-control': 'private, no-cache',
+    etag,
+  };
+  if (req.headers.get('if-none-match') === etag)
+    return new NextResponse(null, { status: 304, headers });
+
+  const src = `/api/apps/code/bundle/${buildId}/${encodeURIComponent(screen.slug)}`;
   const html = `<!doctype html>
 <html lang="es">
 <head>
@@ -98,22 +117,15 @@ export async function GET(
 <meta name="referrer" content="no-referrer">
 <title>${screen.title.replace(/[<>&"]/g, '')}</title>
 <style>html,body{margin:0;padding:0;background:transparent}*{box-sizing:border-box}</style>
-${bundle.css ? `<style>${inlineSafe(bundle.css, 'style')}</style>` : ''}
+${bundle.css ? `<link rel="stylesheet" href="${src}.css">` : ''}
 </head>
 <body>
 <div id="root"></div>
-<script>${inlineSafe(bundle.js, 'script')}</script>
+<script src="${src}.js"></script>
 </body>
 </html>`;
 
   return new NextResponse(html, {
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'content-security-policy': CSP,
-      'x-content-type-options': 'nosniff',
-      'referrer-policy': 'no-referrer',
-      // Depende de quién mira (rol) y la publicada puede cambiar: nada de cachés compartidas.
-      'cache-control': 'private, no-store',
-    },
+    headers: { ...headers, 'content-type': 'text/html; charset=utf-8' },
   });
 }

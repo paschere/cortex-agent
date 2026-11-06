@@ -8,6 +8,7 @@ import {
   addCodeScreen,
   ensureAppCode,
   getAppCode,
+  getBuildBundle,
   listBuilds,
   publishAppCode,
   recordBuild,
@@ -216,5 +217,38 @@ describe('pantallas con código y buildAppCode', () => {
     );
     expect(res.status).toBe('error');
     expect(called).toHaveLength(0);
+  });
+});
+
+describe('getBuildBundle', () => {
+  it('devuelve el bundle de una pantalla de una compilación buena y nunca una función', async () => {
+    const { db } = world();
+    const code = await ensureAppCode(db, '11111111-1111-4111-8111-111111111111', USER);
+    const b = await recordBuild(db, code, {
+      files: {},
+      bundles: { tablero: { js: 'JS', css: 'CSS' } },
+      functions: { enviar: 'SECRETO' },
+      status: 'ok',
+      log: '',
+      userId: USER,
+    });
+    const got = await getBuildBundle(db, { buildId: b.id, slug: 'tablero', codeId: code.id });
+    expect(got).toEqual({ buildId: b.id, js: 'JS', css: 'CSS' });
+    expect(await getBuildBundle(db, { buildId: b.id, slug: 'enviar' })).toBeNull();
+    expect(await getBuildBundle(db, { buildId: b.id, slug: '../x' })).toBeNull();
+    expect(await getBuildBundle(db, { buildId: b.id, slug: 'tablero', codeId: 'otro' })).toBeNull();
+  });
+
+  it('una compilación con error no sirve nada', async () => {
+    const { db } = world();
+    const code = await ensureAppCode(db, '11111111-1111-4111-8111-111111111111', USER);
+    const b = await recordBuild(db, code, {
+      files: {},
+      bundles: { tablero: { js: 'JS', css: '' } },
+      status: 'error',
+      log: 'mal',
+      userId: USER,
+    });
+    expect(await getBuildBundle(db, { buildId: b.id, slug: 'tablero' })).toBeNull();
   });
 });

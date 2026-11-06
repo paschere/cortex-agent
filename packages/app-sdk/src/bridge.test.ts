@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BRIDGE_TIMEOUT_MS, call, resetBridge } from './bridge';
+import { BRIDGE_TIMEOUT_MS, call, resetBridge, withUpdates } from './bridge';
 import { cortex } from './cortex';
 
 /** Una «ventana» mínima: el host (parent) y el oyente de mensajes del iframe. */
@@ -81,5 +81,47 @@ describe('puente', () => {
     void cortex.ui.toast('Listo').catch(() => undefined);
     expect(sent.map((m) => m.op)).toEqual(['nav.go', 'ui.toast']);
     expect(sent[1]?.args).toEqual({ text: 'Listo' });
+  });
+
+  it('sin withUpdates el mensaje no pide segunda respuesta', () => {
+    const { sent } = setup();
+    void call('user.me').catch(() => undefined);
+    expect(sent[0]).not.toHaveProperty('upd');
+  });
+
+  it('cortex:update llega a quien lo pidió, una sola vez, y call() ya resolvió con la primera', async () => {
+    const { sent, reply } = setup();
+    const onUpdate = vi.fn();
+    const p = withUpdates(onUpdate, () => call('tables.query', { table: 'a' }));
+    expect(sent[0]).toMatchObject({ upd: true });
+    const id = sent[0]?.id;
+    reply({ cortex: 1, id, ok: true, data: 'guardado' });
+    await expect(p).resolves.toBe('guardado');
+    expect(onUpdate).not.toHaveBeenCalled();
+    reply({ cortex: 1, id, update: true, data: 'fresco' });
+    reply({ cortex: 1, id, update: true, data: 'otra' });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('un update sin oyente o de otra ventana se ignora y no rompe la llamada', async () => {
+    const { sent, reply } = setup();
+    const onUpdate = vi.fn();
+    const p = withUpdates(onUpdate, () => call('x'));
+    const id = sent[0]?.id;
+    reply({ cortex: 1, id, ok: true, data: 1 });
+    await p;
+    reply({ cortex: 1, id, update: true }, { otra: true });
+    expect(onUpdate).not.toHaveBeenCalled();
+    const q = call('y');
+    reply({ cortex: 1, id: sent[1]?.id, update: true, data: 'x' });
+    reply({ cortex: 1, id: sent[1]?.id, ok: true, data: 'ok' });
+    await expect(q).resolves.toBe('ok');
+  });
+
+  it('withUpdates no deja el oyente puesto después de correr', () => {
+    const { sent } = setup();
+    withUpdates(vi.fn(), () => undefined);
+    void call('z').catch(() => undefined);
+    expect(sent[0]).not.toHaveProperty('upd');
   });
 });

@@ -81,12 +81,16 @@ describe('enlace de una tarjeta', () => {
   });
 });
 
-
 describe('shortTabLabels', () => {
-  const labels = (titles: string[]) =>
-    [...shortTabLabels(titles.map((t, i) => ({ slug: `s${i}`, title: t }))).values()];
+  const labels = (titles: string[]) => [
+    ...shortTabLabels(titles.map((t, i) => ({ slug: `s${i}`, title: t }))).values(),
+  ];
   it('resume a una palabra con sentido y sin cortar a la mitad', () => {
-    expect(labels(['Control de vuelos', 'Inicio', 'Atenciones'])).toEqual(['Vuelos', 'Inicio', 'Atenciones']);
+    expect(labels(['Control de vuelos', 'Inicio', 'Atenciones'])).toEqual([
+      'Vuelos',
+      'Inicio',
+      'Atenciones',
+    ]);
   });
   it('no repite nombres entre pestañas', () => {
     const out = labels(['Control de vuelos', 'Control de equipos', 'Control de tripulación']);

@@ -24,4 +24,18 @@ describe('middleware: rutas públicas de las apps', () => {
     expect(has('/apps')).toBe(false);
     expect(has('/api/apps')).toBe(false);
   });
+
+  it('el código de una pantalla con código es público solo como <uuid>/<pantalla>.js|css', () => {
+    const m = /const CODE_BUNDLE_RE =\s*(\/.+\/i?);/.exec(src);
+    expect(m).not.toBeNull();
+    const re = new RegExp((m?.[1] ?? '').replace(/^\/|\/i?$/g, ''), 'i');
+    const id = '3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b';
+    expect(re.test(`/api/apps/code/bundle/${id}/tablero.js`)).toBe(true);
+    expect(re.test(`/api/apps/code/bundle/${id}/tablero.css`)).toBe(true);
+    expect(re.test(`/api/apps/code/bundle/${id}/tablero`)).toBe(false);
+    expect(re.test(`/api/apps/code/bundle/${id}/a/b.js`)).toBe(false);
+    expect(re.test('/api/apps/code/bundle/x/tablero.js')).toBe(false);
+    expect(re.test(`/api/apps/code/bundle/${id}`)).toBe(false);
+    expect(re.test(`/api/apps/${id}/code/tablero/frame`)).toBe(false);
+  });
 });

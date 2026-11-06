@@ -1,9 +1,10 @@
 'use client';
 
 import { PREFILL_PARAM, decodePrefill } from '@/lib/apps/after-submit';
+import { INVALIDATING_OPS, READ_OPS, readCache, serveRead } from '@/lib/apps/code-read-cache';
 import { confirmDialog } from '@/lib/ui/dialog-queue';
 import { compressImage } from '@/lib/views/compress-image';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppErrorState } from './AppErrorState';
 import { useAppNav } from './AppNav';
@@ -25,6 +26,11 @@ import { useAppToast } from './AppToast';
  *    postMessage): el host lo manda como multipart a la misma ruta.
  *  - Lo demás se reenvía a `/api/apps/<app>/code/<pantalla>/sdk`, donde el
  *    servidor decide el permiso con el rol de quien mira. Aquí nada se decide.
+ *
+ * Las lecturas pasan por una caché de módulo (`lib/apps/code-read-cache.ts`): se contesta al
+ * instante con lo guardado (< 60 s) y se manda el dato fresco como `{cortex:1, update:true, id,
+ * data}`; cualquier escritura la vacía. Cuando la pantalla avisa `{cortex:1, ready:true}` (primer
+ * render listo) se muestra el marco con un fundido.
  *
  * Solo se atienden mensajes cuyo `event.source` es NUESTRO iframe. Las
  * respuestas van con '*' porque el origen del iframe es nulo; solo se envía la
@@ -49,6 +55,8 @@ const FILE_OPS: Record<string, string> = {
 /** Lo que cabe en el cuerpo de una función de Vercel (4,5 MB) con margen. */
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const GEO_TIMEOUT_MS = 12_000;
+/** Si el marco carga pero no avisa «listo» (compilaciones viejas), se muestra pasado este tiempo. */
+const READY_CAP_MS = 1_500;
 /** Si el marco no termina de cargar en este tiempo, se ofrece reintentar. */
 const LOAD_TIMEOUT_MS = 25_000;
 
@@ -57,6 +65,21 @@ interface Request {
   id: string;
   op: string;
   args?: unknown;
+  /** El SDK de la pantalla entiende la segunda respuesta (`update`). */
+  upd?: boolean;
+}
+
+/** Aviso del marco: primer render hecho. */
+function isReady(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  return d.cortex === 1 && d.ready === true;
+}
+
+/** Las demás pantallas con código de la app, para precargar sus bundles y sus rutas. */
+export interface CodePrefetch {
+  buildId: string;
+  screens: Array<{ slug: string; href: string }>;
 }
 
 /** Llama al servidor del SDK y devuelve `{ok,data|error}`; con `file`, como multipart. */
@@ -155,6 +178,8 @@ export function CodeScreen({
   build,
   readOnly = false,
   como = '',
+  cacheScope = '',
+  prefetch,
 }: {
   /** El identificador de la app en las direcciones (slug o id). */
   appId: string;
@@ -164,11 +189,17 @@ export function CodeScreen({
   readOnly?: boolean;
   /** «?como=…» de «Ver como…», con el signo de pregunta; vacío en el uso normal. */
   como?: string;
+  /** Quién mira (rol y persona): cambia → no se reusa lo guardado de otro. */
+  cacheScope?: string;
+  /** Pantallas hermanas con código y la compilación publicada, para precargar. */
+  prefetch?: CodePrefetch;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const nav = useAppNav();
   const toast = useAppToast();
+  const router = useRouter();
   const [loaded, setLoaded] = useState(false);
+  const [shown, setShown] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -183,17 +214,29 @@ export function CodeScreen({
   const sdkUrl = `${base}/sdk${como}`;
 
   // Los controladores cambian de identidad; el oyente lee siempre los últimos.
-  const latest = useRef({ nav, toast, readOnly, sdkUrl });
-  latest.current = { nav, toast, readOnly, sdkUrl };
+  const cacheKeyScope = `${cacheScope}|${como}`;
+  const latest = useRef({ nav, toast, readOnly, sdkUrl, appId, cacheKeyScope });
+  latest.current = { nav, toast, readOnly, sdkUrl, appId, cacheKeyScope };
 
   const onMessage = useCallback(async (event: MessageEvent) => {
     const win = frame.current?.contentWindow;
     if (!win || event.source !== win) return;
+    if (isReady(event.data)) {
+      setShown(true);
+      return;
+    }
     if (!isRequest(event.data)) return;
-    const { id, op, args } = event.data;
+    const { id, op, args, upd } = event.data;
     const reply = (body: { ok: true; data: unknown } | { ok: false; error: string }) =>
       win.postMessage({ cortex: 1, id, ...body }, '*');
-    const { nav: appNav, toast: pushToast, readOnly: ro, sdkUrl: url } = latest.current;
+    const {
+      nav: appNav,
+      toast: pushToast,
+      readOnly: ro,
+      sdkUrl: url,
+      appId: app,
+      cacheKeyScope: scope,
+    } = latest.current;
 
     try {
       if (op === 'ui.toast') {
@@ -249,15 +292,35 @@ export function CodeScreen({
       if (ro && WRITE_OPS.has(op)) {
         return reply({ ok: false, error: 'Estás viendo como otro rol: nada se guarda.' });
       }
-      const fileKey = FILE_OPS[op];
-      if (fileKey) {
-        const raw = (args ?? {}) as Record<string, unknown>;
-        const { [fileKey]: blob, ...rest } = raw;
-        const file = await prepareFile(blob, rest.name);
-        if (typeof file === 'string') return reply({ ok: false, error: file });
-        return reply(await callSdk(url, op, rest, file));
+      if (READ_OPS.has(op)) {
+        return await serveRead({
+          cache: readCache,
+          appId: app,
+          scope,
+          op,
+          args,
+          wantsUpdate: upd === true,
+          fetchFresh: () => callSdk(url, op, args),
+          reply,
+          update: (data) => win.postMessage({ cortex: 1, update: true, id, data }, '*'),
+        });
       }
-      return reply(await callSdk(url, op, args));
+      // Una escritura vacía lo guardado de la app, antes (nadie lee lo viejo mientras corre) y después.
+      const invalidates = INVALIDATING_OPS.has(op);
+      if (invalidates) readCache.invalidate(app);
+      try {
+        const fileKey = FILE_OPS[op];
+        if (fileKey) {
+          const raw = (args ?? {}) as Record<string, unknown>;
+          const { [fileKey]: blob, ...rest } = raw;
+          const file = await prepareFile(blob, rest.name);
+          if (typeof file === 'string') return reply({ ok: false, error: file });
+          return reply(await callSdk(url, op, rest, file));
+        }
+        return reply(await callSdk(url, op, args));
+      } finally {
+        if (invalidates) readCache.invalidate(app);
+      }
     } catch {
       reply({ ok: false, error: 'Sin conexión. Revisa la señal e intenta de nuevo.' });
     }
@@ -272,6 +335,7 @@ export function CodeScreen({
   // biome-ignore lint/correctness/useExhaustiveDependencies: cada intento o cambio de dirección reinicia la espera.
   useEffect(() => {
     setLoaded(false);
+    setShown(false);
     setFailed(false);
     const t = setTimeout(() => setFailed(true), LOAD_TIMEOUT_MS);
     return () => clearTimeout(t);
@@ -280,6 +344,47 @@ export function CodeScreen({
   useEffect(() => {
     if (loaded) setFailed(false);
   }, [loaded]);
+
+  // Se muestra con el aviso «listo»; una pantalla vieja que no lo manda sale a los 1,5 s de cargar.
+  useEffect(() => {
+    if (!loaded) return;
+    const t = setTimeout(() => setShown(true), READY_CAP_MS);
+    return () => clearTimeout(t);
+  }, [loaded]);
+
+  // Precarga: con el navegador ocioso, los bundles (y rutas) de las demás pantallas con código.
+  useEffect(() => {
+    if (!loaded || !prefetch || prefetch.screens.length === 0) return;
+    const conn = (
+      navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }
+    ).connection;
+    if (conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType ?? '')) return;
+    const links: HTMLLinkElement[] = [];
+    const run = () => {
+      for (const sc of prefetch.screens) {
+        if (sc.slug === screen) continue;
+        router.prefetch(sc.href);
+        // El css solo existe en algunas; un 404 de prefetch no molesta, pero no se pide a ciegas.
+        const l = document.createElement('link');
+        l.rel = 'prefetch';
+        l.href = `/api/apps/code/bundle/${prefetch.buildId}/${encodeURIComponent(sc.slug)}.js`;
+        document.head.appendChild(l);
+        links.push(l);
+      }
+    };
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const handle = w.requestIdleCallback
+      ? w.requestIdleCallback(run)
+      : window.setTimeout(run, 1_500);
+    return () => {
+      if (w.requestIdleCallback && w.cancelIdleCallback) w.cancelIdleCallback(handle);
+      else clearTimeout(handle);
+      for (const l of links) l.remove();
+    };
+  }, [loaded, prefetch, screen, router]);
 
   if (failed && !loaded) {
     return (
@@ -293,14 +398,18 @@ export function CodeScreen({
 
   return (
     <div className="relative" style={{ height: 'calc(100dvh - 9rem)', minHeight: '28rem' }}>
-      {!loaded && (
-        <div aria-busy="true" className="absolute inset-0 space-y-3">
-          <output className="sr-only">Cargando la pantalla</output>
-          <SkeletonBlock className="h-7 w-44 !rounded-pill" />
-          <SkeletonBlock className="h-40 w-full !rounded-card" />
-          <SkeletonBlock className="h-40 w-full !rounded-card" />
-        </div>
-      )}
+      {/* El esqueleto conserva la altura y se funde cuando el marco ya pintó (no salta). */}
+      <div
+        aria-busy={!shown}
+        aria-hidden={shown}
+        className="pointer-events-none absolute inset-0 space-y-3 transition-opacity duration-200 ease-out motion-reduce:transition-none"
+        style={{ opacity: shown ? 0 : 1 }}
+      >
+        {!shown && <output className="sr-only">Cargando la pantalla</output>}
+        <SkeletonBlock className="h-7 w-44 !rounded-pill" />
+        <SkeletonBlock className="h-40 w-full !rounded-card" />
+        <SkeletonBlock className="h-40 w-full !rounded-card" />
+      </div>
       <iframe
         key={`${src}:${attempt}`}
         ref={frame}
@@ -308,8 +417,8 @@ export function CodeScreen({
         src={src}
         sandbox="allow-scripts allow-forms allow-popups allow-downloads"
         onLoad={() => setLoaded(true)}
-        className="h-full w-full rounded-card border-0 bg-transparent"
-        style={{ opacity: loaded ? 1 : 0 }}
+        className="h-full w-full rounded-card border-0 bg-transparent transition-opacity duration-200 ease-out motion-reduce:transition-none"
+        style={{ opacity: shown ? 1 : 0 }}
       />
     </div>
   );

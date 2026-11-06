@@ -7,8 +7,8 @@ import {
   type CustomViewRow,
   attributeValueSuggestions,
   draftStatus,
-  getNoticeConfig,
   getKioskSettings,
+  getNoticeConfig,
   listAppUsers,
   listDevices,
   listDirectory,
@@ -19,8 +19,8 @@ import {
   listTrackers,
   listVersions,
   loadUsage,
-  summarizeRoleNotices,
   personLabel,
+  summarizeRoleNotices,
   trackersOf,
 } from '@cortex/agent-tools';
 

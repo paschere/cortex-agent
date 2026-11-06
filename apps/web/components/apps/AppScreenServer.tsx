@@ -10,6 +10,7 @@ import {
   computePortal,
   computeTablero,
   emptyHintsFor,
+  getCodeRef,
   isHomeRoute,
   isPortalRoute,
   listRoles,
@@ -23,6 +24,7 @@ import {
   screenButtons,
   screenFor,
   tableroForRoute,
+  visibleScreens,
 } from '@cortex/agent-tools';
 import { notFound } from 'next/navigation';
 
@@ -111,6 +113,17 @@ export async function AppScreenServer({
     // Compartir ubicación (0216): sólo si la app lo tiene encendido y el rol puede.
     readOnly ? null : locationStatus(db, access),
   ]);
+  // Pantallas hermanas con código y compilación publicada: el navegador las precarga en un rato libre.
+  const codeRef = isCode && !query.build ? await getCodeRef(db, access.app.id) : null;
+  const codePrefetch =
+    codeRef?.published_build_id && screen
+      ? {
+          buildId: codeRef.published_build_id,
+          screens: visibleScreens(access)
+            .filter((s) => s.kind === 'code' && s.slug !== screen.slug)
+            .map((s) => s.slug),
+        }
+      : undefined;
   const emptyHints = screen && read && !sample ? await emptyHintsFor(db, access, screen, read) : [];
   const { app, role } = access;
   return (
@@ -134,7 +147,11 @@ export async function AppScreenServer({
         portal={portal ?? undefined}
         code={
           screen && isCode
-            ? { screen: screen.slug, build: viewer.companyAdmin ? query.build : undefined }
+            ? {
+                screen: screen.slug,
+                build: viewer.companyAdmin ? query.build : undefined,
+                prefetch: codePrefetch,
+              }
             : undefined
         }
         target={

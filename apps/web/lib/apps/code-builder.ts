@@ -129,7 +129,7 @@ for (const [slug, entry] of Object.entries(entries)) {
     // vez de dejar el iframe en blanco.
     const mount = [
       "import Screen from " + JSON.stringify('./' + entry) + ";",
-      "import { Component, createElement } from 'react';",
+      "import { Component, createElement, useEffect } from 'react';",
       "import { createRoot } from 'react-dom/client';",
       "class Boundary extends Component {",
       "  constructor(p) { super(p); this.state = { error: null }; }",
@@ -139,7 +139,11 @@ for (const [slug, entry] of Object.entries(entries)) {
       "    return createElement('pre', { style: { padding: 16, color: '#b91c1c', whiteSpace: 'pre-wrap', font: '13px ui-monospace, monospace' } }, 'Esta pantalla tuvo un error: ' + String(this.state.error && this.state.error.message || this.state.error));",
       "  }",
       "}",
-      "createRoot(document.getElementById('root')).render(createElement(Boundary, null, createElement(Screen)));",
+      "function Ready() {",
+      "  useEffect(() => { try { window.parent.postMessage({ cortex: 1, ready: true }, '*'); } catch (e) {} }, []);",
+      "  return null;",
+      "}",
+      "createRoot(document.getElementById('root')).render(createElement(Boundary, null, createElement(Screen), createElement(Ready)));",
     ].join('\\n');
     const res = await build({
       stdin: { contents: mount, resolveDir: process.cwd(), loader: 'tsx', sourcefile: '__mount.tsx' },

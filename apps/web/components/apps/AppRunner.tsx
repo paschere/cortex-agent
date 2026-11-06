@@ -1,8 +1,8 @@
 'use client';
 
-import { BlockFixProvider } from '@/components/views/blocks/BlockFix';
 import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import type { SubmitTarget } from '@/components/views/ViewCanvas';
+import { BlockFixProvider } from '@/components/views/blocks/BlockFix';
 import { BrandScope } from '@/components/views/blocks/brand';
 import { SheetFillContext } from '@/components/views/blocks/sheet-fill';
 import { headerHidden, shortTabLabels, splitTabs } from '@/lib/apps/app-nav';
@@ -23,10 +23,10 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { type AppButton, AppButtons, PushToggle } from './AppAutomationBar';
 import { AppCaptureLayer } from './AppCaptureLayer';
-import { AppNoticesProvider, NoticeBadge, NoticesBell } from './AppNotices';
 import { Glyph } from './AppGlyph';
 import { AppHome } from './AppHome';
 import { AppNavProvider } from './AppNav';
+import { AppNoticesProvider, NoticeBadge, NoticesBell } from './AppNotices';
 import { AppWorker, InstallButton, KioskIdleGuard, KioskMenu, SignOutMenu } from './AppSession';
 import { AppThemeScope, AppThemeToggle } from './AppTheme';
 import { AppToastProvider } from './AppToast';
@@ -97,7 +97,12 @@ export interface AppRunnerProps {
   /** El portal de un cliente ya calculado (pantalla `portal`, 0225). */
   portal?: ComputedPortal;
   /** Pantalla con código (apps con código): se pinta en un iframe aislado en vez del lienzo. */
-  code?: { screen: string; build?: string };
+  code?: {
+    screen: string;
+    build?: string;
+    /** Compilación publicada y demás pantallas con código, para precargar. */
+    prefetch?: { buildId: string; screens: string[] };
+  };
   title: string;
   /**
    * Para la entrada de afuera (/a/<id>, 0209): la base de las direcciones y quién
@@ -249,7 +254,8 @@ export function AppRunner({
   const tabLabels = shortTabLabels(tabs);
   const standalone = Boolean(basePath);
   // Una pantalla que empieza con una hoja la llena entera, como Google Sheets.
-  const firstBlock = !home && !tablero && !portal && !code && !preview ? computed?.blocks[0] : undefined;
+  const firstBlock =
+    !home && !tablero && !portal && !code && !preview ? computed?.blocks[0] : undefined;
   const fillId = firstBlock?.type === 'sheet' ? firstBlock.id : null;
   const computedAt =
     computed?.computedAt ??
@@ -263,14 +269,18 @@ export function AppRunner({
   // biome-ignore lint/correctness/useExhaustiveDependencies: depende del conjunto de pantallas y de la actual.
   useEffect(() => {
     if (preview || readOnly) return;
-    const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } })
-      .connection;
+    const conn = (
+      navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }
+    ).connection;
     if (conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType ?? '')) return;
     const run = () => {
       for (const sc of screens.filter((x) => x.slug !== current).slice(0, 4))
         router.prefetch(hrefFor(sc.slug));
     };
-    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number; cancelIdleCallback?: (id: number) => void };
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
     if (w.requestIdleCallback) {
       const id = w.requestIdleCallback(run);
       return () => w.cancelIdleCallback?.(id);
@@ -597,6 +607,18 @@ export function AppRunner({
                           build={code.build}
                           readOnly={readOnly}
                           como={como}
+                          cacheScope={`${role.key}:${captureWho?.key ?? ''}`}
+                          prefetch={
+                            code.build || !code.prefetch
+                              ? undefined
+                              : {
+                                  buildId: code.prefetch.buildId,
+                                  screens: code.prefetch.screens.map((slug) => ({
+                                    slug,
+                                    href: hrefFor(slug),
+                                  })),
+                                }
+                          }
                         />
                       ) : (
                         computed &&
@@ -648,25 +670,30 @@ export function AppRunner({
                               }}
                             >
                               <SheetFillContext.Provider value={fillId}>
-                              <LiveViewCanvas
-                                initial={computed}
-                                target={target}
-                                dataUrl={dataUrl ?? null}
-                                heading={{ title }}
-                                bare={Boolean(fillId)}
-                                showBrand={false}
-                                canExport={canExport}
-                                readOnly={readOnly && !viewAs?.sampled}
-                                onView={
-                                  captureWho
-                                    ? (view) =>
-                                        void rememberScreen(
-                                          { appKey, userKey: captureWho.key, screen: current, title },
-                                          view,
-                                        )
-                                    : undefined
-                                }
-                              />
+                                <LiveViewCanvas
+                                  initial={computed}
+                                  target={target}
+                                  dataUrl={dataUrl ?? null}
+                                  heading={{ title }}
+                                  bare={Boolean(fillId)}
+                                  showBrand={false}
+                                  canExport={canExport}
+                                  readOnly={readOnly && !viewAs?.sampled}
+                                  onView={
+                                    captureWho
+                                      ? (view) =>
+                                          void rememberScreen(
+                                            {
+                                              appKey,
+                                              userKey: captureWho.key,
+                                              screen: current,
+                                              title,
+                                            },
+                                            view,
+                                          )
+                                      : undefined
+                                  }
+                                />
                               </SheetFillContext.Provider>
                             </BlockFixProvider>
                           </>

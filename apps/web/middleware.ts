@@ -183,7 +183,8 @@ const SESSION_COOKIE_RE = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=/;
 function isPublic(pathname: string): boolean {
   return (
     PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
-    CODE_HOOK_RE.test(pathname)
+    CODE_HOOK_RE.test(pathname) ||
+    CODE_BUNDLE_RE.test(pathname)
   );
 }
 
@@ -196,6 +197,14 @@ function isPublic(pathname: string): boolean {
  */
 const CODE_HOOK_RE =
   /^\/api\/apps\/(?:[0-9a-f-]{36}\/code\/hooks\/[a-z][a-z0-9_]{1,47}|code\/fn-sdk)$/;
+
+/**
+ * El código de una pantalla con código, como archivo cacheable: el iframe tiene origen nulo y
+ * sus peticiones no llevan cookie. Sin sesión; la llave es el uuid de la compilación (ver la
+ * ruta). Solo `<uuid>/<pantalla>.js|css`.
+ */
+const CODE_BUNDLE_RE =
+  /^\/api\/apps\/code\/bundle\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-zA-Z0-9_-]{1,64}\.(?:js|css)$/i;
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

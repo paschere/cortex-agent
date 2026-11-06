@@ -71,8 +71,7 @@ export function screensToDrop(
   }
   for (const s of mine.sort((a, b) => b.savedAt - a.savedAt).slice(SCREENS_PER_APP))
     drop.add(s.key);
-  for (const s of lists.sort((a, b) => b.savedAt - a.savedAt).slice(LISTS_PER_APP))
-    drop.add(s.key);
+  for (const s of lists.sort((a, b) => b.savedAt - a.savedAt).slice(LISTS_PER_APP)) drop.add(s.key);
   return [...drop];
 }
 

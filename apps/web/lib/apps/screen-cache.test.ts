@@ -85,7 +85,11 @@ describe('copias de pantallas sin señal', () => {
     const lists = Array.from({ length: LISTS_PER_APP + 2 }, (_, i) =>
       meta('planta', 'ana', listEntryName(`/api/x/relation?field=${i}`), NOW - i * 1000),
     );
-    const dropped = screensToDrop([...screens, ...lists], { appKey: 'planta', userKey: 'ana' }, NOW);
+    const dropped = screensToDrop(
+      [...screens, ...lists],
+      { appKey: 'planta', userKey: 'ana' },
+      NOW,
+    );
     expect(dropped).toHaveLength(2);
     expect(dropped.every((k) => k.includes('list:'))).toBe(true);
     expect(isListEntry(listEntryName('/a'))).toBe(true);

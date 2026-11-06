@@ -74,9 +74,7 @@ async function gate(appRef: string) {
 const touched = (app: { id: string; slug: string }) => revalidatePath(`/apps/${app.id}/edit`);
 
 /** Repos a los que tiene acceso la cuenta de GitHub conectada. */
-export async function githubRepos(
-  appRef: string,
-): Promise<
+export async function githubRepos(appRef: string): Promise<
   GithubActionResult<{
     repos: Array<{ fullName: string; defaultBranch: string; private: boolean }>;
   }>

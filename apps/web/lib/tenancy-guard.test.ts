@@ -23,6 +23,10 @@ import { describe, expect, it } from 'vitest';
  */
 const ALLOWED = new Map<string, string>([
   [
+    'app/api/apps/code/bundle/[buildId]/[screen]/route.ts',
+    'Code of an app screen as a cacheable file. The frame is a null-origin iframe, so its requests carry no cookie and no session: the unguessable build uuid (v4) is the credential. One read: bundles->slug of that build when status is ok (screens only, never server functions, which live in another column). It is client code with no secrets; the frame route that decides who sees the screen still authorizes with the scoped client.',
+  ],
+  [
     'app/api/apps/[id]/code/hooks/[name]/route.ts',
     'Incoming webhook of an app with code (0244): there is no session, the per-hook token (stored hashed) is the credential. The raw client only finds the published app by id to learn its organization; the token check and the function run use getOrgScopedClient(app.organization_id).',
   ],
@@ -290,6 +294,8 @@ const ALLOWED = new Map<string, string>([
 
 /** Files that mention the raw client only in order to police it. */
 const NAMES_IT_WITHOUT_CALLING_IT = new Set([
+  // Test of the public bundle route: only stubs the raw client with a mock; never calls the real one.
+  'app/api/apps/code/bundle/[buildId]/[screen]/route.test.ts',
   // This file, which lists every allowed path in prose.
   'lib/tenancy-guard.test.ts',
   // The errand equivalent: asserts that nothing under lib/errands, its routes

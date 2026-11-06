@@ -274,6 +274,68 @@ export async function getBuild(
   return data ? adaptBuild(data as Record<string, unknown>) : null;
 }
 
+/** Lo que se pide de un bundle: el slug de una pantalla, nunca el de una función. */
+const BUNDLE_SLUG_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+export interface BuildBundle {
+  buildId: string;
+  js: string;
+  css: string;
+}
+
+/**
+ * SOLO el bundle de UNA pantalla de una compilación buena, o null.
+ *
+ * `getBuild` trae la fila entera (los bundles de todas las pantallas, 12 × ~300 KB) para servir
+ * uno; aquí se selecciona `bundles->slug` en la base (jsonb) y viaja un solo bundle. Sirve
+ * `bundles` (pantallas) y nunca `functions`. Con `codeId` exige además que la compilación sea
+ * de ese proyecto (el marco, que ya autorizó la pantalla); sin él, el uuid de la compilación
+ * es la única llave (la ruta pública de bundles).
+ */
+export async function getBuildBundle(
+  db: SupabaseClient,
+  input: { buildId: string; slug: string; codeId?: string },
+): Promise<BuildBundle | null> {
+  if (!BUNDLE_SLUG_RE.test(input.slug)) return null;
+  let q = db
+    .from('custom_app_code_builds')
+    .select(`id, status, bundle:bundles->${input.slug}`)
+    .eq('id', input.buildId);
+  if (input.codeId) q = q.eq('code_id', input.codeId);
+  const { data, error } = await q.maybeSingle();
+  if (error) throw error;
+  const row = data as unknown as Record<string, unknown> | null;
+  if (!row || row.status !== 'ok') return null;
+  // Con la base real viene en `bundle`; un doble de pruebas puede traer `bundles` completo.
+  const raw =
+    row.bundle ?? (row.bundles as Record<string, unknown> | null | undefined)?.[input.slug];
+  const b = raw as { js?: unknown; css?: unknown } | null | undefined;
+  if (!b || typeof b.js !== 'string' || !b.js) return null;
+  return { buildId: input.buildId, js: b.js, css: typeof b.css === 'string' ? b.css : '' };
+}
+
+/** El id del proyecto de código y su compilación publicada, sin traer los archivos. */
+export async function getCodeRef(
+  db: SupabaseClient,
+  appId: string,
+): Promise<{ id: string; published_build_id: string | null } | null> {
+  const { data, error } = await db
+    .from('custom_app_code')
+    .select('id, published_build_id')
+    .eq('app_id', appId)
+    .maybeSingle();
+  if (error) throw error;
+  const row = data as { id?: unknown; published_build_id?: unknown } | null;
+  if (!row || typeof row.id !== 'string') return null;
+  return {
+    id: row.id,
+    published_build_id:
+      typeof row.published_build_id === 'string' && row.published_build_id
+        ? row.published_build_id
+        : null,
+  };
+}
+
 /** La última compilación, con bundles. */
 export async function latestBuild(
   db: SupabaseClient,

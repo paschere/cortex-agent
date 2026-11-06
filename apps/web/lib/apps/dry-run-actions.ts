@@ -1,12 +1,7 @@
 'use server';
 
 import { openApp } from '@/lib/apps/access';
-import {
-  describeWouldSave,
-  previewAppForm,
-  screenFor,
-  screenView,
-} from '@cortex/agent-tools';
+import { describeWouldSave, previewAppForm, screenFor, screenView } from '@cortex/agent-tools';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 

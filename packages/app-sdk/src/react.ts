@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { withUpdates } from './bridge';
 import { cortex } from './cortex';
 import type { QueryOptions, SdkLocation, SdkRow, SdkUser } from './types';
 
@@ -20,10 +21,18 @@ function useLoader<T>(load: () => Promise<T>, deps: unknown[], refreshMs?: numbe
   const loadRef = useRef(load);
   loadRef.current = load;
   const alive = useRef(true);
+  const refreshRef = useRef<() => Promise<void>>(async () => undefined);
 
   const refresh = useCallback(async () => {
     try {
-      const next = await loadRef.current();
+      // Las llamadas de `load` piden respuesta en dos tiempos: si el host contestó con lo guardado
+      // y luego llega el dato fresco, se vuelve a cargar (ahora el host ya lo tiene al día).
+      const next = await withUpdates(
+        () => {
+          if (alive.current) void refreshRef.current();
+        },
+        () => loadRef.current(),
+      );
       if (!alive.current) return;
       setData(next);
       setError(null);
@@ -33,8 +42,8 @@ function useLoader<T>(load: () => Promise<T>, deps: unknown[], refreshMs?: numbe
       if (alive.current) setLoading(false);
     }
   }, []);
+  refreshRef.current = refresh;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `deps` decide cuándo se vuelve a cargar.
   useEffect(() => {
     alive.current = true;
     setLoading(true);

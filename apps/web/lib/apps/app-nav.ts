@@ -31,7 +31,21 @@ export function splitTabs<T extends { slug: string }>(
 }
 
 const TAB_MAX = 11;
-const STOP = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'e', 'en', 'a', 'al', 'un', 'una']);
+const STOP = new Set([
+  'de',
+  'del',
+  'la',
+  'el',
+  'los',
+  'las',
+  'y',
+  'e',
+  'en',
+  'a',
+  'al',
+  'un',
+  'una',
+]);
 
 /**
  * Nombres cortos para las pestañas de abajo: una pestaña mide ~70 px, y
@@ -40,7 +54,9 @@ const STOP = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'e', 'en', 'a'
  * entre pestañas; el título completo queda en `title`/aria-label. Si nada alcanza
  * se corta con punto («Programació.»), nunca con un elipsis a mitad de letra.
  */
-export function shortTabLabels(screens: ReadonlyArray<{ slug: string; title: string }>): Map<string, string> {
+export function shortTabLabels(
+  screens: ReadonlyArray<{ slug: string; title: string }>,
+): Map<string, string> {
   const out = new Map<string, string>();
   const used = new Set<string>();
   const cut = (w: string) => (w.length <= TAB_MAX ? w : `${w.slice(0, TAB_MAX - 1)}.`);
@@ -55,7 +71,10 @@ export function shortTabLabels(screens: ReadonlyArray<{ slug: string; title: str
     if (pool.length) {
       candidates.push(cap(pool[pool.length - 1] as string));
       candidates.push(cap(pool[0] as string));
-      if (pool.length > 1) candidates.push(`${cap(pool[0] as string).slice(0, 4)}. ${cap(pool[pool.length - 1] as string)}`);
+      if (pool.length > 1)
+        candidates.push(
+          `${cap(pool[0] as string).slice(0, 4)}. ${cap(pool[pool.length - 1] as string)}`,
+        );
     }
     const pick =
       candidates.find((c) => c.length <= TAB_MAX && !used.has(c.toLocaleLowerCase('es-CO'))) ??

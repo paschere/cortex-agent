@@ -5,11 +5,11 @@ import { buildReportNotice } from '@/lib/block-fix';
 import { bellForSubmission, notifyViewActivity } from '@/lib/views/activity';
 import {
   RowConflictError,
+  type SheetPasteResult,
   SubmissionLimitError,
   editAppRow,
   editAppSubmission,
   pasteAppRows,
-  type SheetPasteResult,
   runAppAction,
   saveAppFormRecord,
   screenFor,
@@ -172,12 +172,20 @@ export async function editAppRowsAction(
     let done = 0;
     for (const it of list) {
       try {
-        await editAppRow(db, access, view, { blockId, rowId: it.rowId, patch: it.patch, expect: it.expect });
+        await editAppRow(db, access, view, {
+          blockId,
+          rowId: it.rowId,
+          patch: it.patch,
+          expect: it.expect,
+        });
         done += 1;
       } catch (err) {
         failed.push({
           rowId: it.rowId,
-          error: err instanceof RowConflictError ? err.message : describe(err, 'No se pudo guardar el cambio.'),
+          error:
+            err instanceof RowConflictError
+              ? err.message
+              : describe(err, 'No se pudo guardar el cambio.'),
         });
       }
     }
@@ -200,7 +208,10 @@ export async function pasteAppRowsAction(
     const { db, access, view } = await open(appRef, screenRef);
     const result = await pasteAppRows(db, access, view, {
       blockId,
-      rows: z.array(z.record(z.string(), z.string().max(2000))).max(500).parse(rows),
+      rows: z
+        .array(z.record(z.string(), z.string().max(2000)))
+        .max(500)
+        .parse(rows),
       apply,
       fresh: fresh === true,
     });
@@ -259,7 +270,8 @@ export async function reportAppProblemAction(
         screenTitle: screen?.title ?? null,
         screenSlug: screen?.slug ?? null,
         blockId: blockId ?? null,
-        blockTitle: block && 'title' in block && typeof block.title === 'string' ? block.title : null,
+        blockTitle:
+          block && 'title' in block && typeof block.title === 'string' ? block.title : null,
         message: z.string().trim().min(1).max(600).parse(message),
       },
       opened.access.user.name,
