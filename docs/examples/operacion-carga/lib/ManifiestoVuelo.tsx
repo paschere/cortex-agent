@@ -4,6 +4,7 @@ import { FileScan, Plane } from 'lucide-react';
 import { MAX_ESCANEO, reducirImagen } from './archivos';
 import { T, aGuia, aPrealerta, porRelacion, traerTodo } from './datos';
 import type { Guia, Prealerta, Vuelo } from './datos';
+import { aerolineaDe } from './aerolineas';
 import { ENCABEZADO_VACIO, leerEncabezado, planRelleno } from './encabezado';
 import type { Encabezado } from './encabezado';
 import { hayCampo, soloExistentes } from './documental';
@@ -193,7 +194,13 @@ export function NuevoDesdeManifiesto({
     }
   };
 
-  const e = (k: keyof Encabezado) => (v: string) => setEnc((p) => ({ ...p, [k]: v }));
+  const e = (k: keyof Encabezado) => (v: string) =>
+    setEnc((p) => {
+      const n = { ...p, [k]: v };
+      // Con el número de vuelo, la aerolínea se llena sola si está vacía.
+      if (k === 'numero' && !p.aerolinea.trim()) n.aerolinea = aerolineaDe(v) ?? '';
+      return n;
+    });
   const cambiar = (k: string, c: Partial<Renglon>) => setRenglones((p) => p.map((r) => (r.k === k ? { ...r, ...c } : r)));
   const elegidos = renglones.map((r, i) => ({ r, c: cruces[i] })).filter((x) => x.r.incluir && x.c && x.c.estado !== 'ya_esta' && x.c.estado !== 'repetida');
   const sinCliente = elegidos.filter((x) => x.r.guia.trim() && !x.c?.clienteId).length;

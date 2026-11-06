@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
 import { Clock, FileScan, Pencil, Plane, Plus, Search } from 'lucide-react';
 import { cargarVuelos, useAcciones, useCarga, useRol } from '../lib/datos';
@@ -8,6 +8,7 @@ import { N, fechaCorta, hhmm, kg, num } from '../lib/formato';
 import { horaAhora, hoyBogota, sumarDias } from '../lib/tiempo';
 import { puedeEditarDoc, useEsquema } from '../lib/documental';
 import { NuevoDesdeManifiesto } from '../lib/ManifiestoVuelo';
+import { aerolineaDe, aprenderAerolineas, codigoAerolinea } from '../lib/aerolineas';
 import { Boton, Campo, Chip, ErrorCaja, Estado, Hoja, Numero, Pantalla, Segmentos, confirmar, useOperacion } from '../lib/ui';
 
 /**
@@ -49,6 +50,7 @@ export default function Vuelos() {
   }, [data, filtro, fecha, q, hoy]);
 
   const aerolineas = useMemo(() => [...new Set((data ?? []).map((v) => v.aerolinea).filter(Boolean))].sort(), [data]);
+  const aprendidas = useMemo(() => aprenderAerolineas((data ?? []).map((v) => ({ numero: v.numero, aerolinea: v.aerolinea }))), [data]);
 
   const accion = async (v: Vuelo, clave: string, texto: string, confirma?: string) => {
     if (confirma && !(await confirmar(confirma, texto))) return;
@@ -169,6 +171,7 @@ export default function Vuelos() {
         <FormVuelo
           vuelo={editando === 'nuevo' ? null : editando}
           aerolineas={aerolineas}
+          aprendidas={aprendidas}
           onCerrar={() => setEditando(null)}
           onGuardado={async (id, nuevo) => {
             setEditando(null);
@@ -235,11 +238,13 @@ function Demora({ vuelo, onListo }: { vuelo: Vuelo; onListo: () => void | Promis
 function FormVuelo({
   vuelo,
   aerolineas,
+  aprendidas,
   onCerrar,
   onGuardado,
 }: {
   vuelo: Vuelo | null;
   aerolineas: string[];
+  aprendidas: Record<string, string>;
   onCerrar: () => void;
   onGuardado: (id: string | null, nuevo: boolean) => void | Promise<void>;
 }) {
@@ -259,6 +264,33 @@ function FormVuelo({
     obs: vuelo?.observaciones ?? '',
   });
   const set = (k: keyof typeof f) => (v: string) => setF((p) => ({ ...p, [k]: v }));
+  // Lo aprendido de las prealertas se suma a lo de los vuelos (lo de los vuelos manda).
+  const [dePrealertas, setDePrealertas] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let vivo = true;
+    cortex.tables
+      .query('prealertas', { limit: 500 })
+      .then((r) => {
+        if (!vivo) return;
+        setDePrealertas(
+          aprenderAerolineas(
+            r.rows.map((x) => ({ numero: String(x.values.numero_vuelo ?? ''), aerolinea: String(x.values.aerolinea ?? '') })),
+          ),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  // La aerolínea se llena sola mientras la persona no la haya escrito a mano.
+  const aeroAuto = useRef(!vuelo?.aerolinea);
+  const [aeroSugerida, setAeroSugerida] = useState('');
+  const cambiarNumero = (v: string) => {
+    const nombre = aerolineaDe(v, { ...dePrealertas, ...aprendidas });
+    setF((p) => ({ ...p, numero: v, aerolinea: aeroAuto.current && nombre ? nombre : aeroAuto.current && !codigoAerolinea(v) ? '' : p.aerolinea }));
+    setAeroSugerida(aeroAuto.current && nombre ? codigoAerolinea(v) ?? '' : '');
+  };
   const op = useOperacion();
   const falta = !f.numero.trim() ? 'Escribe el número de vuelo.' : !f.aerolinea.trim() ? 'Escribe la aerolínea.' : !f.fecha ? 'Elige la fecha.' : '';
 
@@ -299,15 +331,24 @@ function FormVuelo({
       <div className="oc-form">
         <div className="oc-fila2">
           <Campo etiqueta="Número de vuelo">
-            <input type="text" value={f.numero} onChange={(e) => set('numero')(e.target.value)} placeholder="Ej. LA8044" autoCapitalize="characters" />
+            <input type="text" value={f.numero} onChange={(e) => cambiarNumero(e.target.value.toUpperCase())} placeholder="Ej. AV 123, LA8044" autoCapitalize="characters" />
           </Campo>
           <Campo etiqueta="Fecha">
             <input type="date" value={f.fecha} onChange={(e) => set('fecha')(e.target.value)} />
           </Campo>
         </div>
         <div className="oc-fila2">
-          <Campo etiqueta="Aerolínea">
-            <input type="text" list="oc-aerolineas" value={f.aerolinea} onChange={(e) => set('aerolinea')(e.target.value)} />
+          <Campo etiqueta="Aerolínea" ayuda={aeroSugerida ? `Según el código ${aeroSugerida}` : undefined}>
+            <input
+              type="text"
+              list="oc-aerolineas"
+              value={f.aerolinea}
+              onChange={(e) => {
+                aeroAuto.current = e.target.value.trim() === '';
+                setAeroSugerida('');
+                set('aerolinea')(e.target.value);
+              }}
+            />
             <datalist id="oc-aerolineas">
               {aerolineas.map((a) => (
                 <option key={a} value={a} />

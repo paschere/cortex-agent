@@ -1,3 +1,4 @@
+import { aerolineaDe } from './aerolineas';
 import type { Vuelo } from './datos';
 import { N, hay } from './formato';
 import { leer, normVuelo } from './manifiesto';
@@ -64,7 +65,7 @@ export function leerEncabezado(fields: Record<string, string | number>, rows: Re
   const kilos = g(ALIAS.kilos) || (rows.length ? String(Math.round(suma(['kilos', 'kg', 'peso', 'weight', 'kilos_esperados']) * 10) / 10 || '') : '');
   return {
     numero: g(ALIAS.numero).toUpperCase().replace(/\s+/g, ''),
-    aerolinea: g(ALIAS.aerolinea),
+    aerolinea: g(ALIAS.aerolinea) || aerolineaDe(g(ALIAS.numero)) || '',
     fecha: fechaIso(g(ALIAS.fecha)),
     origen: g(ALIAS.origen),
     destino: g(ALIAS.destino),
