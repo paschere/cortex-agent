@@ -1,5 +1,6 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { backupBeforeChange } from '../backups/before-change';
 import { MIGRATION_DIR } from './app-db';
 import { applyAppDbMigrations } from './app-db-store';
 import {
@@ -33,9 +34,18 @@ export async function publishAppCodeWithMigrations(
     throw new ValidationError(
       `La compilación ${build.number} falló; sólo se publican las que salieron bien.`,
     );
+  // Foto de la app antes de publicar (cubre también las migraciones de abajo; no bloquea si falla).
+  await backupBeforeChange(
+    db,
+    appId,
+    userId,
+    `Antes de publicar el código (compilación ${build.number})`,
+  );
   let migrationsApplied: string[] = [];
   if (Object.keys(build.files).some((p) => p.startsWith(MIGRATION_DIR)))
-    migrationsApplied = (await applyAppDbMigrations(db, appId, build.files, userId)).applied;
+    migrationsApplied = (
+      await applyAppDbMigrations(db, appId, build.files, userId, { backup: false })
+    ).applied;
   const published = await publishAppCode(db, appId, buildId, userId);
   return { ...published, migrationsApplied };
 }

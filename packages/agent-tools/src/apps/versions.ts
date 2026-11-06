@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { updateView, validateSpec } from '../views/store';
+import { backupBeforeChange } from './backups/before-change';
 import {
   type AppRoleRow,
   type AppScreenRow,
@@ -245,6 +246,8 @@ export async function publishVersion(
     return { app: opened, number: published.number, created: false, changes: [] };
   }
   const number = (published?.number ?? 0) + 1;
+  // Foto de cómo estaba la app antes de este cambio (no bloquea si falla).
+  await backupBeforeChange(db, app.id, input.userId, `Antes de publicar la versión ${number}`);
   const { error } = await db.from('app_versions').insert({
     ...(app.organization_id ? { organization_id: app.organization_id } : {}),
     app_id: app.id,
@@ -285,23 +288,17 @@ export interface RestoreResult {
 }
 
 /**
- * Devuelve el BORRADOR a lo que decía la versión `number`: pantallas (con su
- * contenido de entonces), roles, inicio, apariencia, tableros y portal. Nada
- * de lo que tiene gente se borra por el camino: un rol que hoy tiene miembros
- * o usuarios y que esa versión no tenía se conserva tal cual. Las pantallas
- * que hoy existen y esa versión no tenía se archivan (como `removeScreen`). Lo
- * que no pasa la validación de hoy (una tabla que cambió) se salta y se
- * cuenta en `skipped`. Con `publish`, lo restaurado se publica como una
- * versión nueva (nunca se reescribe la historia).
+ * Devuelve el BORRADOR a lo que dice una foto (`snapshot`): lo común entre
+ * «Volver a la versión N» y «Restaurar configuración» de una copia (backups/).
+ * Ver `restoreVersion` para las garantías (roles con gente se conservan, lo
+ * que no valida hoy se salta y se cuenta en `skipped`).
  */
-export async function restoreVersion(
+export async function applySnapshot(
   db: SupabaseClient,
-  appRef: string,
-  number: number,
-  input: { userId: string; publish?: boolean },
-): Promise<RestoreResult> {
-  const app = await mustGetApp(db, appRef);
-  const { snapshot } = await getVersion(db, app.id, number);
+  app: CustomAppRow,
+  snapshot: Snapshot,
+  input: { userId: string; label: string },
+): Promise<{ restored: CustomAppRow; done: string[]; skipped: string[] }> {
   const done: string[] = [];
   const skipped: string[] = [];
 
@@ -354,7 +351,7 @@ export async function restoreVersion(
         await updateView(db, existing.view_id, {
           spec,
           userId: input.userId,
-          prompt: `Volver a la versión ${number}`,
+          prompt: input.label,
           appScreen: true,
         });
         const updated = await updateScreen(db, app.id, existing.id, {
@@ -371,7 +368,7 @@ export async function restoreVersion(
           roles: s.roles,
           spec,
           userId: input.userId,
-          prompt: `Volver a la versión ${number}`,
+          prompt: input.label,
         });
         orderIds.push(added.id);
       }
@@ -402,6 +399,31 @@ export async function restoreVersion(
     userId: input.userId,
   });
   done.push('datos, apariencia, inicio, tableros y portal');
+  return { restored, done, skipped };
+}
+
+/**
+ * Devuelve el BORRADOR a lo que decía la versión `number`: pantallas (con su
+ * contenido de entonces), roles, inicio, apariencia, tableros y portal. Nada
+ * de lo que tiene gente se borra por el camino: un rol que hoy tiene miembros
+ * o usuarios y que esa versión no tenía se conserva tal cual. Las pantallas
+ * que hoy existen y esa versión no tenía se archivan (como `removeScreen`). Lo
+ * que no pasa la validación de hoy (una tabla que cambió) se salta y se
+ * cuenta en `skipped`. Con `publish`, lo restaurado se publica como una
+ * versión nueva (nunca se reescribe la historia).
+ */
+export async function restoreVersion(
+  db: SupabaseClient,
+  appRef: string,
+  number: number,
+  input: { userId: string; publish?: boolean },
+): Promise<RestoreResult> {
+  const app = await mustGetApp(db, appRef);
+  const { snapshot } = await getVersion(db, app.id, number);
+  const { restored, done, skipped } = await applySnapshot(db, app, snapshot, {
+    userId: input.userId,
+    label: `Volver a la versión ${number}`,
+  });
 
   let published: { number: number } | null = null;
   if (input.publish) {

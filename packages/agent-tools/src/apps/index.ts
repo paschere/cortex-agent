@@ -15,6 +15,7 @@ import './automations/report-tools';
 import './automations/invoice-draft-tools';
 import './notices/tools';
 import './code/tools';
+import './backups/tools';
 
 export {
   appsAssignMembers,
@@ -103,6 +104,7 @@ export {
   appsCodeRuns,
   appsCodeWrite,
 } from './code/tools';
+export * from './backups';
 export * from './code/app-db';
 export * from './code/app-db-store';
 export * from './code/app-db-publish';

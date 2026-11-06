@@ -1,9 +1,9 @@
 'use client';
 
-import { confirmDialog } from '@/lib/ui/dialog-queue';
 import { Glyph } from '@/components/apps/AppGlyph';
 import { DeleteDialog } from '@/components/ui/DeleteDialog';
 import { archiveAppAction, deleteAppAction, updateAppAction } from '@/lib/apps/actions';
+import { confirmDialog } from '@/lib/ui/dialog-queue';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import { Archive, ChevronLeft, ExternalLink, Loader2, MoreHorizontal, Trash2 } from 'lucide-react';
@@ -14,6 +14,7 @@ import { AppAskBar } from './AppAskBar';
 import { AppearanceTab } from './AppearanceTab';
 import { AutomationsTab } from './AutomationsTab';
 import { CodeTab } from './CodeTab';
+import { CopiasTab } from './CopiasTab';
 import { FlowsTab } from './FlowsTab';
 import { HistoryTab } from './HistoryTab';
 import { HomeTab } from './HomeTab';
@@ -67,6 +68,7 @@ type Tab =
   | 'dashboards'
   | 'portal'
   | 'history'
+  | 'copias'
   | 'usage'
   | 'code'
   | 'preview';
@@ -83,6 +85,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'dashboards', label: 'Tableros' },
   { id: 'portal', label: 'Portal' },
   { id: 'history', label: 'Historial' },
+  { id: 'copias', label: 'Copias' },
   { id: 'usage', label: 'Uso' },
   { id: 'code', label: 'Código' },
   { id: 'preview', label: 'Ver como…' },
@@ -389,6 +392,7 @@ export function AppEditor({
       {tab === 'dashboards' && <TablerosTab data={data} />}
       {tab === 'portal' && <PortalTab data={data} />}
       {tab === 'history' && <HistoryTab data={data} />}
+      {tab === 'copias' && <CopiasTab data={data} />}
       {tab === 'usage' && <UsageTab data={data} />}
       {tab === 'code' && <CodeTab data={data} />}
       {tab === 'preview' && <PreviewTab data={data} />}

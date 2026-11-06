@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ForbiddenError, ValidationError, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { backupBeforeChange } from '../backups/before-change';
 import {
   type AppDbTarget,
   DB_MAX_RESULT_BYTES,
@@ -133,11 +134,20 @@ export async function applyAppDbMigrations(
   appId: string,
   files: CodeFiles,
   userId: string,
+  opts: { backup?: boolean } = {},
 ): Promise<ApplyResult> {
   const applied = await listAppliedMigrations(db, appId);
   const plan = planMigrations(files, applied);
   if (plan.errors.length) throw new ValidationError(plan.errors.join(' '));
   if (!plan.pending.length) return { applied: [], warnings: plan.warnings };
+  // Foto de la app antes de tocar su base (no bloquea si falla). Publicar ya hizo la suya.
+  if (opts.backup !== false)
+    await backupBeforeChange(
+      db,
+      appId,
+      userId,
+      `Antes de aplicar ${plan.pending.length} migración(es) de la base propia`,
+    );
 
   const driver = getAppDbDriver();
   const target = await ensureAppDb(db, appId, driver);

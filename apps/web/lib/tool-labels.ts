@@ -489,13 +489,25 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   // Programas contables conectados directo (Siigo, Alegra, QuickBooks), 0165.
   accounting_status: { label: 'Ver cómo va el programa contable', icon: 'Calculator' },
   accounting_payroll_summary: { label: 'Ver la nómina según la contabilidad', icon: 'Wallet' },
-  accounting_payroll_movements: { label: 'Ver los movimientos de nómina por persona (confidencial)', icon: 'Wallet' },
+  accounting_payroll_movements: {
+    label: 'Ver los movimientos de nómina por persona (confidencial)',
+    icon: 'Wallet',
+  },
   accounting_query: { label: 'Consultar el programa contable en vivo', icon: 'Calculator' },
   accounting_sync_now: { label: 'Traer ya los datos del programa contable', icon: 'RefreshCw' },
   // Fuentes contables combinadas (0239): hojas o tablas que alimentan las mismas cifras.
-  accounting_sources_propose: { label: 'Proponer cómo una hoja alimenta la contabilidad', icon: 'Table2' },
-  accounting_sources_define: { label: 'Declarar una tabla como fuente contable', icon: 'Calculator' },
-  accounting_sources_list: { label: 'Ver las fuentes contables y sus diferencias', icon: 'Calculator' },
+  accounting_sources_propose: {
+    label: 'Proponer cómo una hoja alimenta la contabilidad',
+    icon: 'Table2',
+  },
+  accounting_sources_define: {
+    label: 'Declarar una tabla como fuente contable',
+    icon: 'Calculator',
+  },
+  accounting_sources_list: {
+    label: 'Ver las fuentes contables y sus diferencias',
+    icon: 'Calculator',
+  },
   accounting_sources_remove: { label: 'Quitar una fuente contable', icon: 'Calculator' },
   trackers_define: { label: 'Crear o cambiar una tabla', icon: 'Table2' },
   trackers_list: { label: 'Ver las tablas inventadas', icon: 'Table2' },
@@ -524,8 +536,15 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   apps_code_publish: { label: 'Publicar el código de la aplicación', icon: 'Rocket' },
   apps_code_run: { label: 'Probar una función de servidor de la aplicación', icon: 'Play' },
   apps_code_runs: { label: 'Ver las corridas de las funciones de la aplicación', icon: 'History' },
-  apps_code_db_migrate: { label: 'Aplicar las migraciones de la base de datos de la aplicación', icon: 'Database' },
+  apps_code_db_migrate: {
+    label: 'Aplicar las migraciones de la base de datos de la aplicación',
+    icon: 'Database',
+  },
   apps_code_db_query: { label: 'Consultar la base de datos de la aplicación', icon: 'Database' },
+  apps_backups_list: { label: 'Ver las copias de una aplicación', icon: 'History' },
+  apps_backup_create: { label: 'Hacer una copia de una aplicación', icon: 'Database' },
+  apps_backup_restore_row: { label: 'Restaurar una fila desde una copia', icon: 'RotateCcw' },
+  apps_backup_restore_table: { label: 'Restaurar una tabla desde una copia', icon: 'RotateCcw' },
   apps_inspect: { label: 'Revisar lo que ve un rol en la aplicación', icon: 'ScanEye' },
   apps_delete: { label: 'Eliminar una aplicación', icon: 'Trash2' },
   apps_assign_members: { label: 'Asignar personas a una aplicación', icon: 'Users' },
@@ -537,9 +556,15 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   apps_automations_test: { label: 'Probar una automatización con una fila real', icon: 'Zap' },
   apps_report_preview: { label: 'Ver cómo saldría un reporte por correo', icon: 'FileSpreadsheet' },
   accounting_invoice_drafts_list: { label: 'Ver lo que está por enviar a Siigo', icon: 'Receipt' },
-  accounting_invoice_draft_approve: { label: 'Aprobar y enviar a Siigo (factura, recibo, nota crédito o cliente)', icon: 'Receipt' },
+  accounting_invoice_draft_approve: {
+    label: 'Aprobar y enviar a Siigo (factura, recibo, nota crédito o cliente)',
+    icon: 'Receipt',
+  },
   accounting_invoice_draft_discard: { label: 'Descartar algo por enviar a Siigo', icon: 'Trash2' },
-  accounting_outbox_prepare: { label: 'Preparar un cliente, recibo de caja o nota crédito para Siigo', icon: 'Receipt' },
+  accounting_outbox_prepare: {
+    label: 'Preparar un cliente, recibo de caja o nota crédito para Siigo',
+    icon: 'Receipt',
+  },
   views_list: { label: 'Ver las vistas', icon: 'LayoutPanelTop' },
   views_get: { label: 'Abrir una vista', icon: 'LayoutPanelTop' },
   views_create: { label: 'Crear una vista', icon: 'LayoutPanelTop' },
@@ -858,7 +883,10 @@ function confirmationSummaryBase(toolId: string, input: Record<string, unknown>)
       return `Crear la aplicación «${String(input.name ?? '')}» de una vez${tables.length ? ` — tablas nuevas: ${tables.join(', ')}` : ''}; pantallas: ${screens.join(', ') || 'ninguna'}; roles: ${roles.join(', ') || 'ninguno'}. Queda en borrador, sin publicar; si algo falla se deshace todo`;
     }
     case 'trackers_write_back_sheet': {
-      const v = (input.values && typeof input.values === 'object' ? input.values : {}) as Record<string, unknown>;
+      const v = (input.values && typeof input.values === 'object' ? input.values : {}) as Record<
+        string,
+        unknown
+      >;
       const changes = Object.entries(v)
         .slice(0, 6)
         .map(([k, x]) => `${k} = ${String(x).slice(0, 60)}`)

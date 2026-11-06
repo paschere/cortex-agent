@@ -383,6 +383,10 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   apps_code_runs: 'Ver las corridas de las funciones de la aplicación',
   apps_code_db_migrate: 'Aplicar las migraciones de la base de datos de la aplicación',
   apps_code_db_query: 'Consultar la base de datos de la aplicación',
+  apps_backups_list: 'Ver las copias de una aplicación',
+  apps_backup_create: 'Hacer una copia de una aplicación',
+  apps_backup_restore_row: 'Restaurar una fila desde una copia',
+  apps_backup_restore_table: 'Restaurar una tabla desde una copia',
   apps_inspect: 'Revisar lo que ve un rol en la aplicación',
   apps_delete: 'Eliminar una aplicación',
   apps_assign_members: 'Asignar personas a una aplicación',
@@ -394,7 +398,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   apps_automations_test: 'Probar una automatización con una fila real',
   apps_report_preview: 'Ver cómo saldría un reporte por correo',
   accounting_invoice_drafts_list: 'Ver lo que está por enviar a Siigo',
-  accounting_invoice_draft_approve: 'Aprobar y enviar a Siigo (factura, recibo, nota crédito o cliente)',
+  accounting_invoice_draft_approve:
+    'Aprobar y enviar a Siigo (factura, recibo, nota crédito o cliente)',
   accounting_invoice_draft_discard: 'Descartar algo por enviar a Siigo',
   accounting_outbox_prepare: 'Preparar un cliente, recibo de caja o nota crédito para Siigo',
   views_list: 'Ver las vistas',
@@ -693,7 +698,10 @@ function pendingSummaryBase(toolId: string, input: Record<string, unknown>): str
       return `Crear o cambiar la tabla «${String(input.name ?? input.slug ?? '')}»${quitar}${auto.length ? ` — se llenan solos: ${auto.join('; ')}. Las fórmulas se recalculan en las filas que ya hay` : ''}`;
     }
     case 'trackers_write_back_sheet': {
-      const v = (input.values && typeof input.values === 'object' ? input.values : {}) as Record<string, unknown>;
+      const v = (input.values && typeof input.values === 'object' ? input.values : {}) as Record<
+        string,
+        unknown
+      >;
       const changes = Object.entries(v)
         .slice(0, 6)
         .map(([k, x]) => `${k} = ${String(x).slice(0, 60)}`)

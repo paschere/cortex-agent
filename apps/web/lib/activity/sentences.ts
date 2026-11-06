@@ -181,6 +181,35 @@ const BUILDERS: Record<string, Builder> = {
       `Devolví la aplicación ${quoted(input.app)} a la versión ${typeof input.version === 'number' ? input.version : ''}${input.publish ? ' y la publiqué' : ''}`.trim(),
       'view',
     ),
+  apps_backup_create: ({ input }) =>
+    plain(`Hice una copia de la aplicación ${quoted(input.appName ?? input.app)}`.trim(), 'view'),
+  apps_backup_restore_row: ({ input }) =>
+    plain(
+      `Restauré una fila de ${str(input.table, 50) ?? 'una tabla'} desde una copia de la aplicación ${quoted(input.appName ?? input.app)}`.trim(),
+      'rows',
+    ),
+  apps_backup_restore_table: ({ input, result }) => {
+    const n = [result.create, result.update, result.remove].reduce<number>(
+      (a, v) => a + (typeof v === 'number' ? v : 0),
+      0,
+    );
+    return plain(
+      `Restauré la tabla ${str(input.table, 50) ?? ''} desde una copia de la aplicación ${quoted(input.appName ?? input.app)}${n ? ` (${n} ${n === 1 ? 'fila' : 'filas'})` : ''}`
+        .replace(/\s+/g, ' ')
+        .trim(),
+      'rows',
+    );
+  },
+  apps_backup_restore_config: ({ input }) =>
+    plain(
+      `Restauré la configuración de la aplicación ${quoted(input.appName ?? input.app)} desde una copia`.trim(),
+      'view',
+    ),
+  apps_backup_restore_code: ({ input }) =>
+    plain(
+      `Restauré el código de la aplicación ${quoted(input.appName ?? input.app)} desde una copia`.trim(),
+      'view',
+    ),
   payables_record: ({ input }) =>
     plain(
       `Anoté la factura${input.number ? ` ${str(input.number, 30)}` : ''} de ${str(input.supplierName, 50) ?? 'un proveedor'}`,

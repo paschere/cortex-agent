@@ -3,6 +3,7 @@ import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { closeStaleShifts, parseLocationSettings, purgeLocationHistory } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
+import { runDailyBackups } from './app-backups';
 
 /**
  * LA RETENCIÓN DE LA UBICACIÓN DEL EQUIPO (migración 0216).
@@ -50,7 +51,12 @@ export const appLocationSweepJob: JobHandler = async ({ step }) => {
       }
     }
     logger.info('app location retention sweep', { purged, closed });
-    return { purged, closed };
+    // Copias diarias por app (0247): cuelgan de este barrido horario; ver app-backups.ts.
+    const backups = await runDailyBackups().catch((err) => {
+      logger.warn({ err }, 'app backups: sweep failed');
+      return null;
+    });
+    return { purged, closed, backups };
   });
 };
 
