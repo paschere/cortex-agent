@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
-import { Clock, Pencil, Plane, Plus, Search } from 'lucide-react';
-import { cargarVuelos, useAcciones, useCarga } from '../lib/datos';
+import { Clock, FileScan, Pencil, Plane, Plus, Search } from 'lucide-react';
+import { cargarVuelos, useAcciones, useCarga, useRol } from '../lib/datos';
 import type { Vuelo } from '../lib/datos';
 import { TONO_VUELO, tono } from '../lib/estados';
 import { N, fechaCorta, hhmm, kg, num } from '../lib/formato';
 import { horaAhora, hoyBogota, sumarDias } from '../lib/tiempo';
+import { puedeEditarDoc, useEsquema } from '../lib/documental';
+import { NuevoDesdeManifiesto } from '../lib/ManifiestoVuelo';
 import { Boton, Campo, Chip, ErrorCaja, Estado, Hoja, Numero, Pantalla, Segmentos, confirmar, useOperacion } from '../lib/ui';
 
 /**
@@ -26,6 +28,9 @@ export default function Vuelos() {
   const [q, setQ] = useState('');
   const [editando, setEditando] = useState<Vuelo | 'nuevo' | null>(null);
   const [demora, setDemora] = useState<Vuelo | null>(null);
+  const [desdeManifiesto, setDesdeManifiesto] = useState(false);
+  const esq = useEsquema();
+  const { rol } = useRol();
   const op = useOperacion();
 
   const lista = useMemo(() => {
@@ -56,9 +61,16 @@ export default function Vuelos() {
       titulo="Vuelos"
       sub="Lo esperado de cada vuelo, su posición y su estado."
       acciones={
-        <Boton tono="primario" onClick={() => setEditando('nuevo')} icono={<Plus size={18} />}>
-          Nuevo vuelo
-        </Boton>
+        <>
+          {puedeEditarDoc(rol) ? (
+            <Boton tono="primario" onClick={() => setDesdeManifiesto(true)} icono={<FileScan size={18} />}>
+              Nuevo vuelo desde manifiesto
+            </Boton>
+          ) : null}
+          <Boton onClick={() => setEditando('nuevo')} icono={<Plus size={18} />}>
+            Nuevo vuelo
+          </Boton>
+        </>
       }
     >
       <div className="oc-form" style={{ marginBottom: 18 }}>
@@ -162,6 +174,19 @@ export default function Vuelos() {
             setEditando(null);
             await refresh();
             if (nuevo && id) irA('vuelo', { vuelo: id });
+          }}
+        />
+      ) : null}
+
+      {desdeManifiesto ? (
+        <NuevoDesdeManifiesto
+          vuelos={data ?? []}
+          esq={esq}
+          onCerrar={() => setDesdeManifiesto(false)}
+          onListo={async (id) => {
+            setDesdeManifiesto(false);
+            await refresh();
+            if (id) irA('vuelo', { vuelo: id, tab: 'guias' });
           }}
         />
       ) : null}

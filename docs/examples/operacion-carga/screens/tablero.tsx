@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
 import { cortex } from '@cortex/app-sdk';
-import { AlertTriangle, ArrowRight, Plane, RefreshCw, ShieldAlert } from 'lucide-react';
-import { aAtencion, aEvento, aVuelo, traerTodo, useCarga } from '../lib/datos';
+import { AlertTriangle, ArrowRight, FileCheck2, Inbox, Plane, RefreshCw, ShieldAlert } from 'lucide-react';
+import { aAtencion, aEvento, aVuelo, traerTodo, useCarga, useRol } from '../lib/datos';
 import type { Atencion, Evento, Vuelo } from '../lib/datos';
 import { ESTADOS_VUELO, TONO_VUELO, tono } from '../lib/estados';
 import { fechaLarga, hhmm, kg, minTxt } from '../lib/formato';
 import { difMinutos, horaAhora, hoyBogota, minutosHasta, sumarDias } from '../lib/tiempo';
 import { Pista } from '../lib/Piezas';
+import { aTramite, esActivo, esDocumental, semaforo, useAhora } from '../lib/documental';
+import type { Tramite } from '../lib/documental';
+import { CuentaRegresiva, porVencimiento } from '../lib/PiezasDoc';
 import { Boton, Chip, ES_VIVO, ErrorCaja, Estado, Metrica, Pantalla, Tarjeta } from '../lib/ui';
 
 /**
@@ -23,15 +26,18 @@ interface Datos {
   porAprobar: Atencion[];
   fueraMargen: Atencion[];
   eventos: Evento[];
+  /** null = la tabla de trámites todavía no existe (datos sin aplicar). */
+  tramites: Tramite[] | null;
 }
 
 async function cargar(): Promise<Datos> {
-  const [vs, ea, pa, rec, ev] = await Promise.all([
+  const [vs, ea, pa, rec, ev, trs] = await Promise.all([
     traerTodo('vuelos', { order: { field: 'fecha', dir: 'desc' } }, 500),
     cortex.tables.query('atenciones', { where: { estado: 'En atención' }, limit: 100 }),
     cortex.tables.query('atenciones', { where: { estado: 'Por aprobar' }, limit: 100 }),
     cortex.tables.query('atenciones', { order: { field: 'created_at', dir: 'desc' }, limit: 150 }),
     cortex.tables.query('eventos_operacion', { where: { estado: 'Abierto' }, limit: 100 }),
+    traerTodo('tramites_dian', { order: { field: 'created_at', dir: 'desc' } }, 400).then((r) => r.map(aTramite)).catch((): Tramite[] | null => null),
   ]);
   return {
     vuelos: vs.map(aVuelo),
@@ -39,6 +45,7 @@ async function cargar(): Promise<Datos> {
     porAprobar: pa.rows.map(aAtencion),
     fueraMargen: rec.rows.map(aAtencion).filter((a) => (a.fueraDeMargen || a.fueraDeZona) && a.estado !== 'Aprobada'),
     eventos: ev.rows.map(aEvento),
+    tramites: trs,
   };
 }
 
@@ -50,6 +57,8 @@ const retraso = (v: Vuelo): number => (v.hora && v.horaActual ? (difMinutos(v.ho
 export default function Tablero() {
   const hoy = hoyBogota();
   const { data, loading, error, refresh } = useCarga(cargar, [], CADA);
+  const { rol } = useRol();
+  const ahora = useAhora(15_000);
 
   const vuelosHoy = useMemo(
     () => (data?.vuelos ?? []).filter((v) => v.fecha === hoy).sort((a, b) => (a.horaActual || '99').localeCompare(b.horaActual || '99')),
@@ -83,17 +92,30 @@ export default function Tablero() {
   }, [data, hoy]);
   const sinTomar = [...vuelosHoy, ...abiertosAntes].filter((v) => v.estado === 'Aterrizó');
   const criticos = (data?.eventos ?? []).filter((e) => e.critico);
-  const ahora = horaAhora();
+  const horaTxt = horaAhora();
   const vacio = !data;
+  const activos = (data?.tramites ?? []).filter(esActivo).sort(porVencimiento);
+  const urgentes = activos.filter((t) => {
+    const x = semaforo(t, ahora);
+    return x.vencido || x.porVencer;
+  });
+  const conInconsistencias = (data?.vuelos ?? []).filter((v) => v.inconsistencias > 0 && v.estado !== 'Cancelado');
 
   return (
     <Pantalla
       titulo="Tablero"
       sub={`${fechaLarga(hoy)} · se actualiza solo cada 20 segundos`}
       acciones={
-        <Boton onClick={() => void refresh()} icono={<RefreshCw size={16} />}>
-          Actualizar
-        </Boton>
+        <>
+          {esDocumental(rol) ? (
+            <Boton tono="primario" onClick={() => irA('bandeja')} icono={<Inbox size={16} />}>
+              Ir a mi bandeja
+            </Boton>
+          ) : null}
+          <Boton onClick={() => void refresh()} icono={<RefreshCw size={16} />}>
+            Actualizar
+          </Boton>
+        </>
       }
     >
       {error && data ? <ErrorCaja mensaje={`No se pudo actualizar: ${error}`} reintentar={() => void refresh()} /> : null}
@@ -106,6 +128,76 @@ export default function Tablero() {
         <Metrica etiqueta="Fuera de margen o zona" valor={data?.fueraMargen.length ?? 0} tono={data?.fueraMargen.length ? 'bad' : undefined} />
         <Metrica etiqueta="Eventos críticos abiertos" valor={criticos.length} tono={criticos.length ? 'bad' : undefined} />
       </div>
+
+      {data?.tramites ? (
+        <div className="oc-sec">
+          <Tarjeta
+            titulo="Resumen documental"
+            icono={<FileCheck2 size={18} />}
+            tono={urgentes.length || conInconsistencias.length ? 'aviso' : undefined}
+            derecha={
+              <Boton chico tono={esDocumental(rol) ? 'primario' : 'suave'} onClick={() => irA(esDocumental(rol) ? 'bandeja' : 'tramites')} icono={<ArrowRight size={15} />}>
+                {esDocumental(rol) ? 'Ir a la bandeja' : 'Ver trámites'}
+              </Boton>
+            }
+          >
+            <div className="oc-grid oc-g2">
+              <div>
+                <h3>Trámites por vencer</h3>
+                {!urgentes.length ? (
+                  <p className="oc-sub">{activos.length ? `${activos.length} activos, ninguno por vencer.` : 'Sin trámites activos.'}</p>
+                ) : (
+                  <ul className="oc-lista" style={{ marginTop: 8 }}>
+                    {urgentes.slice(0, 4).map((t) => (
+                      <li key={t.id} className="oc-item hot">
+                        <div className="oc-item-top">
+                          <span>
+                            <strong>{t.tramite}</strong> <span className="oc-sub">· {t.vuelo}</span>
+                          </span>
+                          <CuentaRegresiva t={t} ahora={ahora} />
+                        </div>
+                        <div className="oc-btns">
+                          <Boton chico onClick={() => irA('vuelo', { vuelo: t.vueloId, tab: 'tramites' })}>
+                            Abrir
+                          </Boton>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <h3>Inconsistencias</h3>
+                {!conInconsistencias.length ? (
+                  <p className="oc-sub">Ningún vuelo con inconsistencias en el cruce.</p>
+                ) : (
+                  <ul className="oc-lista" style={{ marginTop: 8 }}>
+                    {conInconsistencias.slice(0, 4).map((v) => (
+                      <li key={v.id} className="oc-item bad">
+                        <div className="oc-item-top">
+                          <strong>{v.numero}</strong>
+                          <Chip tono="bad">{v.inconsistencias} inconsistencias</Chip>
+                        </div>
+                        <div className="oc-btns">
+                          <Boton chico onClick={() => irA('vuelo', { vuelo: v.id, tab: 'guias' })}>
+                            Revisar cruce
+                          </Boton>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </Tarjeta>
+        </div>
+      ) : data && esDocumental(rol) ? (
+        <div className="oc-sec">
+          <div className="oc-aviso" role="status">
+            Falta aplicar los datos del documental (trámites DIAN, avisos, plazos). La bandeja funciona con lo que ya existe.
+          </div>
+        </div>
+      ) : null}
 
       <div className="oc-sec">
         <div className="oc-chips" aria-label="Vuelos por estado">
@@ -137,10 +229,10 @@ export default function Tablero() {
               {abiertosAntes.map((v) => (
                 <FilaVuelo key={v.id} v={v} anterior />
               ))}
-              {lineaConAhora(vuelosHoy, ahora).map((x) =>
+              {lineaConAhora(vuelosHoy, horaTxt).map((x) =>
                 x.ahora ? (
                   <li key="ahora" className="ahora">
-                    Ahora · {ahora}
+                    Ahora · {horaTxt}
                   </li>
                 ) : (
                   <FilaVuelo key={x.v.id} v={x.v} />

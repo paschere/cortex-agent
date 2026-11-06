@@ -142,6 +142,15 @@ export interface Vuelo {
   observaciones: string;
   carpeta: string;
   documentos: Archivo[];
+  /* Documental (campos nuevos: vacíos mientras no se apliquen los datos). */
+  finDescargueFecha: string;
+  finDescargueHora: string;
+  manifiestoNumero: string;
+  matricula: string;
+  destino: string;
+  estadoDocumental: string;
+  inconsistencias: number;
+  manifiestoArchivo: Archivo[];
 }
 
 const nul = (v: unknown): number | null => (hay(v) ? N(v) : null);
@@ -180,6 +189,14 @@ export function aVuelo(r: SdkRow): Vuelo {
     observaciones: T(v.observaciones),
     carpeta: T(v.carpeta_drive),
     documentos: archivos(v.documentos),
+    finDescargueFecha: T(v.fin_descargue_fecha).slice(0, 10),
+    finDescargueHora: T(v.fin_descargue_hora),
+    manifiestoNumero: T(v.manifiesto_numero),
+    matricula: T(v.matricula),
+    destino: T(v.destino),
+    estadoDocumental: T(v.estado_documental),
+    inconsistencias: N(v.inconsistencias),
+    manifiestoArchivo: archivos(v.manifiesto_archivo),
   };
 }
 
@@ -384,6 +401,9 @@ export interface Guia {
   difKilos: number | null;
   novedad: string;
   vueloId: string;
+  estadoCruce: string;
+  listaPrefactura: string;
+  falta: string;
 }
 
 export function aGuia(r: SdkRow): Guia {
@@ -407,6 +427,9 @@ export function aGuia(r: SdkRow): Guia {
     difKilos: nul(v.dif_kilos),
     novedad: T(v.novedad_guia),
     vueloId: relId(v.vuelo),
+    estadoCruce: T(v.estado_cruce),
+    listaPrefactura: T(v.lista_prefactura),
+    falta: T(v.falta),
   };
 }
 
@@ -422,6 +445,12 @@ export interface Prealerta {
   kilos: number;
   estado: string;
   descripcion: string;
+  vueloId: string;
+  estadoCruce: string;
+  guiaNorm: string;
+  documento: Archivo[];
+  canal: string;
+  creada: string;
 }
 
 export function aPrealerta(r: SdkRow): Prealerta {
@@ -438,6 +467,12 @@ export function aPrealerta(r: SdkRow): Prealerta {
     kilos: N(v.kilos),
     estado: T(v.estado),
     descripcion: T(v.descripcion_carga),
+    vueloId: relId(v.vuelo),
+    estadoCruce: T(v.estado_cruce),
+    guiaNorm: T(v.guia_normalizada),
+    documento: archivos(v.documento),
+    canal: T(v.canal),
+    creada: r.created_at,
   };
 }
 

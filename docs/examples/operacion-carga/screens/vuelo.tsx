@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
 import { ArrowLeft, FileText, Pencil, Plus, Search } from 'lucide-react';
 import {
@@ -14,9 +14,31 @@ import {
   traerTodo,
   useAcciones,
   useCarga,
+  useRol,
 } from '../lib/datos';
 import type { Atencion, Equipo, Evento, Guia, Prealerta, Vuelo } from '../lib/datos';
 import { ManifiestoInteligente } from '../lib/ManifiestoInteligente';
+import { RellenarVuelo, campoManifiesto, escanearManifiesto } from '../lib/ManifiestoVuelo';
+import type { Encabezado } from '../lib/encabezado';
+import { leerEncabezado } from '../lib/encabezado';
+import { CruceTresVias, TabAvisos, TabTramites } from '../lib/TabsVuelo';
+import { CuentaRegresiva, FaltaAplicar, Pestañas } from '../lib/PiezasDoc';
+import {
+  TONO_CRUCE_DOC,
+  aAviso,
+  aContacto,
+  aPlazo,
+  aTramite,
+  asegurarTramites,
+  cruzarTresVias,
+  esActivo,
+  hayTabla,
+  leerEsquema,
+  puedeEditarDoc,
+  semaforo,
+  useAhora,
+} from '../lib/documental';
+import type { AvisoCliente, ClienteContacto, Esquema, Plazo, Tramite } from '../lib/documental';
 import { Etapas, TarjetaEmbarque } from '../lib/Piezas';
 import { PARCIALES, TIPOS_GUIA, TONO_ATENCION, TONO_EVENTO, TONO_ETAPA, TONO_VUELO, fueraDeMargen, tono } from '../lib/estados';
 import type { Tono } from '../lib/estados';
@@ -56,15 +78,23 @@ interface Todo {
   equipos: Equipo[];
   eventos: Evento[];
   prealertas: Prealerta[];
+  esq: Esquema;
+  tramites: Tramite[];
+  plazos: Plazo[];
+  avisos: AvisoCliente[];
 }
 
 async function cargar(id: string): Promise<Todo> {
   const fila = await cortex.tables.get('vuelos', id);
-  const [gs, as, ev, pre] = await Promise.all([
+  const esq = await leerEsquema();
+  const [gs, as, ev, pre, trs, pls, avs] = await Promise.all([
     porRelacion('prefacturacion', 'vuelo', id),
     porRelacion('atenciones', 'vuelo', id),
     porRelacion('eventos_operacion', 'vuelo', id),
     traerTodo('prealertas', { order: { field: 'created_at', dir: 'desc' } }, 1000).catch(() => []),
+    hayTabla(esq, 'tramites_dian') ? porRelacion('tramites_dian', 'vuelo', id).catch(() => []) : Promise.resolve([]),
+    hayTabla(esq, 'plazos_dian') ? traerTodo('plazos_dian', {}, 100).catch(() => []) : Promise.resolve([]),
+    hayTabla(esq, 'avisos_cliente') ? porRelacion('avisos_cliente', 'vuelo', id, { order: { field: 'created_at', dir: 'desc' } }).catch(() => []) : Promise.resolve([]),
   ]);
   const atenciones = as.map(aAtencion);
   let equipos: Equipo[] = [];
@@ -80,6 +110,10 @@ async function cargar(id: string): Promise<Todo> {
     equipos,
     eventos: ev.map(aEvento),
     prealertas: pre.map(aPrealerta),
+    esq,
+    tramites: trs.map(aTramite),
+    plazos: pls.map(aPlazo),
+    avisos: avs.map(aAviso),
   };
 }
 
@@ -121,6 +155,31 @@ function Selector({ onElegir }: { onElegir: (id: string) => void }) {
   );
 }
 
+type Tab = 'resumen' | 'guias' | 'tramites' | 'avisos' | 'documentos';
+
+function tabInicial(): Tab {
+  const t = parametro('tab');
+  return t === 'guias' || t === 'tramites' || t === 'avisos' || t === 'documentos' ? t : 'resumen';
+}
+
+/** Franja con lo documental del vuelo: estado, inconsistencias y el trámite más urgente. */
+function ResumenDocumental({ vuelo, tramites, filas, ahora }: { vuelo: Vuelo; tramites: Tramite[]; filas: ReturnType<typeof cruzarTresVias>; ahora: number }) {
+  const siguiente = [...tramites].filter(esActivo).sort((a, b) => (a.venceMs ?? Infinity) - (b.venceMs ?? Infinity))[0];
+  const incons = filas.filter((f) => f.estado !== 'Coincide').length;
+  return (
+    <div className="oc-chips" aria-label="Estado documental">
+      <Chip tono={vuelo.estadoDocumental === 'Listo' ? 'good' : vuelo.estadoDocumental === 'Con inconsistencias' ? 'bad' : 'neutral'}>Documental: {vuelo.estadoDocumental || 'Sin prealertas'}</Chip>
+      <Chip tono={incons ? 'bad' : filas.length ? 'good' : 'quiet'}>{incons ? `${num(incons)} inconsistencias` : filas.length ? 'Sin inconsistencias' : 'Sin cruce todavía'}</Chip>
+      {siguiente ? (
+        <>
+          <span className="oc-sub">{siguiente.tramite}:</span>
+          <CuentaRegresiva t={siguiente} ahora={ahora} />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
   const { data, loading, error, refresh } = useCarga(() => cargar(id), [id], 30_000);
   const acc = useAcciones('vuelos');
@@ -129,6 +188,13 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
   const [guiaForm, setGuiaForm] = useState<Guia | 'nueva' | null>(null);
   const [clientes, setClientes] = useState<{ id: string; label: string }[]>([]);
   const [clientesCargados, setClientesCargados] = useState(false);
+  const [contactos, setContactos] = useState<ClienteContacto[]>([]);
+  const [tab, setTab] = useState<Tab>(tabInicial());
+  const [relleno, setRelleno] = useState<{ enc: Encabezado; archivo: File | null } | null>(null);
+  const { rol, nombre } = useRol();
+  const puede = puedeEditarDoc(rol);
+  const ahora = useAhora(20_000);
+  const aseguradoPara = useRef('');
 
   const cargarClientes = useCallback(async () => {
     if (clientesCargados) return;
@@ -136,6 +202,7 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
     try {
       const rows = await traerTodo('clientes_facturacion', {}, 1500);
       setClientes(rows.map((r) => ({ id: r.id, label: T(r.values.nombre) || T(r.values.razon_social) || r.label })));
+      setContactos(rows.map(aContacto));
     } catch {
       /* sin clientes no se puede crear: la revisión lo avisa */
     }
@@ -146,7 +213,23 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
   }, [cargarClientes]);
 
   const v = data?.vuelo;
-  const pdv = useMemo(() => (data && v ? prealertasDelVuelo(data.prealertas, v.numero, v.fecha) : []), [data, v]);
+  const pdv = useMemo(() => {
+    if (!data || !v) return [];
+    const porNumero = prealertasDelVuelo(data.prealertas, v.numero, v.fecha);
+    const ids = new Set(porNumero.map((p) => p.id));
+    return [...porNumero, ...data.prealertas.filter((p) => p.vueloId === v.id && !ids.has(p.id))];
+  }, [data, v]);
+  const filas = useMemo(() => (data && v ? cruzarTresVias(pdv, data.guias, v) : []), [data, v, pdv]);
+
+  // Al abrir el vuelo se aseguran los trámites que falten (idempotente por vuelo + trámite).
+  useEffect(() => {
+    if (!data || !v || !puede || aseguradoPara.current === v.id) return;
+    if (!data.plazos.length || !hayTabla(data.esq, 'tramites_dian')) return;
+    aseguradoPara.current = v.id;
+    void asegurarTramites(v, data.plazos, data.esq)
+      .then((n) => (n ? refresh() : undefined))
+      .catch(() => undefined);
+  }, [data, v, puede, refresh]);
 
   if (error && !data) {
     return (
@@ -209,6 +292,25 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
         <Etapas estado={v.estado} />
       </div>
 
+      <div className="oc-sec" style={{ marginTop: 14 }}>
+        <ResumenDocumental vuelo={v} tramites={data.tramites} filas={filas} ahora={ahora} />
+        <div style={{ marginTop: 12 }}>
+          <Pestañas
+            valor={tab}
+            onChange={setTab}
+            opciones={[
+              { id: 'resumen', texto: 'Resumen' },
+              { id: 'guias', texto: 'Guías y cruce', cuenta: v.inconsistencias || undefined, alerta: true },
+              { id: 'tramites', texto: 'Trámites DIAN', cuenta: data.tramites.filter((t) => esActivo(t) && semaforo(t, ahora).vencido).length || undefined, alerta: true },
+              { id: 'avisos', texto: 'Avisos', cuenta: data.avisos.filter((a) => a.estado === 'Por enviar').length || undefined },
+              { id: 'documentos', texto: 'Documentos' },
+            ]}
+          />
+        </div>
+      </div>
+
+      {tab === 'resumen' ? (
+        <>
       <div className="oc-sec oc-grid oc-g2">
         <Tarjeta titulo="Esperado y recibido">
           <div className="oc-form">
@@ -251,121 +353,6 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
             </dd>
           </dl>
           {v.observaciones ? <p className="oc-sub" style={{ marginTop: 10 }}>{v.observaciones}</p> : null}
-        </Tarjeta>
-      </div>
-
-      <div className="oc-sec">
-        <h2>Manifiesto inteligente</h2>
-        <Tarjeta>
-          <ManifiestoInteligente
-            vuelo={v}
-            existentes={data.guias}
-            prealertas={data.prealertas}
-            clientes={clientes}
-            extra={extra}
-            onExtraUsado={() => setExtra([])}
-            onListo={refresh}
-          />
-        </Tarjeta>
-      </div>
-
-      <div className="oc-sec">
-        <h2>Guías del vuelo</h2>
-        <Tarjeta
-          derecha={
-            <Boton chico onClick={() => { void cargarClientes(); setGuiaForm('nueva'); }} icono={<Plus size={15} />}>Agregar guía</Boton>
-          }
-          titulo={`${data.guias.length} guías · ${kg(sumaKilosGuias)}`}
-        >
-          {!data.guias.length ? (
-            <p className="oc-sub">Aún no hay guías. Escanea el manifiesto arriba, pega la lista o agrégalas a mano.</p>
-          ) : (
-            <Tabla
-              columnas={[{ t: 'Guía' }, { t: 'Tipo' }, { t: 'Cliente' }, { t: 'Piezas', n: true }, { t: 'Kilos', n: true }, { t: 'Recibido (kg)', n: true }, { t: 'Etapa' }, { t: '' }]}
-              pie={
-                <tr>
-                  <td colSpan={3}>Total</td>
-                  <td className="n">{num(data.guias.reduce((a, g) => a + g.piezasEsp, 0))}</td>
-                  <td className="n">{kg(sumaKilosGuias)}</td>
-                  <td className="n">{kg(data.guias.reduce((a, g) => a + (g.kilosRec ?? 0), 0))}</td>
-                  <td colSpan={2} />
-                </tr>
-              }
-            >
-              {data.guias.map((g) => (
-                <tr key={g.id}>
-                  <td className="oc-mono"><b>{g.guia}</b>{g.madre ? <div className="oc-sub">Madre {g.madre}</div> : null}</td>
-                  <td>{g.tipo || '—'}</td>
-                  <td>{g.cliente || '—'}</td>
-                  <td className="n">{num(g.piezasEsp)}</td>
-                  <td className="n">{num(g.kilosEsp, 1)}</td>
-                  <td className="n">
-                    {g.kilosRec === null ? '—' : num(g.kilosRec, 1)}
-                    {g.novedad ? <div style={{ color: 'var(--malo)', fontSize: 12 }}>{g.novedad}</div> : null}
-                  </td>
-                  <td>{g.etapa ? <Chip tono={tono(TONO_ETAPA, g.etapa)}>{g.etapa}</Chip> : '—'}</td>
-                  <td><Boton chico tono="suave" onClick={() => { void cargarClientes(); setGuiaForm(g); }} aria-label="Editar guía" icono={<Pencil size={15} />} /></td>
-                </tr>
-              ))}
-            </Tabla>
-          )}
-        </Tarjeta>
-      </div>
-
-      <div className="oc-sec">
-        <h2>Prealertas cruzadas</h2>
-        <Tarjeta>
-          <p className="oc-sub" style={{ marginBottom: 10 }}>
-            Prealertas con el número de vuelo {v.numero}: {pdv.length - faltanPre.length} ya están como guía, {faltanPre.length} faltan por asociar.
-          </p>
-          {faltanPre.length ? (
-            <ul className="oc-lista">
-              {faltanPre.map((p) => (
-                <li key={p.id} className="oc-item hot">
-                  <div className="oc-item-top">
-                    <span><b className="oc-mono">{p.guia}</b> <span className="oc-sub">{p.cliente}</span></span>
-                    <Boton chico onClick={() => { void cargarClientes(); setExtra([p]); }}>Agregar al vuelo</Boton>
-                  </div>
-                  <div className="oc-meta">
-                    <span>{kg(p.kilos)}</span>
-                    <span>{num(p.piezas)} piezas</span>
-                    {p.estado === 'Duplicada' ? <Chip tono="bad">Duplicada</Chip> : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="oc-sub">No hay prealertas pendientes de asociar a este vuelo.</p>
-          )}
-          <BuscarPrealertas onAsociar={(p) => { void cargarClientes(); setExtra([p]); }} />
-        </Tarjeta>
-      </div>
-
-      <div className="oc-sec">
-        <h2>Documentos</h2>
-        <Tarjeta>
-          <Adjuntos lista={v.documentos} />
-          {!v.documentos.length ? <p className="oc-sub">Sin documentos todavía.</p> : null}
-          <div className="oc-btns" style={{ marginTop: 12 }}>
-            <SelectorArchivo
-              etiqueta="Adjuntar documento"
-              accept="image/*,application/pdf,.xlsx,.xls,.csv"
-              multiple
-              disabled={op.ocupado}
-              onArchivos={(fs) =>
-                void op
-                  .correr(async () => {
-                    for (const f of fs) await subirArchivo(f, { table: 'vuelos', id: v.id, field: 'documentos' });
-                  }, 'Documento guardado en el vuelo.')
-                  .then((ok) => (ok ? refresh() : undefined))
-              }
-            />
-            {v.carpeta ? (
-              <a className="oc-btn" href={v.carpeta} target="_blank" rel="noreferrer">
-                <FileText size={18} /> Carpeta de Drive
-              </a>
-            ) : null}
-          </div>
         </Tarjeta>
       </div>
 
@@ -437,6 +424,194 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
           <LineaVuelo v={v} atenciones={data.atenciones} eventos={data.eventos} />
         </Tarjeta>
       </div>
+
+        </>
+      ) : null}
+
+      {tab === 'guias' ? (
+        <>
+      <div className="oc-sec">
+        <h2>Manifiesto inteligente</h2>
+        <Tarjeta>
+          <ManifiestoInteligente
+            vuelo={v}
+            existentes={data.guias}
+            prealertas={data.prealertas}
+            clientes={clientes}
+            extra={extra}
+            onExtraUsado={() => setExtra([])}
+            onListo={refresh}
+            campoArchivo={campoManifiesto(data.esq)}
+            onEscaneo={puede ? (fields, rows, archivo) => setRelleno({ enc: leerEncabezado(fields, rows), archivo: null }) : undefined}
+          />
+        </Tarjeta>
+      </div>
+
+      <div className="oc-sec">
+        <h2>Cruce prealerta ↔ manifiesto ↔ recibido</h2>
+        <Tarjeta>
+          <CruceTresVias vuelo={v} filas={filas} esq={data.esq} puede={puede} onCambio={refresh} />
+        </Tarjeta>
+      </div>
+
+      <div className="oc-sec">
+        <h2>Guías del vuelo</h2>
+        <Tarjeta
+          derecha={
+            <Boton chico onClick={() => { void cargarClientes(); setGuiaForm('nueva'); }} icono={<Plus size={15} />}>Agregar guía</Boton>
+          }
+          titulo={`${data.guias.length} guías · ${kg(sumaKilosGuias)}`}
+        >
+          {!data.guias.length ? (
+            <p className="oc-sub">Aún no hay guías. Escanea el manifiesto arriba, pega la lista o agrégalas a mano.</p>
+          ) : (
+            <Tabla
+              columnas={[{ t: 'Guía' }, { t: 'Tipo' }, { t: 'Cliente' }, { t: 'Piezas', n: true }, { t: 'Kilos', n: true }, { t: 'Recibido (kg)', n: true }, { t: 'Etapa' }, { t: 'Cruce' }, { t: '' }]}
+              pie={
+                <tr>
+                  <td colSpan={3}>Total</td>
+                  <td className="n">{num(data.guias.reduce((a, g) => a + g.piezasEsp, 0))}</td>
+                  <td className="n">{kg(sumaKilosGuias)}</td>
+                  <td className="n">{kg(data.guias.reduce((a, g) => a + (g.kilosRec ?? 0), 0))}</td>
+                  <td colSpan={3} />
+                </tr>
+              }
+            >
+              {data.guias.map((g) => (
+                <tr key={g.id}>
+                  <td className="oc-mono"><b>{g.guia}</b>{g.madre ? <div className="oc-sub">Madre {g.madre}</div> : null}</td>
+                  <td>{g.tipo || '—'}</td>
+                  <td>{g.cliente || '—'}</td>
+                  <td className="n">{num(g.piezasEsp)}</td>
+                  <td className="n">{num(g.kilosEsp, 1)}</td>
+                  <td className="n">
+                    {g.kilosRec === null ? '—' : num(g.kilosRec, 1)}
+                    {g.novedad ? <div style={{ color: 'var(--malo)', fontSize: 12 }}>{g.novedad}</div> : null}
+                  </td>
+                  <td>{g.etapa ? <Chip tono={tono(TONO_ETAPA, g.etapa)}>{g.etapa}</Chip> : '—'}</td>
+                  <td>
+                    {g.estadoCruce ? <Chip tono={TONO_CRUCE_DOC[g.estadoCruce] ?? 'neutral'}>{g.estadoCruce}</Chip> : '—'}
+                    {g.listaPrefactura === 'Sí' ? <div className="oc-sub">Lista para prefacturar</div> : g.falta ? <div className="oc-sub">{g.falta}</div> : null}
+                  </td>
+                  <td><Boton chico tono="suave" onClick={() => { void cargarClientes(); setGuiaForm(g); }} aria-label="Editar guía" icono={<Pencil size={15} />} /></td>
+                </tr>
+              ))}
+            </Tabla>
+          )}
+        </Tarjeta>
+      </div>
+
+      <div className="oc-sec">
+        <h2>Prealertas cruzadas</h2>
+        <Tarjeta>
+          <p className="oc-sub" style={{ marginBottom: 10 }}>
+            Prealertas con el número de vuelo {v.numero}: {pdv.length - faltanPre.length} ya están como guía, {faltanPre.length} faltan por asociar.
+          </p>
+          {faltanPre.length ? (
+            <ul className="oc-lista">
+              {faltanPre.map((p) => (
+                <li key={p.id} className="oc-item hot">
+                  <div className="oc-item-top">
+                    <span><b className="oc-mono">{p.guia}</b> <span className="oc-sub">{p.cliente}</span></span>
+                    <Boton chico onClick={() => { void cargarClientes(); setExtra([p]); }}>Agregar al vuelo</Boton>
+                  </div>
+                  <div className="oc-meta">
+                    <span>{kg(p.kilos)}</span>
+                    <span>{num(p.piezas)} piezas</span>
+                    {p.estado === 'Duplicada' ? <Chip tono="bad">Duplicada</Chip> : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="oc-sub">No hay prealertas pendientes de asociar a este vuelo.</p>
+          )}
+          <BuscarPrealertas onAsociar={(p) => { void cargarClientes(); setExtra([p]); }} />
+        </Tarjeta>
+      </div>
+
+        </>
+      ) : null}
+
+      {tab === 'tramites' ? (
+        <div className="oc-sec">
+          <TabTramites vuelo={v} tramites={data.tramites} plazos={data.plazos} filas={filas} esq={data.esq} puede={puede} nombre={nombre} onCambio={refresh} />
+        </div>
+      ) : null}
+
+      {tab === 'avisos' ? (
+        <div className="oc-sec">
+          <TabAvisos vuelo={v} filas={filas} avisos={data.avisos} contactos={contactos} esq={data.esq} puede={puede} nombre={nombre} onCambio={refresh} />
+        </div>
+      ) : null}
+
+      {tab === 'documentos' ? (
+      <div className="oc-sec">
+        <h2>Documentos</h2>
+        <Tarjeta>
+          {v.manifiestoArchivo.length ? (
+            <>
+              <h3>Manifiesto</h3>
+              <Adjuntos lista={v.manifiestoArchivo} />
+            </>
+          ) : null}
+          <h3>Documentos del vuelo</h3>
+          <Adjuntos lista={v.documentos} />
+          {!v.documentos.length && !v.manifiestoArchivo.length ? <p className="oc-sub">Sin documentos todavía.</p> : null}
+          <div className="oc-btns" style={{ marginTop: 12 }}>
+            {puede ? (
+              <SelectorArchivo
+                etiqueta="Adjuntar manifiesto"
+                accept="image/*,application/pdf"
+                tono="primario"
+                disabled={op.ocupado}
+                onArchivos={(fs) =>
+                  void op
+                    .correr(async () => {
+                      const f = fs[0];
+                      if (!f) return;
+                      const r = await escanearManifiesto(f);
+                      setRelleno({ enc: r.enc, archivo: r.archivo });
+                    })
+                }
+              />
+            ) : null}
+            <SelectorArchivo
+              etiqueta="Adjuntar documento"
+              accept="image/*,application/pdf,.xlsx,.xls,.csv"
+              multiple
+              disabled={op.ocupado}
+              onArchivos={(fs) =>
+                void op
+                  .correr(async () => {
+                    for (const f of fs) await subirArchivo(f, { table: 'vuelos', id: v.id, field: 'documentos' });
+                  }, 'Documento guardado en el vuelo.')
+                  .then((ok) => (ok ? refresh() : undefined))
+              }
+            />
+            {v.carpeta ? (
+              <a className="oc-btn" href={v.carpeta} target="_blank" rel="noreferrer">
+                <FileText size={18} /> Carpeta de Drive
+              </a>
+            ) : null}
+          </div>
+        </Tarjeta>
+      </div>
+      ) : null}
+
+      {relleno ? (
+        <RellenarVuelo
+          vuelo={v}
+          enc={relleno.enc}
+          esq={data.esq}
+          archivo={relleno.archivo}
+          onCerrar={() => setRelleno(null)}
+          onListo={async () => {
+            setRelleno(null);
+            await refresh();
+          }}
+        />
+      ) : null}
 
       {guiaForm ? (
         <FormGuia

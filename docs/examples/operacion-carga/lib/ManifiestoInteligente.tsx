@@ -46,6 +46,8 @@ export function ManifiestoInteligente({
   extra,
   onExtraUsado,
   onListo,
+  campoArchivo = 'documentos',
+  onEscaneo,
 }: {
   vuelo: Vuelo;
   existentes: Guia[];
@@ -56,6 +58,10 @@ export function ManifiestoInteligente({
   extra: Prealerta[];
   onExtraUsado: () => void;
   onListo: () => void | Promise<void>;
+  /** Campo de archivos del vuelo donde se guarda el manifiesto. */
+  campoArchivo?: string;
+  /** Avisa el encabezado leído para que la pantalla rellene lo vacío del vuelo. */
+  onEscaneo?: (fields: Record<string, string | number>, rows: Record<string, string | number>[], archivo: File) => void;
 }) {
   const [fase, setFase] = useState<Fase>('inicio');
   const [archivo, setArchivo] = useState<File | null>(null);
@@ -99,6 +105,7 @@ export function ManifiestoInteligente({
       }
       setArchivo(listo);
       const r = await cortex.docs.scan(listo, { kind: 'manifiesto', rows: true });
+      onEscaneo?.(r.fields, r.rows, listo);
       const rs = renglonesDe(r.rows, ctx);
       if (!rs.length) {
         setAviso('No se encontraron guías en el documento. Revisa que se vea completo y nítido, o agrégalas a mano / pega la lista.');
@@ -168,7 +175,7 @@ export function ManifiestoInteligente({
     if (archivo && !docSubido.current && hechas.size) {
       setProgreso('Guardando el documento en el vuelo…');
       try {
-        await cortex.files.upload(archivo, { table: 'vuelos', id: vuelo.id, field: 'documentos', name: archivo.name });
+        await cortex.files.upload(archivo, { table: 'vuelos', id: vuelo.id, field: campoArchivo, name: archivo.name });
         docSubido.current = true;
       } catch (e) {
         malas.push(`Documento: ${mensajeDe(e)}`);
