@@ -151,7 +151,17 @@ export interface Vuelo {
   estadoDocumental: string;
   inconsistencias: number;
   manifiestoArchivo: Archivo[];
+  /** Asignación a operarios (campos nuevos): refs separados por coma y nombres para leer. */
+  asignadosIds: string[];
+  asignados: string;
 }
+
+/** Lista de refs «a, b, c» → arreglo limpio. */
+export const refsDe = (v: unknown): string[] =>
+  T(v)
+    .split(/[,;\n]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
 
 const nul = (v: unknown): number | null => (hay(v) ? N(v) : null);
 
@@ -197,6 +207,8 @@ export function aVuelo(r: SdkRow): Vuelo {
     estadoDocumental: T(v.estado_documental),
     inconsistencias: N(v.inconsistencias),
     manifiestoArchivo: archivos(v.manifiesto_archivo),
+    asignadosIds: refsDe(v.asignados_ids),
+    asignados: T(v.asignados),
   };
 }
 
@@ -579,9 +591,11 @@ export function useAcciones(table: string): { tiene: (clave: string) => boolean;
 }
 
 /** Rol (clave) de quien mira. */
-export function useRol(): { rol: string; nombre: string; id: string; cargando: boolean } {
+export function useRol(): { rol: string; nombre: string; id: string; ref: string; cargando: boolean } {
   const { user, loading } = useUser();
-  return { rol: user?.role ?? '', nombre: user?.name ?? '', id: user?.id ?? '', cargando: loading };
+  // `ref` (mismo formato que cortex.people.list) llega en versiones nuevas del SDK; si no, el id.
+  const ref = (user as { ref?: string } | null)?.ref ?? user?.id ?? '';
+  return { rol: user?.role ?? '', nombre: user?.name ?? '', id: user?.id ?? '', ref, cargando: loading };
 }
 
 /** Opciones de un campo `select` leídas de la tabla; si falla se usa el respaldo. */

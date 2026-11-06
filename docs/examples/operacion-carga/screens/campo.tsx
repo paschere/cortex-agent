@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
-import { AlertTriangle, Camera, CheckCircle2, Clock, MapPin, Minus, Plane, Plus, Truck } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, ClipboardList, Clock, MapPin, Minus, Pencil, Play, Plane, Plus, Truck, Wrench } from 'lucide-react';
 import { Dictado } from '../lib/dictado';
 import { aAtencion, aEquipo, aEvento, aTarifa, aVuelo, porRelacion, traerTodo, useCarga, useRol } from '../lib/datos';
+import { isoBogota, msDeIso, useEsquema } from '../lib/documental';
+import type { Esquema } from '../lib/documental';
+import { TONO_TAREA, cargarTareas, equiposDeTarea, esMia, eventosDeTarea, registrarEvento, terminarTarea } from '../lib/tareas';
+import type { Tarea } from '../lib/tareas';
 import type { Atencion, Equipo, Evento, Tarifa, Vuelo } from '../lib/datos';
 import { Medidor } from '../lib/Piezas';
 import { TIPOS_EVENTO, TONO_ATENCION, TONO_VUELO, tono } from '../lib/estados';
@@ -22,14 +26,16 @@ const CADA = 15_000;
 interface Datos {
   vuelos: Vuelo[];
   atenciones: Atencion[];
+  tareas: Tarea[];
 }
 
 async function cargar(): Promise<Datos> {
-  const [vs, as] = await Promise.all([
+  const [vs, as, tareas] = await Promise.all([
     traerTodo('vuelos', { order: { field: 'fecha', dir: 'desc' } }, 200),
     cortex.tables.query('atenciones', { order: { field: 'created_at', dir: 'desc' }, limit: 40 }),
+    cargarTareas(200),
   ]);
-  return { vuelos: vs.map(aVuelo), atenciones: as.rows.map(aAtencion) };
+  return { vuelos: vs.map(aVuelo), atenciones: as.rows.map(aAtencion), tareas };
 }
 
 function useAhora(ms = 1000): number {
@@ -42,7 +48,8 @@ function useAhora(ms = 1000): number {
 }
 
 export default function EnCampo() {
-  const { id: miId, nombre } = useRol();
+  const { id: miId, ref: miRef, nombre } = useRol();
+  const esq = useEsquema();
   const hoy = hoyBogota();
   const { data, loading, error, refresh } = useCarga(cargar, [], CADA);
   const op = useOperacion();
@@ -51,9 +58,15 @@ export default function EnCampo() {
   const vuelosPorId = useMemo(() => new Map((data?.vuelos ?? []).map((v) => [v.id, v])), [data]);
   const enCurso = (data?.atenciones ?? []).filter((a) => a.estado === 'En atención' && (!miId || !a.operarioId || a.operarioId === miId));
   const recientes = (data?.atenciones ?? []).filter((a) => a.estado !== 'En atención').slice(0, 8);
-  const porTomar = (data?.vuelos ?? []).filter((v) => v.estado === 'Aterrizó').sort((a, b) => (a.llegadaHora || '').localeCompare(b.llegadaHora || ''));
+  // Mis tareas: las asignadas a mí (abiertas) y los vuelos que me asignaron y aún no atiendo.
+  const misTareas = (data?.tareas ?? []).filter((t) => (t.estado === 'Asignada' || t.estado === 'En curso') && esMia(t.asignadosIds, miRef));
+  const misVuelos = (data?.vuelos ?? []).filter((v) => esMia(v.asignadosIds, miRef) && ['Programado', 'En camino', 'Demorado', 'Aterrizó'].includes(v.estado));
+  const idsMisVuelos = new Set(misVuelos.map((v) => v.id));
+  const tareasHechas = (data?.tareas ?? []).filter((t) => t.estado === 'Terminada' && esMia(t.asignadosIds, miRef)).slice(0, 5);
+  // Un vuelo asignado a otros no se muestra para tomar; sin asignados lo toma quien llegue.
+  const porTomar = (data?.vuelos ?? []).filter((v) => v.estado === 'Aterrizó' && !idsMisVuelos.has(v.id) && (!v.asignadosIds.length || esMia(v.asignadosIds, miRef))).sort((a, b) => (a.llegadaHora || '').localeCompare(b.llegadaHora || ''));
   const proximos = (data?.vuelos ?? [])
-    .filter((v) => v.fecha === hoy && ['Programado', 'En camino', 'Demorado'].includes(v.estado))
+    .filter((v) => v.fecha === hoy && ['Programado', 'En camino', 'Demorado'].includes(v.estado) && !idsMisVuelos.has(v.id))
     .sort((a, b) => (a.horaActual || '99').localeCompare(b.horaActual || '99'))
     .slice(0, 6);
 
@@ -89,7 +102,49 @@ export default function EnCampo() {
         <AtencionActiva key={a.id} a={a} vuelo={vuelosPorId.get(a.vueloId)} onCambio={refresh} />
       ))}
 
-      <div className="oc-sec" style={{ marginTop: enCurso.length ? 28 : 0 }}>
+      {misTareas.length || misVuelos.length || tareasHechas.length ? (
+        <div className="oc-sec" style={{ marginTop: enCurso.length ? 28 : 0 }}>
+          <h2><ClipboardList size={22} /> Mis tareas</h2>
+          <div style={{ display: 'grid', gap: 14 }}>
+            {misTareas.map((t) => <TareaActiva key={t.id} t={t} esq={esq} onCambio={refresh} />)}
+            {misVuelos.map((v) => (
+              <div key={v.id} className={`oc-item ${v.estado === 'Aterrizó' ? 'hot' : ''}`}>
+                <div className="oc-item-top">
+                  <span><span className="oc-sub">Te asignaron el vuelo</span><br /><strong className="oc-mono" style={{ fontSize: 24 }}>{v.numero}</strong></span>
+                  <Chip tono={tono(TONO_VUELO, v.estado)} vivo={ES_VIVO.has(v.estado)}>{v.estado === 'Aterrizó' ? `Aterrizó ${hhmm(v.llegadaHora)}` : v.estado}</Chip>
+                </div>
+                <div className="oc-meta" style={{ fontSize: 17 }}>
+                  <span>{v.aerolinea}</span>
+                  <span>{hhmm(v.horaActual) ? `Hora ${hhmm(v.horaActual)}` : ''}</span>
+                  <span><b>Posición {v.posicion || '—'}</b></span>
+                  <span>{kg(v.kilosEsp)}</span>
+                </div>
+                {v.estado === 'Aterrizó' ? (
+                  <Boton grande tono="senal" disabled={op.ocupado} onClick={() => void tomar(v)} icono={<Truck size={24} />}>
+                    {op.ocupado ? 'Tomando…' : 'Tomar este vuelo'}
+                  </Boton>
+                ) : <p className="oc-sub" style={{ fontSize: 16 }}>{textoMinutos(minutosHasta(v.fecha, v.horaActual))}. Cuando aterrice podrás tomarlo aquí.</p>}
+              </div>
+            ))}
+            {!misTareas.length && !misVuelos.length ? <Tarjeta><p className="oc-sub" style={{ fontSize: 17 }}>No tienes tareas pendientes.</p></Tarjeta> : null}
+            {tareasHechas.length ? (
+              <div>
+                <p className="oc-sub" style={{ margin: '4px 0 8px' }}>Terminadas hace poco</p>
+                <ul className="oc-lista">
+                  {tareasHechas.map((t) => (
+                    <li key={t.id} className="oc-item">
+                      <div className="oc-item-top"><b>{t.titulo}</b><Chip tono="good">Terminada</Chip></div>
+                      <div className="oc-meta"><span>{t.duracionMin === null ? '' : `${t.duracionMin} min`}</span><span>{dinero(t.costoTotal, 'COP')}</span></div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="oc-sec" style={{ marginTop: enCurso.length || misTareas.length ? 28 : 0 }}>
         <h2>
           <Plane size={22} /> Vuelos por tomar
         </h2>
@@ -585,3 +640,250 @@ function EventoRapido({ tipo, a, onCerrar, onListo }: { tipo: string; a: Atencio
   );
 }
 
+
+/* ───────────── Tarea asignada ───────────── */
+
+type Hoja_ = 'proceso' | 'equipo' | 'fin';
+
+/** Una tarea mía: Iniciar → En proceso → Usé un equipo → Terminar, con botones grandes. */
+function TareaActiva({ t, esq, onCambio }: { t: Tarea; esq: Esquema; onCambio: () => Promise<void> }) {
+  const ahora = useAhora();
+  const op = useOperacion();
+  const [hoja, setHoja] = useState<Hoja_ | null>(null);
+  const [terminada, setTerminada] = useState<string | null>(null);
+  const eq = useCarga(() => equiposDeTarea(t.id), [t.id, t.estado], 30_000);
+  const ev = useCarga(() => eventosDeTarea(t.id), [t.id, t.estado], 30_000);
+  const enCurso = t.estado === 'En curso';
+  const ini = msDeIso(t.inicio);
+  const seg = enCurso && ini ? (ahora - ini) / 1000 : 0;
+  const equipos = eq.data ?? [];
+  const eventos = ev.data ?? [];
+  const costoEq = equipos.reduce((s, e) => s + (e.costoCop || (e.moneda === 'COP' ? e.tarifa * e.cantidad : 0)), 0);
+
+  const refrescar = async () => {
+    await Promise.all([eq.refresh(), ev.refresh(), onCambio()]);
+  };
+
+  const iniciar = async () => {
+    const ok = await op.correr(async () => {
+      await cortex.tables.update('tareas_operacion', t.id, { estado: 'En curso', inicio: isoBogota(Date.now()) });
+      await registrarEvento(esq, { tipo: 'Inicio', tarea: t, descripcion: `Inicia: ${t.titulo}` }).catch(() => undefined);
+    }, 'Tarea iniciada.');
+    if (ok) await refrescar();
+  };
+
+  if (terminada) {
+    return (
+      <Tarjeta tono="ok">
+        <p style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 20 }}><CheckCircle2 /> {terminada}</p>
+      </Tarjeta>
+    );
+  }
+
+  return (
+    <div className={`oc-card oc-tarea ${t.prioridad === 'Urgente' ? 'alerta' : ''}`}>
+      <div className="oc-item-top">
+        <span>
+          <span className="oc-sub">{t.tipo}{t.prioridad === 'Urgente' ? ' · URGENTE' : ''}</span>
+          <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.2 }}>{t.titulo}</div>
+        </span>
+        <Chip tono={TONO_TAREA[t.estado] ?? 'neutral'} vivo={enCurso}>{t.estado}</Chip>
+      </div>
+      {t.desde || t.hasta ? (
+        <p style={{ fontSize: 20, margin: '10px 0 2px' }}><MapPin size={18} style={{ verticalAlign: -3 }} /> <b>{t.desde || '—'}</b> → <b>{t.hasta || '—'}</b></p>
+      ) : null}
+      <div className="oc-meta" style={{ fontSize: 17 }}>
+        {t.vuelo ? <span><Plane size={15} style={{ verticalAlign: -2 }} /> {t.vuelo}</span> : null}
+        {t.paraHora ? <span>Para las {hhmm(t.paraHora)}</span> : null}
+      </div>
+      {t.descripcion ? <p style={{ marginTop: 8, fontSize: 18 }}>{t.descripcion}</p> : null}
+
+      {enCurso ? (
+        <>
+          <div className="oc-reloj" style={{ margin: '14px 0 2px' }}>{cronometro(seg)}</div>
+          <p className="oc-sub" style={{ textAlign: 'center' }}>Desde las {ini ? hhmm(new Date(ini).toISOString()) : '—'}{costoEq ? ` · equipos ${dinero(costoEq, 'COP')}` : ''}</p>
+        </>
+      ) : null}
+
+      {op.error ? <div style={{ marginTop: 12 }}><ErrorCaja mensaje={op.error} /></div> : null}
+
+      <div className="oc-pasos" style={{ marginTop: 14 }}>
+        {!enCurso ? (
+          <Boton grande tono="senal" disabled={op.ocupado} onClick={() => void iniciar()} icono={<Play size={26} />}>{op.ocupado ? 'Iniciando…' : 'Iniciar'}</Boton>
+        ) : (
+          <>
+            <Boton grande onClick={() => setHoja('proceso')} icono={<Pencil size={24} />}>En proceso: nota, foto o voz</Boton>
+            <Boton grande onClick={() => setHoja('equipo')} icono={<Wrench size={24} />}>Usé un equipo</Boton>
+            <Boton grande tono="ok" onClick={() => setHoja('fin')} icono={<CheckCircle2 size={26} />}>Terminar</Boton>
+          </>
+        )}
+      </div>
+
+      {enCurso && equipos.length ? (
+        <ul className="oc-lista" style={{ marginTop: 14 }}>
+          {equipos.map((e) => (
+            <li key={e.id} className={`oc-item ${e.foto.length ? '' : 'bad'}`}>
+              <div className="oc-item-top"><b>{e.equipo || 'Equipo'} × {num(e.cantidad)}</b><span>{dinero(e.costoCop || e.tarifa * e.cantidad, e.moneda === 'COP' || e.costoCop ? 'COP' : e.moneda)}</span></div>
+              {e.foto.length ? <Adjuntos lista={e.foto} /> : <span className="oc-sub">Sin foto</span>}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {enCurso && eventos.length ? (
+        <ul className="oc-lista" style={{ marginTop: 14 }}>
+          {eventos.map((e) => (
+            <li key={e.id} className="oc-item">
+              <div className="oc-item-top"><b>{e.tipo}</b><span className="oc-mono">{hhmm(e.hora)}</span></div>
+              {e.descripcion && e.descripcion !== e.tipo ? <p>{e.descripcion}</p> : null}
+              {e.costo ? <span className="oc-sub">Gasto {dinero(e.costo, 'COP')}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {hoja === 'proceso' ? <ProcesoTarea t={t} esq={esq} onCerrar={() => setHoja(null)} onListo={async () => { setHoja(null); await refrescar(); }} /> : null}
+      {hoja === 'equipo' ? <EquipoTarea t={t} esq={esq} onCerrar={() => setHoja(null)} onListo={async () => { setHoja(null); await refrescar(); }} /> : null}
+      {hoja === 'fin' ? (
+        <FinTarea
+          t={t}
+          esq={esq}
+          sinFoto={equipos.filter((e) => !e.foto.length).length}
+          onCerrar={() => setHoja(null)}
+          onListo={async (msg) => { setHoja(null); setTerminada(msg); await onCambio(); }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ProcesoTarea({ t, esq, onCerrar, onListo }: { t: Tarea; esq: Esquema; onCerrar: () => void; onListo: () => void | Promise<void> }) {
+  const [nota, setNota] = useState('');
+  const [gasto, setGasto] = useState('');
+  const [fotos, setFotos] = useState<File[]>([]);
+  const op = useOperacion();
+  return (
+    <Hoja titulo="En proceso" onCerrar={onCerrar}>
+      <div className="oc-form campo">
+        <Campo etiqueta="¿Cómo va? (opcional)">
+          <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={3} placeholder="Ya recogí, voy hacia la bodega…" />
+        </Campo>
+        <div><Dictado grande onTexto={(x) => setNota((d) => (d ? `${d} ${x}` : x))} /></div>
+        <Campo etiqueta="Gasto en pesos (si hubo: parqueadero, flete…)"><Numero valor={gasto} onChange={setGasto} placeholder="0" /></Campo>
+        <div className="oc-btns">
+          <SelectorArchivo etiqueta={fotos.length ? `${fotos.length} foto(s)` : 'Agregar foto'} camara="environment" multiple onArchivos={(fs) => setFotos((p) => [...p, ...fs])} />
+        </div>
+        {op.error ? <ErrorCaja mensaje={op.error} /> : null}
+        <Boton grande tono="primario" disabled={op.ocupado} onClick={async () => {
+          const ok = await op.correr(() => registrarEvento(esq, { tipo: 'En proceso', tarea: t, descripcion: nota, costo: gasto.trim() ? N(gasto) : undefined, fotos }), 'Registrado.');
+          if (ok) await onListo();
+        }}>{op.ocupado ? 'Guardando…' : 'Guardar'}</Boton>
+      </div>
+    </Hoja>
+  );
+}
+
+function EquipoTarea({ t, esq, onCerrar, onListo }: { t: Tarea; esq: Esquema; onCerrar: () => void; onListo: () => void | Promise<void> }) {
+  const tarifas = useCarga(async () => (await traerTodo('tarifas_proveedores', {}, 600)).map(aTarifa), []);
+  const [nombre, setNombre] = useState('');
+  const [tarifaId, setTarifaId] = useState('');
+  const [cant, setCant] = useState(1);
+  const [foto, setFoto] = useState<File | null>(null);
+  const op = useOperacion();
+  const lista = tarifas.data ?? [];
+  const nombres = useMemo(() => [...new Set(lista.map((x) => x.equipo))].sort(), [lista]);
+  const opciones = lista.filter((x) => x.equipo === nombre);
+  const tf = lista.find((x) => x.id === tarifaId);
+  const total = tf ? tf.tarifa * cant : 0;
+
+  const agregar = async () => {
+    if (!tf || !foto) return;
+    const ok = await op.correr(async () => {
+      // Igual que en la atención: el servidor calcula el costo en pesos al crear la fila.
+      const fila = await cortex.tables.insert('equipos_usados', { tarea: t.id, tarifa: tf.id, cantidad: cant });
+      try {
+        await subirArchivo(foto, { table: 'equipos_usados', id: fila.id, field: 'foto' });
+      } catch (e) {
+        await registrarEvento(esq, { tipo: 'Uso de equipo', tarea: t, descripcion: `${tf.equipo} × ${cant}`, equipo: tf.equipo, proveedor: tf.proveedor }).catch(() => undefined);
+        throw new Error(`El equipo quedó anotado pero la foto no subió (${mensajeDe(e)}). Tómala de nuevo desde la lista.`);
+      }
+      await registrarEvento(esq, { tipo: 'Uso de equipo', tarea: t, descripcion: `${tf.equipo} × ${cant}`, equipo: tf.equipo, proveedor: tf.proveedor });
+    }, 'Equipo agregado con su foto.');
+    if (ok) await onListo();
+  };
+
+  return (
+    <Hoja titulo="Usé un equipo" onCerrar={onCerrar}>
+      <div className="oc-form campo">
+        {tarifas.loading && !lista.length ? <p className="oc-sub">Cargando tarifas…</p> : null}
+        {!tarifas.loading && !lista.length ? <div className="oc-aviso">No hay tarifas cargadas. Pídele al supervisor que las agregue en Costos.</div> : null}
+        <Campo etiqueta="Equipo">
+          <select value={nombre} onChange={(e) => { setNombre(e.target.value); setTarifaId(''); }}>
+            <option value="">Elige el equipo…</option>
+            {nombres.map((n) => <option key={n}>{n}</option>)}
+          </select>
+        </Campo>
+        {nombre ? (
+          <Campo etiqueta="Proveedor">
+            <select value={tarifaId} onChange={(e) => setTarifaId(e.target.value)}>
+              <option value="">Elige el proveedor…</option>
+              {opciones.map((o) => <option key={o.id} value={o.id}>{o.proveedor} · {dinero(o.tarifa, o.moneda)}</option>)}
+            </select>
+          </Campo>
+        ) : null}
+        {tf ? (
+          <>
+            <Campo etiqueta="Cantidad">
+              <div className="oc-paso">
+                <button type="button" onClick={() => setCant((c) => Math.max(1, c - 1))} aria-label="Menos"><Minus /></button>
+                <input type="text" inputMode="numeric" value={cant} onChange={(e) => setCant(Math.max(1, Math.floor(N(e.target.value)) || 1))} />
+                <button type="button" onClick={() => setCant((c) => c + 1)} aria-label="Más"><Plus /></button>
+              </div>
+            </Campo>
+            <p style={{ fontSize: 20 }}>Costo: <b>{dinero(total, tf.moneda)}</b> <span className="oc-sub">({cant} × {dinero(tf.tarifa, tf.moneda)})</span></p>
+            <div className="oc-btns">
+              <SelectorArchivo etiqueta={foto ? 'Cambiar foto' : 'Foto del equipo (obligatoria)'} camara="environment" tono={foto ? undefined : 'primario'} onArchivos={(fs) => setFoto(fs[0] ?? null)} />
+              {foto ? <Chip tono="good"><Camera size={14} /> Foto lista</Chip> : null}
+            </div>
+          </>
+        ) : null}
+        {op.error ? <ErrorCaja mensaje={op.error} /> : null}
+        <Boton grande tono="primario" disabled={!tf || !foto || op.ocupado} onClick={() => void agregar()}>
+          {op.ocupado ? 'Guardando…' : !tf ? 'Elige equipo y proveedor' : foto ? 'Agregar equipo' : 'Primero toma la foto'}
+        </Boton>
+      </div>
+    </Hoja>
+  );
+}
+
+function FinTarea({ t, esq, sinFoto, onCerrar, onListo }: { t: Tarea; esq: Esquema; sinFoto: number; onCerrar: () => void; onListo: (mensaje: string) => void | Promise<void> }) {
+  const [notas, setNotas] = useState('');
+  const [fotos, setFotos] = useState<File[]>([]);
+  const op = useOperacion();
+  return (
+    <Hoja titulo="Terminar tarea" onCerrar={onCerrar}>
+      <div className="oc-form campo">
+        {sinFoto ? <div className="oc-aviso">Falta la foto de {sinFoto} equipo(s). Agrégala desde la lista antes de terminar.</div> : null}
+        <Campo etiqueta="Notas de cierre (opcional)">
+          <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3} placeholder="Entregado a… / quedó en…" />
+        </Campo>
+        <div><Dictado grande onTexto={(x) => setNotas((d) => (d ? `${d} ${x}` : x))} /></div>
+        <div className="oc-btns">
+          <SelectorArchivo etiqueta={fotos.length ? `${fotos.length} foto(s)` : 'Agregar foto'} camara="environment" multiple onArchivos={(fs) => setFotos((p) => [...p, ...fs])} />
+        </div>
+        {op.error ? <ErrorCaja mensaje={op.error} /> : null}
+        <Boton grande tono="ok" disabled={op.ocupado || sinFoto > 0} icono={<CheckCircle2 size={26} />} onClick={async () => {
+          if (!(await confirmar('¿Terminar la tarea?', 'Terminar'))) return;
+          let mensaje = '';
+          const ok = await op.correr(async () => {
+            const c = await terminarTarea(esq, t, notas, fotos);
+            mensaje = `Terminaste «${t.titulo}»: ${c.duracionMin} min${c.costoTotal ? ` · ${dinero(c.costoTotal, 'COP')}` : ''}.`;
+          });
+          if (ok) {
+            avisar(mensaje);
+            await onListo(mensaje);
+          }
+        }}>{op.ocupado ? 'Terminando…' : 'Terminar tarea'}</Boton>
+      </div>
+    </Hoja>
+  );
+}

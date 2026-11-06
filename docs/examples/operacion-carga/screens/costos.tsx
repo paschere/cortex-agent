@@ -7,6 +7,9 @@ import type { Atencion, Equipo, Evento, Tarifa, Vuelo } from '../lib/datos';
 import { Area, Barras } from '../lib/graficos';
 import { EQUIPOS_TARIFA, PROVEEDORES, TONO_COSTO, tono } from '../lib/estados';
 import { N, cop, dinero, fechaCorta, hhmm, num } from '../lib/formato';
+import { PanelTareas } from '../lib/PiezasTareas';
+import { cargarTareas } from '../lib/tareas';
+import type { Tarea } from '../lib/tareas';
 import { Boton, Campo, Chip, ErrorCaja, Estado, Hoja, Metrica, Numero, Pantalla, Segmentos, Tabla, Tarjeta, avisar, useOperacion } from '../lib/ui';
 
 /**
@@ -20,20 +23,22 @@ interface Datos {
   atenciones: Atencion[];
   vuelos: Vuelo[];
   tarifas: Tarifa[];
+  tareas: Tarea[];
 }
 
 async function cargar(): Promise<Datos> {
-  const [es, ev, as, vs, ts] = await Promise.all([
+  const [es, ev, as, vs, ts, tareas] = await Promise.all([
     traerTodo('equipos_usados', { order: { field: 'created_at', dir: 'desc' } }, 1500),
     traerTodo('eventos_operacion', { order: { field: 'created_at', dir: 'desc' } }, 1000),
     traerTodo('atenciones', { order: { field: 'created_at', dir: 'desc' } }, 1000),
     traerTodo('vuelos', { order: { field: 'fecha', dir: 'desc' } }, 1000),
     traerTodo('tarifas_proveedores', {}, 600),
+    cargarTareas(1000),
   ]);
-  return { equipos: es.map(aEquipo), eventos: ev.map(aEvento), atenciones: as.map(aAtencion), vuelos: vs.map(aVuelo), tarifas: ts.map(aTarifa) };
+  return { equipos: es.map(aEquipo), eventos: ev.map(aEvento), atenciones: as.map(aAtencion), vuelos: vs.map(aVuelo), tarifas: ts.map(aTarifa), tareas };
 }
 
-type Pestana = 'pagar' | 'vuelos' | 'tarifario' | 'exportar';
+type Pestana = 'pagar' | 'vuelos' | 'tareas' | 'tarifario' | 'exportar';
 
 export default function Costos() {
   const { data, loading, error, refresh } = useCarga(cargar, [], 60_000);
@@ -44,12 +49,12 @@ export default function Costos() {
         <Segmentos
           valor={tab}
           onChange={setTab}
-          opciones={[{ id: 'pagar', texto: 'Por pagar' }, { id: 'vuelos', texto: 'Por vuelo' }, { id: 'tarifario', texto: 'Tarifario' }, { id: 'exportar', texto: 'Exportar' }]}
+          opciones={[{ id: 'pagar', texto: 'Por pagar' }, { id: 'vuelos', texto: 'Por vuelo' }, { id: 'tareas', texto: 'Tareas' }, { id: 'tarifario', texto: 'Tarifario' }, { id: 'exportar', texto: 'Exportar' }]}
         />
       </div>
       <Estado cargando={loading} error={error} vacio={!data} tituloVacio="Sin datos" reintentar={() => void refresh()}>
         {data ? (
-          tab === 'pagar' ? <PorPagar d={data} /> : tab === 'vuelos' ? <PorVuelo d={data} /> : tab === 'tarifario' ? <Tarifario d={data} onCambio={refresh} /> : <Exportar d={data} />
+          tab === 'pagar' ? <PorPagar d={data} /> : tab === 'vuelos' ? <PorVuelo d={data} /> : tab === 'tareas' ? <PanelTareas tareas={data.tareas} /> : tab === 'tarifario' ? <Tarifario d={data} onCambio={refresh} /> : <Exportar d={data} />
         ) : null}
       </Estado>
     </Pantalla>
@@ -275,6 +280,11 @@ function Exportar({ d }: { d: Datos }) {
       id: 'gastos', titulo: 'Gastos de eventos', detalle: 'Tanqueos, arreglos y otros eventos con costo', n: d.eventos.filter((e) => e.costo > 0).length,
       armar: () => [['Fecha', 'Tipo', 'Equipo', 'Proveedor', 'Costo (COP)', 'Vuelo', 'Operario', 'Descripción'],
         d.eventos.filter((e) => e.costo > 0).map((e) => [e.fecha, e.tipo, e.equipo, e.proveedor, e.costo, e.vuelo, e.operario, e.descripcion])],
+    },
+    {
+      id: 'tareas', titulo: 'Tareas', detalle: 'Tipo, quién, desde y hasta, tiempo y costo de cada tarea', n: d.tareas.length,
+      armar: () => [['Tarea', 'Tipo', 'Estado', 'Asignados', 'Desde', 'Hasta', 'Vuelo', 'Inicio', 'Fin', 'Duración (min)', 'Equipos (COP)', 'Otros (COP)', 'Total (COP)'],
+        d.tareas.map((t) => [t.titulo, t.tipo, t.estado, t.asignados, t.desde, t.hasta, t.vuelo, t.inicio, t.fin, t.duracionMin ?? '', t.costoEquipos, t.costoOtros, t.costoTotal])],
     },
     {
       id: 'tarifas', titulo: 'Tarifario', detalle: 'Tarifas por equipo y proveedor', n: d.tarifas.length,

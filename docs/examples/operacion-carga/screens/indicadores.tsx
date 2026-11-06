@@ -5,6 +5,9 @@ import { Area, Barras, Columnas, Dona } from '../lib/graficos';
 import { ESTADOS_VUELO, TONO_VUELO, tono } from '../lib/estados';
 import { cop, fechaCorta, kg, minTxt, num, pct, promedio } from '../lib/formato';
 import { hoyBogota, inicioMes, sumarDias } from '../lib/tiempo';
+import { PanelTareas } from '../lib/PiezasTareas';
+import { cargarTareas } from '../lib/tareas';
+import type { Tarea } from '../lib/tareas';
 import { Boton, Estado, Metrica, Pantalla, Segmentos, Tabla, Tarjeta } from '../lib/ui';
 
 /**
@@ -19,15 +22,17 @@ interface Datos {
   vuelos: Vuelo[];
   atenciones: Atencion[];
   equipos: Equipo[];
+  tareas: Tarea[];
 }
 
 async function cargar(): Promise<Datos> {
-  const [vs, as, es] = await Promise.all([
+  const [vs, as, es, tareas] = await Promise.all([
     traerTodo('vuelos', { order: { field: 'fecha', dir: 'desc' } }, 1000),
     traerTodo('atenciones', { order: { field: 'created_at', dir: 'desc' } }, 1000),
     traerTodo('equipos_usados', { order: { field: 'created_at', dir: 'desc' } }, 1500).catch(() => []),
+    cargarTareas(1000),
   ]);
-  return { vuelos: vs.map(aVuelo), atenciones: as.map(aAtencion), equipos: es.map(aEquipo) };
+  return { vuelos: vs.map(aVuelo), atenciones: as.map(aAtencion), equipos: es.map(aEquipo), tareas };
 }
 
 function rango(p: Periodo, hoy: string): [string, string] {
@@ -79,9 +84,15 @@ export default function Indicadores() {
       })
       .sort((a, b) => b.kilos - a.kilos);
 
+    const ts = (data?.tareas ?? []).filter((t) => {
+      const f = (t.fin || t.inicio || t.creado).slice(0, 10);
+      return f >= d && f <= h;
+    });
+
     return {
       vs,
       as,
+      ts,
       kilos: vs.reduce((s, v) => s + (v.kilosRec ?? 0), 0),
       piezas: vs.reduce((s, v) => s + (v.piezasRec ?? 0), 0),
       toma: promedio(vs.map((v) => v.minToma)),
@@ -95,7 +106,7 @@ export default function Indicadores() {
     };
   }, [data, periodo, agrupar, hoy]);
 
-  const vacio = !calc.vs.length;
+  const vacio = !calc.vs.length && !calc.ts.length;
   return (
     <Pantalla
       titulo="Indicadores"
@@ -192,6 +203,11 @@ export default function Indicadores() {
               );
             })}
           </Tabla>
+        </div>
+
+        <div className="oc-sec">
+          <h2 style={{ marginBottom: 12 }}>Tareas</h2>
+          <PanelTareas tareas={calc.ts} />
         </div>
       </Estado>
     </Pantalla>

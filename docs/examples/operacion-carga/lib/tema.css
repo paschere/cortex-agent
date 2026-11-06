@@ -231,3 +231,23 @@
 /* toasts del propio marco los pone el host; gráficos */
 .oc-tip{font-size:12px;fill:#16130f}
 @media (prefers-reduced-motion:reduce){.oc *,.oc *::before,.oc *::after{animation:none!important;transition:none!important}}
+
+/* ───── tareas y asignación (v4) ───── */
+.oc-ops{display:flex;flex-wrap:wrap;gap:8px}
+.oc-op{display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:6px 14px 6px 8px;border-radius:999px;border:1.5px solid var(--linea2);background:var(--hoja);font:inherit;color:var(--tinta);cursor:pointer;text-align:left;transition:background .15s,border-color .15s,transform .12s}
+.oc-op:active{transform:scale(.97)}
+.oc-op .av{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--hoja2);font-weight:700;color:var(--tinta2);flex:none}
+.oc-op .tx{display:flex;flex-direction:column;line-height:1.2}
+.oc-op .tx b{font-size:15px}.oc-op .tx small{display:inline-flex;gap:4px;align-items:center;color:var(--suave);font-size:12px}
+.oc-op.turno .av{background:var(--ok-fondo);color:var(--ok)}.oc-op.turno .tx small{color:var(--ok)}
+.oc-op.on{background:var(--acento-fondo);border-color:var(--acento)}.oc-op.on .av{background:var(--acento);color:#fff}
+.oc-plant{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+@media (max-width:560px){.oc-plant{grid-template-columns:1fr 1fr}}
+.oc-plant button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:14px;border:1.5px solid var(--linea2);background:var(--hoja);font:inherit;font-weight:700;font-size:15px;color:var(--tinta);cursor:pointer;min-height:76px;transition:background .15s,border-color .15s,transform .12s}
+.oc-plant button:active{transform:scale(.97)}
+.oc-plant button[aria-pressed=true]{background:var(--acento);border-color:var(--acento);color:#fff}
+.oc-tab-t{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:start}
+.oc-col-t{display:flex;flex-direction:column;gap:10px}
+.oc-col-t>h3{font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--suave);display:flex;gap:8px;align-items:center}
+.oc-tarea .oc-reloj-s{font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums}
+.oc-pasos{display:grid;gap:10px}
