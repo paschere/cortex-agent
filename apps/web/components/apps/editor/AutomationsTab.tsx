@@ -63,7 +63,9 @@ interface Act {
   admins: boolean;
   title: string;
   body: string;
-  toKind: 'creator' | 'role';
+  toKind: 'creator' | 'role' | 'field';
+  /** Con «A las personas del campo…»: la clave del campo con los refs. */
+  toField: string;
   role: string;
   screen: string;
   emails: string;
@@ -350,6 +352,7 @@ const emptyAct = (type: string): Act => ({
   title: '',
   body: '',
   toKind: 'role',
+  toField: '',
   role: '',
   screen: '',
   emails: '',
@@ -634,7 +637,12 @@ function toInput(d: Draft): unknown {
       case 'notify_app_user':
         return {
           type: a.type,
-          to: a.toKind === 'creator' ? 'creator' : { role: a.role },
+          to:
+            a.toKind === 'creator'
+              ? 'creator'
+              : a.toKind === 'field'
+                ? { field: a.toField }
+                : { role: a.role },
           title: a.title,
           ...(a.body ? { body: a.body } : {}),
           ...(a.screen ? { screen: a.screen } : {}),
@@ -906,8 +914,12 @@ function toDraft(v: AutomationView): Draft {
     x.title = String(a.title ?? '');
     x.body = String(a.body ?? '');
     if (a.to === 'creator') x.toKind = 'creator';
-    else if (a.to && typeof a.to === 'object' && !Array.isArray(a.to))
-      x.role = String((a.to as { role: string }).role);
+    else if (a.to && typeof a.to === 'object' && !Array.isArray(a.to)) {
+      if ('field' in a.to) {
+        x.toKind = 'field';
+        x.toField = String((a.to as { field: string }).field);
+      } else x.role = String((a.to as { role: string }).role);
+    }
     if (a.type === 'email') x.emails = ((a.to as string[] | undefined) ?? []).join(', ');
     x.screen = String(a.screen ?? '');
     x.subject = String(a.subject ?? '');
@@ -2393,13 +2405,28 @@ function ActionFields({
           <div className="flex flex-wrap gap-2">
             <select
               value={a.toKind}
-              onChange={(e) => set({ toKind: e.target.value as 'creator' | 'role' })}
+              onChange={(e) => set({ toKind: e.target.value as 'creator' | 'role' | 'field' })}
               className={INPUT}
             >
               {!rowless && <option value="creator">A quien creó la fila</option>}
               <option value="role">A los de un rol</option>
+              {!rowless && <option value="field">A las personas del campo…</option>}
             </select>
             {a.toKind === 'role' && rolePick(a.role, (v) => set({ role: v }))}
+            {a.toKind === 'field' && (
+              <select
+                value={a.toField}
+                onChange={(e) => set({ toField: e.target.value })}
+                className={INPUT}
+              >
+                <option value="">Elige el campo con las personas…</option>
+                {fields.map((f) => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <select
               value={a.screen}
               onChange={(e) => set({ screen: e.target.value })}
@@ -2417,6 +2444,8 @@ function ActionFields({
           {text(a.body, (v) => set({ body: v }), 'Detalle (opcional)', 2)}
           <p className="text-micro text-ink-muted">
             Llega por push; si la persona no lo tiene activo, le llega por correo.
+            {a.toKind === 'field' &&
+              ' El campo guarda las personas como referencias separadas por coma (hasta 50); las que no se reconocen se ignoran.'}
           </p>
         </div>
       );

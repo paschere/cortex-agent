@@ -324,8 +324,14 @@ export async function validateAutomation(
             problems.push(fieldLockedMessage(o, [triggerTracker_.fields.find((f) => f.key === k)?.label ?? String(k)]));
         }
     }
-    if (a.type === 'notify_app_user' && a.to !== 'creator' && !roleKeys.has(a.to.role))
+    if (a.type === 'notify_app_user' && typeof a.to === 'object' && 'role' in a.to && !roleKeys.has(a.to.role))
       problems.push(`El rol «${a.to.role}» no existe en esta app.`);
+    if (a.type === 'notify_app_user' && typeof a.to === 'object' && 'field' in a.to) {
+      if (triggerTracker_ && !triggerFields.has(a.to.field))
+        problems.push(
+          `«A las personas del campo…» nombra «${a.to.field}», que no es un campo de «${slug}».`,
+        );
+    }
     if (a.type === 'notify_app_user' && a.screen && !screenSlugs.has(a.screen))
       problems.push(`La pantalla «${a.screen}» del aviso no es de esta app.`);
     if ((a.type === 'email' || a.type === 'notify_member' || a.type === 'report') && 'roles' in a)

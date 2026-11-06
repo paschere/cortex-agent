@@ -346,6 +346,75 @@ describe('la corrida', () => {
     expect(JSON.stringify(calls)).not.toContain('b.co');
   });
 
+  it('notify_app_user to {field}: refs mixtos (usuario, miembro), espacios, desconocidos y de otra app se ignoran', async () => {
+    const U1 = '11111111-1111-4111-8111-111111111111';
+    const U2 = '22222222-2222-4222-8222-222222222222';
+    const UOTRA = '33333333-3333-4333-8333-333333333333';
+    const M1 = '44444444-4444-4444-8444-444444444444';
+    const MAJENO = '55555555-5555-4555-8555-555555555555';
+    const mkUser = (org: string, appId: string, id: string, email: string) => ({
+      id,
+      organization_id: org,
+      app_id: appId,
+      name: id,
+      email,
+      role_key: 'operario',
+      attributes: {},
+      status: 'active',
+    });
+    const { a, tables } = setup({});
+    tables.custom_app_users?.push(
+      mkUser(A, 'app-a', U1, 'u1@a.co'),
+      mkUser(A, 'app-a', U2, 'u2@a.co'),
+      mkUser(B, 'app-b', UOTRA, 'otra@b.co'),
+    );
+    tables.custom_app_members?.push({
+      id: 'cm-1',
+      organization_id: A,
+      app_id: 'app-a',
+      user_id: M1,
+      role_key: 'operario',
+    });
+    const auto = tables.custom_app_automations?.find((x) => x.id === 'auto-a');
+    if (!auto) throw new Error('sin regla');
+    auto.actions = [
+      { type: 'notify_app_user', to: { field: 'asignados_ids' }, title: 'Tarea {{nombre}}' },
+    ];
+    const run = queuedRun('auto-a', 'app-a', A, {
+      event: baseEvent({
+        after: {
+          numero_guia: '045',
+          asignados_ids: ` u:${U1} ,m:${M1}, u:${UOTRA}, m:${MAJENO}, basura, u:nada ,u:${U2}`,
+        },
+      }),
+    });
+    tables.custom_app_automation_runs?.push(run);
+    const { d, calls } = deps({}, [U1]);
+    const out = await executeRun(a, run.id as string, A, d);
+    expect(out.status).toBe('succeeded');
+    expect(calls.push).toHaveLength(1);
+    expect([...(calls.push[0]?.users ?? [])].sort()).toEqual([U1, U2].sort());
+    // U2 no tiene push: correo sólo a él; el de otra app jamás
+    expect(calls.mail.map((m) => m.to)).toEqual(['u2@a.co']);
+    // el miembro de Cortex recibe campana; el miembro ajeno no
+    expect(calls.bell).toEqual([{ users: [M1], title: expect.any(String) }]);
+    expect(JSON.stringify(calls)).not.toContain('b.co');
+  });
+
+  it('notify_app_user to {field} con el campo vacío no avisa a nadie', async () => {
+    const { a, tables } = setup({});
+    const auto = tables.custom_app_automations?.find((x) => x.id === 'auto-a');
+    if (!auto) throw new Error('sin regla');
+    auto.actions = [{ type: 'notify_app_user', to: { field: 'asignados_ids' }, title: 't' }];
+    const run = queuedRun('auto-a', 'app-a', A);
+    tables.custom_app_automation_runs?.push(run);
+    const { d, calls } = deps();
+    const out = await executeRun(a, run.id as string, A, d);
+    expect(out.status).toBe('succeeded');
+    expect(calls.push).toHaveLength(0);
+    expect(calls.mail).toHaveLength(0);
+  });
+
   it('sin llaves de push (nadie recibe push) todo cae a correo', async () => {
     const { a, tables } = setup();
     const run = queuedRun('auto-a', 'app-a', A);
@@ -652,6 +721,20 @@ describe('botones y validación', () => {
         actions: [{ type: 'notify_app_user', to: { role: 'fantasma' }, title: 't' }],
       }),
     ).rejects.toThrow(/fantasma/);
+    await expect(
+      validateAutomation(a, 'app-a', {
+        name: 'x',
+        trigger: { type: 'row_created', tracker: 'guias' },
+        actions: [{ type: 'notify_app_user', to: { field: 'no_existe' }, title: 't' }],
+      }),
+    ).rejects.toThrow(/no_existe/);
+    await expect(
+      validateAutomation(a, 'app-a', {
+        name: 'x',
+        trigger: { type: 'schedule', cadence: 'daily', hour: 8 },
+        actions: [{ type: 'notify_app_user', to: { field: 'numero_guia' }, title: 't' }],
+      }),
+    ).rejects.toThrow(/necesita una fila/);
     const ok = await validateAutomation(a, 'app-a', {
       name: 'x',
       trigger: { type: 'row_created', tracker: 'guias' },

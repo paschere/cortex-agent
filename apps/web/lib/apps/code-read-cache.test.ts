@@ -143,6 +143,7 @@ describe('caché de lecturas del padre', () => {
       'tables.list',
       'user.me',
       'geofences.list',
+      'people.list',
       'tables.listActions',
     ])
       expect(READ_OPS.has(op)).toBe(true);

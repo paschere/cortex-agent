@@ -539,3 +539,55 @@ describe('pantalla oculta', () => {
     expect(canSeeScreen(admin, ['operario'])).toBe(true);
   });
 });
+
+describe('people.list y user.me.ref', () => {
+  const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  async function withPeople() {
+    const w = await setup();
+    const roles = w.fake.tables.custom_app_roles as Array<{
+      key: string;
+      permissions: Record<string, unknown>;
+    }>;
+    const sup = roles.find((r) => r.key === 'supervisor');
+    if (sup) sup.permissions = { ...sup.permissions, location: { assign: true } };
+    w.fake.tables.users = [
+      { id: SOFIA, organization_id: ORG, name: 'Sofía', email: 's@x.co' },
+      { id: ANA, organization_id: ORG, name: 'Ana', email: 'a@x.co' },
+    ];
+    w.fake.tables.custom_app_users = [
+      {
+        id: uuid(7),
+        organization_id: ORG,
+        app_id: APP,
+        name: 'Externo',
+        role_key: 'operario',
+        status: 'active',
+      },
+    ];
+    return w;
+  }
+  it('sin permiso de asignar, error claro', async () => {
+    const { db, as } = await withPeople();
+    await expect(runSdkOp(db, await as(ANA), 'people.list', {})).rejects.toThrow(
+      /no asigna tareas/,
+    );
+  });
+  it('lista personas con ref y filtra por rol; el ref de user.me coincide', async () => {
+    const { db, as } = await withPeople();
+    const sofia = await as(SOFIA);
+    const all = (await runSdkOp(db, sofia, 'people.list', null)) as Array<{
+      ref: string;
+      name: string;
+      roleKey: string;
+    }>;
+    expect(all.map((p) => p.ref)).toContain(`u:${uuid(7)}`);
+    const me = (await runSdkOp(db, sofia, 'user.me', null)) as { ref: string };
+    expect(me.ref).toBe(`m:${SOFIA}`);
+    expect(all.find((p) => p.name === 'Sofía')?.ref).toBe(me.ref);
+    const ops = (await runSdkOp(db, sofia, 'people.list', { roles: ['operario'] })) as Array<{
+      roleKey: string;
+    }>;
+    expect(ops.length).toBeGreaterThan(0);
+    expect(ops.every((p) => p.roleKey === 'operario')).toBe(true);
+  });
+});

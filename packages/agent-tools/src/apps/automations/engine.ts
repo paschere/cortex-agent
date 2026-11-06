@@ -453,7 +453,7 @@ function previewAction(a: AutomationAction, ctx: TemplateContext): ActionPreview
     case 'notify_app_user':
       return {
         type: a.type,
-        summary: `Mandaría a ${a.to === 'creator' ? 'quien creó la fila' : `los del rol ${a.to.role}`} (push, o correo si no tiene push): «${renderTemplate(a.title, ctx)}».`,
+        summary: `Mandaría a ${a.to === 'creator' ? 'quien creó la fila' : 'role' in a.to ? `los del rol ${a.to.role}` : `las personas del campo «${a.to.field}»`} (push, o correo si no tiene push): «${renderTemplate(a.title, ctx)}».`,
       };
     case 'email':
       return {

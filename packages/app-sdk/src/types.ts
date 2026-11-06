@@ -5,6 +5,17 @@ export interface SdkUser {
   name: string;
   role: string;
   attributes: Record<string, string>;
+  /** Referencia de la persona, con el mismo formato que `SdkPerson.ref` («m:…» o «u:…»). */
+  ref: string;
+}
+
+/** Una persona a quien se le puede asignar algo (`cortex.people.list`). */
+export interface SdkPerson {
+  ref: string;
+  name: string;
+  roleKey: string;
+  roleName: string;
+  onShift: boolean;
 }
 
 export interface SdkField {

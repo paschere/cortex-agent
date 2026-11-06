@@ -54,6 +54,10 @@ import { WaitingForPersonError, notifyWaitOpened, openWait } from './waits';
 import { runFunctionAction } from '../code/rule-action';
 import { runLedgerPayable } from './ledger-payable';
 import { onShiftOnly, runCheckZone } from './zone-run';
+import { parsePersonRef } from '../location-shape';
+
+/** Tope de personas que avisa una regla «A las personas del campo…». */
+const MAX_FIELD_RECIPIENTS = 50;
 
 /**
  * LA CORRIDA DE UNA AUTOMATIZACIÓN (migración 0210).
@@ -752,13 +756,47 @@ async function runAction(a: ActionRun): Promise<string> {
     }
     case 'notify_app_user': {
       let recipients: AppUserLite[] = [];
-      let memberCreator: string | null = null;
+      let memberIds: string[] = [];
       if (action.to === 'creator') {
         if (!a.trackerRow || !event.rowId) throw new Error('Sin fila de donde sacar al creador.');
         const row = await currentRow(db, a.trackerRow.id, event.rowId);
         if (row?.created_by_app_user)
           recipients = await appUsers(db, app.id, { ids: [row.created_by_app_user] });
-        else if (row?.created_by) memberCreator = row.created_by;
+        else if (row?.created_by) memberIds = [row.created_by];
+      } else if ('field' in action.to) {
+        // Las personas cuyos refs («u:…», «m:…», separados por coma) están en ese campo.
+        const raw = ctx.after[action.to.field];
+        const refs = String(raw ?? '')
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean)
+          .slice(0, MAX_FIELD_RECIPIENTS * 2);
+        const appUserIds: string[] = [];
+        const wantedMembers: string[] = [];
+        for (const r of refs) {
+          const p = parsePersonRef(r);
+          if (!p) continue; // ref desconocido o mal formado: se ignora
+          if (p.kind === 'app_user') appUserIds.push(p.id);
+          else wantedMembers.push(p.id);
+        }
+        if (appUserIds.length)
+          recipients = await appUsers(db, app.id, {
+            ids: [...new Set(appUserIds)].slice(0, MAX_FIELD_RECIPIENTS),
+          });
+        if (wantedMembers.length) {
+          // Sólo miembros con rol en ESTA app.
+          const { data, error } = await db
+            .from('custom_app_members')
+            .select('user_id')
+            .eq('app_id', app.id)
+            .in('user_id', [...new Set(wantedMembers)].slice(0, MAX_FIELD_RECIPIENTS));
+          if (error) throw error;
+          memberIds = ((data ?? []) as Array<{ user_id: string }>).map((m) => m.user_id);
+        }
+        recipients = recipients.slice(0, MAX_FIELD_RECIPIENTS);
+        memberIds = memberIds.slice(0, Math.max(0, MAX_FIELD_RECIPIENTS - recipients.length));
+        if (!recipients.length && !memberIds.length)
+          return 'El campo no tenía a nadie de la app a quien avisar.';
       } else {
         recipients = await appUsers(db, app.id, { role: action.to.role });
       }
@@ -767,7 +805,11 @@ async function runAction(a: ActionRun): Promise<string> {
           await onShiftOnly(db, app.id, 'app_user', recipients.map((r) => r.id)),
         );
         recipients = recipients.filter((r) => onShift.has(r.id));
-        if (!recipients.length && !memberCreator)
+        if (memberIds.length && typeof action.to === 'object' && 'field' in action.to) {
+          const memberOn = new Set(await onShiftOnly(db, app.id, 'member', memberIds));
+          memberIds = memberIds.filter((id) => memberOn.has(id));
+        }
+        if (!recipients.length && !memberIds.length)
           return 'Nadie de ese grupo tiene el turno abierto ahora.';
       }
       const title = renderText(action.title, ctx);
@@ -800,8 +842,8 @@ async function runAction(a: ActionRun): Promise<string> {
           throw new TransientActionError(out.reason);
       }
       let belled = 0;
-      if (memberCreator)
-        belled = await deps.notifyMembers(db, [memberCreator], {
+      if (memberIds.length)
+        belled = await deps.notifyMembers(db, memberIds, {
           appId: app.id,
           title,
           body,

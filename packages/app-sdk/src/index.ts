@@ -18,6 +18,7 @@ export type {
   QueryOptions,
   SdkField,
   SdkGeofence,
+  SdkPerson,
   SdkLocation,
   SdkRow,
   SdkTable,

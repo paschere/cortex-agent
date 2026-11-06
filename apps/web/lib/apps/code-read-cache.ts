@@ -27,6 +27,7 @@ export const READ_OPS = new Set([
   'tables.listActions',
   'user.me',
   'geofences.list',
+  'people.list',
 ]);
 /** Operaciones que pueden cambiar lo que las lecturas devolverían. */
 export const INVALIDATING_OPS = new Set([

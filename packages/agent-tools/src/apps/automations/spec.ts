@@ -246,8 +246,16 @@ export const automationActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('notify_app_user'),
     ...branch,
-    /** El creador de la fila, o los usuarios de la app con un rol. */
-    to: z.union([z.literal('creator'), z.object({ role: roleKeySchema })]),
+    /**
+     * El creador de la fila, los usuarios de la app con un rol, o las personas cuyos refs
+     * («u:uuid» usuario de la app, «m:uuid» miembro de Cortex; separados por coma) están en
+     * ese campo de la fila.
+     */
+    to: z.union([
+      z.literal('creator'),
+      z.object({ role: roleKeySchema }),
+      z.object({ field: fieldKey }),
+    ]),
     /** Sólo a quienes tienen el turno abierto ahora (con ubicación compartida) en la app. */
     onShift: z.boolean().optional(),
     title: text(120),
@@ -541,6 +549,8 @@ export function structuralProblems(input: AutomationInput): string[] {
         out.push('«Cambiar un campo» necesita una fila; con un horario o un botón no hay fila.');
       if (a.type === 'notify_app_user' && a.to === 'creator')
         out.push('«Al creador de la fila» necesita una fila; elige un rol.');
+      if (a.type === 'notify_app_user' && typeof a.to === 'object' && 'field' in a.to)
+        out.push('«A las personas del campo…» necesita una fila; elige un rol.');
     }
   }
   if (

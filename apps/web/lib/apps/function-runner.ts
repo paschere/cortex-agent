@@ -130,6 +130,7 @@ const cortex = {
   },
   locations: { live: () => sdk('locations.live') },
   geofences: { list: () => sdk('geofences.list') },
+  people: { list: (opts) => sdk('people.list', opts || {}) },
   ai: { ask: (prompt, data) => sdk('ai.ask', { prompt, data }) },
   // Base propia de la app (0246): UNA sentencia SQL por llamada, con parámetros $1…
   db: { query: (sql, params) => sdk('db.query', { sql, params: params || [] }) },

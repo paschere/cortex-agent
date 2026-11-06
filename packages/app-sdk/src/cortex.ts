@@ -9,6 +9,7 @@ import type {
   SdkAction,
   SdkField,
   SdkGeofence,
+  SdkPerson,
   SdkLocation,
   SdkPosition,
   SdkRow,
@@ -27,6 +28,13 @@ export const cortex = {
   user: {
     /** Quién está usando la pantalla, con su rol y atributos. */
     me: () => call<SdkUser>('user.me'),
+  },
+  people: {
+    /**
+     * A quién se le puede asignar algo: usuarios de la app y miembros con rol, con su `ref`.
+     * Solo si el rol de quien mira asigna tareas (si no, error). `roles` limita por rol.
+     */
+    list: (opts: { roles?: string[] } = {}) => call<SdkPerson[]>('people.list', opts),
   },
   tables: {
     /** Las tablas que el rol puede leer, con sus campos. */
