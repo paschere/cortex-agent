@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Vuelo } from './datos';
 import { ESTADOS_VUELO, TONO_VUELO, tono } from './estados';
 import type { Tono } from './estados';
@@ -13,62 +13,94 @@ const aMin = (h: string): number | null => {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 };
 
-/** Línea de tiempo horizontal del día: cada vuelo es una píldora puesta por su hora estimada. */
+const ENCABEZADO_G = 112; // ancho de la columna de nombres (px)
+
+/**
+ * Gantt del día: una fila por vuelo, barra desde que llega (o su hora estimada) hasta que cierra
+ * (o su duración prevista), línea de «ahora» que avanza y barras que cambian de color al atrasarse.
+ */
 export function Pista({ vuelos, onAbrir }: { vuelos: Vuelo[]; onAbrir: (v: Vuelo) => void }) {
   const [ahora, setAhora] = useState(horaAhora());
   useEffect(() => {
     const t = setInterval(() => setAhora(horaAhora()), 30_000);
     return () => clearInterval(t);
   }, []);
-  const PX = 96; // píxeles por hora
-  const datos = useMemo(() => {
-    const mins = vuelos.map((v) => aMin(v.horaActual)).filter((m): m is number => m !== null);
-    const a = aMin(ahora) ?? 720;
-    const ini = Math.max(0, Math.floor((Math.min(a, ...(mins.length ? mins : [a])) - 60) / 60)) * 60;
-    const fin = Math.min(24 * 60, Math.ceil((Math.max(a, ...(mins.length ? mins : [a])) + 120) / 60) * 60);
-    return { ini, fin, a };
-  }, [vuelos, ahora]);
-  const horas = Array.from({ length: (datos.fin - datos.ini) / 60 }, (_, i) => datos.ini / 60 + i);
-  const x = (m: number) => ((m - datos.ini) / 60) * PX;
-  // Reparto en carriles para que no se encimen.
-  const puestos = useMemo(() => {
-    const fin: number[] = [];
+  const PX = 104; // píxeles por hora
+  const a = aMin(ahora) ?? 720;
+  const filas = useMemo(() => {
     return [...vuelos]
       .filter((v) => aMin(v.horaActual) !== null)
       .sort((p, q) => (aMin(p.horaActual) ?? 0) - (aMin(q.horaActual) ?? 0))
       .map((v) => {
-        const ini = x(aMin(v.horaActual) ?? 0);
-        let c = fin.findIndex((f) => f + 8 < ini);
-        if (c < 0) c = fin.length;
-        fin[c] = ini + 150;
-        return { v, ini, c };
+        const est = aMin(v.horaActual) ?? 0;
+        const llego = v.llegadaHora ? aMin(v.llegadaHora) : null;
+        const ini = llego ?? est;
+        const cierre = v.cierreHora ? aMin(v.cierreHora) : null;
+        const enCurso = v.estado === 'Aterrizó' || v.estado === 'En atención';
+        const fin = cierre ?? (enCurso ? Math.max(ini + 60, a + 12) : ini + 90);
+        const atraso = v.hora && v.horaActual ? (aMin(v.horaActual) ?? 0) - (aMin(v.hora) ?? 0) : 0;
+        const sinLlegar = ['Programado', 'En camino', 'Demorado'].includes(v.estado);
+        const tarde = sinLlegar && (a - est >= 15 || atraso >= 15 || v.estado === 'Demorado');
+        const sinTomar = v.estado === 'Aterrizó' && a - ini >= 10;
+        const riesgo = !tarde && ((sinLlegar && est - a <= 20 && est - a >= -15) || (v.estado === 'Aterrizó' && !sinTomar));
+        return { v, ini, fin: Math.max(fin, ini + 70), tarde: tarde || sinTomar, riesgo, hecho: ['Recibido', 'Cerrado'].includes(v.estado) };
       });
-    // biome-ignore lint/correctness/useExhaustiveDependencies: x depende de datos.
-  }, [vuelos, datos]);
-  const carriles = Math.max(1, ...puestos.map((p) => p.c + 1));
+  }, [vuelos, a]);
+  const ini = Math.max(0, Math.floor((Math.min(a, ...filas.map((f) => f.ini)) - 30) / 60)) * 60;
+  const fin = Math.min(24 * 60, Math.ceil((Math.max(a + 60, ...filas.map((f) => f.fin)) + 30) / 60) * 60);
+  const horas = Array.from({ length: Math.max(1, (fin - ini) / 60) }, (_, i) => ini / 60 + i);
+  const x = (m: number) => ((m - ini) / 60) * PX;
   const ancho = horas.length * PX;
+  const refScroll = useRef<HTMLDivElement>(null);
+  // Al abrir, deja «ahora» visible (un poco a la derecha del borde).
+  useEffect(() => {
+    const el = refScroll.current;
+    if (el) el.scrollLeft = Math.max(0, x(a) - el.clientWidth * 0.3);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: solo al montar.
+  }, []);
   return (
-    <div className="oc-pista" role="group" aria-label="Línea de tiempo del día">
-      <div className="oc-pista-in" style={{ width: Math.max(ancho + 40, 320), paddingLeft: 20 }}>
-        <div className="regla" style={{ width: ancho }}>
-          {horas.map((h) => (
-            <span key={h} style={{ width: PX }}>
-              {String(h).padStart(2, '0')}:00
-            </span>
-          ))}
+    <div className="oc-gantt" role="group" aria-label="Gantt del día">
+      <div className="oc-gantt-sc" ref={refScroll}>
+        <div className="oc-gantt-in" style={{ width: ancho + ENCABEZADO_G, ['--px' as string]: `${PX}px` }}>
+          <div className="oc-g-regla">
+            <span className="rl" style={{ width: ENCABEZADO_G, padding: '7px 0 0 10px' }}>Vuelo</span>
+            {horas.map((h) => (
+              <span key={h} className="h" style={{ width: PX }}>
+                {String(h).padStart(2, '0')}:00
+              </span>
+            ))}
+          </div>
+          {a >= ini && a <= fin ? <div className="oc-g-ahora" style={{ left: ENCABEZADO_G + x(a) }} /> : null}
+          {filas.map(({ v, ini: i0, fin: f0, tarde, riesgo, hecho }) => {
+            const t: Tono = tarde ? 'bad' : tono(TONO_VUELO, v.estado);
+            return (
+              <div className="oc-g-fila" key={v.id}>
+                <button type="button" className="oc-g-lab" style={{ width: ENCABEZADO_G }} onClick={() => onAbrir(v)}>
+                  <b>{v.numero}</b>
+                  <small>{v.aerolinea.replace(/ Cargo| Airlines/g, '')} · {v.origen}</small>
+                </button>
+                <div className="oc-g-pista" style={{ width: ancho }}>
+                  <button
+                    type="button"
+                    className={`oc-g-barra ${t} ${riesgo ? 'riesgo' : ''} ${hecho ? 'hecho' : ''}`}
+                    style={{ left: x(i0), width: Math.max(122, x(f0) - x(i0)) }}
+                    onClick={() => onAbrir(v)}
+                    title={`${v.numero} · ${v.estado}${tarde ? ' · atrasado' : ''}`}
+                    aria-label={`${v.numero}, ${v.estado}${tarde ? ', atrasado' : ''}, ${hhmm(v.horaActual)}`}
+                  >
+                    {ES_VIVO.has(v.estado) ? <span className="oc-punto vivo" aria-hidden="true" /> : null}
+                    {hhmm(v.llegadaHora || v.horaActual)} · {tarde && v.estado !== 'Aterrizó' ? 'Atrasado' : v.estado}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div style={{ position: 'relative', height: carriles * 50, width: ancho }}>
-          {datos.a >= datos.ini && datos.a <= datos.fin ? <div className="oc-ahora" style={{ left: x(datos.a) }} /> : null}
-          {Array.from({ length: carriles }, (_, i) => (
-            <div key={i} className="carril" style={{ position: 'absolute', top: i * 50, left: 0, right: 0 }} />
-          ))}
-          {puestos.map(({ v, ini, c }) => (
-            <button key={v.id} type="button" className={`oc-pill ${tono(TONO_VUELO, v.estado)}`} style={{ left: ini, top: c * 50 + 7 }} onClick={() => onAbrir(v)} title={`${v.numero} · ${v.estado}`}>
-              {ES_VIVO.has(v.estado) ? <span className="oc-punto vivo" aria-hidden="true" /> : null}
-              {hhmm(v.horaActual)} {v.numero}
-            </button>
-          ))}
-        </div>
+      </div>
+      <div className="oc-g-leyenda" aria-hidden="true">
+        {([['#efeadb', '#b9b098', 'Programado'], ['#dce7fa', '#6d8fd0', 'En camino'], ['#ebe3f6', '#8d6fc2', 'Aterrizó'], ['#dff0e2', '#4f9a62', 'En atención / recibido'], ['#fde4e0', '#d9534a', 'Atrasado o sin tomar']] as const).map(([bg, bd, t]) => (
+          <span key={t}><i style={{ background: bg, borderColor: bd }} />{t}</span>
+        ))}
       </div>
     </div>
   );
@@ -161,7 +193,7 @@ export function TarjetaEmbarque({ v, acciones }: { v: Vuelo; acciones?: React.Re
           </div>
           <div>
             <small>Estimada</small>
-            <b style={cambio ? { color: 'var(--senal)' } : undefined}>{hhmm(v.horaActual) || '—'}</b>
+            <b style={cambio ? { color: 'var(--aviso)' } : undefined}>{hhmm(v.horaActual) || '—'}</b>
           </div>
           {v.horaReal ? (
             <div>

@@ -2,7 +2,8 @@ import { num } from './formato';
 
 /** Gráficos propios en HTML/SVG, sin dependencias. */
 
-export const PALETA = ['#12365f', '#e8590c', '#2f6b3e', '#8a4f9e', '#a3281f', '#1d7f86', '#7a7060', '#b08a00'];
+export const ACENTO = '#17428a';
+export const PALETA = [ACENTO, '#5b7fc0', '#2f6b3e', '#8a8068', '#a3281f', '#1d7f86', '#7a7060', '#b08a00'];
 
 export interface Dato {
   etiqueta: string;
@@ -21,7 +22,7 @@ export function Barras({ datos, formato = (n: number) => num(n), max }: { datos:
             {d.etiqueta || '—'}
           </span>
           <div className="oc-barra">
-            <i style={{ width: `${Math.max(2, (d.valor / tope) * 100)}%`, background: d.color ?? PALETA[i % PALETA.length] }} />
+            <i style={{ width: `${Math.max(2, (d.valor / tope) * 100)}%`, background: d.color ?? ACENTO }} />
           </div>
           <span className="v">{formato(d.valor)}</span>
         </div>
@@ -38,13 +39,13 @@ export function Columnas({ datos, formato = (n: number) => num(n) }: { datos: Da
   const w = ancho / Math.max(1, datos.length);
   return (
     <div style={{ overflowX: 'auto' }}>
-      <svg width={ancho} height={alto + 34} viewBox={`0 0 ${ancho} ${alto + 34}`} role="img" aria-label="Gráfico de columnas">
+      <svg width="100%" style={{ minWidth: Math.min(ancho, 320), maxHeight: 260 }} viewBox={`0 0 ${ancho} ${alto + 34}`} role="img" aria-label="Gráfico de columnas">
         <line x1="0" x2={ancho} y1={alto} y2={alto} stroke="#d6cdb8" />
         {datos.map((d, i) => {
           const h = (d.valor / tope) * (alto - 18);
           return (
             <g key={d.etiqueta}>
-              <rect x={i * w + w * 0.18} y={alto - h} width={w * 0.64} height={h} rx="7" fill={d.color ?? '#12365f'}>
+              <rect x={i * w + w * 0.18} y={alto - h} width={w * 0.64} height={h} rx="7" fill={d.color ?? ACENTO}>
                 <title>{`${d.etiqueta}: ${formato(d.valor)}`}</title>
               </rect>
               <text x={i * w + w / 2} y={alto - h - 4} textAnchor="middle" fontSize="10" fill="#4a4338">
@@ -93,7 +94,7 @@ export function Dona({ datos, centro }: { datos: Dato[]; centro?: string }) {
             acum += frac;
             return el;
           })}
-        <text x="70" y="76" textAnchor="middle" fontSize="22" fontFamily="Georgia,serif" fontWeight="700" fill="#1f1b16">
+        <text x="70" y="76" textAnchor="middle" fontSize="22" fontFamily="inherit" fontWeight="700" fill="#1f1b16">
           {centro ?? num(total)}
         </text>
       </svg>
@@ -117,8 +118,8 @@ export function Sparkline({ valores, ancho = 84, alto = 30 }: { valores: number[
   const pts = valores.map((v, i) => `${(i / (valores.length - 1)) * (ancho - 4) + 2},${alto - 4 - ((v - min) / r) * (alto - 8)}`);
   return (
     <svg width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} aria-hidden="true">
-      <polyline points={pts.join(' ')} fill="none" stroke="#e8590c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={pts[pts.length - 1]?.split(',')[0]} cy={pts[pts.length - 1]?.split(',')[1]} r="3" fill="#e8590c" />
+      <polyline points={pts.join(' ')} fill="none" stroke={ACENTO} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={pts[pts.length - 1]?.split(',')[0]} cy={pts[pts.length - 1]?.split(',')[1]} r="3" fill={ACENTO} />
     </svg>
   );
 }
@@ -132,18 +133,18 @@ export function Area({ datos, formato = (n: number) => num(n), alto = 170 }: { d
   const linea = datos.map((d, i) => `${i ? 'L' : 'M'}${x(i)},${y(d.valor)}`).join(' ');
   return (
     <div style={{ overflowX: 'auto' }}>
-      <svg width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} role="img" aria-label="Gráfico de área">
+      <svg width="100%" style={{ minWidth: Math.min(ancho, 320), maxHeight: 260 }} viewBox={`0 0 ${ancho} ${alto}`} role="img" aria-label="Gráfico de área">
         <defs>
           <linearGradient id="oc-area" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="#12365f" stopOpacity=".35" />
-            <stop offset="1" stopColor="#12365f" stopOpacity="0" />
+            <stop offset="0" stopColor="#17428a" stopOpacity=".35" />
+            <stop offset="1" stopColor="#17428a" stopOpacity="0" />
           </linearGradient>
         </defs>
         {datos.length > 1 ? <path d={`${linea} L${x(datos.length - 1)},${alto - 28} L${x(0)},${alto - 28} Z`} fill="url(#oc-area)" /> : null}
-        <path d={linea} fill="none" stroke="#12365f" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={linea} fill="none" stroke="#17428a" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
         {datos.map((d, i) => (
           <g key={d.etiqueta}>
-            <circle cx={x(i)} cy={y(d.valor)} r="4.5" fill="#fff" stroke="#12365f" strokeWidth="2.5">
+            <circle cx={x(i)} cy={y(d.valor)} r="4.5" fill="#fff" stroke="#17428a" strokeWidth="2.5">
               <title>{`${d.etiqueta}: ${formato(d.valor)}`}</title>
             </circle>
             <text x={x(i)} y={alto - 8} textAnchor="middle" fontSize="11" fill="#6f6757">

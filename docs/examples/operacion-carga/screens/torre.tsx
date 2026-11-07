@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
-import { MapContainer, TileLayer, Circle, Polygon, CircleMarker, Tooltip } from 'react-leaflet';
+import { useEffect, useMemo, useState } from 'react';
+import { MapContainer, TileLayer, Circle, Polygon, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useLocations, useQuery, cortex } from '@cortex/app-sdk';
 import { Plane, Users, AlertTriangle, Clock, MapPin, RefreshCw } from 'lucide-react';
 import { hoyBogota, minutosHasta, minutosDesde, textoMinutos, texto } from '../lib/tiempo';
+import { Actualizado } from '../lib/ui';
+import { marcarCarga } from '../lib/vivo';
 import '../lib/tema.css';
 import '../lib/torre.css';
 
@@ -18,6 +20,18 @@ const EL_DORADO: [number, number] = [4.7016, -74.1469];
 const CADA = 30_000;
 
 type Geo = { id: string; name: string; lat: number; lng: number; radiusM: number; polygon?: [number, number][] };
+
+/** Encuadra el mapa en las zonas y las personas (la primera vez que llegan). */
+function Encuadrar({ puntos }: { puntos: [number, number][] }) {
+  const map = useMap();
+  const clave = puntos.map((p) => p.join(',')).join('|');
+  useEffect(() => {
+    if (puntos.length > 1) map.fitBounds(puntos, { padding: [40, 40], maxZoom: 16 });
+    else if (puntos.length === 1) map.setView(puntos[0] as [number, number], 15);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: se encuadra solo cuando cambian los puntos.
+  }, [clave]);
+  return null;
+}
 
 export default function Torre() {
   const hoy = hoyBogota();
@@ -53,10 +67,16 @@ export default function Torre() {
       .sort((a, b) => (a.min ?? 1e9) - (b.min ?? 1e9));
   }, [vuelos.rows]);
 
-  const criticos = eventos.rows.filter((r) => texto(r.values.critico));
+  const criticos = eventos.rows.filter((r) => {
+    const c = texto(r.values.critico);
+    return c !== '' && c !== 'No' && c !== 'false';
+  });
   const fueraZona = enAtencion.rows.filter((r) => texto(r.values.fuera_de_zona) === 'Sí');
   const cargando = vuelos.loading && !vuelos.rows.length;
 
+  useEffect(() => {
+    if (!vuelos.loading && !vuelos.error) marcarCarga();
+  }, [vuelos.rows, vuelos.loading, vuelos.error]);
   const refrescar = () => {
     void vuelos.refresh();
     void enAtencion.refresh();
@@ -72,9 +92,12 @@ export default function Torre() {
           <h1>Torre de control</h1>
           <p>El Dorado · {hoy}</p>
         </div>
-        <button className="btn" onClick={refrescar} aria-label="Actualizar">
-          <RefreshCw size={16} /> Actualizar
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Actualizado />
+          <button className="btn" onClick={refrescar} aria-label="Actualizar">
+            <RefreshCw size={16} /> Actualizar
+          </button>
+        </div>
       </header>
 
       <section className="kpis">
@@ -105,13 +128,14 @@ export default function Torre() {
               url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
               maxNativeZoom={16}
             />
+            <Encuadrar puntos={[...(zonas ?? []).map((z): [number, number] => [z.lat, z.lng]), ...gente.locations.map((p): [number, number] => [p.lat, p.lng])]} />
             {(zonas ?? []).map((z) =>
               z.polygon?.length ? (
-                <Polygon key={z.id} positions={z.polygon} pathOptions={{ color: '#12365f', weight: 2, fillOpacity: 0.08 }}>
+                <Polygon key={z.id} positions={z.polygon} pathOptions={{ color: '#17428a', weight: 2, fillOpacity: 0.08 }}>
                   <Tooltip>{z.name}</Tooltip>
                 </Polygon>
               ) : (
-                <Circle key={z.id} center={[z.lat, z.lng]} radius={z.radiusM} pathOptions={{ color: '#12365f', weight: 2, fillOpacity: 0.08 }}>
+                <Circle key={z.id} center={[z.lat, z.lng]} radius={z.radiusM} pathOptions={{ color: '#17428a', weight: 2, fillOpacity: 0.08 }}>
                   <Tooltip>{z.name}</Tooltip>
                 </Circle>
               ),
@@ -196,7 +220,7 @@ export default function Torre() {
                   </div>
                   <div className="tags">
                     {texto(v.fuera_de_zona) === 'Sí' && <span className="tag red">Fuera de zona</span>}
-                    {texto(v.fuera_de_margen) && <span className="tag amber">{texto(v.fuera_de_margen)}</span>}
+                    {texto(v.fuera_de_margen) && texto(v.fuera_de_margen) !== 'No' && <span className="tag amber">{texto(v.fuera_de_margen) === 'Sí' ? 'Fuera de margen' : texto(v.fuera_de_margen)}</span>}
                     {texto(v.nota_correccion) && <span className="tag amber">Corrección pedida</span>}
                   </div>
                 </li>

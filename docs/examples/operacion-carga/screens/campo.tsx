@@ -12,7 +12,7 @@ import { Medidor } from '../lib/Piezas';
 import { TIPOS_EVENTO, TONO_ATENCION, TONO_VUELO, tono } from '../lib/estados';
 import { N, cronometro, dinero, hhmm, kg, num } from '../lib/formato';
 import { horaAhora, hoyBogota, minutosHasta, textoMinutos } from '../lib/tiempo';
-import { Adjuntos, Boton, Campo, Chip, ES_VIVO, Cargando, ErrorCaja, Hoja, Numero, Pantalla, SelectorArchivo, Tarjeta, avisar, confirmar, mensajeDe, subirArchivo, useOperacion } from '../lib/ui';
+import { Adjuntos, Boton, Campo, Chip, ES_VIVO, Cargando, ErrorCaja, Hoja, Numero, Pantalla, Paso, SelectorArchivo, Tarjeta, avisar, confirmar, mensajeDe, subirArchivo, useOperacion } from '../lib/ui';
 
 /**
  * EN CAMPO — pantalla del operario, hecha para el teléfono y para leerse al sol.
@@ -268,6 +268,8 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
   const kReal = kilos.trim() ? N(kilos) : null;
   const pReal = pallets.trim() ? N(pallets) : null;
   const sinFoto = (eq.data ?? []).filter((e) => !e.foto.length);
+  const pzReal = piezas.trim() ? N(piezas) : null;
+  const cuadra = pReal !== null && pReal === esp.pallets && (!esp.piezas || pzReal === esp.piezas) && (kReal === null || Math.abs(kReal - esp.kilos) <= (esp.kilos * esp.pct) / 100);
 
   const marcar = <T,>(set: (v: T) => void) => (v: T) => {
     set(v);
@@ -291,6 +293,14 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
     if (ok) setSucio(false);
     return ok;
   };
+
+  // Guarda solo, sin avisos, un momento después del último cambio (también al usar − / +).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: depende de los valores que se guardan.
+  useEffect(() => {
+    if (!sucio) return;
+    const t = setTimeout(() => void guardar(true), 1200);
+    return () => clearTimeout(t);
+  }, [sucio, kilos, pallets, piezas, horaFin, novedades]);
 
   const cerrar = async () => {
     if (!pallets.trim()) return avisar('Anota los pallets recibidos para cerrar.');
@@ -345,16 +355,21 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
       <div className="oc-asistente" style={{ marginTop: 22 }}><span className="n">1</span><h2>Lo que recibiste</h2></div>
       <Tarjeta>
         <div className="oc-form">
-          <div className="oc-fila3">
-            <Campo etiqueta="Pallets *"><Numero valor={pallets} onChange={marcar(setPallets)} onBlur={() => sucio && void guardar(true)} placeholder="0" /></Campo>
-            <Campo etiqueta="Kilos"><Numero valor={kilos} onChange={marcar(setKilos)} onBlur={() => sucio && void guardar(true)} placeholder="0" /></Campo>
-            <Campo etiqueta="Piezas"><Numero valor={piezas} onChange={marcar(setPiezas)} onBlur={() => sucio && void guardar(true)} placeholder="0" /></Campo>
+          <div className="oc-conteo" aria-live="polite">
+            <Celda etiqueta="Pallets" esperado={esp.pallets} real={pReal} margen={esp.mp} />
+            <Celda etiqueta="Piezas" esperado={esp.piezas} real={piezas.trim() ? N(piezas) : null} margen={0} />
+            <Celda etiqueta="Kilos" esperado={esp.kilos} real={kReal} margen={(esp.kilos * esp.pct) / 100} formato={(n) => num(n)} />
           </div>
-          <Medidor titulo="Kilos" esperado={esp.kilos} real={kReal} margen={(esp.kilos * esp.pct) / 100} formato={(n) => kg(n)} />
-          <Medidor titulo="Pallets" esperado={esp.pallets} real={pReal} margen={esp.mp} formato={(n) => num(n)} />
-          {esp.piezas ? (
-            <p className="oc-sub">Piezas esperadas: {num(esp.piezas)}{piezas.trim() ? ` · diferencia ${N(piezas) - esp.piezas > 0 ? '+' : ''}${num(N(piezas) - esp.piezas)}` : ''}</p>
+          {cuadra ? (
+            <div className="oc-celebra oc-card tight" role="status" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="oc-celebra-ico"><CheckCircle2 size={22} /></span>
+              <span style={{ fontWeight: 700, fontSize: 19 }}>¡Cuadró! Sin diferencias con lo esperado.</span>
+            </div>
           ) : null}
+          <Paso etiqueta="Pallets *" valor={pallets} onChange={marcar(setPallets)} onBlur={() => void guardar(true)} esperado={esp.pallets ? num(esp.pallets) : undefined} />
+          <Paso etiqueta="Piezas" valor={piezas} onChange={marcar(setPiezas)} onBlur={() => void guardar(true)} esperado={esp.piezas ? num(esp.piezas) : undefined} />
+          <Paso etiqueta="Kilos" valor={kilos} onChange={marcar(setKilos)} onBlur={() => void guardar(true)} paso={50} unidad="kg" esperado={esp.kilos ? num(esp.kilos) : undefined} />
+          <Medidor titulo="Kilos frente al margen" esperado={esp.kilos} real={kReal} margen={(esp.kilos * esp.pct) / 100} formato={(n) => kg(n)} />
           <div className="oc-fila2" style={{ alignItems: 'end' }}>
             <Campo etiqueta="Hora de fin">
               <input type="time" value={horaFin} onChange={(e) => marcar(setHoraFin)(e.target.value)} onBlur={() => sucio && void guardar(true)} />
@@ -409,14 +424,14 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
       {guardado.error ? <div style={{ marginTop: 14 }}><ErrorCaja mensaje={guardado.error} /></div> : null}
       {op.error ? <div style={{ marginTop: 14 }}><ErrorCaja mensaje={op.error} /></div> : null}
 
-      <div style={{ display: 'grid', gap: 10, marginTop: 22 }}>
-        <Boton grande onClick={() => void guardar()} disabled={guardado.ocupado || op.ocupado}>
-          {guardado.ocupado ? 'Guardando…' : sucio ? 'Guardar cambios' : 'Guardado'}
-        </Boton>
-        <Boton grande tono="ok" disabled={op.ocupado || guardado.ocupado} onClick={() => void cerrar()} icono={<CheckCircle2 size={26} />}>
-          {op.ocupado ? 'Cerrando…' : 'Cerrar atención'}
-        </Boton>
-        {sinFoto.length ? <p className="oc-sub" style={{ color: 'var(--malo)' }}>Falta la foto de {sinFoto.length} equipo(s).</p> : null}
+      <div className="oc-accion-fija">
+        {sinFoto.length ? <p className="oc-sub" style={{ color: 'var(--malo)', fontWeight: 700, marginBottom: 6 }}>Falta la foto de {sinFoto.length} equipo(s).</p> : null}
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: sucio ? '1fr 2fr' : '1fr' }}>
+          {sucio ? <Boton onClick={() => void guardar()} disabled={guardado.ocupado || op.ocupado}>{guardado.ocupado ? 'Guardando…' : 'Guardar'}</Boton> : null}
+          <Boton grande tono="primario" disabled={op.ocupado || guardado.ocupado} onClick={() => void cerrar()} icono={<CheckCircle2 size={26} />}>
+            {op.ocupado ? 'Cerrando…' : 'Cerrar atención'}
+          </Boton>
+        </div>
       </div>
 
       {evento ? (
@@ -885,5 +900,20 @@ function FinTarea({ t, esq, sinFoto, onCerrar, onListo }: { t: Tarea; esq: Esque
         }}>{op.ocupado ? 'Terminando…' : 'Terminar tarea'}</Boton>
       </div>
     </Hoja>
+  );
+}
+
+/** Una celda del conteo: esperado contra real, con la diferencia dicha en palabras y color. */
+function Celda({ etiqueta, esperado, real, margen, formato = (n: number) => num(n) }: { etiqueta: string; esperado: number; real: number | null; margen: number; formato?: (n: number) => string }) {
+  if (!esperado && real === null) return <div className="c vacio"><small>{etiqueta}</small><b>—</b><span>Sin dato</span></div>;
+  const dif = real === null ? null : real - esperado;
+  const ok = dif !== null && Math.abs(dif) <= margen + 1e-9;
+  const cls = dif === null ? 'vacio' : ok ? 'ok' : 'bad';
+  return (
+    <div className={`c ${cls}`}>
+      <small>{etiqueta}</small>
+      <b>{real === null ? formato(esperado) : formato(real)}</b>
+      <span>{dif === null ? 'esperado' : dif === 0 ? '✓ cuadra' : `${dif > 0 ? 'sobran' : 'faltan'} ${formato(Math.abs(dif))}${ok ? ' (en margen)' : ''}`}</span>
+    </div>
   );
 }

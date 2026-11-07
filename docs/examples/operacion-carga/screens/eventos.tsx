@@ -8,6 +8,7 @@ import { TIPOS_EVENTO, TONO_EVENTO, tono } from '../lib/estados';
 import { N, cop, fechaCorta, hhmm } from '../lib/formato';
 import { parametro } from '../lib/ruta';
 import { Adjuntos, Boton, Campo, Chip, ES_VIVO, ErrorCaja, Estado, Hoja, Numero, Pantalla, SelectorArchivo, Segmentos, subirArchivo, useOperacion } from '../lib/ui';
+import { useGuardado } from '../lib/guardado';
 
 /**
  * EVENTOS — lo que pasa en plataforma, con o sin vuelo: registrar (con voz y fotos)
@@ -20,7 +21,7 @@ export default function Eventos() {
   const { rol } = useRol();
   const acc = useAcciones('eventos_operacion');
   const { data, loading, error, refresh } = useCarga(async () => (await traerTodo('eventos_operacion', { order: { field: 'created_at', dir: 'desc' } }, 300)).map(aEvento), [], 30_000);
-  const [filtro, setFiltro] = useState<Filtro>('abiertos');
+  const [filtro, setFiltro] = useGuardado<Filtro>('eventos-filtro', 'abiertos');
   const [q, setQ] = useState('');
   const [nuevo, setNuevo] = useState(false);
   const [abierto, setAbierto] = useState<Evento | null>(null);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import { Check, Moon, Sun } from 'lucide-react';
 import { Barras } from './graficos';
 import { cop, minTxt, num } from './formato';
@@ -7,6 +7,9 @@ import type { Persona, Tarea } from './tareas';
 import { Metrica, Segmentos, Tabla, Tarjeta } from './ui';
 
 /** Piezas de las tareas compartidas por asignar, costos e indicadores. */
+
+/** Carga de cada persona (ref → cosas abiertas): la pone la pantalla Asignar y el selector la muestra. */
+export const CargaCtx = createContext<Record<string, number>>({});
 
 /**
  * Chips de operarios: los de turno abierto primero y marcados. `valor` son refs.
@@ -23,6 +26,7 @@ export function SelectorOperarios({
   onChange: (refs: string[]) => void;
   nombresPrevios?: Record<string, string>;
 }) {
+  const carga = useContext(CargaCtx);
   const conocidos = new Set(personas.map((p) => p.ref));
   const extra = valor.filter((r) => !conocidos.has(r)).map((r) => ({ ref: r, name: nombresPrevios[r] ?? r, roleKey: '', roleName: '', onShift: false }));
   const todos = [...personas, ...extra];
@@ -39,6 +43,10 @@ export function SelectorOperarios({
               <span className="tx">
                 <b>{p.name}</b>
                 <small>{p.onShift ? <><Sun size={11} /> En turno</> : <><Moon size={11} /> Sin turno</>}</small>
+                <small className={`carga ${(carga[p.ref] ?? 0) >= 3 ? 'alta' : (carga[p.ref] ?? 0) >= 1 ? 'media' : 'libre'}`}>
+                  <span className="barrita" aria-hidden="true"><i style={{ width: `${Math.min(100, (carga[p.ref] ?? 0) * 33)}%` }} /></span>
+                  {(carga[p.ref] ?? 0) === 0 ? 'Libre' : `${carga[p.ref]} ${(carga[p.ref] ?? 0) === 1 ? 'pendiente' : 'pendientes'}`}
+                </small>
               </span>
             </button>
           );

@@ -64,6 +64,7 @@ import {
   useOperacion,
 } from '../lib/ui';
 import { Medidor } from '../lib/Piezas';
+import { LineaVuelo } from '../lib/LineaVuelo';
 
 /**
  * VUELO — detalle de un vuelo: tarjeta de embarque, esperado vs recibido, guías,
@@ -370,7 +371,7 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
                   <dt>Kilos</dt><dd>{a.kilosRec === null ? 'sin registrar' : `${kg(a.kilosRec)} (dif. ${a.difKilos === null ? '—' : kg(a.difKilos)})`}</dd>
                   <dt>Pallets</dt><dd>{a.palletsRec === null ? 'sin registrar' : `${num(a.palletsRec)} (dif. ${a.difPallets ?? '—'})`}</dd>
                   <dt>Margen</dt><dd>{a.fueraDeMargen ? <Chip tono="bad">Fuera de margen</Chip> : <Chip tono="good">Dentro</Chip>} {a.fueraDeZona ? <Chip tono="bad">Fuera de zona</Chip> : null}</dd>
-                  <dt>Costo de equipos</dt><dd>{cop(a.costoEquipos)}</dd>
+                  <dt>Costo de equipos</dt><dd>{cop(a.costoEquipos || eq.reduce((t, e) => t + (e.costoCop || e.porPagar), 0))}</dd>
                 </dl>
                 {a.novedades ? <p style={{ margin: '10px 0' }}>{a.novedades}</p> : null}
                 {a.notaCorreccion ? <div className="oc-aviso" style={{ margin: '10px 0' }}>Corrección pedida: {a.notaCorreccion}</div> : null}
@@ -788,27 +789,3 @@ function FormGuia({
     </Hoja>
   );
 }
-
-function LineaVuelo({ v, atenciones, eventos }: { v: Vuelo; atenciones: Atencion[]; eventos: Evento[] }) {
-  const pasos: { h: string; texto: string; t: Tono }[] = [];
-  if (v.llegadaHora) pasos.push({ h: hhmm(v.llegadaHora), texto: 'Aterrizó', t: 'accent' });
-  if (v.tomadoHora) pasos.push({ h: hhmm(v.tomadoHora), texto: `Tomado por ${v.atendidoPor || 'un operario'}${v.fueraZonaToma === 'Sí' ? ' (fuera de zona)' : ''}`, t: v.fueraZonaToma === 'Sí' ? 'bad' : 'info' });
-  for (const a of atenciones) {
-    if (a.horaFin) pasos.push({ h: hhmm(a.horaFin), texto: `Fin de la atención de ${a.operario}`, t: 'good' });
-  }
-  for (const e of eventos) if (e.hora) pasos.push({ h: hhmm(e.hora), texto: `${e.tipo}${e.critico ? ' (crítico)' : ''}`, t: e.critico ? 'bad' : 'warn' });
-  if (v.cierreHora) pasos.push({ h: hhmm(v.cierreHora), texto: 'Recibido', t: 'good' });
-  pasos.sort((a, b) => a.h.localeCompare(b.h));
-  if (!pasos.length) return <p className="oc-sub">Aún no hay movimientos. Se irán llenando cuando el vuelo aterrice y lo tomen.</p>;
-  return (
-    <ol className="oc-linea">
-      {pasos.map((p, i) => (
-        <li key={`${p.h}-${i}`} className={p.t}>
-          <span className="oc-hora">{p.h}</span>
-          {p.texto}
-        </li>
-      ))}
-    </ol>
-  );
-}
-

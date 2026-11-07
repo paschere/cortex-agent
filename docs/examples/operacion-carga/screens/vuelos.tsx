@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
-import { Clock, FileScan, Pencil, Plane, Plus, Search } from 'lucide-react';
-import { cargarVuelos, useAcciones, useCarga, useRol } from '../lib/datos';
+import { ArrowRight, Clock, FileScan, Pencil, Plane, Plus, Search, X } from 'lucide-react';
+import { aAtencion, aEvento, cargarVuelos, porRelacion, useAcciones, useCarga, useRol } from '../lib/datos';
 import type { Vuelo } from '../lib/datos';
+import { Etapas, TarjetaEmbarque } from '../lib/Piezas';
+import { LineaVuelo } from '../lib/LineaVuelo';
 import { TONO_VUELO, tono } from '../lib/estados';
 import { N, fechaCorta, hhmm, kg, num } from '../lib/formato';
-import { horaAhora, hoyBogota, sumarDias } from '../lib/tiempo';
+import { horaAhora, hoyBogota, minutosHasta, sumarDias } from '../lib/tiempo';
 import { puedeEditarDoc, useEsquema } from '../lib/documental';
 import { NuevoDesdeManifiesto } from '../lib/ManifiestoVuelo';
 import { aerolineaDe, aprenderAerolineas, codigoAerolinea } from '../lib/aerolineas';
-import { Boton, Campo, Chip, ErrorCaja, Estado, Hoja, Numero, Pantalla, Segmentos, confirmar, useOperacion } from '../lib/ui';
+import { Boton, Campo, Chip, ES_VIVO, ErrorCaja, Estado, Hoja, Numero, Pantalla, Segmentos, confirmar, useOperacion } from '../lib/ui';
+import { useGuardado } from '../lib/guardado';
 
 /**
  * VUELOS — el documental crea y edita lo esperado de cada vuelo y marca
@@ -24,12 +27,15 @@ export default function Vuelos() {
   const hoy = hoyBogota();
   const { data, loading, error, refresh } = useCarga(() => cargarVuelos(500), [], 30_000);
   const acc = useAcciones('vuelos');
-  const [filtro, setFiltro] = useState<Filtro>('hoy');
+  const [filtro, setFiltro] = useGuardado<Filtro>('vuelos-filtro', 'hoy');
   const [fecha, setFecha] = useState(hoy);
   const [q, setQ] = useState('');
   const [editando, setEditando] = useState<Vuelo | 'nuevo' | null>(null);
   const [demora, setDemora] = useState<Vuelo | null>(null);
   const [desdeManifiesto, setDesdeManifiesto] = useState(false);
+  const [selId, setSelId] = useState<string | null>(null);
+  const ancha = useAncha();
+  const sel = (data ?? []).find((v) => v.id === selId) ?? null;
   const esq = useEsquema();
   const { rol } = useRol();
   const op = useOperacion();
@@ -114,58 +120,43 @@ export default function Vuelos() {
         }
         reintentar={() => void refresh()}
       >
-        <ul className="oc-lista" style={{ marginTop: op.error ? 14 : 0 }}>
-          {lista.map((v) => {
-            const puedeCamino = acc.tiene('en_camino') && ['Programado', 'Demorado'].includes(v.estado);
-            const puedeDemora = acc.tiene('demorado') && ['Programado', 'En camino'].includes(v.estado);
-            const puedeLlego = acc.tiene('llego') && ['Programado', 'En camino', 'Demorado'].includes(v.estado);
-            return (
-              <li key={v.id} className="oc-item">
-                <div className="oc-item-top">
-                  <span>
-                    <span className="oc-hora">{hhmm(v.horaActual) || '—'}</span>
-                    <strong>{v.numero}</strong>
-                    <span className="oc-sub"> · {[v.aerolinea, v.origen].filter(Boolean).join(' · ')}</span>
-                  </span>
-                  <Chip tono={tono(TONO_VUELO, v.estado)}>{v.estado}</Chip>
-                </div>
-                <div className="oc-meta">
-                  <span>{fechaCorta(v.fecha)}</span>
-                  {v.hora && v.horaActual && hhmm(v.hora) !== hhmm(v.horaActual) ? <span>Programado {hhmm(v.hora)}</span> : null}
-                  <span>{v.posicion ? `Posición ${v.posicion}` : 'Sin posición'}</span>
-                  <span>{kg(v.kilosEsp)}</span>
-                  <span>{num(v.palletsEsp)} pallets</span>
-                  <span>{num(v.piezasEsp)} piezas</span>
-                  {v.atendidoPor ? <span>Atiende {v.atendidoPor}</span> : null}
-                </div>
-                <div className="oc-btns">
-                  <Boton chico onClick={() => irA('vuelo', { vuelo: v.id })} icono={<Plane size={15} />}>
-                    Abrir
-                  </Boton>
-                  <Boton chico onClick={() => setEditando(v)} icono={<Pencil size={15} />}>
-                    Editar
-                  </Boton>
-                  {puedeCamino ? (
-                    <Boton chico disabled={op.ocupado} onClick={() => void accion(v, 'en_camino', 'En camino')}>
-                      En camino
-                    </Boton>
-                  ) : null}
-                  {puedeDemora ? (
-                    <Boton chico tono="aviso" disabled={op.ocupado} onClick={() => setDemora(v)} icono={<Clock size={15} />}>
-                      Demorado
-                    </Boton>
-                  ) : null}
-                  {puedeLlego ? (
-                    <Boton chico tono="ok" disabled={op.ocupado} onClick={() => void accion(v, 'llego', 'Llegó', `¿Confirmas que ${v.numero} aterrizó? Se avisa a los operarios de turno.`)}>
-                      Llegó
-                    </Boton>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <div className={`oc-maestro ${sel && ancha ? 'con-panel' : ''}`} style={{ marginTop: op.error ? 14 : 0 }}>
+          <ul className="oc-lista">
+            {lista.map((v) => {
+              const tarde = ['Programado', 'En camino', 'Demorado'].includes(v.estado) && (v.estado === 'Demorado' || (minutosHasta(v.fecha, v.horaActual) ?? 0) < -15);
+              const cls = v.estado === 'Aterrizó' || tarde ? 'bad' : ['Cerrado', 'Recibido'].includes(v.estado) ? 'normal' : '';
+              return (
+                <li key={v.id}>
+                  <button type="button" className={`oc-fila ${cls} ${sel?.id === v.id ? 'sel' : ''}`} onClick={() => setSelId(v.id)} aria-pressed={sel?.id === v.id}>
+                    <span className="h">{hhmm(v.horaActual) || '—'}</span>
+                    <span className="t">
+                      <b>{v.numero}</b>
+                      <small>
+                        {[v.aerolinea, v.origen, fechaCorta(v.fecha), v.posicion ? `Posición ${v.posicion}` : 'Sin posición', kg(v.kilosEsp), `${num(v.palletsEsp)} pallets`, `${num(v.piezasEsp)} piezas`, v.atendidoPor ? `Atiende ${v.atendidoPor}` : ''].filter(Boolean).join(' · ')}
+                      </small>
+                    </span>
+                    <span className="d">
+                      {v.hora && v.horaActual && hhmm(v.hora) !== hhmm(v.horaActual) ? <Chip tono="warn">Era {hhmm(v.hora)}</Chip> : null}
+                      <Chip tono={tono(TONO_VUELO, v.estado)} vivo={ES_VIVO.has(v.estado)}>{v.estado}</Chip>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {sel && ancha ? (
+            <aside className="oc-panel" aria-label={`Vuelo ${sel.numero}`}>
+              <PanelVuelo v={sel} acc={acc} ocupado={op.ocupado} onCerrar={() => setSelId(null)} onEditar={() => setEditando(sel)} onDemora={() => setDemora(sel)} onAccion={(c, t, m) => void accion(sel, c, t, m)} />
+            </aside>
+          ) : null}
+        </div>
       </Estado>
+
+      {sel && !ancha ? (
+        <Hoja titulo={sel.numero} onCerrar={() => setSelId(null)}>
+          <PanelVuelo v={sel} acc={acc} ocupado={op.ocupado} onEditar={() => { setSelId(null); setEditando(sel); }} onDemora={() => { setSelId(null); setDemora(sel); }} onAccion={(c, t, m) => { setSelId(null); void accion(sel, c, t, m); }} />
+        </Hoja>
+      ) : null}
 
       {editando ? (
         <FormVuelo
@@ -206,6 +197,75 @@ export default function Vuelos() {
         </Hoja>
       ) : null}
     </Pantalla>
+  );
+}
+
+/** ¿La pantalla es ancha? (panel lateral en escritorio, hoja en móvil). */
+function useAncha(): boolean {
+  const [a, setA] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 1100);
+  useEffect(() => {
+    const f = () => setA(window.innerWidth >= 1100);
+    window.addEventListener('resize', f);
+    return () => window.removeEventListener('resize', f);
+  }, []);
+  return a;
+}
+
+/** Vista rápida del vuelo: tarjeta de embarque, etapas, línea de tiempo y acciones de estado. */
+function PanelVuelo({
+  v,
+  acc,
+  ocupado,
+  onCerrar,
+  onEditar,
+  onDemora,
+  onAccion,
+}: {
+  v: Vuelo;
+  acc: { tiene: (c: string) => boolean };
+  ocupado: boolean;
+  onCerrar?: () => void;
+  onEditar: () => void;
+  onDemora: () => void;
+  onAccion: (clave: string, texto: string, confirma?: string) => void;
+}) {
+  const det = useCarga(async () => {
+    const [as, ev] = await Promise.all([porRelacion('atenciones', 'vuelo', v.id).catch(() => []), porRelacion('eventos_operacion', 'vuelo', v.id).catch(() => [])]);
+    return { atenciones: as.map(aAtencion), eventos: ev.map(aEvento) };
+  }, [v.id]);
+  const puedeCamino = acc.tiene('en_camino') && ['Programado', 'Demorado'].includes(v.estado);
+  const puedeDemora = acc.tiene('demorado') && ['Programado', 'En camino'].includes(v.estado);
+  const puedeLlego = acc.tiene('llego') && ['Programado', 'En camino', 'Demorado'].includes(v.estado);
+  return (
+    <div className="oc-form">
+      {onCerrar ? (
+        <div className="oc-panel-top">
+          <h2>Vista rápida</h2>
+          <Boton chico tono="suave" onClick={onCerrar} aria-label="Cerrar el panel" icono={<X size={18} />} />
+        </div>
+      ) : null}
+      <TarjetaEmbarque v={v} />
+      <Etapas estado={v.estado} />
+      <div className="oc-btns">
+        <Boton tono="primario" onClick={() => irA('vuelo', { vuelo: v.id })} icono={<ArrowRight size={16} />}>
+          Abrir ficha completa
+        </Boton>
+        <Boton onClick={onEditar} icono={<Pencil size={15} />}>
+          Editar
+        </Boton>
+      </div>
+      {puedeCamino || puedeDemora || puedeLlego ? (
+        <div className="oc-btns">
+          {puedeCamino ? <Boton disabled={ocupado} onClick={() => onAccion('en_camino', 'En camino')}>Marcar en camino</Boton> : null}
+          {puedeDemora ? <Boton tono="aviso" disabled={ocupado} onClick={onDemora} icono={<Clock size={15} />}>Demorado</Boton> : null}
+          {puedeLlego ? <Boton tono="ok" disabled={ocupado} onClick={() => onAccion('llego', 'Llegó', `¿Confirmas que ${v.numero} aterrizó? Se avisa a los operarios de turno.`)}>Llegó</Boton> : null}
+        </div>
+      ) : null}
+      <div>
+        <h3 style={{ marginBottom: 6 }}>Qué ha pasado</h3>
+        {det.data ? <LineaVuelo v={v} atenciones={det.data.atenciones} eventos={det.data.eventos} /> : <p className="oc-sub">Cargando…</p>}
+      </div>
+    </div>
   );
 }
 

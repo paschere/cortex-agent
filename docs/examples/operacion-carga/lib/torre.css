@@ -23,3 +23,24 @@
 .tag.red{color:var(--malo);background:var(--malo-fondo);border-color:transparent}.tag.green{color:var(--ok);background:var(--ok-fondo);border-color:transparent}
 .torre .muted{color:var(--suave);font-size:13px}.torre .error{color:var(--malo);font-size:14px}
 .torre .leaflet-container{font-family:inherit}
+
+/* v5: torre — misma familia visual que el resto */
+.torre{padding:22px 16px 56px;max-width:1360px;margin:0 auto}
+@media (min-width:900px){.torre{padding:22px 32px 64px}}
+.torre h1{font-size:clamp(26px,1.4vw + 20px,34px)}
+.torre-head p{font-size:15px}
+.kpi{padding:14px 16px;border-radius:var(--radio);box-shadow:var(--sombra)}
+.kpi strong{font-size:clamp(28px,2vw + 14px,38px);font-feature-settings:"tnum" 1}
+.kpi-label{font-weight:600;color:var(--suave)}
+.kpi.amber strong{color:var(--aviso)}.kpi.red strong{color:var(--malo)}
+.torre .card{box-shadow:var(--sombra);border-radius:var(--radio)}
+.torre .card>h2{font-size:17px;margin-bottom:12px}
+.torre .btn{border-radius:11px;min-height:40px}
+.row{border-radius:12px;padding:9px 12px}
+.row.hot{border-color:var(--acento);background:var(--acento-fondo);box-shadow:inset 4px 0 0 var(--acento)}
+.row.alert{box-shadow:inset 4px 0 0 var(--malo);border-color:#eab4ad;background:#fff7f5}
+.eta{font-size:16px}
+.torre .muted{color:var(--suave)}
+.tag.blue{color:var(--acento-fuerte);background:var(--acento-fondo)}
+.map{border:1px solid var(--linea);border-radius:14px}
+.leaflet-tooltip{font-family:inherit;font-weight:600;border-radius:8px}

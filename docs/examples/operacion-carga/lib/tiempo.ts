@@ -38,6 +38,13 @@ export const texto = (v: unknown): string => {
     }
     return v;
   }
+  if (typeof v === 'object') {
+    // Las relaciones también pueden llegar como objeto {id,label}.
+    const o = v as { label?: unknown; name?: unknown };
+    if (typeof o.label === 'string') return o.label;
+    if (typeof o.name === 'string') return o.name;
+    return '';
+  }
   return String(v);
 };
 

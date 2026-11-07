@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { cortex, useUser } from '@cortex/app-sdk';
 import type { QueryOptions, SdkRow } from '@cortex/app-sdk';
 import { N, hay } from './formato';
+import { marcarCarga } from './vivo';
 
 /**
  * Lectura de datos: filas del servidor → objetos con nombres claros.
@@ -516,6 +517,7 @@ export function useCarga<T>(fn: () => Promise<T>, deps: unknown[], refreshMs?: n
       if (!vivo.current || mi !== seq.current) return;
       setData(x);
       setError(null);
+      marcarCarga();
     } catch (e) {
       if (vivo.current && mi === seq.current) setError(e instanceof Error ? e.message : 'No se pudo cargar.');
     } finally {

@@ -10,7 +10,7 @@ import { hoyBogota, sumarDias } from '../lib/tiempo';
 import { REQUERIDO, aAviso, aPlazo, aTramite, esActivo, faltantesDe, hayCampo, hayTabla, leerEsquema, semaforo, useAhora } from '../lib/documental';
 import type { AvisoCliente, Esquema, Plazo, Tramite } from '../lib/documental';
 import { CuentaRegresiva, FaltaAplicar, porVencimiento } from '../lib/PiezasDoc';
-import { Boton, Chip, ErrorCaja, Estado, Metrica, Pantalla, Tarjeta } from '../lib/ui';
+import { Boton, Chip, ErrorCaja, Estado, Frase, Metrica, Pantalla, Tarjeta } from '../lib/ui';
 
 /**
  * BANDEJA — el día del documental, en una sola pantalla: trámites por vencer con cuenta
@@ -120,6 +120,22 @@ export default function Bandeja() {
     >
       {error && d ? <ErrorCaja mensaje={`No se pudo actualizar: ${error}`} reintentar={() => void refresh()} /> : null}
       <FaltaAplicar faltan={faltan} />
+
+      {d ? (
+        <Frase tono={urgentes.some((t) => semaforo(t, ahora, horas(t)).vencido) ? 'bad' : urgentes.length || sinReportar.length ? 'warn' : 'good'}>
+          {(() => {
+            const vencidos = urgentes.filter((t) => semaforo(t, ahora, horas(t)).vencido).length;
+            const total = urgentes.length + (d.sinVuelo?.length ?? 0) + sinManifiesto.length + sinReportar.length + (d.avisos?.length ?? 0) + noListasPorVuelo.length;
+            if (!total) return 'Tu bandeja está al día: nada por hacer ahora.';
+            return (
+              <>
+                Tienes <b>{total} {total === 1 ? 'cosa' : 'cosas'} por hacer</b>
+                {urgentes.length ? <>; lo más urgente: <b>{urgentes.length} {urgentes.length === 1 ? 'trámite por vencer' : 'trámites por vencer'}</b>{vencidos ? <> ({vencidos} ya vencido{vencidos === 1 ? '' : 's'})</> : null}</> : null}.
+              </>
+            );
+          })()}
+        </Frase>
+      ) : null}
 
       <div className="oc-kpis">
         <Metrica etiqueta="Trámites por vencer" valor={d?.tramites ? urgentes.length : '—'} tono={urgentes.length ? 'bad' : undefined} pista={d?.tramites ? `${num(activos.length)} activos` : 'Sin datos aplicados'} />
@@ -296,7 +312,7 @@ export default function Bandeja() {
                   <li key={vid} className="oc-item">
                     <div className="oc-item-top">
                       <span>
-                        <strong>{nombreVuelo(vid)}</strong> <span className="oc-sub">· {num(gs.length)} guías</span>
+                        <strong>{nombreVuelo(vid)}</strong> <span className="oc-sub">· {num(gs.length)} {gs.length === 1 ? 'guía' : 'guías'}</span>
                       </span>
                       <Boton chico onClick={() => irA('vuelo', { vuelo: vid, tab: 'guias' })}>
                         Resolver

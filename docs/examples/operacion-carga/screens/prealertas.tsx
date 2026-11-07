@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
 import { cortex } from '@cortex/app-sdk';
-import { ClipboardPaste, Copy, FileScan, Link2, Plane, Search, Trash2, UploadCloud } from 'lucide-react';
+import { ArrowRight, ClipboardPaste, Copy, FileScan, Link2, Plane, Search, Trash2, UploadCloud } from 'lucide-react';
 import { MAX_ESCANEO, reducirImagen } from '../lib/archivos';
 import { aPrealerta, cargarVuelos, traerTodo, useCarga, useRol } from '../lib/datos';
 import type { Prealerta, Vuelo } from '../lib/datos';
@@ -12,6 +12,7 @@ import { CANALES_PREALERTA, ESTADOS_CRUCE, TONO_CRUCE_DOC, faltantesDe, hayCampo
 import { FaltaAplicar } from '../lib/PiezasDoc';
 import { parametro } from '../lib/ruta';
 import { Boton, Campo, Chip, ErrorCaja, Estado, Hoja, Metrica, Pantalla, SelectorArchivo, Tabla, Tarjeta, avisar, mensajeDe, useOperacion } from '../lib/ui';
+import { useGuardado } from '../lib/guardado';
 
 /**
  * PREALERTAS — la entrada del documental. Soltar varias fotos o PDF, o pegar el texto de un
@@ -51,6 +52,13 @@ const A = {
 let SEQ = 0;
 const nuevaClave = () => `b${Date.now().toString(36)}${SEQ++}`;
 
+/** Lo que más pide acción va primero. */
+const PRIORIDAD = (p: Prealerta): number => (p.estado === 'Duplicada' ? 5 : p.estadoCruce === 'Diferencia' ? 0 : p.estadoCruce === 'Faltante' || p.estadoCruce === 'Sobrante' ? 1 : p.estadoCruce === 'Sin vuelo' || !p.vueloId ? 2 : p.estadoCruce === 'En vuelo' ? 3 : 4);
+
+/** Siguiente acción de una prealerta. */
+const SIGUIENTE = (p: Prealerta): string =>
+  p.estado === 'Duplicada' ? '' : p.estadoCruce === 'Diferencia' ? 'Siguiente: aclarar la diferencia con el cliente' : p.estadoCruce === 'Faltante' ? 'Siguiente: confirmar si llegó o avisar al cliente' : p.estadoCruce === 'Sobrante' ? 'Siguiente: pedir la prealerta que falta' : !p.vueloId ? 'Siguiente: enlazarla a un vuelo' : p.estadoCruce === 'En vuelo' ? 'Siguiente: esperar el recibo del vuelo' : '';
+
 const irA = (screen: string, prefill?: Record<string, string | number>) => void cortex.nav.go({ screen, prefill }).catch(() => undefined);
 
 interface Datos {
@@ -79,7 +87,13 @@ export default function Prealertas() {
   const [errorLectura, setErrorLectura] = useState<string | null>(null);
   const [texto, setTexto] = useState('');
   const [canalTexto, setCanalTexto] = useState<string>('Correo');
-  const [filtro, setFiltro] = useState<string>(parametro('estado') || 'todas');
+  const [filtroG, setFiltroG] = useGuardado<string>('prealertas-filtro', 'todas');
+  const [filtroU, setFiltroU] = useState<string>(parametro('estado'));
+  const filtro = filtroU || filtroG;
+  const setFiltro = (v: string) => {
+    setFiltroU(v);
+    setFiltroG(v);
+  };
   const [q, setQ] = useState('');
   const [enlazar, setEnlazar] = useState<Prealerta | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
@@ -265,6 +279,7 @@ export default function Prealertas() {
     return lista
       .filter((p) => (filtro === 'todas' ? true : filtro === 'duplicadas' ? p.estado === 'Duplicada' : p.estadoCruce === filtro || (filtro === 'Sin vuelo' && !p.estadoCruce && !p.vueloId)))
       .filter((p) => !qn || normNombre(`${p.guia} ${p.cliente} ${p.numeroVuelo}`).includes(qn))
+      .sort((a, b) => PRIORIDAD(a) - PRIORIDAD(b))
       .slice(0, 150);
   }, [lista, filtro, q]);
 
@@ -462,6 +477,7 @@ export default function Prealertas() {
                     </a>
                   ) : null}
                 </div>
+                {SIGUIENTE(p) ? <p className="oc-siguiente"><ArrowRight size={14} /> {SIGUIENTE(p)}</p> : null}
                 <div className="oc-btns">
                   {p.vueloId ? (
                     <Boton chico onClick={() => irA('vuelo', { vuelo: p.vueloId, tab: 'guias' })} icono={<Plane size={15} />}>

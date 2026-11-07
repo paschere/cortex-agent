@@ -5,7 +5,7 @@ import { ArrowRight, Ban, Box, Clock, Hand, Plane, Repeat, Send, Truck, UserChec
 import { Dictado } from '../lib/dictado';
 import { aVuelo, traerTodo, useCarga, useRol } from '../lib/datos';
 import type { Vuelo } from '../lib/datos';
-import { SelectorOperarios } from '../lib/PiezasTareas';
+import { CargaCtx, SelectorOperarios } from '../lib/PiezasTareas';
 import { faltantesDe, hayCampo, hayTabla, hace, soloExistentes, useAhora, useEsquema } from '../lib/documental';
 import { TONO_VUELO, tono } from '../lib/estados';
 import { cop, cronometro, hhmm, minTxt } from '../lib/formato';
@@ -54,9 +54,17 @@ export default function Asignar() {
   const falta = faltantesDe(esq, REQUERIDO_TAREAS);
   const sinTabla = esq.listo && !hayTabla(esq, 'tareas_operacion');
   const lugares = useMemo(() => lugaresUsados(data?.tareas ?? []), [data]);
+  // Carga de cada operario: tareas abiertas + vuelos que le asignaron y siguen sin cerrarse.
+  const cargaPor = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const t of data?.tareas ?? []) if (t.estado === 'Asignada' || t.estado === 'En curso') for (const r of t.asignadosIds) m[r] = (m[r] ?? 0) + 1;
+    for (const v of data?.vuelos ?? []) if (!['Recibido', 'Cerrado', 'Cancelado'].includes(v.estado) && v.fecha === hoyBogota()) for (const r of v.asignadosIds) m[r] = (m[r] ?? 0) + 1;
+    return m;
+  }, [data]);
 
   return (
     <Pantalla titulo="Asignar" sub="Crea una tarea en segundos, elige quién la hace y mira cómo van.">
+      <CargaCtx.Provider value={cargaPor}>
       {sinTabla ? (
         <div className="oc-aviso" style={{ marginBottom: 16 }}>Todavía falta aplicar los datos de tareas ({falta.join('; ') || 'tabla tareas_operacion'}). Pídele al administrador que los aplique; mientras tanto solo puedes asignar vuelos.</div>
       ) : falta.length ? (
@@ -84,6 +92,7 @@ export default function Asignar() {
           <div className="oc-aviso">Falta aplicar los campos de asignación en vuelos (asignados_ids, asignados).</div>
         )}
       </div>
+      </CargaCtx.Provider>
     </Pantalla>
   );
 }

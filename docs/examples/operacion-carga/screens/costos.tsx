@@ -1,16 +1,17 @@
 import { useMemo, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
-import { Download, Pencil, Plus } from 'lucide-react';
+import { Download, Pencil, Plus, Wallet } from 'lucide-react';
 import { exportarCsv } from '../lib/csv';
 import { aAtencion, aEquipo, aEvento, aTarifa, aVuelo, traerTodo, useCarga, useOpciones } from '../lib/datos';
 import type { Atencion, Equipo, Evento, Tarifa, Vuelo } from '../lib/datos';
 import { Area, Barras } from '../lib/graficos';
 import { EQUIPOS_TARIFA, PROVEEDORES, TONO_COSTO, tono } from '../lib/estados';
 import { N, cop, dinero, fechaCorta, hhmm, num } from '../lib/formato';
+import { hoyBogota, inicioMes, sumarDias } from '../lib/tiempo';
 import { PanelTareas } from '../lib/PiezasTareas';
 import { cargarTareas } from '../lib/tareas';
 import type { Tarea } from '../lib/tareas';
-import { Boton, Campo, Chip, ErrorCaja, Estado, Hoja, Metrica, Numero, Pantalla, Segmentos, Tabla, Tarjeta, avisar, useOperacion } from '../lib/ui';
+import { Boton, Campo, Chip, ErrorCaja, Delta, Estado, Frase, Hoja, Metrica, Numero, Pantalla, Segmentos, Tabla, Tarjeta, avisar, useOperacion } from '../lib/ui';
 
 /**
  * COSTOS — por pagar a proveedores (Probable → Aprobado → Anulado), tarifario editable,
@@ -70,6 +71,13 @@ function PorPagar({ d }: { d: Datos }) {
   const suma = (xs: Equipo[]) => xs.reduce((s, e) => s + e.porPagar, 0);
   const probable = suma(conEstado.filter((e) => e.estadoCosto === 'Probable'));
   const aprobado = suma(conEstado.filter((e) => e.estadoCosto === 'Aprobado'));
+  const hoy = hoyBogota();
+  const mesAct = hoy.slice(0, 7);
+  const finPrev = sumarDias(inicioMes(hoy), -1);
+  const diaTope = Math.min(Number(hoy.slice(8)), Number(finPrev.slice(8)));
+  const enMes = (e: Equipo, mes: string, tope?: number) => e.creado.slice(0, 7) === mes && (!tope || Number(e.creado.slice(8, 10)) <= tope);
+  const mesActual = suma(conEstado.filter((e) => e.estadoCosto !== 'Anulado' && enMes(e, mesAct)));
+  const mesPrevio = suma(conEstado.filter((e) => e.estadoCosto !== 'Anulado' && enMes(e, finPrev.slice(0, 7), diaTope)));
   const gastos = d.eventos.filter((e) => e.costo > 0);
   const totalGastos = gastos.reduce((s, e) => s + e.costo, 0);
 
@@ -89,11 +97,16 @@ function PorPagar({ d }: { d: Datos }) {
 
   return (
     <>
-      <div className="oc-kpis">
-        <Metrica etiqueta="Equipos por pagar" valor={cop(probable + aprobado)} pista="Probable + aprobado" />
-        <Metrica etiqueta="Sin aprobar (probable)" valor={cop(probable)} tono="warn" />
-        <Metrica etiqueta="Aprobado" valor={cop(aprobado)} tono="good" />
-        <Metrica etiqueta="Gastos de eventos" valor={cop(totalGastos)} pista="Combustible, arreglos…" />
+      <Frase icono={<Wallet size={20} />} tono={probable > 0 ? 'warn' : 'good'}>
+        Se deben <b>{cop(probable + aprobado)}</b> a proveedores
+        {probable > 0 ? <>, de los cuales <b>{cop(probable)}</b> {probable === probable + aprobado ? 'todavía' : 'aún'} no están aprobados</> : ', todo aprobado'}
+        {mesPrevio > 0 ? <>. Este mes llevan <b>{cop(mesActual)}</b> ({mesActual >= mesPrevio ? '+' : '−'}{Math.abs(Math.round(((mesActual - mesPrevio) / mesPrevio) * 100))} % frente al mes pasado a la misma fecha)</> : null}.
+      </Frase>
+      <div className="oc-kpis oc-kpis-q">
+        <Metrica etiqueta="¿Cuánto debemos pagar?" valor={cop(probable + aprobado)} pista={<><span>Probable + aprobado</span><br /><Delta actual={mesActual} previo={mesPrevio || null} mejorSiBaja /></>} />
+        <Metrica etiqueta="¿Cuánto falta por aprobar?" valor={cop(probable)} tono={probable ? 'warn' : 'good'} pista="Equipos en estado probable" />
+        <Metrica etiqueta="¿Cuánto ya está aprobado?" valor={cop(aprobado)} tono="good" />
+        <Metrica etiqueta="¿Cuánto salió en gastos de eventos?" valor={cop(totalGastos)} pista="Combustible, arreglos…" />
       </div>
 
       <div className="oc-grid oc-g2 oc-sec">

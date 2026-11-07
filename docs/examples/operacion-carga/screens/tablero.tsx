@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
-import { AlertTriangle, ArrowRight, FileCheck2, Inbox, Plane, RefreshCw, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock3, FileCheck2, Inbox, Plane, RefreshCw, ShieldAlert } from 'lucide-react';
 import { aAtencion, aEvento, aVuelo, traerTodo, useCarga, useRol } from '../lib/datos';
 import type { Atencion, Evento, Vuelo } from '../lib/datos';
 import { ESTADOS_VUELO, TONO_VUELO, tono } from '../lib/estados';
@@ -10,7 +10,7 @@ import { Pista } from '../lib/Piezas';
 import { aTramite, esActivo, esDocumental, semaforo, useAhora } from '../lib/documental';
 import type { Tramite } from '../lib/documental';
 import { CuentaRegresiva, porVencimiento } from '../lib/PiezasDoc';
-import { Boton, Chip, ES_VIVO, ErrorCaja, Estado, Metrica, Pantalla, Tarjeta } from '../lib/ui';
+import { Boton, Chip, ES_VIVO, ErrorCaja, Estado, Frase, Metrica, Pantalla, Tarjeta } from '../lib/ui';
 
 /**
  * TABLERO — inicio del supervisor, documental y gerencia.
@@ -101,10 +101,27 @@ export default function Tablero() {
   });
   const conInconsistencias = (data?.vuelos ?? []).filter((v) => v.inconsistencias > 0 && v.estado !== 'Cancelado');
 
+  const [filtro, setFiltro] = useState<Filtro>('todos');
+  const enAtencionHoy = vuelosHoy.filter((v) => v.estado === 'En atención');
+  const visibles = useMemo(() => {
+    const todos = [...abiertosAntes, ...vuelosHoy];
+    if (filtro === 'sin-tomar') return todos.filter((v) => v.estado === 'Aterrizó');
+    if (filtro === 'en-atencion') return todos.filter((v) => v.estado === 'En atención');
+    if (filtro === 'atrasados') return retrasados;
+    return null;
+  }, [filtro, vuelosHoy, abiertosAntes, retrasados]);
+  const alternar = (f: Filtro) => setFiltro((x) => (x === f ? 'todos' : f));
+  const atrasados = retrasados.length;
+  const partes: string[] = [];
+  void partes;
+  const hayExcepcion = atrasados + sinTomar.length + criticos.length + (data?.porAprobar.length ?? 0) > 0;
+  const costoHoy = 0;
+  void costoHoy;
+
   return (
     <Pantalla
       titulo="Tablero"
-      sub={`${fechaLarga(hoy)} · se actualiza solo cada 20 segundos`}
+      sub={fechaLarga(hoy)}
       acciones={
         <>
           {esDocumental(rol) ? (
@@ -120,13 +137,65 @@ export default function Tablero() {
     >
       {error && data ? <ErrorCaja mensaje={`No se pudo actualizar: ${error}`} reintentar={() => void refresh()} /> : null}
 
+      {data ? (
+        <Frase tono={atrasados || sinTomar.length || criticos.length ? 'bad' : data.porAprobar.length ? 'warn' : 'good'} icono={hayExcepcion ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}>
+          Hoy: <b>{vuelosHoy.length} {vuelosHoy.length === 1 ? 'vuelo' : 'vuelos'}</b>
+          {atrasados ? <>, <b>{atrasados} {atrasados === 1 ? 'atrasado' : 'atrasados'}</b></> : ', ninguno atrasado'}
+          {sinTomar.length ? <>, <b>{sinTomar.length} sin tomar</b></> : null}
+          {data.porAprobar.length ? <>, <b>{data.porAprobar.length} por aprobar</b></> : null}
+          {criticos.length ? <>, <b>{criticos.length} {criticos.length === 1 ? 'evento crítico' : 'eventos críticos'}</b></> : null}.
+          {!hayExcepcion ? ' Todo en orden.' : ' Toca una cifra para ver cuáles.'}
+        </Frase>
+      ) : null}
+
       <div className="oc-kpis" style={{ marginTop: error && data ? 14 : 0 }}>
-        <Metrica etiqueta="Vuelos de hoy" valor={vuelosHoy.length} spark={ultimosDias.vuelos} pista="Últimos 7 días" />
-        <Metrica etiqueta="Sin tomar (aterrizaron)" valor={sinTomar.length} tono={sinTomar.length ? 'bad' : undefined} />
-        <Metrica etiqueta="En atención" valor={data?.enAtencion.length ?? 0} tono="info" />
-        <Metrica etiqueta="Por aprobar" valor={data?.porAprobar.length ?? 0} tono={data?.porAprobar.length ? 'warn' : undefined} />
-        <Metrica etiqueta="Fuera de margen o zona" valor={data?.fueraMargen.length ?? 0} tono={data?.fueraMargen.length ? 'bad' : undefined} />
-        <Metrica etiqueta="Eventos críticos abiertos" valor={criticos.length} tono={criticos.length ? 'bad' : undefined} />
+        <Metrica etiqueta="Vuelos de hoy" valor={vuelosHoy.length} spark={ultimosDias.vuelos} pista="Últimos 7 días" onClick={() => setFiltro('todos')} activo={filtro === 'todos'} />
+        <Metrica etiqueta="Atrasados" valor={atrasados} tono={atrasados ? 'bad' : undefined} onClick={() => alternar('atrasados')} activo={filtro === 'atrasados'} pista={atrasados ? 'Ver cuáles' : 'Todo en hora'} />
+        <Metrica etiqueta="Sin tomar" valor={sinTomar.length} tono={sinTomar.length ? 'bad' : undefined} onClick={() => alternar('sin-tomar')} activo={filtro === 'sin-tomar'} pista="Aterrizaron" />
+        <Metrica etiqueta="En atención" valor={data?.enAtencion.length ?? 0} tono="info" onClick={() => alternar('en-atencion')} activo={filtro === 'en-atencion'} />
+        <Metrica etiqueta="Por aprobar" valor={data?.porAprobar.length ?? 0} tono={data?.porAprobar.length ? 'warn' : undefined} onClick={() => irA('aprobar')} pista="Abrir la cola" />
+        <Metrica etiqueta="Críticos abiertos" valor={criticos.length} tono={criticos.length ? 'bad' : undefined} onClick={() => irA('eventos')} pista="Abrir eventos" />
+      </div>
+
+      {visibles ? (
+        <div className="oc-sec">
+          <Tarjeta titulo={filtro === 'sin-tomar' ? 'Aterrizaron y nadie los ha tomado' : filtro === 'en-atencion' ? 'En atención ahora' : 'Vuelos atrasados'} derecha={<Boton chico tono="suave" onClick={() => setFiltro('todos')}>Quitar filtro</Boton>}>
+            {!visibles.length ? <p className="oc-sub">Ninguno por ahora.</p> : <ul className="oc-lista">{visibles.map((v) => <FilaVuelo key={v.id} v={v} anterior={v.fecha < hoy} resaltar={retrasados.includes(v) || v.estado === 'Aterrizó'} />)}</ul>}
+          </Tarjeta>
+        </div>
+      ) : null}
+
+      <div className="oc-sec">
+        <h2>
+          <Plane size={20} /> Gantt del día
+        </h2>
+        <Estado
+          cargando={loading}
+          error={error}
+          vacio={vacio || (!vuelosHoy.length && !abiertosAntes.length)}
+          tituloVacio="No hay vuelos para hoy"
+          textoVacio={<p>Cuando el documental cree los vuelos del día, aparecerán aquí por hora.</p>}
+          reintentar={() => void refresh()}
+        >
+          {vuelosHoy.length ? <Pista vuelos={vuelosHoy} onAbrir={(v) => irA('vuelo', { vuelo: v.id })} /> : null}
+          <div style={{ height: 14 }} />
+          <Tarjeta titulo="Vuelo por vuelo" derecha={<span className="oc-sub">{enAtencionHoy.length ? `${enAtencionHoy.length} en atención` : 'Nada en atención'}</span>}>
+            <ul className="oc-lista">
+              {abiertosAntes.map((v) => (
+                <FilaVuelo key={v.id} v={v} anterior resaltar />
+              ))}
+              {lineaConAhora(vuelosHoy, horaTxt).map((x) =>
+                x.ahora ? (
+                  <li key="ahora" className="oc-ahora-linea" aria-label={`Ahora ${horaTxt}`}>
+                    AHORA {horaTxt}
+                  </li>
+                ) : (
+                  <FilaVuelo key={x.v.id} v={x.v} resaltar={retrasados.includes(x.v) || x.v.estado === 'Aterrizó'} />
+                ),
+              )}
+            </ul>
+          </Tarjeta>
+        </Estado>
       </div>
 
       {data?.tramites ? (
@@ -148,21 +217,19 @@ export default function Tablero() {
                   <p className="oc-sub">{activos.length ? `${activos.length} activos, ninguno por vencer.` : 'Sin trámites activos.'}</p>
                 ) : (
                   <ul className="oc-lista" style={{ marginTop: 8 }}>
-                    {urgentes.slice(0, 4).map((t) => (
-                      <li key={t.id} className="oc-item hot">
-                        <div className="oc-item-top">
-                          <span>
-                            <strong>{t.tramite}</strong> <span className="oc-sub">· {t.vuelo}</span>
-                          </span>
-                          <CuentaRegresiva t={t} ahora={ahora} />
-                        </div>
-                        <div className="oc-btns">
-                          <Boton chico onClick={() => irA('vuelo', { vuelo: t.vueloId, tab: 'tramites' })}>
-                            Abrir
-                          </Boton>
-                        </div>
-                      </li>
-                    ))}
+                    {urgentes.slice(0, 4).map((t) => {
+                      const x = semaforo(t, ahora);
+                      return (
+                        <li key={t.id}>
+                          <button type="button" className={`oc-fila ${x.vencido ? 'bad' : 'hot'}`} onClick={() => irA('vuelo', { vuelo: t.vueloId, tab: 'tramites' })}>
+                            <span className="h"><Clock3 size={18} /></span>
+                            <span className="t"><b>{t.tramite}</b><small>{t.vuelo}</small></span>
+                            <span className="d"><CuentaRegresiva t={t} ahora={ahora} /></span>
+                            <span className="sig"><ArrowRight size={14} /> {x.vencido ? 'Presentar ya' : 'Presentar antes del vencimiento'}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
@@ -173,16 +240,13 @@ export default function Tablero() {
                 ) : (
                   <ul className="oc-lista" style={{ marginTop: 8 }}>
                     {conInconsistencias.slice(0, 4).map((v) => (
-                      <li key={v.id} className="oc-item bad">
-                        <div className="oc-item-top">
-                          <strong>{v.numero}</strong>
-                          <Chip tono="bad">{v.inconsistencias} inconsistencias</Chip>
-                        </div>
-                        <div className="oc-btns">
-                          <Boton chico onClick={() => irA('vuelo', { vuelo: v.id, tab: 'guias' })}>
-                            Revisar cruce
-                          </Boton>
-                        </div>
+                      <li key={v.id}>
+                        <button type="button" className="oc-fila bad" onClick={() => irA('vuelo', { vuelo: v.id, tab: 'guias' })}>
+                          <span className="h"><AlertTriangle size={18} /></span>
+                          <span className="t"><b>{v.numero}</b><small>{v.aerolinea}</small></span>
+                          <span className="d"><Chip tono="bad">{v.inconsistencias} inconsistencias</Chip></span>
+                          <span className="sig"><ArrowRight size={14} /> Revisar el cruce de guías</span>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -199,74 +263,7 @@ export default function Tablero() {
         </div>
       ) : null}
 
-      <div className="oc-sec">
-        <div className="oc-chips" aria-label="Vuelos por estado">
-          {ESTADOS_VUELO.filter((e) => conteo[e]).map((e) => (
-            <Chip key={e} tono={tono(TONO_VUELO, e)}>
-              {e} · {conteo[e]}
-            </Chip>
-          ))}
-          {!Object.keys(conteo).length && !loading ? <span className="oc-sub">Ningún vuelo abierto.</span> : null}
-        </div>
-      </div>
-
-      <div className="oc-sec">
-        <h2>
-          <Plane size={20} /> Línea de tiempo del día
-        </h2>
-        <Estado
-          cargando={loading}
-          error={error}
-          vacio={vacio || (!vuelosHoy.length && !abiertosAntes.length)}
-          tituloVacio="No hay vuelos para hoy"
-          textoVacio={<p>Cuando el documental cree los vuelos del día, aparecerán aquí por hora.</p>}
-          reintentar={() => void refresh()}
-        >
-          {vuelosHoy.length ? <Pista vuelos={vuelosHoy} onAbrir={(v) => irA('vuelo', { vuelo: v.id })} /> : null}
-          <div style={{ height: 14 }} />
-          <Tarjeta titulo="Detalle del día">
-            <ol className="oc-linea">
-              {abiertosAntes.map((v) => (
-                <FilaVuelo key={v.id} v={v} anterior />
-              ))}
-              {lineaConAhora(vuelosHoy, horaTxt).map((x) =>
-                x.ahora ? (
-                  <li key="ahora" className="ahora">
-                    Ahora · {horaTxt}
-                  </li>
-                ) : (
-                  <FilaVuelo key={x.v.id} v={x.v} />
-                ),
-              )}
-            </ol>
-          </Tarjeta>
-        </Estado>
-      </div>
-
       <div className="oc-grid oc-g2 oc-sec">
-        <Tarjeta titulo="Retrasos" icono={<AlertTriangle size={18} />} tono={retrasados.length ? 'aviso' : undefined}>
-          {!retrasados.length ? (
-            <p className="oc-sub">Todo en hora. Ningún vuelo con más de 15 minutos de retraso.</p>
-          ) : (
-            <ul className="oc-lista">
-              {retrasados.map((v) => (
-                <li key={v.id} className="oc-item hot">
-                  <div className="oc-item-top">
-                    <strong>{v.numero}</strong>
-                    <Chip tono={tono(TONO_VUELO, v.estado)}>{v.estado}</Chip>
-                  </div>
-                  <div className="oc-meta">
-                    <span>
-                      Programado {hhmm(v.hora) || '—'} · ahora {hhmm(v.horaActual) || '—'}
-                    </span>
-                    <span>{retraso(v) > 0 ? `+${minTxt(retraso(v))}` : minTxt(minutosHasta(v.fecha, v.horaActual))}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Tarjeta>
-
         <Tarjeta
           titulo="Por aprobar"
           derecha={
@@ -282,18 +279,35 @@ export default function Tablero() {
           ) : (
             <ul className="oc-lista">
               {data.porAprobar.map((a) => (
-                <li key={a.id} className="oc-item">
-                  <div className="oc-item-top">
-                    <strong>{a.vuelo}</strong>
-                    <span className="oc-chips">
+                <li key={a.id}>
+                  <button type="button" className={`oc-fila ${a.fueraDeMargen || a.fueraDeZona ? 'bad' : ''}`} onClick={() => irA('aprobar')}>
+                    <span className="h" style={{ fontSize: 14 }}>{a.vuelo}</span>
+                    <span className="t"><b>{a.operario}</b><small>Dif. kilos {a.difKilos === null ? '—' : kg(a.difKilos)}</small></span>
+                    <span className="d">
                       {a.fueraDeMargen ? <Chip tono="bad">Fuera de margen</Chip> : <Chip tono="good">Dentro del margen</Chip>}
                       {a.fueraDeZona ? <Chip tono="bad">Fuera de zona</Chip> : null}
                     </span>
-                  </div>
-                  <div className="oc-meta">
-                    <span>{a.operario}</span>
-                    <span>Dif. kilos {a.difKilos === null ? '—' : kg(a.difKilos)}</span>
-                  </div>
+                    <span className="sig"><ArrowRight size={14} /> Revisar y aprobar</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Tarjeta>
+
+        <Tarjeta titulo="Eventos críticos abiertos" icono={<ShieldAlert size={18} />} tono={criticos.length ? 'alerta' : undefined}>
+          {!criticos.length ? (
+            <p className="oc-sub">Sin eventos críticos abiertos.</p>
+          ) : (
+            <ul className="oc-lista">
+              {criticos.map((e) => (
+                <li key={e.id}>
+                  <button type="button" className="oc-fila bad" onClick={() => irA('eventos')}>
+                    <span className="h" style={{ fontSize: 14 }}>{hhmm(e.hora)}</span>
+                    <span className="t"><b>{e.tipo}{e.vuelo ? ` · ${e.vuelo}` : ''}</b><small>{e.descripcion}</small></span>
+                    <span className="d"><Chip tono="bad">Crítico</Chip></span>
+                    <span className="sig"><ArrowRight size={14} /> Revisar y resolver · {e.operario}</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -301,11 +315,9 @@ export default function Tablero() {
         </Tarjeta>
       </div>
 
-      <div className="oc-grid oc-g2 oc-sec">
-        <Tarjeta titulo="Diferencias fuera de margen o de zona">
-          {!data?.fueraMargen.length ? (
-            <p className="oc-sub">Ninguna por revisar.</p>
-          ) : (
+      {data?.fueraMargen.length ? (
+        <div className="oc-sec">
+          <Tarjeta titulo="Diferencias fuera de margen o de zona">
             <ul className="oc-lista">
               {data.fueraMargen.map((a) => (
                 <li key={a.id} className="oc-item bad">
@@ -325,42 +337,14 @@ export default function Tablero() {
                 </li>
               ))}
             </ul>
-          )}
-        </Tarjeta>
-
-        <Tarjeta titulo="Eventos críticos abiertos" icono={<ShieldAlert size={18} />} tono={criticos.length ? 'alerta' : undefined}>
-          {!criticos.length ? (
-            <p className="oc-sub">Sin eventos críticos abiertos.</p>
-          ) : (
-            <ul className="oc-lista">
-              {criticos.map((e) => (
-                <li key={e.id} className="oc-item bad">
-                  <div className="oc-item-top">
-                    <strong>{e.tipo}</strong>
-                    <span className="oc-sub">{hhmm(e.hora)}</span>
-                  </div>
-                  <p>{e.descripcion}</p>
-                  <div className="oc-meta">
-                    <span>{e.operario}</span>
-                    {e.vuelo ? <span>{e.vuelo}</span> : null}
-                    {e.equipo ? <span>{e.equipo}</span> : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          {criticos.length ? (
-            <div style={{ marginTop: 12 }}>
-              <Boton chico onClick={() => irA('eventos')}>
-                Ir a eventos
-              </Boton>
-            </div>
-          ) : null}
-        </Tarjeta>
-      </div>
+          </Tarjeta>
+        </div>
+      ) : null}
     </Pantalla>
   );
 }
+
+type Filtro = 'todos' | 'atrasados' | 'sin-tomar' | 'en-atencion';
 
 /** Mezcla el marcador «Ahora» en la lista de vuelos del día ordenada por hora. */
 function lineaConAhora(vs: Vuelo[], ahora: string): ({ v: Vuelo; ahora?: false } | { ahora: true })[] {
@@ -377,32 +361,41 @@ function lineaConAhora(vs: Vuelo[], ahora: string): ({ v: Vuelo; ahora?: false }
   return out;
 }
 
-function FilaVuelo({ v, anterior }: { v: Vuelo; anterior?: boolean }) {
+function FilaVuelo({ v, anterior, resaltar }: { v: Vuelo; anterior?: boolean; resaltar?: boolean }) {
   const r = retraso(v);
+  const sig = SIGUIENTE[v.estado];
+  const tomar = v.estado === 'Aterrizó';
+  const cls = resaltar ? (tomar || v.estado === 'Demorado' || r >= 15 ? 'bad' : 'hot') : v.estado === 'Cerrado' || v.estado === 'Recibido' ? 'normal' : '';
   return (
-    <li className={tono(TONO_VUELO, v.estado)}>
-      <div className="oc-item" style={{ marginBottom: 0 }}>
-        <div className="oc-item-top">
-          <span>
-            <span className="oc-hora">{anterior ? fechaLarga(v.fecha).slice(0, 12) : hhmm(v.horaActual) || '—'}</span>
-            <strong>{v.numero}</strong>
-            <span className="oc-sub"> · {[v.aerolinea, v.origen].filter(Boolean).join(' · ')}</span>
-          </span>
+    <li>
+      <button type="button" className={`oc-fila ${cls}`} onClick={() => irA('vuelo', { vuelo: v.id })}>
+        <span className="h">{anterior ? fechaLarga(v.fecha).slice(0, 8) : hhmm(v.horaActual) || '—'}</span>
+        <span className="t">
+          <b>{v.numero}</b>
+          <small>
+            {[v.aerolinea, v.origen, v.posicion ? `Posición ${v.posicion}` : '', v.kilosEsp > 0 ? kg(v.kilosEsp) : '', v.atendidoPor ? `Atiende ${v.atendidoPor}` : ''].filter(Boolean).join(' · ')}
+          </small>
+        </span>
+        <span className="d">
+          {r >= 5 ? <Chip tono="warn">+{minTxt(r)}</Chip> : null}
           <Chip tono={tono(TONO_VUELO, v.estado)} vivo={ES_VIVO.has(v.estado)}>{v.estado}</Chip>
-        </div>
-        <div className="oc-meta">
-          {r >= 5 ? <span style={{ color: 'var(--aviso)', fontWeight: 700 }}>Retraso +{minTxt(r)}</span> : null}
-          {v.posicion ? <span>Posición {v.posicion}</span> : <span>Sin posición</span>}
-          {v.kilosEsp > 0 ? <span>{kg(v.kilosEsp)} esperados</span> : null}
-          {v.atendidoPor ? <span>Atiende {v.atendidoPor}</span> : null}
-          {v.estado === 'Aterrizó' && v.llegadaHora ? <span>Aterrizó {hhmm(v.llegadaHora)}</span> : null}
-        </div>
-        <div className="oc-btns">
-          <Boton chico onClick={() => irA('vuelo', { vuelo: v.id })}>
-            Abrir vuelo
-          </Boton>
-        </div>
-      </div>
+        </span>
+        {sig && cls !== 'normal' ? (
+          <span className="sig">
+            <ArrowRight size={14} /> {tomar && v.llegadaHora ? `Aterrizó ${hhmm(v.llegadaHora)} · ${sig}` : sig}
+          </span>
+        ) : null}
+      </button>
     </li>
   );
 }
+
+/** Qué sigue en cada estado del vuelo. */
+const SIGUIENTE: Record<string, string> = {
+  Programado: 'Esperar llegada',
+  'En camino': 'Preparar posición y operarios',
+  Demorado: 'Avisar al operario de turno la nueva hora',
+  Aterrizó: 'Un operario debe tomarlo',
+  'En atención': 'Seguir el conteo',
+  Recibido: 'Aprobar y cerrar',
+};
