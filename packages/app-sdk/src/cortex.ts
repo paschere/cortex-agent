@@ -3,14 +3,15 @@ import type {
   ActionResult,
   ConfirmOptions,
   PickOptions,
+  PrintOptions,
   QueryOptions,
   ScanOptions,
   ScanResult,
   SdkAction,
   SdkField,
   SdkGeofence,
-  SdkPerson,
   SdkLocation,
+  SdkPerson,
   SdkPosition,
   SdkRow,
   SdkTable,
@@ -127,6 +128,12 @@ export const cortex = {
     /** Pregunta «¿seguro?» con el diálogo de Cortex. `true` si la persona confirma. */
     confirm: (text: string, opts: ConfirmOptions = {}) =>
       call<boolean>('ui.confirm', { text, ...opts }),
+    /**
+     * Imprime un HTML con el diálogo de impresión del navegador (el marco lo hace: la pantalla
+     * no puede). El HTML se sanea (sin scripts) y se imprime aparte, sin tocar la pantalla.
+     */
+    print: (html: string, opts: PrintOptions = {}) =>
+      call<void>('ui.print', { html, title: opts.title }),
   },
 };
 

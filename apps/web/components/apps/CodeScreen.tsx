@@ -2,6 +2,7 @@
 
 import { PREFILL_PARAM, decodePrefill } from '@/lib/apps/after-submit';
 import { INVALIDATING_OPS, READ_OPS, readCache, serveRead } from '@/lib/apps/code-read-cache';
+import { PRINT_MAX_BYTES, buildPrintDoc } from '@/lib/apps/print-html';
 import { confirmDialog } from '@/lib/ui/dialog-queue';
 import { compressImage } from '@/lib/views/compress-image';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -19,7 +20,7 @@ import { useAppToast } from './AppToast';
  * Cortex. Para todo lo demás habla con este componente por `postMessage`
  * (`{cortex:1, id, op, args}` → `{cortex:1, id, ok, data | error}`):
  *
- *  - `nav.go`, `ui.toast`, `ui.confirm`, `ui.download` y `location.current` los resuelve el host
+ *  - `nav.go`, `ui.toast`, `ui.confirm`, `ui.download`, `ui.print` y `location.current` los resuelve el host
  *    aquí mismo (el iframe de origen nulo no puede: sin diálogos de Cortex, sin descargas
  *    propias, sin geolocalización).
  *  - `files.upload`, `docs.scan` y `voice.transcribe` llevan un archivo (los Blob viajan por
@@ -166,6 +167,58 @@ function downloadFile(filename: string, data: Blob | string, mime?: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
+/**
+ * `ui.print`: imprime un HTML de la app en un iframe oculto SIN scripts (`allow-same-origin`
+ * solo para poder llamar a print() desde aquí; `allow-modals` para el diálogo). El HTML ya va
+ * saneado. Se retira al terminar de imprimir o por tiempo; nunca toca el DOM de Cortex.
+ */
+function printHtml(html: string, title?: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-same-origin allow-modals');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.tabIndex = -1;
+    frame.style.cssText =
+      'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none';
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      frame.remove();
+      resolve();
+    };
+    frame.addEventListener('load', async () => {
+      const win = frame.contentWindow;
+      const doc = frame.contentDocument;
+      if (!win || !doc) return cleanup();
+      try {
+        // Espera a las imágenes (tope de 5 s) para no imprimir en blanco.
+        const pending = Array.from(doc.images)
+          .filter((img) => !img.complete)
+          .map(
+            (img) =>
+              new Promise<void>((r) => {
+                img.addEventListener('load', () => r(), { once: true });
+                img.addEventListener('error', () => r(), { once: true });
+              }),
+          );
+        if (pending.length) {
+          await Promise.race([Promise.all(pending), new Promise<void>((r) => setTimeout(r, 5000))]);
+        }
+        win.addEventListener('afterprint', () => setTimeout(cleanup, 200), { once: true });
+        win.focus();
+        win.print();
+      } catch {
+        return cleanup();
+      }
+      // Respaldo: algunos navegadores no avisan afterprint.
+      setTimeout(cleanup, 120_000);
+    });
+    frame.srcdoc = buildPrintDoc(html, title);
+    document.body.appendChild(frame);
+  });
+}
+
 function isRequest(data: unknown): data is Request {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
@@ -274,6 +327,18 @@ export function CodeScreen({
         if (!(a.data instanceof Blob) && typeof a.data !== 'string')
           return reply({ ok: false, error: 'Falta el contenido del archivo.' });
         downloadFile(a.filename, a.data, typeof a.mime === 'string' ? a.mime : undefined);
+        return reply({ ok: true, data: null });
+      }
+      if (op === 'ui.print') {
+        const a = (args ?? {}) as { html?: unknown; title?: unknown };
+        if (typeof a.html !== 'string' || !a.html.trim())
+          return reply({ ok: false, error: 'Falta el contenido a imprimir.' });
+        if (new Blob([a.html]).size > PRINT_MAX_BYTES)
+          return reply({
+            ok: false,
+            error: 'Lo que se quiere imprimir es demasiado grande (máx. 2 MB).',
+          });
+        void printHtml(a.html, typeof a.title === 'string' ? a.title : undefined);
         return reply({ ok: true, data: null });
       }
       if (op === 'location.current') {

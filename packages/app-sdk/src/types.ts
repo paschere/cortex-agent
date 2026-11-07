@@ -125,6 +125,11 @@ export interface SdkPosition {
   inside: boolean | null;
 }
 
+export interface PrintOptions {
+  /** Título del documento (el nombre que propone «guardar como PDF»). */
+  title?: string;
+}
+
 export interface ConfirmOptions {
   confirmLabel?: string;
   /** Pinta el botón principal como acción que no se deshace. */

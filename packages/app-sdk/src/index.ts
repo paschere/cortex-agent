@@ -8,6 +8,7 @@ export { useAsync, useLocations, useQuery, useUser } from './react';
 export type {
   ActionResult,
   ConfirmOptions,
+  PrintOptions,
   PickOptions,
   ScanOptions,
   ScanResult,
