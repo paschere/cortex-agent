@@ -361,7 +361,7 @@
 .oc-g-lab b{font:700 13px var(--mono)}.oc-g-lab small{font-size:11px;color:var(--suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oc-g-lab:hover{background:var(--hoja2)}
 .oc-g-pista{flex:none;position:relative;background-image:linear-gradient(90deg,var(--linea) 1px,transparent 1px);background-size:var(--px) 100%}
-.oc-g-barra{position:absolute;top:7px;height:30px;min-width:122px;border-radius:9px;display:flex;align-items:center;gap:6px;padding:0 9px;font:700 12px var(--mono);white-space:nowrap;overflow:hidden;cursor:pointer;border:1.5px solid;transition:filter .15s,transform .12s}
+.oc-g-barra{position:absolute;top:7px;height:30px;min-width:172px;border-radius:9px;display:flex;align-items:center;gap:6px;padding:0 9px;font:700 12px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:1;cursor:pointer;border:1.5px solid;transition:filter .15s,transform .12s}
 .oc-g-barra:hover{filter:brightness(.97);transform:translateY(-1px)}
 .oc-g-barra:focus-visible{outline:3px solid #7fa3c9;outline-offset:1px}
 .oc-g-barra.neutral{background:#efeadb;border-color:#b9b098;color:#3a3429}

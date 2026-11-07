@@ -83,7 +83,7 @@ export function Pista({ vuelos, onAbrir }: { vuelos: Vuelo[]; onAbrir: (v: Vuelo
                   <button
                     type="button"
                     className={`oc-g-barra ${t} ${riesgo ? 'riesgo' : ''} ${hecho ? 'hecho' : ''}`}
-                    style={{ left: x(i0), width: Math.max(122, x(f0) - x(i0)) }}
+                    style={{ left: x(i0), width: Math.max(172, x(f0) - x(i0)) }}
                     onClick={() => onAbrir(v)}
                     title={`${v.numero} · ${v.estado}${tarde ? ' · atrasado' : ''}`}
                     aria-label={`${v.numero}, ${v.estado}${tarde ? ', atrasado' : ''}, ${hhmm(v.horaActual)}`}
