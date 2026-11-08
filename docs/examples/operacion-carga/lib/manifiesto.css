@@ -1,0 +1,26 @@
+/* Editor del manifiesto (Nuevo manifiesto). Se apoya en las variables de tema.css. */
+.oc-hoja.mf{max-width:1280px;width:calc(100% - 24px);max-height:94vh}
+@media (max-width:759px){.oc-hoja.mf{width:100%}}
+.mf-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+@media (min-width:1180px){.mf-cols{grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);align-items:start}.mf-solo-estrecho{display:none}}
+.mf-aeros{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
+.mf-aero{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;padding:6px;border:1.5px solid var(--linea2);border-radius:12px;background:var(--hoja);cursor:pointer;font:inherit;color:var(--tinta);font-size:12px;font-weight:700}
+.mf-aero img{max-width:92px;max-height:30px;object-fit:contain}
+.mf-aero[aria-pressed=true]{border-color:var(--acento);background:var(--acento-fondo);box-shadow:0 0 0 2px var(--acento) inset}
+.mf-hoja{overflow:auto;border:1px solid var(--linea2);border-radius:12px;background:var(--hoja);max-height:52vh}
+table.mf-t{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+.mf-t th{position:sticky;top:0;background:var(--hoja2);text-align:left;font-size:12px;padding:6px 6px;border-bottom:1px solid var(--linea2);z-index:1}
+.mf-t td{padding:0;border-bottom:1px solid var(--linea)}
+.mf-t td.n{width:34px;text-align:center;color:var(--suave);font-size:12px}
+.oc-hoja .mf-t input{width:100%;min-height:34px;height:34px;border:0;border-radius:0;background:transparent;padding:2px 6px;font:inherit;font-size:14px;box-shadow:none}
+.oc-hoja .mf-t input:focus{outline:2px solid var(--acento);outline-offset:-2px;background:var(--acento-fondo)}
+.oc-hoja .mf-t td.num input{text-align:right}
+.mf-t tr.mal td{background:var(--malo-fondo)}
+.mf-t tr.aviso td{background:var(--aviso-fondo)}
+.mf-tot{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;font-weight:700;padding:8px 2px}
+.mf-tot span{color:var(--suave);font-weight:500;font-size:13px}
+.mf-prev{border:1px solid var(--linea2);border-radius:12px;background:#cfcac0;overflow:hidden;position:relative}
+.mf-prev iframe{border:0;display:block;transform-origin:0 0;background:#cfcac0}
+.mf-lista{margin:0;padding-left:18px;font-size:13px}
+.mf-pegar{width:100%;min-height:90px;font:13px var(--mono)}
+@media (max-width:1179px){.mf-oculta-estrecho{display:none!important}}

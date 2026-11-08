@@ -6,6 +6,7 @@
     "react-dom": "18.3.1",
     "leaflet": "1.9.4",
     "react-leaflet": "4.2.1",
-    "lucide-react": "0.441.0"
+    "lucide-react": "0.441.0",
+    "exceljs": "4.4.0"
   }
 }

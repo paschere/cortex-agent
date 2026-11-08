@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
-import { ArrowRight, Clock, FileScan, Pencil, Plane, Plus, Search, X } from 'lucide-react';
+import { ArrowRight, Clock, FileScan, FileSpreadsheet, Pencil, Plane, Plus, Search, X } from 'lucide-react';
 import { aAtencion, aEvento, cargarVuelos, porRelacion, useAcciones, useCarga, useRol } from '../lib/datos';
 import type { Vuelo } from '../lib/datos';
 import { Etapas, TarjetaEmbarque } from '../lib/Piezas';
@@ -10,6 +10,7 @@ import { N, fechaCorta, hhmm, kg, num } from '../lib/formato';
 import { horaAhora, hoyBogota, minutosHasta, sumarDias } from '../lib/tiempo';
 import { puedeEditarDoc, useEsquema } from '../lib/documental';
 import { NuevoDesdeManifiesto } from '../lib/ManifiestoVuelo';
+import { ManifiestoNuevo } from '../lib/ManifiestoNuevo';
 import { aerolineaDe, aprenderAerolineas, codigoAerolinea } from '../lib/aerolineas';
 import { Boton, Campo, Chip, ES_VIVO, ErrorCaja, Estado, Hoja, Numero, Pantalla, Segmentos, confirmar, useOperacion } from '../lib/ui';
 import { useGuardado } from '../lib/guardado';
@@ -33,6 +34,7 @@ export default function Vuelos() {
   const [editando, setEditando] = useState<Vuelo | 'nuevo' | null>(null);
   const [demora, setDemora] = useState<Vuelo | null>(null);
   const [desdeManifiesto, setDesdeManifiesto] = useState(false);
+  const [manifiestoNuevo, setManifiestoNuevo] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
   const ancha = useAncha();
   const sel = (data ?? []).find((v) => v.id === selId) ?? null;
@@ -71,9 +73,14 @@ export default function Vuelos() {
       acciones={
         <>
           {puedeEditarDoc(rol) ? (
-            <Boton tono="primario" onClick={() => setDesdeManifiesto(true)} icono={<FileScan size={18} />}>
-              Nuevo vuelo desde manifiesto
-            </Boton>
+            <>
+              <Boton tono="primario" onClick={() => setManifiestoNuevo(true)} icono={<FileSpreadsheet size={18} />}>
+                Nuevo manifiesto
+              </Boton>
+              <Boton onClick={() => setDesdeManifiesto(true)} icono={<FileScan size={18} />}>
+                Nuevo vuelo desde manifiesto
+              </Boton>
+            </>
           ) : null}
           <Boton onClick={() => setEditando('nuevo')} icono={<Plus size={18} />}>
             Nuevo vuelo
@@ -115,7 +122,7 @@ export default function Vuelos() {
         tituloVacio={data && !data.length ? 'Todavía no hay vuelos' : 'No hay vuelos con ese filtro'}
         textoVacio={
           <p>
-            Crea el primero con «Nuevo vuelo»: número, fecha, hora estimada y lo esperado.
+            Empieza con «Nuevo manifiesto»: aerolínea, vuelo, fecha y las guías; o crea el vuelo a mano con «Nuevo vuelo».
           </p>
         }
         reintentar={() => void refresh()}
@@ -168,6 +175,20 @@ export default function Vuelos() {
             setEditando(null);
             await refresh();
             if (nuevo && id) irA('vuelo', { vuelo: id });
+          }}
+        />
+      ) : null}
+
+      {manifiestoNuevo ? (
+        <ManifiestoNuevo
+          vuelos={data ?? []}
+          esq={esq}
+          onCerrar={() => {
+            setManifiestoNuevo(false);
+            void refresh();
+          }}
+          onGuardado={async () => {
+            await refresh();
           }}
         />
       ) : null}

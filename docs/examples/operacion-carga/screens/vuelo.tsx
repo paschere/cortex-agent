@@ -19,6 +19,7 @@ import {
 import type { Atencion, Equipo, Evento, Guia, Prealerta, Vuelo } from '../lib/datos';
 import { ManifiestoInteligente } from '../lib/ManifiestoInteligente';
 import { RellenarVuelo, campoManifiesto, escanearManifiesto } from '../lib/ManifiestoVuelo';
+import { ManifiestoNuevo } from '../lib/ManifiestoNuevo';
 import type { Encabezado } from '../lib/encabezado';
 import { leerEncabezado } from '../lib/encabezado';
 import { CruceTresVias, TabAvisos, TabTramites } from '../lib/TabsVuelo';
@@ -192,6 +193,7 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
   const [contactos, setContactos] = useState<ClienteContacto[]>([]);
   const [tab, setTab] = useState<Tab>(tabInicial());
   const [relleno, setRelleno] = useState<{ enc: Encabezado; archivo: File | null } | null>(null);
+  const [verManifiesto, setVerManifiesto] = useState(false);
   const { rol, nombre } = useRol();
   const puede = puedeEditarDoc(rol);
   const ahora = useAhora(20_000);
@@ -432,6 +434,14 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
       {tab === 'guias' ? (
         <>
       <div className="oc-sec">
+        <h2>Manifiesto de la aerolínea</h2>
+        <Tarjeta>
+          <p className="oc-sub" style={{ marginBottom: 10 }}>Ábrelo para editar las guías, imprimirlo en el formato de la aerolínea o bajarlo en Excel.</p>
+          <Boton tono="primario" onClick={() => setVerManifiesto(true)}>{puede ? 'Abrir / editar manifiesto' : 'Ver e imprimir manifiesto'}</Boton>
+        </Tarjeta>
+      </div>
+
+      <div className="oc-sec">
         <h2>Manifiesto inteligente</h2>
         <Tarjeta>
           <ManifiestoInteligente
@@ -598,6 +608,19 @@ function Detalle({ id, onVolver }: { id: string; onVolver: () => void }) {
           </div>
         </Tarjeta>
       </div>
+      ) : null}
+
+      {verManifiesto ? (
+        <ManifiestoNuevo
+          vuelo={v}
+          vuelos={[v]}
+          esq={data.esq}
+          soloLectura={!puede}
+          onCerrar={() => {
+            setVerManifiesto(false);
+            void refresh();
+          }}
+        />
       ) : null}
 
       {relleno ? (
