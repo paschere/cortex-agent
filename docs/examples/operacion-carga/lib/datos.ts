@@ -3,6 +3,7 @@ import { cortex, useUser } from '@cortex/app-sdk';
 import type { QueryOptions, SdkRow } from '@cortex/app-sdk';
 import { N, hay } from './formato';
 import { marcarCarga } from './vivo';
+import { useRefrescoVivo } from './enVivo';
 
 /**
  * Lectura de datos: filas del servidor → objetos con nombres claros.
@@ -345,6 +346,13 @@ export interface Evento {
   documentos: Archivo[];
   nota: string;
   creado: string;
+  /** Tarea a la que pertenece (vacío si es de un vuelo). */
+  tareaId: string;
+  /** Centro de atención: quién lo vio / lo tomó y cuándo (vacíos mientras no se apliquen los datos). */
+  vistoPor: string;
+  vistoEn: string;
+  tomadoPor: string;
+  escalado: boolean;
 }
 
 export function aEvento(r: SdkRow): Evento {
@@ -371,6 +379,11 @@ export function aEvento(r: SdkRow): Evento {
     documentos: archivos(v.documentos),
     nota: T(v.nota_supervisor),
     creado: r.created_at,
+    tareaId: relId(v.tarea),
+    vistoPor: T(v.visto_por),
+    vistoEn: T(v.visto_en),
+    tomadoPor: T(v.tomado_por),
+    escalado: ['Sí', 'true', '1', 'si'].includes(T(v.escalado).toLowerCase()) || v.escalado === true || v.escalado === 1,
   };
 }
 
@@ -500,8 +513,14 @@ export interface Carga<T> {
   refresh: () => Promise<void>;
 }
 
-/** Carga con `fn` ahora, cuando cambian `deps` y cada `refreshMs` (solo con la pantalla visible). */
-export function useCarga<T>(fn: () => Promise<T>, deps: unknown[], refreshMs?: number): Carga<T> {
+/** Respaldo cuando hay tiempo real: el sondeo se alarga a esto (por si se cae la conexión en vivo). */
+export const RESPALDO_VIVO_MS = 120_000;
+
+/**
+ * Carga con `fn` ahora, cuando cambian `deps` y cada `refreshMs` (solo con la pantalla visible).
+ * Con `tablasVivo` (tablas que lee `fn`) además recarga en 1–2 s cuando alguna cambia; `refreshMs` queda de respaldo.
+ */
+export function useCarga<T>(fn: () => Promise<T>, deps: unknown[], refreshMs?: number, tablasVivo?: string[]): Carga<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -539,6 +558,8 @@ export function useCarga<T>(fn: () => Promise<T>, deps: unknown[], refreshMs?: n
       document.removeEventListener('visibilitychange', onVis);
     };
   }, [refresh, refreshMs, ...deps]);
+
+  useRefrescoVivo(tablasVivo ?? [], () => (tablasVivo?.length ? refresh() : undefined));
 
   return { data, loading, error, refresh };
 }

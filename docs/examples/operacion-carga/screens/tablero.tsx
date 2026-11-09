@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock3, FileCheck2, Inbox, Plane, RefreshCw, ShieldAlert } from 'lucide-react';
-import { aAtencion, aEvento, aVuelo, traerTodo, useCarga, useRol } from '../lib/datos';
+import { RESPALDO_VIVO_MS, aAtencion, aEvento, aVuelo, traerTodo, useCarga, useRol } from '../lib/datos';
 import type { Atencion, Evento, Vuelo } from '../lib/datos';
 import { ESTADOS_VUELO, TONO_VUELO, tono } from '../lib/estados';
 import { fechaLarga, hhmm, kg, minTxt } from '../lib/formato';
@@ -15,10 +15,10 @@ import { Boton, Chip, ES_VIVO, ErrorCaja, Estado, Frase, Metrica, Pantalla, Tarj
 /**
  * TABLERO — inicio del supervisor, documental y gerencia.
  * Línea de tiempo del día, estado de cada vuelo, retrasos, diferencias fuera de
- * margen, atenciones por aprobar y eventos críticos. Se actualiza solo cada 20 s.
+ * margen, atenciones por aprobar y eventos críticos. Se actualiza en vivo.
  */
 
-const CADA = 20_000;
+const CADA = RESPALDO_VIVO_MS;
 
 interface Datos {
   vuelos: Vuelo[];
@@ -56,7 +56,7 @@ const retraso = (v: Vuelo): number => (v.hora && v.horaActual ? (difMinutos(v.ho
 
 export default function Tablero() {
   const hoy = hoyBogota();
-  const { data, loading, error, refresh } = useCarga(cargar, [], CADA);
+  const { data, loading, error, refresh } = useCarga(cargar, [], CADA, ['vuelos', 'atenciones', 'eventos_operacion', 'tramites_dian']);
   const { rol } = useRol();
   const ahora = useAhora(15_000);
 

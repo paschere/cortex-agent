@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { cortex } from '@cortex/app-sdk';
 import type { SdkRow } from '@cortex/app-sdk';
 import { ArrowRight, BellRing, ClipboardCheck, FileWarning, Inbox, RefreshCw, Timer, TriangleAlert } from 'lucide-react';
-import { aGuia, aPrealerta, cargarVuelos, traerTodo, useCarga } from '../lib/datos';
+import { RESPALDO_VIVO_MS, aGuia, aPrealerta, cargarVuelos, traerTodo, useCarga } from '../lib/datos';
 import type { Guia, Prealerta, Vuelo } from '../lib/datos';
 import { fechaCorta, fechaLarga, num } from '../lib/formato';
 import { normNombre } from '../lib/manifiesto';
@@ -74,7 +74,7 @@ const TOPE = 6;
 
 export default function Bandeja() {
   const hoy = hoyBogota();
-  const { data, loading, error, refresh } = useCarga(cargar, [], 30_000);
+  const { data, loading, error, refresh } = useCarga(cargar, [], RESPALDO_VIVO_MS, ['vuelos', 'prealertas', 'prefacturacion', 'tramites_dian', 'avisos_cliente']);
   const ahora = useAhora(15_000);
 
   const d = data;

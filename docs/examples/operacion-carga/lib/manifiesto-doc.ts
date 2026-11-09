@@ -1,6 +1,6 @@
 import { tituloManifiesto, aerolineaManifiesto } from './aerolineas';
 import { N } from './formato';
-import { LOGO_EMPRESA_ALTO, LOGO_EMPRESA_ANCHO, LOGO_EMPRESA_PNG } from './manifiesto-logo';
+import { LOGOS_AEROLINEA, LOGO_EMPRESA_ALTO, LOGO_EMPRESA_ANCHO, LOGO_EMPRESA_PNG } from './manifiesto-logo';
 
 /**
  * EL MANIFIESTO DE LA AEROLÍNEA, TAL CUAL LA PLANTILLA «MANIFIESTO AEROLINEAS NO MODIFICAR»
@@ -206,7 +206,11 @@ function enteroTxt(v: string | number): string {
   const n = N(v);
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
 }
-const pesoTxt = (v: string | number): string => N(v).toFixed(2);
+/** Peso en formato colombiano: coma decimal y punto de miles («1.250,50»), siempre con dos decimales. */
+const FORMATO_PESO = new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
+export const pesoTxt = (v: string | number): string => FORMATO_PESO.format(N(v));
+/** Formato de celda de Excel para el peso: número real (no texto); la coma o el punto decimal los pone Excel según la región. */
+export const FORMATO_CELDA_PESO = '#,##0.00';
 
 function armarPagina(m: Manifiesto, guias: GuiaManifiesto[], n: number, de: number, totales: { paquetes: number; peso: number } | null, formulasTotales: { c: string; d: string } | null): Pagina {
   const celdas: Celda[] = [];
@@ -256,7 +260,7 @@ function armarPagina(m: Manifiesto, guias: GuiaManifiesto[], n: number, de: numb
     const r = PRIMERA_FILA_DATOS + i;
     if (g.guia.trim()) poner(r, 1, g.guia.trim(), { f: 'ar', h: 'c' });
     if (tiene(g.paquetes)) poner(r, 3, N(g.paquetes), { texto: enteroTxt(g.paquetes), fmt: '0', f: 'ar', h: 'c' });
-    if (tiene(g.peso)) poner(r, 4, N(g.peso), { texto: pesoTxt(g.peso), fmt: '0.00', f: 'ar', h: 'c' });
+    if (tiene(g.peso)) poner(r, 4, N(g.peso), { texto: pesoTxt(g.peso), fmt: FORMATO_CELDA_PESO, f: 'ar', h: 'c' });
     if (g.naturaleza.trim()) poner(r, 5, g.naturaleza.trim(), { f: 'ar', h: 'c', encoger: true });
     if (g.consignatario.trim()) poner(r, 8, g.consignatario.trim(), { f: 'ar', h: 'c', encoger: true });
   });
@@ -264,7 +268,7 @@ function armarPagina(m: Manifiesto, guias: GuiaManifiesto[], n: number, de: numb
   // Totales (solo la última página)
   if (totales) {
     poner(FILA_TOTALES, 3, totales.paquetes, { texto: enteroTxt(totales.paquetes), fmt: '0', formula: formulasTotales?.c, f: 'ar', b: true, h: 'c' });
-    poner(FILA_TOTALES, 4, totales.peso, { texto: pesoTxt(totales.peso), fmt: '0.00', formula: formulasTotales?.d, f: 'ar', b: true, h: 'c' });
+    poner(FILA_TOTALES, 4, totales.peso, { texto: pesoTxt(totales.peso), fmt: FORMATO_CELDA_PESO, formula: formulasTotales?.d, f: 'ar', b: true, h: 'c' });
   }
 
   // Pie
@@ -618,5 +622,11 @@ export async function cargarLogo(url: string): Promise<LogoImagen | null> {
   }
 }
 
-/** El logo de la aerolínea de la lista, si el nombre la reconoce. */
+/** El logo (data URI incrustado) de la aerolínea de la lista, si el nombre la reconoce. */
 export const logoDe = (aerolinea: string): string => aerolineaManifiesto(aerolinea)?.logo ?? '';
+
+/** El logo incrustado listo para usar en la impresión y en Excel (sin descargar nada), o null si no es de la lista. */
+export function logoImagenDe(aerolinea: string): LogoImagen | null {
+  const a = aerolineaManifiesto(aerolinea);
+  return a ? (LOGOS_AEROLINEA[a.clave] ?? null) : null;
+}

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
 import { AlertTriangle, Camera, CheckCircle2, ClipboardList, Clock, MapPin, Minus, Pencil, Play, Plane, Plus, Truck, Wrench } from 'lucide-react';
 import { Dictado } from '../lib/dictado';
-import { aAtencion, aEquipo, aEvento, aTarifa, aVuelo, porRelacion, traerTodo, useCarga, useRol } from '../lib/datos';
+import { RESPALDO_VIVO_MS, aAtencion, aEquipo, aEvento, aTarifa, aVuelo, porRelacion, traerTodo, useCarga, useRol } from '../lib/datos';
 import { isoBogota, msDeIso, useEsquema } from '../lib/documental';
 import type { Esquema } from '../lib/documental';
 import { TONO_TAREA, cargarTareas, equiposDeTarea, esMia, eventosDeTarea, registrarEvento, terminarTarea } from '../lib/tareas';
@@ -12,16 +12,18 @@ import { Medidor } from '../lib/Piezas';
 import { TIPOS_EVENTO, TONO_ATENCION, TONO_VUELO, tono } from '../lib/estados';
 import { N, cronometro, dinero, hhmm, kg, num } from '../lib/formato';
 import { horaAhora, hoyBogota, minutosHasta, textoMinutos } from '../lib/tiempo';
+import { BarraSinSenal, FilaPendiente, agregarPendiente, usePendientes } from '../lib/SinSenal';
+import { accionSS, actualizarSS, esEncolado, insertarSS } from '../lib/enVivo';
 import { Adjuntos, Boton, Campo, Chip, ES_VIVO, Cargando, ErrorCaja, Hoja, Numero, Pantalla, Paso, SelectorArchivo, Tarjeta, avisar, confirmar, mensajeDe, subirArchivo, useOperacion } from '../lib/ui';
 
 /**
  * EN CAMPO — pantalla del operario, hecha para el teléfono y para leerse al sol.
  * Vuelos por tomar → Tomar → atención en curso (cronómetro, real vs esperado en vivo,
  * equipos con foto obligatoria, eventos rápidos, novedades por voz, fotos) → Cerrar.
- * Sondeo cada 15 s; los formularios no se pisan con el sondeo.
+ * En vivo (se recarga cuando cambia la tabla); los formularios no se pisan con la recarga.
  */
 
-const CADA = 15_000;
+const CADA = RESPALDO_VIVO_MS;
 
 interface Datos {
   vuelos: Vuelo[];
@@ -51,9 +53,11 @@ export default function EnCampo() {
   const { id: miId, ref: miRef, nombre } = useRol();
   const esq = useEsquema();
   const hoy = hoyBogota();
-  const { data, loading, error, refresh } = useCarga(cargar, [], CADA);
+  const { data, loading, error, refresh } = useCarga(cargar, [], CADA, ['vuelos', 'atenciones', 'tareas_operacion']);
   const op = useOperacion();
   const [zona, setZona] = useState<string | null>(null);
+  const pendVuelos = usePendientes('vuelos');
+  const enEspera = (id: string) => pendVuelos.some((p) => p.clave === id);
 
   const vuelosPorId = useMemo(() => new Map((data?.vuelos ?? []).map((v) => [v.id, v])), [data]);
   const enCurso = (data?.atenciones ?? []).filter((a) => a.estado === 'En atención' && (!miId || !a.operarioId || a.operarioId === miId));
@@ -71,13 +75,17 @@ export default function EnCampo() {
     .slice(0, 6);
 
   const tomar = async (v: Vuelo) => {
+    let enCola = false;
     const ok = await op.correr(async () => {
       // La ubicación sirve para decir si estás dentro de la zona; el servidor la registra al tomar.
       const ub = await cortex.location.current().catch(() => null);
       setZona(ub ? (ub.zone ?? (ub.inside === false ? 'Fuera de las zonas' : null)) : null);
-      await cortex.tables.action('vuelos', v.id, 'tomar');
-    }, `Tomaste ${v.numero}.`);
-    if (ok) {
+      // Sin señal queda en la cola del aparato y se toma en cuanto haya red.
+      enCola = esEncolado(await accionSS('vuelos', v.id, 'tomar'));
+      if (enCola) agregarPendiente({ localId: `tomar-${v.id}`, tabla: 'vuelos', clave: v.id, titulo: `Tomar ${v.numero}`, detalle: 'Se tomará apenas haya señal.' });
+    });
+    if (ok) avisar(enCola ? `Sin señal: ${v.numero} quedó por tomar, se envía solo.` : `Tomaste ${v.numero}.`);
+    if (ok && !enCola) {
       await refresh();
       // La atención se crea sola al tomar: se vuelve a mirar un par de veces.
       setTimeout(() => void refresh(), 1500);
@@ -87,6 +95,7 @@ export default function EnCampo() {
 
   return (
     <Pantalla clase="campo" titulo="En campo" sub={nombre ? `Hola, ${nombre.split(' ')[0]}. Se actualiza solo.` : 'Se actualiza solo.'}>
+      <BarraSinSenal alVaciar={() => void refresh()} />
       {op.error ? <ErrorCaja mensaje={op.error} /> : null}
       {error && data ? <ErrorCaja mensaje={`Sin señal para actualizar. ${error}`} reintentar={() => void refresh()} /> : null}
       {zona ? (
@@ -120,8 +129,8 @@ export default function EnCampo() {
                   <span>{kg(v.kilosEsp)}</span>
                 </div>
                 {v.estado === 'Aterrizó' ? (
-                  <Boton grande tono="senal" disabled={op.ocupado} onClick={() => void tomar(v)} icono={<Truck size={24} />}>
-                    {op.ocupado ? 'Tomando…' : 'Tomar este vuelo'}
+                  <Boton grande tono="senal" disabled={op.ocupado || enEspera(v.id)} onClick={() => void tomar(v)} icono={<Truck size={24} />}>
+                    {enEspera(v.id) ? 'Pendiente de enviar (sin señal)' : op.ocupado ? 'Tomando…' : 'Tomar este vuelo'}
                   </Boton>
                 ) : <p className="oc-sub" style={{ fontSize: 16 }}>{textoMinutos(minutosHasta(v.fecha, v.horaActual))}. Cuando aterrice podrás tomarlo aquí.</p>}
               </div>
@@ -164,8 +173,8 @@ export default function EnCampo() {
                     <span>{num(v.palletsEsp)} pallets</span>
                     <span>{num(v.piezasEsp)} piezas</span>
                   </div>
-                  <Boton grande tono="senal" disabled={op.ocupado} onClick={() => void tomar(v)} icono={<Truck size={24} />}>
-                    {op.ocupado ? 'Tomando…' : 'Tomar este vuelo'}
+                  <Boton grande tono="senal" disabled={op.ocupado || enEspera(v.id)} onClick={() => void tomar(v)} icono={<Truck size={24} />}>
+                    {enEspera(v.id) ? 'Pendiente de enviar (sin señal)' : op.ocupado ? 'Tomando…' : 'Tomar este vuelo'}
                   </Boton>
                 </li>
               ))}
@@ -237,7 +246,7 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
   const [novedades, setNovedades] = useState(a.novedades);
   const [sucio, setSucio] = useState(false);
   const [evento, setEvento] = useState<string | null>(null);
-  const [hecho, setHecho] = useState(false);
+  const [hecho, setHecho] = useState<boolean | 'cola'>(false);
 
   // Si cambió la atención (otra distinta), se reinicia el formulario; el sondeo no lo toca.
   useEffect(() => {
@@ -251,8 +260,8 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
     setSucio(false);
   }, [a]);
 
-  const eq = useCarga(async () => (await porRelacion('equipos_usados', 'atencion', a.id)).map(aEquipo), [a.id], 30_000);
-  const ev = useCarga(async () => (await porRelacion('eventos_operacion', 'atencion', a.id)).map(aEvento), [a.id], 30_000);
+  const eq = useCarga(async () => (await porRelacion('equipos_usados', 'atencion', a.id)).map(aEquipo), [a.id], RESPALDO_VIVO_MS, ['equipos_usados']);
+  const ev = useCarga(async () => (await porRelacion('eventos_operacion', 'atencion', a.id)).map(aEvento), [a.id], RESPALDO_VIVO_MS, ['eventos_operacion']);
   const tarifas = useCarga(async () => (await traerTodo('tarifas_proveedores', {}, 600)).map(aTarifa), []);
 
   const inicioMs = Date.parse(`${a.fecha || hoyBogota()}T${hhmm(a.horaInicio) || '00:00'}:00-05:00`);
@@ -289,7 +298,7 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
   const guardar = async (silencioso = false) => {
     const v = campos();
     if (!Object.keys(v).length) return true;
-    const ok = await guardado.correr(() => cortex.tables.update('atenciones', a.id, v), silencioso ? undefined : 'Guardado.');
+    const ok = await guardado.correr(() => actualizarSS('atenciones', a.id, v), silencioso ? undefined : 'Guardado.');
     if (ok) setSucio(false);
     return ok;
   };
@@ -307,13 +316,16 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
     if (sinFoto.length) return avisar('Cada equipo necesita su foto. Agrégala antes de cerrar.');
     const hf = horaFin || horaAhora();
     if (!(await confirmar('¿Cerrar la atención? Se envía al supervisor para aprobación.', 'Cerrar atención'))) return;
+    let enCola = false;
     const ok = await op.correr(async () => {
       setHoraFin(hf);
-      await cortex.tables.update('atenciones', a.id, { ...campos(), hora_fin: hf });
-      await cortex.tables.action('atenciones', a.id, 'cerrar');
-    }, 'Atención cerrada. Quedó por aprobar.');
+      const r1 = await actualizarSS('atenciones', a.id, { ...campos(), hora_fin: hf });
+      const r2 = await accionSS('atenciones', a.id, 'cerrar');
+      enCola = esEncolado(r1) || esEncolado(r2);
+    });
     if (ok) {
-      setHecho(true);
+      avisar(enCola ? 'Sin señal: el cierre quedó guardado y se envía solo.' : 'Atención cerrada. Quedó por aprobar.');
+      setHecho(enCola ? 'cola' : true);
       await onCambio();
     }
   };
@@ -322,7 +334,7 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
     return (
       <Tarjeta tono="ok">
         <p style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 20 }}>
-          <CheckCircle2 /> Atención de {a.vuelo} enviada a aprobación.
+          <CheckCircle2 /> {hecho === 'cola' ? `Atención de ${a.vuelo} cerrada: se envía a aprobación apenas haya señal.` : `Atención de ${a.vuelo} enviada a aprobación.`}
         </p>
       </Tarjeta>
     );
@@ -392,7 +404,7 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
             <Boton key={t} onClick={() => setEvento(t)}>{t}</Boton>
           ))}
         </div>
-        <EventosLista eventos={ev.data ?? []} cargando={ev.loading} />
+        <EventosLista eventos={ev.data ?? []} cargando={ev.loading} clave={a.id} />
       </Tarjeta>
 
       <div className="oc-asistente" style={{ marginTop: 22 }}><span className="n">4</span><h2>Novedades y fotos</h2></div>
@@ -413,7 +425,7 @@ function AtencionActiva({ a, vuelo, onCambio }: { a: Atencion; vuelo?: Vuelo; on
             onArchivos={(fs) =>
               void guardado
                 .correr(async () => {
-                  for (const f of fs) await subirArchivo(f, { table: 'atenciones', id: a.id, field: 'fotos' });
+                  for (const f of fs) await subirArchivo(f, { table: 'atenciones', id: a.id, field: 'fotos' }, { sinSenal: true });
                 }, 'Foto guardada.')
                 .then(() => onCambio())
             }
@@ -474,6 +486,7 @@ function EquiposPanel({
   const [foto, setFoto] = useState<File | null>(null);
   const op = useOperacion();
   const nombres = useMemo(() => [...new Set(tarifas.map((t) => t.equipo))].sort(), [tarifas]);
+  const pendEq = usePendientes('equipos_usados', a.id);
   const opciones = tarifas.filter((t) => t.equipo === nombre);
   const t = tarifas.find((x) => x.id === tarifaId);
   const total = t ? t.tarifa * cant : 0;
@@ -481,9 +494,10 @@ function EquiposPanel({
   const agregar = async () => {
     if (!t || !foto) return;
     const ok = await op.correr(async () => {
-      const fila = await cortex.tables.insert('equipos_usados', { atencion: a.id, tarifa: t.id, cantidad: cant });
+      const fila = await insertarSS('equipos_usados', { atencion: a.id, tarifa: t.id, cantidad: cant });
+      if (esEncolado(fila)) agregarPendiente({ localId: fila.localId, tabla: 'equipos_usados', clave: a.id, titulo: `${t.equipo} × ${cant}`, detalle: t.proveedor });
       try {
-        await subirArchivo(foto, { table: 'equipos_usados', id: fila.id, field: 'foto' });
+        await subirArchivo(foto, { table: 'equipos_usados', id: esEncolado(fila) ? fila.localId : fila.id, field: 'foto' }, { sinSenal: true });
       } catch (e) {
         await onCambio();
         throw new Error(`El equipo quedó anotado pero la foto no subió (${mensajeDe(e)}). Vuelve a tomarla en la lista de abajo.`);
@@ -500,7 +514,7 @@ function EquiposPanel({
 
   const cambiarCantidad = async (e: Equipo, n: number) => {
     if (n < 1) return;
-    await op.correr(() => cortex.tables.update('equipos_usados', e.id, { cantidad: n }));
+    await op.correr(() => actualizarSS('equipos_usados', e.id, { cantidad: n }));
     await onCambio();
   };
 
@@ -530,16 +544,17 @@ function EquiposPanel({
                   camara="environment"
                   onArchivos={(fs) =>
                     fs[0] &&
-                    void op.correr(() => subirArchivo(fs[0] as File, { table: 'equipos_usados', id: e.id, field: 'foto' }), 'Foto guardada.').then(() => onCambio())
+                    void op.correr(() => subirArchivo(fs[0] as File, { table: 'equipos_usados', id: e.id, field: 'foto' }, { sinSenal: true }), 'Foto guardada.').then(() => onCambio())
                   }
                 />
               )}
             </li>
           ))}
         </ul>
-      ) : !cargando ? (
+      ) : !cargando && !pendEq.length ? (
         <p className="oc-sub">Todavía no anotaste equipos.</p>
       ) : null}
+      {pendEq.length ? <ul className="oc-lista">{pendEq.map((p) => <FilaPendiente key={p.localId} p={p} />)}</ul> : null}
 
       <h3>Agregar un equipo</h3>
       {cargandoTarifas && !tarifas.length ? <p className="oc-sub">Cargando tarifas…</p> : null}
@@ -584,11 +599,13 @@ function EquiposPanel({
 
 /* ───────────── Eventos ───────────── */
 
-function EventosLista({ eventos, cargando }: { eventos: Evento[]; cargando: boolean }) {
-  if (cargando && !eventos.length) return null;
-  if (!eventos.length) return null;
+function EventosLista({ eventos, cargando, clave }: { eventos: Evento[]; cargando: boolean; clave: string }) {
+  const pend = usePendientes('eventos_operacion', clave);
+  if (cargando && !eventos.length && !pend.length) return null;
+  if (!eventos.length && !pend.length) return null;
   return (
     <ul className="oc-lista" style={{ marginTop: 14 }}>
+      {pend.map((p) => <FilaPendiente key={p.localId} p={p} />)}
       {eventos.map((e) => (
         <li key={e.id} className={`oc-item ${e.critico ? 'bad' : ''}`}>
           <div className="oc-item-top"><b>{e.tipo}</b><span className="oc-mono">{hhmm(e.hora)}</span></div>
@@ -613,7 +630,7 @@ function EventoRapido({ tipo, a, onCerrar, onListo }: { tipo: string; a: Atencio
 
   const registrar = async () => {
     const ok = await op.correr(async () => {
-      const fila = await cortex.tables.insert('eventos_operacion', {
+      const fila = await insertarSS('eventos_operacion', {
         tipo,
         descripcion: desc.trim() || tipo,
         vuelo: a.vueloId || undefined,
@@ -622,8 +639,12 @@ function EventoRapido({ tipo, a, onCerrar, onListo }: { tipo: string; a: Atencio
         ...(proveedor.trim() ? { proveedor: proveedor.trim() } : {}),
         ...(costo.trim() ? { costo: N(costo) } : {}),
       });
-      for (const f of fotos) await subirArchivo(f, { table: 'eventos_operacion', id: fila.id, field: 'fotos' });
-    }, `${tipo}: registrado.`);
+      if (esEncolado(fila)) {
+        agregarPendiente({ localId: fila.localId, tabla: 'eventos_operacion', clave: a.id, titulo: tipo, detalle: desc.trim() || undefined });
+        avisar(`Sin señal: «${tipo}» quedó guardado y se envía solo.`);
+      } else avisar(`${tipo}: registrado.`);
+      for (const f of fotos) await subirArchivo(f, { table: 'eventos_operacion', id: esEncolado(fila) ? fila.localId : fila.id, field: 'fotos' }, { sinSenal: true });
+    });
     if (ok) await onListo();
   };
 
@@ -666,13 +687,15 @@ function TareaActiva({ t, esq, onCambio }: { t: Tarea; esq: Esquema; onCambio: (
   const op = useOperacion();
   const [hoja, setHoja] = useState<Hoja_ | null>(null);
   const [terminada, setTerminada] = useState<string | null>(null);
-  const eq = useCarga(() => equiposDeTarea(t.id), [t.id, t.estado], 30_000);
-  const ev = useCarga(() => eventosDeTarea(t.id), [t.id, t.estado], 30_000);
+  const eq = useCarga(() => equiposDeTarea(t.id), [t.id, t.estado], RESPALDO_VIVO_MS, ['equipos_usados']);
+  const ev = useCarga(() => eventosDeTarea(t.id), [t.id, t.estado], RESPALDO_VIVO_MS, ['eventos_operacion']);
   const enCurso = t.estado === 'En curso';
   const ini = msDeIso(t.inicio);
   const seg = enCurso && ini ? (ahora - ini) / 1000 : 0;
   const equipos = eq.data ?? [];
   const eventos = ev.data ?? [];
+  const pendEq = usePendientes('equipos_usados', t.id);
+  const pendEv = usePendientes('eventos_operacion', t.id);
   const costoEq = equipos.reduce((s, e) => s + (e.costoCop || (e.moneda === 'COP' ? e.tarifa * e.cantidad : 0)), 0);
 
   const refrescar = async () => {
@@ -681,8 +704,9 @@ function TareaActiva({ t, esq, onCambio }: { t: Tarea; esq: Esquema; onCambio: (
 
   const iniciar = async () => {
     const ok = await op.correr(async () => {
-      await cortex.tables.update('tareas_operacion', t.id, { estado: 'En curso', inicio: isoBogota(Date.now()) });
-      await registrarEvento(esq, { tipo: 'Inicio', tarea: t, descripcion: `Inicia: ${t.titulo}` }).catch(() => undefined);
+      const r = await actualizarSS('tareas_operacion', t.id, { estado: 'En curso', inicio: isoBogota(Date.now()) });
+      await registrarEvento(esq, { tipo: 'Inicio', tarea: t, descripcion: `Inicia: ${t.titulo}` }, { sinSenal: true }).catch(() => undefined);
+      if (esEncolado(r)) avisar('Sin señal: el inicio quedó guardado y se envía solo.');
     }, 'Tarea iniciada.');
     if (ok) await refrescar();
   };
@@ -734,8 +758,9 @@ function TareaActiva({ t, esq, onCambio }: { t: Tarea; esq: Esquema; onCambio: (
         )}
       </div>
 
-      {enCurso && equipos.length ? (
+      {enCurso && (equipos.length || pendEq.length) ? (
         <ul className="oc-lista" style={{ marginTop: 14 }}>
+          {pendEq.map((p) => <FilaPendiente key={p.localId} p={p} />)}
           {equipos.map((e) => (
             <li key={e.id} className={`oc-item ${e.foto.length ? '' : 'bad'}`}>
               <div className="oc-item-top"><b>{e.equipo || 'Equipo'} × {num(e.cantidad)}</b><span>{dinero(e.costoCop || e.tarifa * e.cantidad, e.moneda === 'COP' || e.costoCop ? 'COP' : e.moneda)}</span></div>
@@ -744,8 +769,9 @@ function TareaActiva({ t, esq, onCambio }: { t: Tarea; esq: Esquema; onCambio: (
           ))}
         </ul>
       ) : null}
-      {enCurso && eventos.length ? (
+      {enCurso && (eventos.length || pendEv.length) ? (
         <ul className="oc-lista" style={{ marginTop: 14 }}>
+          {pendEv.map((p) => <FilaPendiente key={p.localId} p={p} />)}
           {eventos.map((e) => (
             <li key={e.id} className="oc-item">
               <div className="oc-item-top"><b>{e.tipo}</b><span className="oc-mono">{hhmm(e.hora)}</span></div>
@@ -763,6 +789,8 @@ function TareaActiva({ t, esq, onCambio }: { t: Tarea; esq: Esquema; onCambio: (
           t={t}
           esq={esq}
           sinFoto={equipos.filter((e) => !e.foto.length).length}
+          equipos={equipos}
+          eventos={eventos}
           onCerrar={() => setHoja(null)}
           onListo={async (msg) => { setHoja(null); setTerminada(msg); await onCambio(); }}
         />
@@ -789,7 +817,7 @@ function ProcesoTarea({ t, esq, onCerrar, onListo }: { t: Tarea; esq: Esquema; o
         </div>
         {op.error ? <ErrorCaja mensaje={op.error} /> : null}
         <Boton grande tono="primario" disabled={op.ocupado} onClick={async () => {
-          const ok = await op.correr(() => registrarEvento(esq, { tipo: 'En proceso', tarea: t, descripcion: nota, costo: gasto.trim() ? N(gasto) : undefined, fotos }), 'Registrado.');
+          const ok = await op.correr(() => registrarEvento(esq, { tipo: 'En proceso', tarea: t, descripcion: nota, costo: gasto.trim() ? N(gasto) : undefined, fotos }, { sinSenal: true }), 'Registrado.');
           if (ok) await onListo();
         }}>{op.ocupado ? 'Guardando…' : 'Guardar'}</Boton>
       </div>
@@ -814,14 +842,15 @@ function EquipoTarea({ t, esq, onCerrar, onListo }: { t: Tarea; esq: Esquema; on
     if (!tf || !foto) return;
     const ok = await op.correr(async () => {
       // Igual que en la atención: el servidor calcula el costo en pesos al crear la fila.
-      const fila = await cortex.tables.insert('equipos_usados', { tarea: t.id, tarifa: tf.id, cantidad: cant });
+      const fila = await insertarSS('equipos_usados', { tarea: t.id, tarifa: tf.id, cantidad: cant });
+      if (esEncolado(fila)) agregarPendiente({ localId: fila.localId, tabla: 'equipos_usados', clave: t.id, titulo: `${tf.equipo} × ${cant}`, detalle: tf.proveedor });
       try {
-        await subirArchivo(foto, { table: 'equipos_usados', id: fila.id, field: 'foto' });
+        await subirArchivo(foto, { table: 'equipos_usados', id: esEncolado(fila) ? fila.localId : fila.id, field: 'foto' }, { sinSenal: true });
       } catch (e) {
-        await registrarEvento(esq, { tipo: 'Uso de equipo', tarea: t, descripcion: `${tf.equipo} × ${cant}`, equipo: tf.equipo, proveedor: tf.proveedor }).catch(() => undefined);
+        await registrarEvento(esq, { tipo: 'Uso de equipo', tarea: t, descripcion: `${tf.equipo} × ${cant}`, equipo: tf.equipo, proveedor: tf.proveedor }, { sinSenal: true }).catch(() => undefined);
         throw new Error(`El equipo quedó anotado pero la foto no subió (${mensajeDe(e)}). Tómala de nuevo desde la lista.`);
       }
-      await registrarEvento(esq, { tipo: 'Uso de equipo', tarea: t, descripcion: `${tf.equipo} × ${cant}`, equipo: tf.equipo, proveedor: tf.proveedor });
+      await registrarEvento(esq, { tipo: 'Uso de equipo', tarea: t, descripcion: `${tf.equipo} × ${cant}`, equipo: tf.equipo, proveedor: tf.proveedor }, { sinSenal: true });
     }, 'Equipo agregado con su foto.');
     if (ok) await onListo();
   };
@@ -870,7 +899,7 @@ function EquipoTarea({ t, esq, onCerrar, onListo }: { t: Tarea; esq: Esquema; on
   );
 }
 
-function FinTarea({ t, esq, sinFoto, onCerrar, onListo }: { t: Tarea; esq: Esquema; sinFoto: number; onCerrar: () => void; onListo: (mensaje: string) => void | Promise<void> }) {
+function FinTarea({ t, esq, sinFoto, equipos, eventos, onCerrar, onListo }: { t: Tarea; esq: Esquema; sinFoto: number; equipos: Equipo[]; eventos: Evento[]; onCerrar: () => void; onListo: (mensaje: string) => void | Promise<void> }) {
   const [notas, setNotas] = useState('');
   const [fotos, setFotos] = useState<File[]>([]);
   const op = useOperacion();
@@ -890,7 +919,7 @@ function FinTarea({ t, esq, sinFoto, onCerrar, onListo }: { t: Tarea; esq: Esque
           if (!(await confirmar('¿Terminar la tarea?', 'Terminar'))) return;
           let mensaje = '';
           const ok = await op.correr(async () => {
-            const c = await terminarTarea(esq, t, notas, fotos);
+            const c = await terminarTarea(esq, t, notas, fotos, { sinSenal: true, equipos, eventos });
             mensaje = `Terminaste «${t.titulo}»: ${c.duracionMin} min${c.costoTotal ? ` · ${dinero(c.costoTotal, 'COP')}` : ''}.`;
           });
           if (ok) {

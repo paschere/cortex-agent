@@ -10,8 +10,8 @@ import { hayCampo, isoBogota, soloExistentes } from './documental';
 import type { Esquema } from './documental';
 import { N, kg, num } from './formato';
 import { clienteId, leer, normGuia, normVuelo, prealertasDelVuelo } from './manifiesto';
-import { MANIFIESTO_VACIO, MIME_XLSX, RENGLONES_POR_PAGINA, cargarLogo, guiaVacia, guiasDesdeTexto, guiasUtiles, htmlManifiesto, logoDe, numeroPaginas, renglonConDatos, totalesManifiesto, xlsxManifiesto } from './manifiesto-doc';
-import type { GuiaManifiesto, LogoImagen, Manifiesto } from './manifiesto-doc';
+import { MANIFIESTO_VACIO, MIME_XLSX, RENGLONES_POR_PAGINA, guiaVacia, guiasDesdeTexto, guiasUtiles, htmlManifiesto, logoDe, logoImagenDe, numeroPaginas, renglonConDatos, totalesManifiesto, xlsxManifiesto } from './manifiesto-doc';
+import type { GuiaManifiesto, Manifiesto } from './manifiesto-doc';
 import { fechaIso } from './encabezado';
 import { hoyBogota } from './tiempo';
 import { Boton, Campo, Chip, ErrorCaja, SelectorArchivo, avisar, mensajeDe, useOperacion } from './ui';
@@ -40,7 +40,6 @@ let contador = 0;
 const nuevaFila = (g: GuiaManifiesto = guiaVacia()): Fila => ({ ...g, k: `f${Date.now().toString(36)}-${contador++}` });
 const conVacia = (f: Fila[]): Fila[] => (f.length && !renglonConDatos(f[f.length - 1]!) ? f : [...f, nuevaFila()]);
 
-const logosCache = new Map<string, LogoImagen | null>();
 
 export function ManifiestoNuevo({
   vuelo,
@@ -118,19 +117,11 @@ export function ManifiestoNuevo({
     return n && m.fecha ? (vuelos.find((v) => normVuelo(v.numero) === n && v.fecha === m.fecha) ?? null) : null;
   }, [vuelo, vuelos, m.vuelo, m.fecha]);
 
-  // Logo de la aerolínea: dirección de la lista y, si se puede, la imagen descargada.
+  // Logo de la aerolínea: el incrustado en la app (sin descargar nada, siempre disponible).
   useEffect(() => {
     const url = logoDe(m.aerolinea);
-    setM((p) => (p.logoUrl === (url || undefined) ? p : { ...p, logoUrl: url || undefined, logo: logosCache.get(url) ?? null }));
-    if (!url || logosCache.has(url)) return;
-    let vivo = true;
-    void cargarLogo(url).then((l) => {
-      logosCache.set(url, l);
-      if (vivo && l) setM((p) => (p.logoUrl === url ? { ...p, logo: l } : p));
-    });
-    return () => {
-      vivo = false;
-    };
+    const logo = logoImagenDe(m.aerolinea);
+    setM((p) => (p.logoUrl === (url || undefined) && p.logo === logo ? p : { ...p, logoUrl: url || undefined, logo }));
   }, [m.aerolinea]);
 
   const set = <K extends keyof Manifiesto>(k: K, v: Manifiesto[K]) => setM((p) => ({ ...p, [k]: v }));

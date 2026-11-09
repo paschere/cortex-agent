@@ -9,6 +9,9 @@ import type { Esquema } from './documental';
 import type { Tono } from './estados';
 import { N } from './formato';
 import { subirArchivo } from './ui';
+import { actualizarSS, esEncolado, insertarSS } from './enVivo';
+import type { Encolado } from './enVivo';
+import { agregarPendiente } from './SinSenal';
 
 /**
  * TAREAS RÁPIDAS (v4): recoger, entregar, trasladar, apoyar un vuelo. Las crea el supervisor o
@@ -182,7 +185,10 @@ export async function ubicacionTexto(): Promise<string | null> {
 export async function registrarEvento(
   esq: Esquema,
   a: { tipo: TipoEventoTarea; tarea: Tarea; descripcion?: string; costo?: number; equipo?: string; proveedor?: string; fotos?: File[] },
-): Promise<SdkRow> {
+  opts: { sinSenal?: boolean } = {},
+): Promise<SdkRow | Encolado> {
+  // Sin señal el SDK guarda la escritura en la cola del aparato: la fila vuelve como `{ queued, localId }`.
+  const crear = (v: Record<string, unknown>) => (opts.sinSenal ? insertarSS('eventos_operacion', v) : cortex.tables.insert('eventos_operacion', v));
   const zona = await ubicacionTexto();
   const base = {
     descripcion: a.descripcion?.trim() || a.tipo,
@@ -195,18 +201,20 @@ export async function registrarEvento(
     equipo: a.equipo || undefined,
     proveedor: a.proveedor || undefined,
   };
-  let fila: SdkRow;
+  let fila: SdkRow | Encolado;
   try {
-    fila = await cortex.tables.insert('eventos_operacion', soloExistentes(esq, 'eventos_operacion', { tipo: a.tipo, ...base }));
+    fila = await crear(soloExistentes(esq, 'eventos_operacion', { tipo: a.tipo, ...base }));
   } catch (e) {
     // Tipo aún no agregado al select: se registra igual para no perder el rastro.
     try {
-      fila = await cortex.tables.insert('eventos_operacion', soloExistentes(esq, 'eventos_operacion', { ...base, tipo: 'Otro', descripcion: `[${a.tipo}] ${base.descripcion}` }));
+      fila = await crear(soloExistentes(esq, 'eventos_operacion', { ...base, tipo: 'Otro', descripcion: `[${a.tipo}] ${base.descripcion}` }));
     } catch {
       throw e;
     }
   }
-  for (const f of a.fotos ?? []) await subirArchivo(f, { table: 'eventos_operacion', id: fila.id, field: 'fotos' });
+  const id = esEncolado(fila) ? fila.localId : fila.id;
+  if (esEncolado(fila)) agregarPendiente({ localId: fila.localId, tabla: 'eventos_operacion', clave: a.tarea.id, titulo: a.tipo, detalle: base.descripcion !== a.tipo ? base.descripcion : undefined });
+  for (const f of a.fotos ?? []) await subirArchivo(f, { table: 'eventos_operacion', id, field: 'fotos' }, { sinSenal: !!opts.sinSenal });
   return fila;
 }
 
@@ -247,11 +255,22 @@ export function calcularCierre(t: Pick<Tarea, 'inicio' | 'creado'>, equipos: Equ
 }
 
 /** Termina la tarea: último evento (Fin), cálculos y estado Terminada. Devuelve lo calculado. */
-export async function terminarTarea(esq: Esquema, t: Tarea, notas: string, fotos: File[]): Promise<CierreCalculado> {
-  await registrarEvento(esq, { tipo: 'Fin', tarea: t, descripcion: notas.trim() || 'Tarea terminada' });
-  const [eq, ev] = await Promise.all([equiposDeTarea(t.id), eventosDeTarea(t.id)]);
+export async function terminarTarea(
+  esq: Esquema,
+  t: Tarea,
+  notas: string,
+  fotos: File[],
+  opts: { sinSenal?: boolean; equipos?: Equipo[]; eventos?: Evento[] } = {},
+): Promise<CierreCalculado> {
+  await registrarEvento(esq, { tipo: 'Fin', tarea: t, descripcion: notas.trim() || 'Tarea terminada' }, { sinSenal: opts.sinSenal });
+  // Sin señal no se puede releer del servidor: se calcula con lo que la pantalla ya tenía a la vista.
+  const [eq, ev]: [Equipo[], Evento[]] =
+    opts.sinSenal && (opts.equipos || opts.eventos) && !navigator.onLine
+      ? [opts.equipos ?? [], opts.eventos ?? []]
+      : await Promise.all([equiposDeTarea(t.id), eventosDeTarea(t.id)]);
   const c = calcularCierre(t, eq, ev);
-  await cortex.tables.update(
+  const escribir = opts.sinSenal ? actualizarSS : cortex.tables.update;
+  await escribir(
     'tareas_operacion',
     t.id,
     soloExistentes(esq, 'tareas_operacion', {
@@ -264,7 +283,7 @@ export async function terminarTarea(esq: Esquema, t: Tarea, notas: string, fotos
       notas_cierre: notas.trim() || undefined,
     }),
   );
-  for (const f of fotos) await subirArchivo(f, { table: 'tareas_operacion', id: t.id, field: 'fotos' });
+  for (const f of fotos) await subirArchivo(f, { table: 'tareas_operacion', id: t.id, field: 'fotos' }, { sinSenal: !!opts.sinSenal });
   return c;
 }
 

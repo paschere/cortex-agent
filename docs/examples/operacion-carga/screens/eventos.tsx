@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { cortex } from '@cortex/app-sdk';
 import { Check, Eye, Plus } from 'lucide-react';
 import { Dictado } from '../lib/dictado';
-import { aAtencion, aEvento, cargarVuelos, porRelacion, traerTodo, useAcciones, useCarga, useRol } from '../lib/datos';
+import { RESPALDO_VIVO_MS, aAtencion, aEvento, cargarVuelos, porRelacion, traerTodo, useAcciones, useCarga, useRol } from '../lib/datos';
 import type { Evento } from '../lib/datos';
 import { TIPOS_EVENTO, TONO_EVENTO, tono } from '../lib/estados';
 import { N, cop, fechaCorta, hhmm } from '../lib/formato';
@@ -20,7 +20,7 @@ type Filtro = 'abiertos' | 'todos' | 'criticos';
 export default function Eventos() {
   const { rol } = useRol();
   const acc = useAcciones('eventos_operacion');
-  const { data, loading, error, refresh } = useCarga(async () => (await traerTodo('eventos_operacion', { order: { field: 'created_at', dir: 'desc' } }, 300)).map(aEvento), [], 30_000);
+  const { data, loading, error, refresh } = useCarga(async () => (await traerTodo('eventos_operacion', { order: { field: 'created_at', dir: 'desc' } }, 300)).map(aEvento), [], RESPALDO_VIVO_MS, ['eventos_operacion']);
   const [filtro, setFiltro] = useGuardado<Filtro>('eventos-filtro', 'abiertos');
   const [q, setQ] = useState('');
   const [nuevo, setNuevo] = useState(false);

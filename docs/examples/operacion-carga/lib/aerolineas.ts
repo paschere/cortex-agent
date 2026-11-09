@@ -1,3 +1,5 @@
+import { LOGOS_AEROLINEA } from './manifiesto-logo';
+
 /**
  * Aerolínea a partir del número de vuelo: «AV», «AV123», «LA 8044», «CM-401», «AVA123»…
  * Primero manda lo que ya se usó en la empresa (vuelos y prealertas anteriores), luego esta tabla.
@@ -110,23 +112,26 @@ export interface AerolineaManifiesto {
   nombre: string;
   /** Códigos IATA e ICAO, para prellenar desde el número de vuelo. */
   codigos: string[];
-  /** Logo (Wikimedia cuando existe; sin parámetros utm). */
+  /** Logo incrustado (data URI PNG, ver manifiesto-logo.ts). */
   logo: string;
 }
 
 export const AEROLINEAS_MANIFIESTO: AerolineaManifiesto[] = [
-  { clave: 'LATAM', titulo: 'LATAM', nombre: 'LATAM Airlines', codigos: ['LA', 'LAN', 'L7', 'LAE', 'UC', 'LCO', 'M3', 'LTG', '4C', 'LP', 'XL', 'JJ'], logo: 'https://upload.wikimedia.org/wikipedia/commons/6/64/Latam-logo_.png' },
-  { clave: 'AMERIJET', titulo: 'AMERIJET', nombre: 'Amerijet International', codigos: ['M6', 'AJT'], logo: 'https://upload.wikimedia.org/wikipedia/commons/9/97/AmeriJet_International_logo.png' },
-  { clave: 'FEDEX', titulo: 'FEDEX', nombre: 'FedEx Express', codigos: ['FX', 'FDX'], logo: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/FedEx_Express.svg' },
-  { clave: 'UNITED', titulo: 'UNITED', nombre: 'United Airlines', codigos: ['UA', 'UAL'], logo: 'https://1000logos.net/wp-content/uploads/2017/06/United-Airlines-logo.jpg' },
-  { clave: 'CARGOJET', titulo: 'CARGOJET', nombre: 'Cargojet', codigos: ['W8', 'CJT'], logo: 'https://aeroconnect.com/wp-content/uploads/2022/12/CargoJet.png' },
-  { clave: 'KALITTA', titulo: 'KALITTA', nombre: 'Kalitta Air', codigos: ['K4', 'CKS'], logo: 'https://tse4.mm.bing.net/th/id/OIP.D68pGeeNQC0bYUJicfd4IwHaAn?r=0&rs=1&pid=ImgDetMain&o=7&rm=3' },
-  { clave: 'AIR CANADA', titulo: 'AIR CANADA', nombre: 'Air Canada', codigos: ['AC', 'ACA'], logo: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Air_Canada_2017.svg' },
-  { clave: 'UPS', titulo: 'UPS', nombre: 'UPS Airlines', codigos: ['5X', 'UPS'], logo: 'https://upload.wikimedia.org/wikipedia/commons/1/1b/UPS_Logo_Shield_2017.svg' },
-  { clave: 'KLM', titulo: 'KLM', nombre: 'KLM', codigos: ['KL', 'KLM'], logo: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/KLM_logo.svg' },
-  { clave: 'ABX', titulo: 'ABX', nombre: 'ABX Air', codigos: ['GB', 'ABX'], logo: 'https://upload.wikimedia.org/wikipedia/commons/b/ba/Abx_Air_logo.svg' },
-  { clave: 'ATLAS', titulo: 'ATLAS', nombre: 'Atlas Air', codigos: ['5Y', 'GTI'], logo: 'https://logos-world.net/wp-content/uploads/2023/05/Atlas-Air-Logo-1992.png' },
+  { clave: 'LATAM', titulo: 'LATAM', nombre: 'LATAM Airlines', codigos: ['LA', 'LAN', 'L7', 'LAE', 'UC', 'LCO', 'M3', 'LTG', '4C', 'LP', 'XL', 'JJ'], logo: '' },
+  { clave: 'AMERIJET', titulo: 'AMERIJET', nombre: 'Amerijet International', codigos: ['M6', 'AJT'], logo: '' },
+  { clave: 'FEDEX', titulo: 'FEDEX', nombre: 'FedEx Express', codigos: ['FX', 'FDX'], logo: '' },
+  { clave: 'UNITED', titulo: 'UNITED', nombre: 'United Airlines', codigos: ['UA', 'UAL'], logo: '' },
+  { clave: 'CARGOJET', titulo: 'CARGOJET', nombre: 'Cargojet', codigos: ['W8', 'CJT'], logo: '' },
+  { clave: 'KALITTA', titulo: 'KALITTA', nombre: 'Kalitta Air', codigos: ['K4', 'CKS'], logo: '' },
+  { clave: 'AIR CANADA', titulo: 'AIR CANADA', nombre: 'Air Canada', codigos: ['AC', 'ACA'], logo: '' },
+  { clave: 'UPS', titulo: 'UPS', nombre: 'UPS Airlines', codigos: ['5X', 'UPS'], logo: '' },
+  { clave: 'KLM', titulo: 'KLM', nombre: 'KLM', codigos: ['KL', 'KLM'], logo: '' },
+  { clave: 'ABX', titulo: 'ABX', nombre: 'ABX Air', codigos: ['GB', 'ABX'], logo: '' },
+  { clave: 'ATLAS', titulo: 'ATLAS', nombre: 'Atlas Air', codigos: ['5Y', 'GTI'], logo: '' },
 ];
+
+// El logo de cada aerolínea es el incrustado (data URI): nada de direcciones externas frágiles.
+for (const a of AEROLINEAS_MANIFIESTO) a.logo = LOGOS_AEROLINEA[a.clave]?.dataUrl ?? '';
 
 const sinTildes = (s: string): string =>
   s

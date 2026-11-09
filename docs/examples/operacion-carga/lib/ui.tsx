@@ -9,6 +9,7 @@ import { reducirImagen } from './archivos';
 import { Sparkline } from './graficos';
 import { BarraComandos } from './Comandos';
 import { textoHace, useVivo } from './vivo';
+import { subirSS } from './enVivo';
 import './tema.css';
 
 /** Componentes de interfaz compartidos por todas las pantallas. */
@@ -461,9 +462,12 @@ export async function confirmar(texto: string, etiqueta = 'Confirmar', peligro =
 export async function subirArchivo(
   file: File,
   destino: { table: string; id: string; field: string },
+  opts: { sinSenal?: boolean } = {},
 ): Promise<void> {
   const f = await reducirImagen(file);
-  await cortex.files.upload(f, { ...destino, name: f.name });
+  // `sinSenal`: si no hay red, la foto queda en la cola del aparato y se sube sola (id = localId de la fila que espera).
+  if (opts.sinSenal) await subirSS(f, { ...destino, name: f.name });
+  else await cortex.files.upload(f, { ...destino, name: f.name });
 }
 
 /** Campo numérico que acepta coma o punto; entrega el texto tal cual para no pelear con el cursor. */

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Circle, Polygon, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useLocations, useQuery, cortex } from '@cortex/app-sdk';
+import { useLocations, cortex } from '@cortex/app-sdk';
+import { useQueryVivo } from '../lib/enVivo';
 import { Plane, Users, AlertTriangle, Clock, MapPin, RefreshCw } from 'lucide-react';
 import { hoyBogota, minutosHasta, minutosDesde, textoMinutos, texto } from '../lib/tiempo';
 import { Actualizado } from '../lib/ui';
@@ -17,7 +18,8 @@ import '../lib/torre.css';
  */
 
 const EL_DORADO: [number, number] = [4.7016, -74.1469];
-const CADA = 30_000;
+/** Respaldo: con tiempo real (`live`) cada tabla se recarga sola al cambiar; el sondeo es solo por si se cae la conexión. */
+const CADA = 90_000;
 
 type Geo = { id: string; name: string; lat: number; lng: number; radiusM: number; polygon?: [number, number][] };
 
@@ -35,10 +37,10 @@ function Encuadrar({ puntos }: { puntos: [number, number][] }) {
 
 export default function Torre() {
   const hoy = hoyBogota();
-  const vuelos = useQuery('vuelos', { where: { fecha: hoy }, limit: 200 }, { refreshMs: CADA });
-  const enAtencion = useQuery('atenciones', { where: { estado: 'En atención' }, limit: 100 }, { refreshMs: CADA });
-  const porAprobar = useQuery('atenciones', { where: { estado: 'Por aprobar' }, limit: 100 }, { refreshMs: CADA });
-  const eventos = useQuery('eventos_operacion', { where: { estado: 'Abierto' }, limit: 100 }, { refreshMs: CADA });
+  const vuelos = useQueryVivo('vuelos', { where: { fecha: hoy }, limit: 200 }, CADA);
+  const enAtencion = useQueryVivo('atenciones', { where: { estado: 'En atención' }, limit: 100 }, CADA);
+  const porAprobar = useQueryVivo('atenciones', { where: { estado: 'Por aprobar' }, limit: 100 }, CADA);
+  const eventos = useQueryVivo('eventos_operacion', { where: { estado: 'Abierto' }, limit: 100 }, CADA);
   const gente = useLocations({ refreshMs: 15_000 });
   const [zonas, setZonas] = useState<Geo[] | null>(null);
   if (zonas === null) {
