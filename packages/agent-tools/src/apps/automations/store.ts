@@ -59,7 +59,7 @@ export interface AutomationRow {
 export const AUTOMATION_COLUMNS =
   'id, app_id, name, enabled, trigger, conditions, actions, tracker_id, trigger_kind, schedule_last_slot, last_run_at, last_status, created_by, created_at, updated_at';
 
-export const MAX_AUTOMATIONS_PER_APP = 30;
+export const MAX_AUTOMATIONS_PER_APP = 60;
 
 export type RunStatus =
   | 'queued'
