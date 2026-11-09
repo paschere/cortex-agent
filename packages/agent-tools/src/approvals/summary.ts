@@ -335,6 +335,8 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   trackers_sync_from_source: 'Llenar una tabla sola desde una fuente',
   trackers_update_from_source: 'Actualizar una tabla desde una fuente',
   trackers_syncs: 'Ver las tablas que se llenan solas',
+  trackers_sync_dry_run: 'Ensayar una sincronización (sin escribir)',
+  trackers_sync_run_now: 'Correr una sincronización ahora',
   trackers_row_lookup_create: 'Consultar una API fila por fila',
   trackers_row_lookup_status: 'Ver cómo van las consultas automáticas',
   trackers_row_lookup_update: 'Cambiar o pausar una consulta automática',

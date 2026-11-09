@@ -14,6 +14,7 @@ import {
 } from '../trackers/store';
 import { dayOfCell, headerKey, inferSheetFields } from '../views/feed-sources';
 import { resolveSheetTab } from './feed-capture';
+import { type GroupedReport, runGroupedSync } from './sheet-spec-sync';
 
 /**
  * UNA FUENTE QUE LLENA UNA TABLA SOLA (migración 0161).
@@ -53,10 +54,13 @@ export interface TrackerSyncRow {
   last_skipped: number;
   /** 0163: `update_only` sólo escribe en filas que ya existen (ver enrich.ts). */
   mode?: 'upsert' | 'update_only';
+  /** 0248: receta (sheet-spec.ts). Si existe manda sobre `mapping`/`key_fields`. */
+  spec?: unknown | null;
+  last_report?: unknown | null;
 }
 
 export const SYNC_COLUMNS =
-  'id, source_id, sheet_index, tracker_id, mapping, key_fields, interval_minutes, notify, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_inserted, last_updated, last_skipped, mode';
+  'id, source_id, sheet_index, tracker_id, mapping, key_fields, interval_minutes, notify, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_inserted, last_updated, last_skipped, mode, spec';
 
 // ---------------------------------------------------------------------------
 // Celdas → valores de la tabla
@@ -225,6 +229,8 @@ function sameValues(a: Record<string, unknown>, b: Record<string, unknown>): boo
 // ---------------------------------------------------------------------------
 
 export interface SyncOutcome {
+  /** Sincronización con receta: el informe completo (también en `last_report`). */
+  report?: GroupedReport;
   inserted: number;
   updated: number;
   unchanged: number;
@@ -240,9 +246,28 @@ export interface SyncOutcome {
  */
 export async function applyTrackerSync(
   db: SupabaseClient,
-  sync: Pick<TrackerSyncRow, 'tracker_id' | 'mapping' | 'key_fields' | 'created_by' | 'mode'>,
+  sync: Pick<TrackerSyncRow, 'tracker_id' | 'mapping' | 'key_fields' | 'created_by' | 'mode'> &
+    Partial<Pick<TrackerSyncRow, 'spec' | 'last_run_at'>>,
   sheet: SheetData,
+  options: { dryRun?: boolean } = {},
 ): Promise<SyncOutcome> {
+  if (sync.spec) {
+    const run = await runGroupedSync(
+      db,
+      { tracker_id: sync.tracker_id, created_by: sync.created_by, spec: sync.spec, last_run_at: sync.last_run_at },
+      sheet,
+      options,
+    );
+    return {
+      report: run.report,
+      inserted: run.inserted,
+      updated: run.updated,
+      unchanged: run.unchanged,
+      skipped: run.skipped,
+      newLabels: run.report.sampleNew.slice(0, 10),
+      changedLabels: run.report.sampleChanged.slice(0, 10).map((c) => c.key),
+    };
+  }
   if (sync.mode === 'update_only') {
     const { applyUpdateOnly } = await import('./enrich');
     return applyUpdateOnly(db, sync, sheet);
@@ -406,6 +431,44 @@ export async function latestSourceSheet(
       : sheetIndex;
   const sheet = tables[index];
   return sheet ? { sheet, sourceName: s.name, index } : null;
+}
+
+/**
+ * La pestaña que lee una sincronización: con receta, la de la receta por NOMBRE
+ * y, si ya no se llama así, por POSICIÓN; sin receta, `sheet_index`.
+ * (El `gid` de la receta sólo identifica la pestaña de una hoja nativa de Google;
+ * un Excel guardado en Drive no tiene.)
+ */
+export async function latestSheetForSync(
+  db: SupabaseClient,
+  sync: Pick<TrackerSyncRow, 'source_id' | 'sheet_index' | 'created_by' | 'spec'>,
+): Promise<{ sheet: SheetData; sourceName: string; index: number } | null> {
+  const tab = (sync.spec as { tab?: { name?: string; index?: number } } | null | undefined)?.tab;
+  if (tab?.name) {
+    try {
+      const byName = await latestSourceSheet(db, sync.source_id, sync.created_by, tab.name);
+      if (byName) return byName;
+    } catch (err) {
+      if (!(err instanceof ValidationError)) throw err;
+    }
+    if (tab.index !== undefined) {
+      const byIndex = await latestSourceSheet(db, sync.source_id, sync.created_by, tab.index);
+      if (byIndex) return byIndex;
+    }
+    throw new ValidationError(
+      `La fuente ya no trae la pestaña «${tab.name}» (ni una en la posición ${tab.index ?? '—'}).`,
+    );
+  }
+  return latestSourceSheet(db, sync.source_id, sync.created_by, sync.sheet_index);
+}
+
+/** Guarda el informe de un ensayo sin tocar `last_run_at` ni el ritmo de la sincronización. */
+export async function saveSyncReport(
+  db: SupabaseClient,
+  syncId: string,
+  report: GroupedReport,
+): Promise<void> {
+  await db.from('tracker_syncs').update({ last_report: report }).eq('id', syncId);
 }
 
 /**
@@ -575,6 +638,7 @@ export async function markSyncRun(
             last_inserted: result.outcome.inserted,
             last_updated: result.outcome.updated,
             last_skipped: result.outcome.skipped,
+            ...(result.outcome.report ? { last_report: result.outcome.report } : {}),
           }
         : {}),
     })

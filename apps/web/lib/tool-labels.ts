@@ -459,6 +459,8 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
     icon: 'RefreshCw',
   },
   trackers_syncs: { label: 'Ver las tablas que se llenan solas', icon: 'RefreshCw' },
+  trackers_sync_dry_run: { label: 'Ensayar una sincronización (sin escribir)', icon: 'RefreshCw' },
+  trackers_sync_run_now: { label: 'Correr una sincronización ahora', icon: 'RefreshCw' },
   trackers_row_lookup_create: { label: 'Consultar una API fila por fila', icon: 'ScanSearch' },
   trackers_row_lookup_status: {
     label: 'Ver cómo van las consultas automáticas',

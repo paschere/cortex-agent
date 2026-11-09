@@ -11,7 +11,7 @@ import {
   type TrackerSyncRow,
   applyTrackerSync,
   createTrackerSync,
-  latestSourceSheet,
+  latestSheetForSync,
   markSyncRun,
   runRowLookup,
 } from '@cortex/agent-tools';
@@ -203,10 +203,13 @@ export const tableSyncRunJob: JobHandler = async ({ event, step }) => {
     try {
       await refreshFeedSource(db, sync.created_by, sync.source_id, organizationId).catch((err) => {
         // Una API que no respondió esta vez no borra la última captura buena:
-        // se sincroniza con lo que hay y el error queda anotado.
+        // se sincroniza con lo que hay y el error queda anotado. Con receta (0248)
+        // NO: aplicar una copia vieja en silencio escondería que Google dejó de
+        // contestar (p.ej. la conexión caducó); la sincronización queda en error.
+        if (sync.spec) throw err;
         logger.warn({ err, syncId }, 'source refresh failed; using latest capture');
       });
-      const found = await latestSourceSheet(db, sync.source_id, sync.created_by, sync.sheet_index);
+      const found = await latestSheetForSync(db, sync);
       if (!found) throw new Error('La fuente no tiene una captura vigente con esa hoja.');
       const outcome = await applyTrackerSync(db, sync, found.sheet);
       await markSyncRun(db, sync, { ok: true, outcome });

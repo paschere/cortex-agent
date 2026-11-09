@@ -406,6 +406,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.sync_from_source': 'Haz que la tabla se llene sola desde la fuente ',
   'trackers.update_from_source': 'Que la fuente actualice la tabla ',
   'trackers.syncs': 'Muéstrame las tablas que se llenan solas',
+  'trackers.sync_dry_run': 'Ensaya la sincronización de la tabla ',
+  'trackers.sync_run_now': 'Corre ahora la sincronización de la tabla ',
   'trackers.row_lookup_create': 'Consulta en una API el estado de cada fila de la tabla ',
   'trackers.row_lookup_status': 'Muéstrame cómo van las consultas automáticas',
   'trackers.row_lookup_update': 'Cambia o pausa la consulta automática ',
