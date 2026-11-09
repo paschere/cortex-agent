@@ -5,6 +5,7 @@
  * Los Blob de las fotos que no se pudieron subir van en su propio almacén.
  */
 
+import type { CodeOp } from '@/lib/apps/code-outbox';
 import type { QueuedOp } from '@/lib/apps/op-queue';
 import type { QueuedSubmission } from './offline-queue';
 
@@ -15,6 +16,8 @@ const BLOBS = 'blobs';
 // y la última copia de cada pantalla para verla sin señal.
 const OPS = 'ops';
 const SCREENS = 'screens';
+// v3: las operaciones sin señal de las pantallas con código (`cortex.*({ offline: true })`).
+const CODE_OPS = 'codeops';
 
 /** Una operación guardada: lleva de quién es, para no enviar nunca lo de otra persona. */
 export type StoredOp = QueuedOp & { userKey: string };
@@ -36,12 +39,13 @@ const memoryQueue = new Map<string, QueuedSubmission>();
 const memoryBlobs = new Map<string, Blob>();
 const memoryOps = new Map<string, StoredOp>();
 const memoryScreens = new Map<string, StoredScreen>();
+const memoryCodeOps = new Map<string, CodeOp>();
 
 function open(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     try {
       if (typeof indexedDB === 'undefined') return resolve(null);
-      const req = indexedDB.open(DB_NAME, 2);
+      const req = indexedDB.open(DB_NAME, 3);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(QUEUE))
@@ -50,6 +54,8 @@ function open(): Promise<IDBDatabase | null> {
         if (!db.objectStoreNames.contains(OPS)) db.createObjectStore(OPS, { keyPath: 'clientId' });
         if (!db.objectStoreNames.contains(SCREENS))
           db.createObjectStore(SCREENS, { keyPath: 'key' });
+        if (!db.objectStoreNames.contains(CODE_OPS))
+          db.createObjectStore(CODE_OPS, { keyPath: 'clientId' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => resolve(null);
@@ -181,6 +187,34 @@ export async function removeScreen(key: string): Promise<void> {
   db.close();
 }
 
+// ---------------------------------------------------------------------------
+// Operaciones sin señal de las pantallas con código
+// ---------------------------------------------------------------------------
+
+export async function loadCodeOps(): Promise<CodeOp[]> {
+  const db = await open();
+  if (!db) return [...memoryCodeOps.values()];
+  const all = await run<CodeOp[]>(db, CODE_OPS, 'readonly', (s) => s.getAll());
+  db.close();
+  return all ?? [...memoryCodeOps.values()];
+}
+
+export async function putCodeOp(op: CodeOp): Promise<void> {
+  memoryCodeOps.set(op.clientId, op);
+  const db = await open();
+  if (!db) return;
+  await run(db, CODE_OPS, 'readwrite', (s) => s.put(op));
+  db.close();
+}
+
+export async function removeCodeOp(clientId: string): Promise<void> {
+  memoryCodeOps.delete(clientId);
+  const db = await open();
+  if (!db) return;
+  await run(db, CODE_OPS, 'readwrite', (s) => s.delete(clientId));
+  db.close();
+}
+
 /**
  * Borra TODO lo guardado en este teléfono: cola de formularios, operaciones,
  * fotos pendientes y copias de pantallas. Es lo que se hace al cerrar sesión:
@@ -191,9 +225,10 @@ export async function clearEverything(): Promise<void> {
   memoryBlobs.clear();
   memoryOps.clear();
   memoryScreens.clear();
+  memoryCodeOps.clear();
   const db = await open();
   if (!db) return;
-  for (const store of [QUEUE, BLOBS, OPS, SCREENS])
+  for (const store of [QUEUE, BLOBS, OPS, SCREENS, CODE_OPS])
     if (db.objectStoreNames.contains(store)) await run(db, store, 'readwrite', (s) => s.clear());
   db.close();
 }

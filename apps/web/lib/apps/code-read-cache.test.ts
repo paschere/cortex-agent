@@ -158,3 +158,39 @@ describe('caché de lecturas del padre', () => {
     expect(READ_OPS.has('tables.insert')).toBe(false);
   });
 });
+
+describe('invalidación por tabla', () => {
+  it('borra solo las lecturas de esa tabla y deja las demás', async () => {
+    const h = harness();
+    await h.run({ args: { table: 'vuelos', limit: 5 } }, async () => ok(1));
+    await h.run({ args: { table: 'vuelos', limit: 10 } }, async () => ok(2));
+    await h.run({ args: { table: 'guias' } }, async () => ok(3));
+    await h.run({ op: 'user.me', args: null }, async () => ok(4));
+    expect(h.cache.invalidateTable('planta', 'vuelos')).toBe(2);
+    h.replies.length = 0;
+    const fetchFresh = vi.fn(async () => ok(9));
+    await h.run({ args: { table: 'vuelos', limit: 5 } }, fetchFresh);
+    expect(fetchFresh).toHaveBeenCalledTimes(1);
+    expect(h.replies[0]).toEqual(ok(9));
+    h.now.t += 2_000;
+    await h.run({ args: { table: 'guias' } }, async () => ok(3));
+    expect(h.replies[1]).toEqual(ok(3));
+  });
+
+  it('una lectura en vuelo de esa tabla no guarda lo viejo, pero la de otra tabla sí', async () => {
+    const h = harness();
+    let release: (r: SdkResult) => void = () => undefined;
+    const slow = new Promise<SdkResult>((r) => {
+      release = r;
+    });
+    const p = h.run({ args: { table: 'vuelos' } }, () => slow);
+    const q = h.run({ args: { table: 'guias' } }, async () => ok('g'));
+    h.cache.invalidateTable('planta', 'vuelos');
+    release(ok('viejo'));
+    await Promise.all([p, q]);
+    const get = (t: string) =>
+      h.cache.get('planta', ReadCache.key('admin:u1|', 'tables.query', { table: t }));
+    expect(get('vuelos')).toBeNull();
+    expect(get('guias')?.data).toBe('g');
+  });
+});

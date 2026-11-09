@@ -92,6 +92,14 @@ export * from './code/store';
 export * from './code/build';
 export * from './code/github';
 export { runSdkOp, SDK_OPS, SDK_CALLS_PER_MINUTE } from './code/sdk';
+export {
+  changedTables,
+  fingerprintOf,
+  parseLiveTables,
+  readFingerprint,
+  resolveLiveTables,
+} from './code/live';
+export type { LiveTable } from './code/live';
 export type { SdkCallContext, SdkOp, SdkRowOut, StoredUpload } from './code/sdk';
 export {
   appsCodeAddScreen,

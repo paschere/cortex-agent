@@ -1,7 +1,12 @@
-import { SLOW_BRIDGE_TIMEOUT_MS, call } from './bridge';
+import { SLOW_BRIDGE_TIMEOUT_MS, call, listen } from './bridge';
+import { addLiveSub, getLiveStatus, getOutbox, liveUnion, setLiveStatus } from './events';
 import type {
   ActionResult,
   ConfirmOptions,
+  LiveEvent,
+  LiveStatus,
+  MaybeQueued,
+  OutboxItem,
   PickOptions,
   PrintOptions,
   QueryOptions,
@@ -18,7 +23,26 @@ import type {
   SdkUser,
   UploadOptions,
   UploadResult,
+  WriteOptions,
 } from './types';
+
+/** Avisa al host qué tablas miran las pantallas (la unión); él abre UN canal por app. */
+let syncScheduled = false;
+function syncLive(): void {
+  if (syncScheduled) return;
+  syncScheduled = true;
+  void Promise.resolve().then(async () => {
+    syncScheduled = false;
+    try {
+      listen();
+      const res = await call<{ status?: LiveStatus } | null>('live.set', { tables: liveUnion() });
+      if (res?.status) setLiveStatus(res.status);
+    } catch {
+      // Un host que no tiene canal en vivo: la pantalla se queda sondeando.
+      setLiveStatus('off');
+    }
+  });
+}
 
 /**
  * `cortex`: todas las operaciones como promesas. Se agrupan igual que en el
@@ -46,17 +70,51 @@ export const cortex = {
         ...opts,
       }),
     get: (table: string, id: string) => call<SdkRow>('tables.get', { table, id }),
-    insert: (table: string, values: Record<string, unknown>) =>
-      call<SdkRow>('tables.insert', { table, values }),
-    update: (table: string, id: string, values: Record<string, unknown>) =>
-      call<SdkRow>('tables.update', { table, id, values }),
+    /**
+     * Crea una fila. Con `{ offline: true }`, sin señal se guarda en el teléfono y contesta
+     * `{ queued: true, localId }`; el `localId` vale como `id` en `update`/`action`/`files.upload`
+     * encolados después (se cambia por el real al enviar).
+     */
+    insert: <O extends WriteOptions | undefined = undefined>(
+      table: string,
+      values: Record<string, unknown>,
+      opts?: O,
+    ) =>
+      call<MaybeQueued<SdkRow, O>>('tables.insert', {
+        table,
+        values,
+        ...(opts?.offline ? { offline: true } : {}),
+      }),
+    update: <O extends WriteOptions | undefined = undefined>(
+      table: string,
+      id: string,
+      values: Record<string, unknown>,
+      opts?: O,
+    ) =>
+      call<MaybeQueued<SdkRow, O>>('tables.update', {
+        table,
+        id,
+        values,
+        ...(opts?.offline ? { offline: true } : {}),
+      }),
     /**
      * Corre el botón de flujo con esa clave (`'tomar'`, `'cerrar'`, `'aprobar'`, `'rechazar'`…)
      * sobre una fila, igual que en las pantallas de bloques: mismo rol, mismos efectos y
      * mismas reglas. `reason` es el motivo (por ejemplo al rechazar).
      */
-    action: (table: string, id: string, action: string, opts: { reason?: string } = {}) =>
-      call<ActionResult>('tables.action', { table, id, action, reason: opts.reason }),
+    action: <O extends (WriteOptions & { reason?: string }) | undefined = undefined>(
+      table: string,
+      id: string,
+      action: string,
+      opts?: O,
+    ) =>
+      call<MaybeQueued<ActionResult, O>>('tables.action', {
+        table,
+        id,
+        action,
+        reason: opts?.reason,
+        ...(opts?.offline ? { offline: true } : {}),
+      }),
     /** Los botones de flujo de la tabla que el rol puede correr. */
     listActions: (table: string) => call<SdkAction[]>('tables.listActions', { table }),
   },
@@ -65,8 +123,12 @@ export const cortex = {
      * Sube un archivo y lo AGREGA al campo de archivos de esa fila (respeta quién puede editar
      * ese campo). Las fotos se comprimen antes de subir. Pesa hasta 4 MB ya comprimido.
      */
-    upload: (file: File | Blob, opts: UploadOptions) =>
-      call<UploadResult>('files.upload', { ...opts, file }, { timeoutMs: SLOW_BRIDGE_TIMEOUT_MS }),
+    upload: <O extends UploadOptions>(file: File | Blob, opts: O) =>
+      call<MaybeQueued<UploadResult, O>>(
+        'files.upload',
+        { ...opts, file },
+        { timeoutMs: SLOW_BRIDGE_TIMEOUT_MS },
+      ),
     /**
      * Abre el selector de archivos o la cámara y devuelve lo elegido (`[]` si se cancela).
      * Solo funciona dentro del navegador, y desde un toque de la persona (un botón).
@@ -113,6 +175,40 @@ export const cortex = {
     /** SQL sobre la base propia de la app (fase 3). */
     query: <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
       call<{ rows: T[] }>('db.query', { sql, params }),
+  },
+  live: {
+    /**
+     * Avisa cuando cambia una de estas tablas (las filas que el rol ve). Devuelve cómo dejar de
+     * escuchar. El canal lo abre el marco; sin canal (`status() === 'off'`) no llega nada y
+     * conviene sondear. `useQuery(..., { live: true })` ya lo hace por ti.
+     */
+    subscribe: (tables: string[], cb: (ev: LiveEvent) => void): (() => void) => {
+      listen();
+      const off = addLiveSub(tables, cb);
+      syncLive();
+      return () => {
+        off();
+        syncLive();
+      };
+    },
+    /** `live` conectado · `reconnecting` reintentando · `off` sin canal. */
+    status: (): LiveStatus => getLiveStatus(),
+  },
+  outbox: {
+    /** Lo que espera señal en el teléfono (operaciones hechas con `{ offline: true }`). */
+    list: async (): Promise<OutboxItem[]> => {
+      try {
+        listen();
+        const res = await call<{ items?: OutboxItem[] } | null>('outbox.list');
+        return res?.items ?? getOutbox().items;
+      } catch {
+        return getOutbox().items;
+      }
+    },
+    /** Reintenta ahora lo que está en espera o rechazado. */
+    retry: () => call<void>('outbox.retry'),
+    /** Quita una operación de la cola (y su archivo guardado). */
+    discard: (localId: string) => call<void>('outbox.discard', { localId }),
   },
   nav: {
     /** Abre otra pantalla de la app, con campos prellenados si se quiere. */

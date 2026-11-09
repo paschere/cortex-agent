@@ -15,6 +15,8 @@
  * Un host viejo ignora `upd` y un SDK viejo ignora los `update`: nada se rompe.
  */
 
+import { handleHostEvent, resetEvents } from './events';
+
 /** Cuánto se espera la respuesta del host antes de rendirse. */
 export const BRIDGE_TIMEOUT_MS = 30_000;
 
@@ -46,7 +48,13 @@ function onMessage(event: MessageEvent): void {
       }
     | null
     | undefined;
-  if (!msg || msg.cortex !== 1 || typeof msg.id !== 'string') return;
+  if (!msg || msg.cortex !== 1) return;
+  // Avisos del host sin llamada de por medio (canal en vivo, cola sin señal, visibilidad).
+  if (typeof (msg as { event?: unknown }).event === 'string') {
+    handleHostEvent(msg as Record<string, unknown>);
+    return;
+  }
+  if (typeof msg.id !== 'string') return;
   if (msg.update === true) {
     // La segunda respuesta de una llamada ya resuelta: se avisa una sola vez.
     const u = updaters.get(msg.id);
@@ -64,7 +72,7 @@ function onMessage(event: MessageEvent): void {
   else p.reject(new Error(msg.error || 'No se pudo completar la operación.'));
 }
 
-function listen(): void {
+export function listen(): void {
   if (listening) return;
   window.addEventListener('message', onMessage);
   listening = true;
@@ -135,4 +143,5 @@ export function resetBridge(): void {
   if (listening && typeof window !== 'undefined') window.removeEventListener('message', onMessage);
   listening = false;
   seq = 0;
+  resetEvents();
 }

@@ -11,6 +11,9 @@
  *    refresco los dejaría hasta 60 s desactualizados; a ellas se les contesta siempre de la red.
  *  - Cualquier escritura (`WRITE_OPS`) borra TODO lo de esa app y sube su `epoch`: una lectura
  *    que salió antes de la escritura y vuelve después no guarda su respuesta vieja.
+ *  - Una lectura de una tabla (`tables.query`/`tables.get`) recuerda de qué tabla es: el canal en
+ *    vivo avisa «cambió la tabla X» y `invalidateTable` borra SOLO esas entradas (y sube su
+ *    época para que una lectura en vuelo no guarde lo viejo); lo de otras tablas se queda.
  *  - La clave incluye app, rol/«ver como» (el alcance que pone el padre), operación y argumentos;
  *    no depende de la pantalla: dos pantallas que leen lo mismo comparten.
  */
@@ -44,11 +47,21 @@ export type SdkResult = { ok: true; data: unknown } | { ok: false; error: string
 interface Entry {
   data: unknown;
   at: number;
+  /** La tabla que la lectura nombra (si la hay): la invalidación por tabla busca por aquí. */
+  table?: string;
+}
+
+/** La tabla que una lectura nombra, o undefined si no es de una tabla concreta. */
+export function tableOfRead(op: string, args: unknown): string | undefined {
+  if (op !== 'tables.query' && op !== 'tables.get') return undefined;
+  const t = (args as { table?: unknown } | null)?.table;
+  return typeof t === 'string' && t ? t : undefined;
 }
 
 export class ReadCache {
   private apps = new Map<string, Map<string, Entry>>();
   private epochs = new Map<string, number>();
+  private tableEpochs = new Map<string, number>();
 
   constructor(private now: () => number = Date.now) {}
 
@@ -56,8 +69,13 @@ export class ReadCache {
     return `${scope}\u0000${op}\u0000${JSON.stringify(args ?? null)}`;
   }
 
-  epoch(appId: string): number {
-    return this.epochs.get(appId) ?? 0;
+  /**
+   * La época de una lectura: sube con cualquier escritura de la app y, si se pasa `table`, también
+   * con cada invalidación de ESA tabla (una de otra tabla no la mueve).
+   */
+  epoch(appId: string, table?: string): number {
+    const app = this.epochs.get(appId) ?? 0;
+    return table ? app + (this.tableEpochs.get(`${appId}\u0000${table}`) ?? 0) : app;
   }
 
   get(appId: string, key: string): { data: unknown; age: number } | null {
@@ -72,15 +90,15 @@ export class ReadCache {
   }
 
   /** Guarda solo si no hubo escrituras desde que empezó la lectura (`epoch`). */
-  set(appId: string, key: string, data: unknown, epoch: number): void {
-    if (epoch !== this.epoch(appId)) return;
+  set(appId: string, key: string, data: unknown, epoch: number, table?: string): void {
+    if (epoch !== this.epoch(appId, table)) return;
     let m = this.apps.get(appId);
     if (!m) {
       m = new Map();
       this.apps.set(appId, m);
     }
     m.delete(key);
-    m.set(key, { data, at: this.now() });
+    m.set(key, { data, at: this.now(), ...(table ? { table } : {}) });
     while (m.size > MAX_ENTRIES) {
       const oldest = m.keys().next().value;
       if (oldest === undefined) break;
@@ -90,12 +108,28 @@ export class ReadCache {
 
   invalidate(appId: string): void {
     this.apps.delete(appId);
-    this.epochs.set(appId, this.epoch(appId) + 1);
+    this.epochs.set(appId, (this.epochs.get(appId) ?? 0) + 1);
+  }
+
+  /** Borra solo las lecturas de esa tabla (las demás siguen) y devuelve cuántas. */
+  invalidateTable(appId: string, table: string): number {
+    const k = `${appId}\u0000${table}`;
+    this.tableEpochs.set(k, (this.tableEpochs.get(k) ?? 0) + 1);
+    const m = this.apps.get(appId);
+    if (!m) return 0;
+    let n = 0;
+    for (const [key, e] of m) {
+      if (e.table !== table) continue;
+      m.delete(key);
+      n++;
+    }
+    return n;
   }
 
   clear(): void {
     this.apps.clear();
     this.epochs.clear();
+    this.tableEpochs.clear();
   }
 }
 
@@ -120,16 +154,17 @@ export async function serveRead(opts: {
   const { cache, appId, scope, op, args } = opts;
   const key = ReadCache.key(scope, op, args);
   const hit = opts.wantsUpdate ? cache.get(appId, key) : null;
-  const epoch = cache.epoch(appId);
+  const table = tableOfRead(op, args);
+  const epoch = cache.epoch(appId, table);
   if (hit) {
     opts.reply({ ok: true, data: hit.data });
     if (hit.age < FRESH_MS) return;
     try {
       const fresh = await opts.fetchFresh();
       if (!fresh.ok) return;
-      cache.set(appId, key, fresh.data, epoch);
+      cache.set(appId, key, fresh.data, epoch, table);
       // Si hubo una escritura mientras tanto, lo guardado ya no vale y la pantalla se enterará sola.
-      if (cache.epoch(appId) !== epoch) return;
+      if (cache.epoch(appId, table) !== epoch) return;
       if (JSON.stringify(fresh.data) !== JSON.stringify(hit.data)) opts.update(fresh.data);
     } catch {
       // El refresco es de cortesía: la pantalla ya tiene su respuesta.
@@ -137,6 +172,6 @@ export async function serveRead(opts: {
     return;
   }
   const res = await opts.fetchFresh();
-  if (res.ok) cache.set(appId, key, res.data, epoch);
+  if (res.ok) cache.set(appId, key, res.data, epoch, table);
   opts.reply(res);
 }
